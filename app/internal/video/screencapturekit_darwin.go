@@ -6,6 +6,7 @@ package video
 #cgo darwin CFLAGS: -x objective-c -fobjc-arc -fblocks -Wno-deprecated-declarations -mmacosx-version-min=12.3
 #cgo darwin LDFLAGS: -framework ScreenCaptureKit -framework AVFoundation -framework CoreMedia -framework CoreVideo -framework Foundation -mmacosx-version-min=12.3
 #include "screencapturekit_darwin.h"
+#include <stdlib.h>
 */
 import "C"
 
