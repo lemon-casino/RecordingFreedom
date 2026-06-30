@@ -17,6 +17,8 @@ func init() {
 
 func newScreenCaptureKitBackend(packages *recpackage.Service) Backend {
 	return NewNativeRuntimeBackend(BackendScreenCaptureKit, packages, NativeBackendRuntimeOptions{
-		VideoSessionFactory: video.NewPlatformSession,
+		VideoSessionFactory: func(config video.CaptureConfig) (NativeVideoSession, error) {
+			return video.NewPlatformSession(config)
+		},
 	})
 }
