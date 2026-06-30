@@ -236,6 +236,9 @@ func TestNativeBackendRuntimeSkipsAudioWhenNoStreamsEnabled(t *testing.T) {
 	if _, ok := runtime.AudioDiagnostics(); ok {
 		t.Fatal("AudioDiagnostics() reported diagnostics with no audio session")
 	}
+	if sync := runtime.SyncDiagnostics(); sync == nil || sync.AudioDiagnosticsPath != "" || sync.SystemAudio.Enabled || sync.Microphone.Enabled {
+		t.Fatalf("sync diagnostics = %#v, want video-only diagnostics without audio tracks", sync)
+	}
 }
 
 func TestNativeBackendRuntimeMarksPackageFailedWhenVideoSessionFails(t *testing.T) {
@@ -270,6 +273,107 @@ func TestNativeBackendRuntimeMarksPackageFailedWhenVideoSessionFails(t *testing.
 	}
 	if manifest.Status != recpackage.StatusFailed {
 		t.Fatalf("manifest status = %q, want failed after video setup failure", manifest.Status)
+	}
+}
+
+func TestNativeBackendRuntimeBuildsSyncDiagnosticsFromMediaDiagnostics(t *testing.T) {
+	packages := recpackage.NewService()
+	audioSession := &fakeNativeAudioSession{
+		diagnostics: audio.Diagnostics{
+			Backend: BackendWindowsGraphicsCapture,
+			SystemAudio: audio.StreamDiagnostics{
+				Enabled:        true,
+				SampleRate:     48000,
+				FramesReceived: 120,
+				SamplesWritten: 115200,
+				DroppedSamples: 240,
+				AppendFailures: 1,
+				StartOffsetMs:  12,
+				EndOffsetMs:    2412,
+				DurationMs:     2400,
+				Message:        "system loopback active",
+			},
+			Microphone: audio.StreamDiagnostics{
+				Enabled:        true,
+				SampleRate:     48000,
+				FramesReceived: 100,
+				SamplesWritten: 48000,
+				StartOffsetMs:  20,
+				EndOffsetMs:    1020,
+				DurationMs:     1000,
+			},
+		},
+	}
+	videoSession := &fakeNativeVideoSession{
+		diagnostics: video.Diagnostics{
+			Backend: BackendWindowsGraphicsCapture,
+			Screen: video.TrackDiagnostics{
+				Enabled:        true,
+				Width:          1920,
+				Height:         1080,
+				FrameRate:      60,
+				FramesWritten:  600,
+				DroppedFrames:  2,
+				AppendFailures: 3,
+				StartOffsetMs:  0,
+				EndOffsetMs:    10000,
+				DurationMs:     10000,
+				Message:        "screen writer finalized",
+			},
+		},
+	}
+
+	runtime, err := NewNativeBackendRuntime(packages, BackendWindowsGraphicsCapture, BackendStartRequest{
+		VideoDir:  t.TempDir(),
+		CreatedAt: time.Now(),
+		StartRequest: StartRequest{
+			SourceID:   "screen:primary",
+			SourceType: SourceScreen,
+			Audio: AudioRequest{
+				System:     true,
+				Microphone: true,
+			},
+		},
+	}, NativeBackendRuntimeOptions{
+		VideoSessionFactory: func(video.CaptureConfig) (NativeVideoSession, error) {
+			return videoSession, nil
+		},
+		AudioSessionFactory: func(audio.CaptureConfig, audio.NoiseSuppressor) (NativeAudioSession, error) {
+			return audioSession, nil
+		},
+	})
+	if err != nil {
+		t.Fatalf("NewNativeBackendRuntime() error = %v", err)
+	}
+
+	sync := runtime.SyncDiagnostics()
+	if sync == nil {
+		t.Fatal("SyncDiagnostics() = nil")
+	}
+	if sync.TimelineBase != recpackage.TimelineBaseMedia {
+		t.Fatalf("timeline base = %q, want media timestamp", sync.TimelineBase)
+	}
+	if sync.VideoDiagnosticsPath != recpackage.VideoDiagnosticsFile || sync.AudioDiagnosticsPath != recpackage.AudioDiagnosticsFile {
+		t.Fatalf("diagnostics paths = video:%q audio:%q", sync.VideoDiagnosticsPath, sync.AudioDiagnosticsPath)
+	}
+	if sync.Screen.Path != recpackage.ScreenVideoFile || sync.Screen.FrameRate != 60 || sync.Screen.DroppedFrames != 2 || sync.Screen.AppendFailures != 3 || sync.Screen.DurationMs != 10000 {
+		t.Fatalf("screen sync = %#v", sync.Screen)
+	}
+	if sync.SystemAudio.Path != recpackage.SystemAudioFile || sync.SystemAudio.SampleRate != 48000 || sync.SystemAudio.DroppedSamples != 240 || sync.SystemAudio.AppendFailures != 1 || sync.SystemAudio.DurationMs != 2400 {
+		t.Fatalf("system audio sync = %#v", sync.SystemAudio)
+	}
+	if sync.Microphone.Path != recpackage.MicrophoneAudioFile || sync.Microphone.SampleRate != 48000 || sync.Microphone.DurationMs != 1000 {
+		t.Fatalf("microphone sync = %#v", sync.Microphone)
+	}
+	if err := packages.PatchSyncDiagnostics(runtime.Plan.Package.ManifestPath, *sync); err != nil {
+		t.Fatalf("PatchSyncDiagnostics(runtime sync) error = %v", err)
+	}
+	manifest, err := packages.ReadManifest(runtime.Plan.Package.ManifestPath)
+	if err != nil {
+		t.Fatalf("ReadManifest() error = %v", err)
+	}
+	if manifest.Diagnostics.Sync == nil || manifest.Diagnostics.Sync.Screen.Path != recpackage.ScreenVideoFile {
+		t.Fatalf("manifest sync = %#v", manifest.Diagnostics.Sync)
 	}
 }
 

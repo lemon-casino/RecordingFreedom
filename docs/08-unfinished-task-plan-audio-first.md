@@ -34,11 +34,13 @@
 - 已落地 `audio.Pipeline`、`audio.Diagnostics`、`audio.WriteDiagnostics()`、`recording.CreateAudioCaptureConfig()` 和对应单元测试。
 - 已落地 `audio.CaptureSession`、`audio.NewNativeCaptureSession()`、`audio.WAVSink`、`system-audio.wav` / `microphone.wav` sidecar 合同和 ready 前音频 sidecar 校验。
 - 已落地 `recording.NativeBackendRuntime`：真实平台 backend 后续可统一复用 native write plan、audio session 生命周期、RNNoise suppressor 生命周期和启动失败标记 `failed` 的处理。
+- 已落地 `NativeBackendRuntime.SyncDiagnostics()`：真实平台 backend 后续可统一把 video/audio diagnostics 写成 manifest `diagnostics.sync`，不用各平台重复手写音画同步映射。
 
 验收：
 
 - Go 测试已覆盖：打开/关闭系统声音、打开/关闭麦克风、打开/关闭 RNNoise 时，请求合同、输出路径和 diagnostics 路径稳定。
 - Go 测试已覆盖：有音频时 `NativeBackendRuntime` 会创建并控制 audio session；无音频时不创建；RNNoise 不可用时失败且不会假装降噪可用。
+- Go 测试已覆盖：`NativeBackendRuntime.SyncDiagnostics()` 输出可被 `PatchSyncDiagnostics()` 接受并写回 manifest。
 - `RecordingService` 仍只负责状态机、包状态和 ready 前门禁；音频采集和处理合同位于 `internal/audio`、`recording.CreateAudioCaptureConfig()` 与 `recording.NativeBackendRuntime`。
 
 ### A1 真实音频设备枚举

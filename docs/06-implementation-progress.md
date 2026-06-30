@@ -52,6 +52,7 @@
   - 新增 `internal/video` 视频采集合约：`CaptureConfig`、`Session`、`video-diagnostics.json` 和默认 unsupported 平台入口，为 ScreenCaptureKit/WGC/PipeWire writer 提供同一生命周期目标。
   - 新增 `recording.CreateVideoCaptureConfig()`：从 `StartRequest + RecordingWritePlan` 生成统一视频采集配置，真实后端复用同一份 source、profile、`screen.mp4` 和 `video-diagnostics.json` 路径合同。
   - 新增 `recording.NativeBackendRuntime`：把 native `.rfrec` 写盘计划、视频 session 生命周期和音频 session 生命周期串起来，提供 `Start()`、`Pause()`、`Resume()`、`Stop()`、单独 video/audio 控制、RNNoise suppressor 生命周期和启动失败标记 `failed` 的统一入口。
+  - 新增 `NativeBackendRuntime.SyncDiagnostics()`：把 video/audio diagnostics 转成 manifest `diagnostics.sync`，统一输出 screen、system audio、microphone track 起止、duration、drop count、append failure、sample rate 和 diagnostics 相对路径。
   - 正式录制策略调整为 mux 优先：默认目标是把屏幕视频、系统声音和麦克风写入同一个主媒体 `screen.mp4`；包内 WAV sidecar 继续作为 smoke、fallback、恢复和诊断路径。
   - `internal/recpackage` 已新增音频 sidecar 合同：系统声音写 `system-audio.wav`，麦克风写 `microphone.wav`；manifest `media` 保存包内相对路径，write plan 返回包内绝对路径。
   - `PackageService.ValidateReady()` 已在非 mock 包中校验已启用音频 sidecar：系统声音或麦克风开启时，对应 WAV 必须存在、可读且非 0 字节。
@@ -223,6 +224,7 @@ go test -tags rnnoise_native ./internal/audio/rnnoise/native ./internal/recordin
 - `internal/recording` 覆盖 `CreateAudioCaptureConfig()`：打开/关闭系统声音、麦克风和 RNNoise 时，音频设备、sidecar 输出路径、diagnostics 路径和系统声音不降噪策略保持稳定。
 - `internal/recording` 覆盖 `CreateVideoCaptureConfig()`：source、profile、`screen.mp4` 输出路径和 `video-diagnostics.json` 路径保持稳定。
 - `internal/recording` 覆盖 `NativeBackendRuntime`：会创建并控制 video session；有音频时创建并控制 audio session；无音频时不启动 audio session；RNNoise suppressor 会传入并在停止时关闭；视频 session 或 RNNoise 不可用时初始化失败并把已创建 native 包标记为 `failed`。
+- `internal/recording` 覆盖 `NativeBackendRuntime.SyncDiagnostics()`：runtime 生成的 screen/system/microphone track diagnostics 可被 `recpackage.PatchSyncDiagnostics()` 接受并写回 manifest。
 - 本机 Windows audio smoke 已确认默认麦克风 WASAPI capture 生成非空 `microphone.wav`：`framesReceived=99`、`samplesReceived=47520`、`samplesWritten=47520`、duration 约 `990ms`。
 - 本机 Windows system audio smoke 已确认 WASAPI loopback source 在有活动系统播放时可以写入真实样本：`system-audio.wav` 614444 bytes，`framesReceived=160`，`samplesReceived=153600`，`samplesWritten=153600`，`sampleRate=48000`，`channels=2`，duration 约 `1600ms`。
 

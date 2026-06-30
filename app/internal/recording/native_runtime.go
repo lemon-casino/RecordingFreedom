@@ -199,6 +199,25 @@ func (r *NativeBackendRuntime) AudioDiagnostics() (audio.Diagnostics, bool) {
 	return r.audioSession.Diagnostics(), true
 }
 
+func (r *NativeBackendRuntime) SyncDiagnostics() *recpackage.ManifestSyncDiagnostics {
+	if r == nil {
+		return nil
+	}
+	diagnostics := &recpackage.ManifestSyncDiagnostics{
+		TimelineBase:         recpackage.TimelineBaseMedia,
+		VideoDiagnosticsPath: recpackage.VideoDiagnosticsFile,
+	}
+	if videoDiagnostics, ok := r.VideoDiagnostics(); ok {
+		diagnostics.Screen = screenSyncTrack(videoDiagnostics, r.Plan.Package.Manifest.Media.ScreenVideoPath)
+	}
+	if audioDiagnostics, ok := r.AudioDiagnostics(); ok {
+		diagnostics.AudioDiagnosticsPath = recpackage.AudioDiagnosticsFile
+		diagnostics.SystemAudio = audioSyncTrack(audioDiagnostics.SystemAudio, r.Plan.Package.Manifest.Media.SystemAudioPath)
+		diagnostics.Microphone = audioSyncTrack(audioDiagnostics.Microphone, r.Plan.Package.Manifest.Media.MicrophoneAudioPath)
+	}
+	return diagnostics
+}
+
 func (r *NativeBackendRuntime) MarkPackageFailed() error {
 	if r == nil {
 		return nil
@@ -298,4 +317,41 @@ func defaultNativeNoiseSuppressorFactory(outputGain float64) (audio.NoiseSuppres
 		return nil, nil, err
 	}
 	return suppressor, suppressor.Close, nil
+}
+
+func screenSyncTrack(diagnostics video.Diagnostics, defaultPath string) recpackage.ManifestTrackDiagnostics {
+	track := diagnostics.Screen
+	if defaultPath == "" {
+		defaultPath = recpackage.ScreenVideoFile
+	}
+	return recpackage.ManifestTrackDiagnostics{
+		Enabled:        track.Enabled,
+		Path:           defaultPath,
+		Clock:          recpackage.TimelineBaseMedia,
+		StartOffsetMs:  track.StartOffsetMs,
+		EndOffsetMs:    track.EndOffsetMs,
+		DurationMs:     track.DurationMs,
+		DroppedFrames:  track.DroppedFrames,
+		AppendFailures: track.AppendFailures,
+		FrameRate:      track.FrameRate,
+		Message:        track.Message,
+	}
+}
+
+func audioSyncTrack(diagnostics audio.StreamDiagnostics, defaultPath string) recpackage.ManifestTrackDiagnostics {
+	if !diagnostics.Enabled {
+		return recpackage.ManifestTrackDiagnostics{}
+	}
+	return recpackage.ManifestTrackDiagnostics{
+		Enabled:        true,
+		Path:           defaultPath,
+		Clock:          recpackage.TimelineBaseMedia,
+		StartOffsetMs:  diagnostics.StartOffsetMs,
+		EndOffsetMs:    diagnostics.EndOffsetMs,
+		DurationMs:     diagnostics.DurationMs,
+		DroppedSamples: diagnostics.DroppedSamples,
+		AppendFailures: diagnostics.AppendFailures,
+		SampleRate:     diagnostics.SampleRate,
+		Message:        diagnostics.Message,
+	}
 }
