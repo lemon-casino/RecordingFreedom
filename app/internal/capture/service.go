@@ -27,7 +27,7 @@ func (s *Service) Capabilities() Capabilities {
 func screenRecordingCapability(platform string) Capability {
 	switch platform {
 	case "darwin":
-		return available("screen-recording", "Screen Recording", "ScreenCaptureKit", PermissionScreenRecording, "ScreenCaptureKit display capture is implemented; program grouping and audio mapping remain queued.")
+		return available("screen-recording", "Screen Recording", "ScreenCaptureKit", PermissionScreenRecording, "ScreenCaptureKit display capture is implemented; audio mapping remains queued.")
 	case "windows":
 		return queued("screen-recording", "Screen Recording", "Windows.Graphics.Capture", PermissionNotRequired, "WGC capture backend is queued behind source and package contracts.")
 	case "linux":
@@ -40,7 +40,7 @@ func screenRecordingCapability(platform string) Capability {
 func windowRecordingCapability(platform string) Capability {
 	switch platform {
 	case "darwin":
-		return available("window-recording", "Window Recording", "ScreenCaptureKit", PermissionScreenRecording, "ScreenCaptureKit single-window capture is implemented; program grouping and audio mapping remain queued.")
+		return available("window-recording", "Window Recording", "ScreenCaptureKit", PermissionScreenRecording, "ScreenCaptureKit single-window capture is implemented; audio mapping remains queued.")
 	case "windows":
 		return queued("window-recording", "Window Recording", "Windows.Graphics.Capture", PermissionNotRequired, "Win32 can enumerate windows; WGC capture target mapping is still queued.")
 	case "linux":
@@ -53,7 +53,7 @@ func windowRecordingCapability(platform string) Capability {
 func applicationRecordingCapability(platform string) Capability {
 	switch platform {
 	case "darwin":
-		return queued("application-recording", "Program Recording", "ScreenCaptureKit", PermissionScreenRecording, "Program sources are currently PID groups that must map to ScreenCaptureKit windows.")
+		return available("application-recording", "Program Recording", "ScreenCaptureKit", PermissionScreenRecording, "ScreenCaptureKit program capture maps a PID group to its largest visible window; multi-window composition and audio mapping remain queued.")
 	case "windows":
 		return queued("application-recording", "Program Recording", "Windows.Graphics.Capture", PermissionNotRequired, "Program sources are currently process groups that must map to WGC windows.")
 	case "linux":

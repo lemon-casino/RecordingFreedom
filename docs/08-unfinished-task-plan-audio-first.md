@@ -121,6 +121,7 @@
 
 - 默认录制优先把音频写入 `screen.mp4`：可以是系统声音和麦克风独立 track，也可以先混成一个 AAC track，但必须记录诊断。
 - WAV sidecar 只作为 smoke、fallback、恢复或平台限制下的过渡输出；不能在最终架构里强迫所有平台重复写两份音频。
+- manifest 需要记录音频存储形态：已 mux 进 `screen.mp4` 的 track 走主媒体探测；fallback sidecar 才检查 `system-audio.wav` / `microphone.wav`。
 - 音频 writer 持续写入 `screen.mp4` 或包内约定 fallback sidecar；路径必须由 `CreateNativeWritePlan()` 或后续扩展计划返回。
 - 暂停段必须写入 `diagnostics.sync.pauseSegments`。
 - 增加 muxed audio track probe：当 manifest 声明音频已 mux 进 `screen.mp4`，ready 门禁应检查主媒体音轨，而不是要求 `system-audio.wav` / `microphone.wav`。
@@ -129,6 +130,7 @@
 
 - 1 分钟、5 分钟录制停止后，主媒体中的音频可播放且和视频同步。
 - 开启/关闭系统声音、麦克风、RNNoise 的组合都能停止并生成 ready package。
+- 关闭 fallback sidecar 时，启用系统声音或麦克风不会长期重复写 WAV 文件。
 - audio diagnostics 路径不能是绝对路径，不能逃逸 `.rfrec` 包目录。
 
 ### A5b 单独音频录制
@@ -139,7 +141,7 @@
 
 - 新增 audio-only recording kind 或 source type，不创建假的 `screen.mp4`。
 - 支持系统声音、麦克风、麦克风 + RNNoise 的单独录音。
-- 默认输出使用可持续写盘的 `audio.m4a` 或 `audio.wav`，仍写入 `<DataRoot>/data/video/<session>.rfrec/`。
+- 默认输出使用可持续写盘的 `audio.m4a`，平台受限时使用 `audio.wav` fallback，仍写入 `<DataRoot>/data/video/<session>.rfrec/`。
 - 复用 `audio.Pipeline`、RNNoise reset、diagnostics 和 bounded buffer 策略。
 
 验收：
@@ -156,6 +158,7 @@
 
 - 使用有限环形缓冲和编码队列，不能把完整录制放进内存。
 - 主录制优先 mux 到单个 `screen.mp4`，减少重复写长期音频 sidecar。
+- 队列需要有明确容量、背压和失败诊断；不能因为编码或磁盘变慢而无限吃内存。
 - diagnostics 和 manifest 低频批量 flush，状态切换时强制落盘。
 - 预览、波形、缩略图和导出 cache 按需写入包内 `cache/`，不在录制时反复读取完整媒体。
 
@@ -201,14 +204,16 @@
 
 ## P0-RECORDING：真实屏幕/窗口/程序录制
 
-状态：macOS ScreenCaptureKit display/window video session 已接入代码路径：`screen:display-<CGDirectDisplayID>` 和 `window:<CGWindowID>` 会通过 `SCStream` 写入真实 `screen.mp4`，并输出 `video-diagnostics.json`。已新增 `cmd/video-smoke` 作为无 UI 真机验收入口。仍需 macOS 真机 smoke 验证；程序、系统声音 mux、麦克风 mux、Windows WGC 和 Linux PipeWire 仍未完成。
+状态：macOS ScreenCaptureKit display/window/program video session 已接入代码路径：`screen:display-<CGDirectDisplayID>`、`window:<CGWindowID>` 和 `application:<pid>` 会通过 `SCStream` 写入真实 `screen.mp4`，并输出 `video-diagnostics.json`；`application:<pid>` 首版选择该 PID 当前最大可见窗口。已新增 `cmd/video-smoke` 作为无 UI 真机验收入口。仍需 macOS 真机 smoke 验证；系统声音 mux、麦克风 mux、Windows WGC 和 Linux PipeWire 仍未完成。
 
 任务：
 
 - macOS ScreenCaptureKit 最小 display `screen.mp4` 写盘。代码已接入，待真机录制验收。
 - macOS ScreenCaptureKit 最小 window `screen.mp4` 写盘。代码已接入，待真机录制验收。
+- macOS ScreenCaptureKit 最小 program `screen.mp4` 写盘。代码已接入，待真机录制验收。
 - macOS `cmd/video-smoke` 真实录制验收：`go run ./cmd/video-smoke -duration=1m` 和 `go run ./cmd/video-smoke -duration=5m -pause-after=10s -pause-duration=2s`。
 - macOS window smoke：`go run ./cmd/video-smoke -source-type=window -duration=1m`。
+- macOS program smoke：`go run ./cmd/video-smoke -source-type=application -duration=1m`。
 - Windows Windows.Graphics.Capture 最小 `screen.mp4` 写盘。
 - Linux XDG Desktop Portal + PipeWire experimental 写盘。
 - 将 CoreGraphics/Win32/PipeWire 源 ID 映射为真实 capture target。

@@ -65,6 +65,12 @@ func screenCaptureKitTarget(config CaptureConfig) (C.int, uint32, error) {
 			return 0, 0, fmt.Errorf("ScreenCaptureKit window source id %q is invalid", config.SourceID)
 		}
 		return C.RF_SCK_TARGET_WINDOW, windowID, nil
+	case devices.SourceApplication:
+		processID, ok := DarwinApplicationPID(config.SourceID)
+		if !ok {
+			return 0, 0, fmt.Errorf("ScreenCaptureKit application source id %q is invalid", config.SourceID)
+		}
+		return C.RF_SCK_TARGET_APPLICATION, processID, nil
 	default:
 		return 0, 0, fmt.Errorf("ScreenCaptureKit recording does not support source type %q yet", config.SourceType)
 	}

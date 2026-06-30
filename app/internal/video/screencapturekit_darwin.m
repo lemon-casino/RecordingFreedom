@@ -232,6 +232,9 @@ static int64_t rf_sck_elapsed_ms(CMTime start, CMTime value) {
 	if (self.targetKind == RF_SCK_TARGET_WINDOW) {
 		return [self windowFilterWithContent:content error:errorMessage];
 	}
+	if (self.targetKind == RF_SCK_TARGET_APPLICATION) {
+		return [self applicationFilterWithContent:content error:errorMessage];
+	}
 	if (errorMessage != NULL) {
 		*errorMessage = [NSString stringWithFormat:@"ScreenCaptureKit target kind %d is not supported", self.targetKind];
 	}
@@ -254,17 +257,54 @@ static int64_t rf_sck_elapsed_ms(CMTime start, CMTime value) {
 	return nil;
 }
 
+- (SCContentFilter *)filterWithWindow:(SCWindow *)window error:(NSString **)errorMessage API_AVAILABLE(macos(12.3)) {
+	if (window == nil) {
+		if (errorMessage != NULL) {
+			*errorMessage = @"ScreenCaptureKit window target is nil";
+		}
+		return nil;
+	}
+	CGRect frame = window.frame;
+	self.width = (int)ceil(frame.size.width);
+	self.height = (int)ceil(frame.size.height);
+	return [[SCContentFilter alloc] initWithDesktopIndependentWindow:window];
+}
+
 - (SCContentFilter *)windowFilterWithContent:(SCShareableContent *)content error:(NSString **)errorMessage API_AVAILABLE(macos(12.3)) {
 	for (SCWindow *window in content.windows) {
 		if ((uint32_t)window.windowID == self.targetID) {
-			CGRect frame = window.frame;
-			self.width = (int)ceil(frame.size.width);
-			self.height = (int)ceil(frame.size.height);
-			return [[SCContentFilter alloc] initWithDesktopIndependentWindow:window];
+			return [self filterWithWindow:window error:errorMessage];
 		}
 	}
 	if (errorMessage != NULL) {
 		*errorMessage = [NSString stringWithFormat:@"ScreenCaptureKit window %u was not found", self.targetID];
+	}
+	return nil;
+}
+
+- (SCContentFilter *)applicationFilterWithContent:(SCShareableContent *)content error:(NSString **)errorMessage API_AVAILABLE(macos(12.3)) {
+	SCWindow *bestWindow = nil;
+	double bestArea = 0.0;
+	for (SCWindow *window in content.windows) {
+		SCRunningApplication *application = window.owningApplication;
+		if (application == nil || (uint32_t)application.processID != self.targetID) {
+			continue;
+		}
+		CGRect frame = window.frame;
+		double area = frame.size.width * frame.size.height;
+		if (area <= 0.0) {
+			continue;
+		}
+		if (bestWindow == nil || area > bestArea) {
+			bestWindow = window;
+			bestArea = area;
+		}
+	}
+	if (bestWindow != nil) {
+		return [self filterWithWindow:bestWindow error:errorMessage];
+	}
+	if (errorMessage != NULL) {
+		*errorMessage = [NSString stringWithFormat:@"ScreenCaptureKit found no visible window for application pid %u", self.targetID];
 	}
 	return nil;
 }
@@ -502,7 +542,7 @@ RFSCKSession *rf_sck_session_create(
 	const char *quality,
 	char **error_message
 ) {
-	if (target_kind != RF_SCK_TARGET_DISPLAY && target_kind != RF_SCK_TARGET_WINDOW) {
+	if (target_kind != RF_SCK_TARGET_DISPLAY && target_kind != RF_SCK_TARGET_WINDOW && target_kind != RF_SCK_TARGET_APPLICATION) {
 		rf_sck_set_error(error_message, @"ScreenCaptureKit target kind is not supported");
 		return NULL;
 	}

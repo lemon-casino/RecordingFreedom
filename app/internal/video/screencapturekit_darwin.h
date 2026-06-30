@@ -7,7 +7,8 @@ typedef struct RFSCKSession RFSCKSession;
 
 enum {
 	RF_SCK_TARGET_DISPLAY = 1,
-	RF_SCK_TARGET_WINDOW = 2
+	RF_SCK_TARGET_WINDOW = 2,
+	RF_SCK_TARGET_APPLICATION = 3
 };
 
 typedef struct {

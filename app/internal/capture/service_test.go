@@ -42,6 +42,16 @@ func TestDarwinWindowRecordingCapabilityAvailable(t *testing.T) {
 	}
 }
 
+func TestDarwinProgramRecordingCapabilityAvailable(t *testing.T) {
+	capability := applicationRecordingCapability("darwin")
+	if capability.Status != StatusAvailable {
+		t.Fatalf("darwin program recording status = %q, want %q", capability.Status, StatusAvailable)
+	}
+	if capability.Backend != "ScreenCaptureKit" {
+		t.Fatalf("darwin program recording backend = %q, want ScreenCaptureKit", capability.Backend)
+	}
+}
+
 func assertCapability(t *testing.T, capability Capability) {
 	t.Helper()
 	if capability.ID == "" {

@@ -78,7 +78,7 @@ GitHub Actions 会自动运行 `release.yml`，通过后生成 GitHub prerelease
 - 无 GUI preview smoke 是否能完成设置持久化、storage health、预检、mock 开始/暂停/继续/结束、manifest ready 校验和恢复扫描。
 - Windows、macOS、Linux 三个平台是否能完成 Wails 构建。
 
-当前 preview release 必须在 release notes 中明确：macOS ScreenCaptureKit display/window capture 已接入代码路径但仍需真机 smoke 验收；ScreenCaptureKit program capture、Windows WGC、Linux PipeWire、完整 app recording backend 音频接入、摄像头 sidecar 和 PIP 导出仍属于后续里程碑，不能把 mock package、未验收的 ScreenCaptureKit 路径或 `audio-smoke` 说成完整真实录制。
+当前 preview release 必须在 release notes 中明确：macOS ScreenCaptureKit display/window/program capture 已接入代码路径但仍需真机 smoke 验收；Windows WGC、Linux PipeWire、完整 app recording backend 音频接入、摄像头 sidecar 和 PIP 导出仍属于后续里程碑，不能把 mock package、未验收的 ScreenCaptureKit 路径或 `audio-smoke` 说成完整真实录制。
 
 `preview`、`alpha`、`beta`、`rc` 标签会被 workflow 自动标记为 GitHub prerelease；正式稳定版本再移除这些后缀。
 

@@ -52,3 +52,28 @@ func TestDarwinWindowID(t *testing.T) {
 		})
 	}
 }
+
+func TestDarwinApplicationPID(t *testing.T) {
+	tests := []struct {
+		name     string
+		sourceID string
+		wantID   uint32
+		wantOK   bool
+	}{
+		{name: "application", sourceID: "application:1201", wantID: 1201, wantOK: true},
+		{name: "trimmed", sourceID: " application:99 ", wantID: 99, wantOK: true},
+		{name: "window", sourceID: "window:99"},
+		{name: "empty", sourceID: "application:"},
+		{name: "zero", sourceID: "application:0"},
+		{name: "negative", sourceID: "application:-1"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			gotID, gotOK := DarwinApplicationPID(tt.sourceID)
+			if gotOK != tt.wantOK || gotID != tt.wantID {
+				t.Fatalf("DarwinApplicationPID(%q) = (%d, %v), want (%d, %v)", tt.sourceID, gotID, gotOK, tt.wantID, tt.wantOK)
+			}
+		})
+	}
+}

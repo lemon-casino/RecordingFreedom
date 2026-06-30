@@ -55,7 +55,7 @@
 
 ## M3 macOS 录制
 
-状态：ScreenCaptureKit display/window `screen.mp4` 写盘代码已接入，待 macOS 真机录制 smoke 验收；程序录制、系统声音、麦克风和完整音画同步仍是本里程碑后续任务。
+状态：ScreenCaptureKit display/window/program `screen.mp4` 写盘代码已接入，待 macOS 真机录制 smoke 验收；系统声音、麦克风和完整音画同步仍是本里程碑后续任务。
 
 目标：
 
