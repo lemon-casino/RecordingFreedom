@@ -1,0 +1,42 @@
+.DS_Store
+Thumbs.db
+
+# Local environment
+.env
+.env.*
+!.env.example
+
+# Logs and temporary output
+*.log
+*.tmp
+*.out
+*.test
+coverage/
+
+# Wails / Go build output
+app/.task/
+app/bin/
+
+# App-managed local data
+app/data/*
+!app/data/
+!app/data/video/
+!app/data/video/.gitkeep
+
+# Frontend build and local tooling output
+app/frontend/dist/
+app/frontend/node_modules/
+!app/frontend/package-lock.json
+app/frontend/.codex-run/
+app/frontend/capsule-preview.png
+app/frontend/vite-preview.log
+
+# Platform packaging caches
+app/build/linux/appimage/build/
+app/build/windows/nsis/MicrosoftEdgeWebview2Setup.exe
+
+# Mobile generated files contain machine-local paths
+app/build/ios/xcode/overlay.json
+app/build/ios/xcode/gen/
+app/build/android/overlay.json
+app/build/android/gen/

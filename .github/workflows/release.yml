@@ -1,0 +1,211 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+env:
+  GO_VERSION: "1.25.0"
+  NODE_VERSION: "24"
+  WAILS_VERSION: "v3.0.0-alpha2.109"
+  APP_DIR: app
+
+jobs:
+  validate:
+    name: Release Gate
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache-dependency-path: ${{ env.APP_DIR }}/go.sum
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: ${{ env.APP_DIR }}/frontend/package-lock.json
+
+      - name: Install Linux Wails build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            build-essential \
+            pkg-config \
+            libgtk-3-dev \
+            libwebkit2gtk-4.1-dev
+
+      - name: Install Wails v3 CLI
+        working-directory: ${{ env.APP_DIR }}
+        run: |
+          go install github.com/wailsapp/wails/v3/cmd/wails3@${WAILS_VERSION}
+          echo "$(go env GOPATH)/bin" >> "$GITHUB_PATH"
+
+      - name: Install frontend dependencies
+        working-directory: ${{ env.APP_DIR }}/frontend
+        run: npm ci
+
+      - name: Generate Wails bindings
+        working-directory: ${{ env.APP_DIR }}
+        run: wails3 generate bindings -ts -i
+
+      - name: Verify generated bindings are committed
+        working-directory: ${{ env.APP_DIR }}
+        run: git diff --exit-code -- frontend/bindings
+
+      - name: Build frontend
+        working-directory: ${{ env.APP_DIR }}/frontend
+        run: npm run build
+
+      - name: Test Go packages
+        working-directory: ${{ env.APP_DIR }}
+        run: go test ./...
+
+      - name: Run preview smoke
+        working-directory: ${{ env.APP_DIR }}
+        run: go run ./cmd/preview-smoke
+
+  build:
+    name: Build ${{ matrix.name }}
+    runs-on: ${{ matrix.os }}
+    needs: [validate]
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: windows-x64
+            os: windows-latest
+          - name: macos-arm64
+            os: macos-15
+          - name: linux-x64
+            os: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache-dependency-path: ${{ env.APP_DIR }}/go.sum
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: ${{ env.APP_DIR }}/frontend/package-lock.json
+
+      - name: Install Linux Wails build dependencies
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            build-essential \
+            pkg-config \
+            libgtk-3-dev \
+            libwebkit2gtk-4.1-dev
+
+      - name: Install Wails v3 CLI
+        working-directory: ${{ env.APP_DIR }}
+        shell: bash
+        run: |
+          go install github.com/wailsapp/wails/v3/cmd/wails3@${WAILS_VERSION}
+          echo "$(go env GOPATH)/bin" >> "$GITHUB_PATH"
+
+      - name: Build app
+        working-directory: ${{ env.APP_DIR }}
+        run: wails3 build
+
+      - name: Stage release artifact
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p release-out
+          if [ "${{ runner.os }}" = "Windows" ]; then
+            cp "${APP_DIR}/bin/recordingfreedom.exe" "release-out/RecordingFreedom-${{ matrix.name }}-${{ github.ref_name }}.exe"
+          else
+            cp "${APP_DIR}/bin/recordingfreedom" "release-out/RecordingFreedom-${{ matrix.name }}-${{ github.ref_name }}"
+            chmod +x "release-out/RecordingFreedom-${{ matrix.name }}-${{ github.ref_name }}"
+          fi
+          artifact_count="$(find release-out -maxdepth 1 -type f ! -name "SHA256SUMS-*" | wc -l | tr -d ' ')"
+          if [ "${artifact_count}" -eq 0 ]; then
+            echo "No release artifact was staged." >&2
+            exit 1
+          fi
+          while IFS= read -r artifact; do
+            test -s "${artifact}"
+          done < <(find release-out -maxdepth 1 -type f ! -name "SHA256SUMS-*")
+          (
+            cd release-out
+            if command -v sha256sum >/dev/null 2>&1; then
+              sha256sum RecordingFreedom-* > "SHA256SUMS-${{ matrix.name }}.txt"
+            else
+              shasum -a 256 RecordingFreedom-* > "SHA256SUMS-${{ matrix.name }}.txt"
+            fi
+          )
+
+      - name: Upload release artifact
+        uses: actions/upload-artifact@v5
+        with:
+          name: RecordingFreedom-${{ matrix.name }}
+          path: release-out/**
+          if-no-files-found: error
+
+  publish:
+    name: Publish GitHub Release
+    runs-on: ubuntu-latest
+    needs: [build]
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Download release artifacts
+        uses: actions/download-artifact@v5
+        with:
+          path: release-artifacts
+          merge-multiple: true
+
+      - name: Publish release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG_NAME: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          mapfile -t assets < <(find release-artifacts -type f | sort)
+          if [ "${#assets[@]}" -eq 0 ]; then
+            echo "No release artifacts were produced." >&2
+            exit 1
+          fi
+
+          title="RecordingFreedom ${TAG_NAME}"
+          notes="$(cat <<'NOTES'
+RecordingFreedom Wails v3 preview build.
+
+Ready to verify:
+- Capsule recorder UI shell and tray/settings windows.
+- Simplified Chinese / English global language switching.
+- Settings persistence, app-managed data/video storage, storage health, preflight, recovery scan, and capability matrix.
+- Mock .rfrec package flow for UI/package validation.
+- No-GUI preview smoke for settings, storage, preflight, mock start/pause/resume/stop, ready manifest, RNNoise/camera/PIP manifest contract, and recovery scan.
+- Windows, macOS, and Linux Wails build artifacts.
+
+Not included yet:
+- Real ScreenCaptureKit / Windows.Graphics.Capture / PipeWire recording.
+- Real system audio or microphone capture.
+- Native RNNoise DSP processing.
+- Camera sidecar capture and PIP export.
+- Signed installers, notarization, or Linux packages.
+NOTES
+)"
+
+          if gh release view "${TAG_NAME}" >/dev/null 2>&1; then
+            gh release edit "${TAG_NAME}" --title "${title}" --notes "${notes}"
+          else
+            gh release create "${TAG_NAME}" --title "${title}" --notes "${notes}"
+          fi
+
+          gh release upload "${TAG_NAME}" "${assets[@]}" --clobber
