@@ -17,6 +17,9 @@ import (
 //go:embed all:frontend/dist
 var assets embed.FS
 
+//go:embed build/appicon.png
+var appIcon []byte
+
 func init() {
 	application.RegisterEvent[recording.StatusEvent]("recording.status")
 }
@@ -27,6 +30,7 @@ func main() {
 	app := application.New(application.Options{
 		Name:        "RecordingFreedom",
 		Description: "A modern capsule screen recorder built with Go, React, and Wails v3",
+		Icon:        appIcon,
 		Services: []application.Service{
 			application.NewService(recordingFreedom),
 		},

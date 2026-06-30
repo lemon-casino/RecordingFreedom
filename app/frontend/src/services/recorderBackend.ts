@@ -1,4 +1,4 @@
-import {Events} from '@wailsio/runtime'
+import {Events, Window as WailsWindow} from '@wailsio/runtime'
 import {RecordingFreedomService} from '../../bindings/github.com/lemon-casino/RecordingFreedom/app'
 import {type BootstrapState as BoundBootstrapState} from '../../bindings/github.com/lemon-casino/RecordingFreedom/app/models'
 import {
@@ -76,6 +76,17 @@ export type RecorderBootstrap = {
 }
 
 const browserSettingsKey = 'recordingfreedom.settings.v1'
+const capsuleWindowWidth = 860
+const capsuleWindowCollapsedHeight = 166
+const capsuleWindowExpandedHeight = 420
+
+export async function setCapsuleWindowExpanded(expanded: boolean): Promise<void> {
+  try {
+    await WailsWindow.SetSize(capsuleWindowWidth, expanded ? capsuleWindowExpandedHeight : capsuleWindowCollapsedHeight)
+  } catch (error) {
+    console.info('Using browser capsule window size fallback:', error)
+  }
+}
 
 export async function loadBootstrap(): Promise<RecorderBootstrap> {
   try {

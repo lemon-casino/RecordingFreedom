@@ -1,24 +1,27 @@
 package main
 
 import (
-	"runtime"
-
 	"github.com/wailsapp/wails/v3/pkg/application"
 	"github.com/wailsapp/wails/v3/pkg/events"
-	"github.com/wailsapp/wails/v3/pkg/icons"
+)
+
+const (
+	capsuleWindowWidth           = 860
+	capsuleWindowCollapsedHeight = 166
 )
 
 func createCapsuleWindow(app *application.App) *application.WebviewWindow {
 	window := app.Window.NewWithOptions(application.WebviewWindowOptions{
 		Name:            "capsule-recorder",
 		Title:           "RecordingFreedom",
-		Width:           980,
-		Height:          420,
+		Width:           capsuleWindowWidth,
+		Height:          capsuleWindowCollapsedHeight,
 		Frameless:       true,
 		AlwaysOnTop:     true,
 		DisableResize:   true,
 		HideOnEscape:    true,
 		HideOnFocusLost: true,
+		BackgroundType:  application.BackgroundTypeTransparent,
 		Mac: application.MacWindow{
 			InvisibleTitleBarHeight: 50,
 			Backdrop:                application.MacBackdropTranslucent,
@@ -27,7 +30,10 @@ func createCapsuleWindow(app *application.App) *application.WebviewWindow {
 		Windows: application.WindowsWindow{
 			HiddenOnTaskbar: true,
 		},
-		BackgroundColour: application.NewRGB(6, 7, 15),
+		Linux: application.LinuxWindow{
+			Icon: appIcon,
+		},
+		BackgroundColour: application.NewRGBA(0, 0, 0, 0),
 		URL:              "/",
 	})
 
@@ -55,6 +61,9 @@ func createSettingsWindow(app *application.App) *application.WebviewWindow {
 			Backdrop:                application.MacBackdropTranslucent,
 			TitleBar:                application.MacTitleBarDefault,
 		},
+		Linux: application.LinuxWindow{
+			Icon: appIcon,
+		},
 		BackgroundColour: application.NewRGB(11, 15, 19),
 		URL:              "/settings",
 	})
@@ -70,13 +79,8 @@ func createSettingsWindow(app *application.App) *application.WebviewWindow {
 func configureSystemTray(app *application.App, recorderWindow *application.WebviewWindow, settingsWindow *application.WebviewWindow) {
 	tray := app.SystemTray.New()
 	tray.SetTooltip("RecordingFreedom")
-
-	if runtime.GOOS == "darwin" {
-		tray.SetTemplateIcon(icons.SystrayMacTemplate)
-	} else {
-		tray.SetIcon(icons.SystrayLight)
-		tray.SetDarkModeIcon(icons.SystrayDark)
-	}
+	tray.SetIcon(appIcon)
+	tray.SetDarkModeIcon(appIcon)
 
 	menu := app.NewMenu()
 	menu.Add("Show Recorder").OnClick(func(ctx *application.Context) {

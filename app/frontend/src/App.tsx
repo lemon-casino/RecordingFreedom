@@ -6,13 +6,11 @@ import {
   CircleDot,
   Gauge,
   Languages,
-  Mic,
   Monitor,
   Pause,
   Play,
   Radio,
   Settings,
-  ShieldCheck,
   Square,
   Video,
   Volume2,
@@ -43,7 +41,7 @@ import {
   fallbackCapabilities,
   fallbackStorageStatus,
 } from './services/mockBackend'
-import {hideSettingsWindow, loadBootstrap, pauseRecording, preflightRecording, recoverRecordingPackage, resumeRecording, saveSettings, setDataRoot, showSettingsWindow, startRecording, stopRecording, subscribeRecordingStatus, type RecordingRecovery, type RecordingStatusUpdate} from './services/recorderBackend'
+import {hideSettingsWindow, loadBootstrap, pauseRecording, preflightRecording, recoverRecordingPackage, resumeRecording, saveSettings, setCapsuleWindowExpanded, setDataRoot, showSettingsWindow, startRecording, stopRecording, subscribeRecordingStatus, type RecordingRecovery, type RecordingStatusUpdate} from './services/recorderBackend'
 
 const sourceIcon = {
   screen: Monitor,
@@ -146,6 +144,7 @@ function App() {
   const [storageRootDraft, setStorageRootDraft] = useState(fallbackAppData.rootDir)
   const [storageBusy, setStorageBusy] = useState(false)
   const [storageMessage, setStorageMessage] = useState<StorageMessageState | null>(null)
+  const rnnoiseActive = microphone && noiseSuppression
 
   const copy = copyByLocale[locale]
   const lastStatusText = lastStatusMessage.fallback ?? copy.statusMessages[lastStatusMessage.key]
@@ -209,8 +208,21 @@ function App() {
   }
 
   useEffect(() => {
+    document.body.classList.toggle('rf-settings-window', isSettingsWindow)
+    document.body.classList.toggle('rf-recorder-window', !isSettingsWindow)
+    return () => {
+      document.body.classList.remove('rf-settings-window', 'rf-recorder-window')
+    }
+  }, [isSettingsWindow])
+
+  useEffect(() => {
     document.documentElement.lang = locale
   }, [locale])
+
+  useEffect(() => {
+    if (isSettingsWindow) return
+    void setCapsuleWindowExpanded(activePanel !== null)
+  }, [activePanel, isSettingsWindow])
 
   useEffect(() => {
     let cancelled = false
@@ -585,31 +597,14 @@ function App() {
 
           <div className="control-group" aria-label={copy.aria.audioCameraControls}>
             <button
-              className={`icon-button ${systemAudio ? 'is-on' : ''}`}
+              className={`icon-button ${systemAudio || microphone ? 'is-on' : ''} ${rnnoiseActive ? 'strong' : ''}`}
               type="button"
-              aria-label={copy.aria.toggleSystemAudio}
-              title={copy.panels.systemAudio}
-              onClick={() => setSystemAudio((value) => !value)}
-            >
-              <Volume2 size={18} />
-            </button>
-            <button
-              className={`icon-button ${microphone ? 'is-on' : ''}`}
-              type="button"
-              aria-label={copy.aria.openMicrophoneSettings}
-              title={copy.panels.microphone}
+              aria-label={copy.aria.openAudioSettings}
+              title={copy.panels.audio}
+              aria-expanded={activePanel === 'audio'}
               onClick={() => setActivePanel(activePanel === 'audio' ? null : 'audio')}
             >
-              <Mic size={18} />
-            </button>
-            <button
-              className={`icon-button ${noiseSuppression ? 'is-on strong' : ''}`}
-              type="button"
-              aria-label={copy.aria.toggleNoiseSuppression}
-              title={copy.panels.rnnoise}
-              onClick={() => setNoiseSuppression((value) => !value)}
-            >
-              <ShieldCheck size={18} />
+              <Volume2 size={18} />
             </button>
             <button
               className={`icon-button ${camera ? 'is-on' : ''}`}
@@ -707,7 +702,7 @@ function App() {
                   {availableSystemAudio.map((device) => <option key={device.id} value={device.id}>{mediaDeviceName(device, copy)}</option>)}
                 </select>
                 <SwitchRow label={copy.panels.microphone} checked={microphone} onChange={setMicrophone} />
-                <SwitchRow label={copy.panels.rnnoise} checked={noiseSuppression} onChange={setNoiseSuppression} />
+                <SwitchRow label={copy.panels.rnnoise} checked={rnnoiseActive} disabled={!microphone} onChange={setNoiseSuppression} />
                 <label className="field-label" htmlFor="mic-device">{copy.panels.microphoneDevice}</label>
                 <select id="mic-device" value={selectedMic} onChange={(event) => setSelectedMic(event.target.value)}>
                   {availableMicrophones.map((device) => <option key={device.id} value={device.id}>{mediaDeviceName(device, copy)}</option>)}
@@ -764,7 +759,7 @@ function App() {
           <span>{copy.common.backend}: {lastBackend}</span>
           <span>{copy.common.status}: {lastStatusText}</span>
           <Wand2 size={16} />
-          <span>{noiseSuppression ? copy.strip.micEnhancementOn : copy.strip.micEnhancementOff}</span>
+          <span>{rnnoiseActive ? copy.strip.micEnhancementOn : copy.strip.micEnhancementOff}</span>
           <span>{copy.common.preflight}: {lastPreflight ? copy.preflightLabels[lastPreflight.status] : copy.common.notRun}</span>
           <span>{recoverablePackages > 0 ? copy.strip.recoveryPackages(recoverablePackages) : copy.strip.recoveryClean}</span>
         </div>
@@ -775,11 +770,11 @@ function App() {
   )
 }
 
-function SwitchRow({label, checked, onChange}: {label: string; checked: boolean; onChange: (value: boolean) => void}) {
+function SwitchRow({label, checked, disabled = false, onChange}: {label: string; checked: boolean; disabled?: boolean; onChange: (value: boolean) => void}) {
   return (
-    <label className="switch-row">
+    <label className={`switch-row ${disabled ? 'is-disabled' : ''}`}>
       <span>{label}</span>
-      <input type="checkbox" checked={checked} onChange={(event) => onChange(event.target.checked)} />
+      <input type="checkbox" checked={checked} disabled={disabled} onChange={(event) => onChange(event.target.checked)} />
       <i aria-hidden="true" />
     </label>
   )

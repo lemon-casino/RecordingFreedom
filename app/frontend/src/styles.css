@@ -27,18 +27,27 @@ html,
 body,
 #root {
   width: 100%;
-  min-width: 780px;
   height: 100%;
-  min-height: 360px;
+  min-width: 0;
+  min-height: 0;
   margin: 0;
+  background: transparent;
 }
 
 body {
   overflow: hidden;
+  background: transparent;
+  color: var(--text);
+}
+
+body.rf-settings-window {
   background:
     radial-gradient(circle at 50% -20%, rgba(17, 183, 167, 0.18), transparent 34%),
     linear-gradient(135deg, #0b0f13 0%, #111821 52%, #090c10 100%);
-  color: var(--text);
+}
+
+body.rf-recorder-window {
+  background: transparent;
 }
 
 button,
@@ -58,17 +67,20 @@ button:disabled {
 .rf-shell {
   position: relative;
   display: grid;
-  min-height: 100%;
-  place-items: center;
-  padding: 42px;
+  height: 100%;
+  place-items: start center;
+  padding: 12px 18px;
+  background: transparent;
+  --wails-draggable: drag;
 }
 
 .recorder-stage {
   position: relative;
   display: grid;
   justify-items: center;
-  gap: 16px;
-  width: min(920px, 100%);
+  gap: 12px;
+  width: min(944px, 100%);
+  --wails-draggable: drag;
 }
 
 .capsule {
@@ -84,6 +96,7 @@ button:disabled {
   box-shadow: 0 30px 80px rgba(0, 0, 0, 0.42), inset 0 1px 0 rgba(255, 255, 255, 0.08);
   backdrop-filter: blur(22px) saturate(150%);
   transition: border-color 180ms ease, box-shadow 180ms ease;
+  --wails-draggable: drag;
 }
 
 .capsule-active {
@@ -100,6 +113,7 @@ button:disabled {
   border-radius: var(--radius-pill);
   background: transparent;
   color: var(--quiet);
+  --wails-draggable: drag;
 }
 
 .grabber span {
@@ -286,7 +300,7 @@ button:disabled {
 .popover {
   position: absolute;
   z-index: 5;
-  top: calc(50% + 54px);
+  top: 86px;
   left: 62px;
   width: 360px;
   padding: 8px;
@@ -295,6 +309,7 @@ button:disabled {
   background: var(--panel-strong);
   box-shadow: 0 24px 70px rgba(0, 0, 0, 0.45);
   backdrop-filter: blur(24px) saturate(150%);
+  --wails-draggable: no-drag;
 }
 
 .menu-grid,
@@ -355,6 +370,12 @@ button:disabled {
   color: var(--text);
 }
 
+.switch-row.is-disabled {
+  cursor: not-allowed;
+  color: var(--muted);
+  opacity: 0.62;
+}
+
 .switch-row input {
   position: absolute;
   opacity: 0;
@@ -388,6 +409,11 @@ button:disabled {
 .switch-row input:checked + i::after {
   transform: translateX(18px);
   background: var(--teal);
+}
+
+.switch-row input:disabled + i {
+  border-color: rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.04);
 }
 
 .field-label {
@@ -457,6 +483,7 @@ input {
   background: rgba(255, 255, 255, 0.04);
   color: var(--muted);
   font-size: 12px;
+  --wails-draggable: drag;
 }
 
 .storage-strip span {
@@ -481,6 +508,7 @@ input {
   background: var(--panel-strong);
   box-shadow: 0 24px 80px rgba(0, 0, 0, 0.5);
   overflow: auto;
+  --wails-draggable: no-drag;
 }
 
 .settings-sheet {
@@ -675,6 +703,21 @@ input:focus-visible,
 .switch-row:focus-within {
   outline: 2px solid rgba(17, 183, 167, 0.72);
   outline-offset: 3px;
+}
+
+button,
+select,
+input,
+textarea,
+label,
+.menu-row,
+.switch-row,
+.settings-panel {
+  --wails-draggable: no-drag;
+}
+
+.grabber {
+  --wails-draggable: drag;
 }
 
 @media (max-width: 840px) {

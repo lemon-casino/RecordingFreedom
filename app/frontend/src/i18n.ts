@@ -36,9 +36,7 @@ export type RecorderCopy = {
     recorderControls: string
     moveRecorder: string
     audioCameraControls: string
-    toggleSystemAudio: string
-    openMicrophoneSettings: string
-    toggleNoiseSuppression: string
+    openAudioSettings: string
     openCameraSettings: string
     startRecording: string
     stopRecording: string
@@ -97,6 +95,7 @@ export type RecorderCopy = {
     release: string
   }
   panels: {
+    audio: string
     systemAudio: string
     systemAudioDevice: string
     microphone: string
@@ -154,9 +153,7 @@ const zhCN: RecorderCopy = {
     recorderControls: '胶囊录制控制',
     moveRecorder: '移动录制器',
     audioCameraControls: '音频和摄像头控制',
-    toggleSystemAudio: '切换系统声音',
-    openMicrophoneSettings: '打开麦克风设置',
-    toggleNoiseSuppression: '切换麦克风降噪',
+    openAudioSettings: '打开音频设置',
     openCameraSettings: '打开摄像头设置',
     startRecording: '开始录制',
     stopRecording: '结束录制',
@@ -238,6 +235,7 @@ const zhCN: RecorderCopy = {
     release: '发布',
   },
   panels: {
+    audio: '音频',
     systemAudio: '系统声音',
     systemAudioDevice: '系统声音设备',
     microphone: '麦克风',
@@ -414,9 +412,7 @@ const en: RecorderCopy = {
     recorderControls: 'Capsule recorder controls',
     moveRecorder: 'Move recorder',
     audioCameraControls: 'Audio and camera controls',
-    toggleSystemAudio: 'Toggle system audio',
-    openMicrophoneSettings: 'Open microphone settings',
-    toggleNoiseSuppression: 'Toggle microphone noise suppression',
+    openAudioSettings: 'Open audio settings',
     openCameraSettings: 'Open camera settings',
     startRecording: 'Start recording',
     stopRecording: 'Stop recording',
@@ -498,6 +494,7 @@ const en: RecorderCopy = {
     release: 'Release',
   },
   panels: {
+    audio: 'Audio',
     systemAudio: 'System audio',
     systemAudioDevice: 'System audio device',
     microphone: 'Microphone',
