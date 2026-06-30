@@ -23,7 +23,8 @@ import (
 
 type screenCaptureKitSession struct {
 	config      CaptureConfig
-	displayID   uint32
+	targetKind  C.int
+	targetID    uint32
 	handle      *C.RFSCKSession
 	diagnostics Diagnostics
 
@@ -33,12 +34,9 @@ type screenCaptureKitSession struct {
 
 func NewPlatformSession(config CaptureConfig) (Session, error) {
 	config = NormalizeCaptureConfig(config)
-	if config.SourceType != devices.SourceScreen {
-		return nil, fmt.Errorf("ScreenCaptureKit display recording only supports screen sources in this milestone, got %q", config.SourceType)
-	}
-	displayID, ok := DarwinDisplayID(config.SourceID)
-	if !ok {
-		return nil, fmt.Errorf("ScreenCaptureKit display source id %q is invalid", config.SourceID)
+	targetKind, targetID, err := screenCaptureKitTarget(config)
+	if err != nil {
+		return nil, err
 	}
 	if config.OutputPath == "" {
 		return nil, errors.New("ScreenCaptureKit output path is required")
@@ -47,9 +45,29 @@ func NewPlatformSession(config CaptureConfig) (Session, error) {
 	diagnostics.Screen.Path = filepath.Base(config.OutputPath)
 	return &screenCaptureKitSession{
 		config:      config,
-		displayID:   displayID,
+		targetKind:  targetKind,
+		targetID:    targetID,
 		diagnostics: diagnostics,
 	}, nil
+}
+
+func screenCaptureKitTarget(config CaptureConfig) (C.int, uint32, error) {
+	switch config.SourceType {
+	case devices.SourceScreen:
+		displayID, ok := DarwinDisplayID(config.SourceID)
+		if !ok {
+			return 0, 0, fmt.Errorf("ScreenCaptureKit display source id %q is invalid", config.SourceID)
+		}
+		return C.RF_SCK_TARGET_DISPLAY, displayID, nil
+	case devices.SourceWindow:
+		windowID, ok := DarwinWindowID(config.SourceID)
+		if !ok {
+			return 0, 0, fmt.Errorf("ScreenCaptureKit window source id %q is invalid", config.SourceID)
+		}
+		return C.RF_SCK_TARGET_WINDOW, windowID, nil
+	default:
+		return 0, 0, fmt.Errorf("ScreenCaptureKit recording does not support source type %q yet", config.SourceType)
+	}
 }
 
 func (s *screenCaptureKitSession) Start(ctx context.Context) error {
@@ -73,7 +91,8 @@ func (s *screenCaptureKitSession) Start(ctx context.Context) error {
 
 	var errMessage *C.char
 	handle := C.rf_sck_session_create(
-		C.uint32_t(s.displayID),
+		s.targetKind,
+		C.uint32_t(s.targetID),
 		outputPath,
 		C.int(s.config.Profile.FPS),
 		boolToCInt(s.config.Profile.CaptureCursor),
@@ -89,7 +108,7 @@ func (s *screenCaptureKitSession) Start(ctx context.Context) error {
 		return err
 	}
 	s.handle = handle
-	s.diagnostics.Messages = append(s.diagnostics.Messages, "ScreenCaptureKit display capture started.")
+	s.diagnostics.Messages = append(s.diagnostics.Messages, fmt.Sprintf("ScreenCaptureKit %s capture started.", s.config.SourceType))
 	return nil
 }
 

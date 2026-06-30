@@ -24,3 +24,19 @@ func TestScreenCaptureKitPlatformSessionConstructsForDisplaySource(t *testing.T)
 		t.Fatal("NewPlatformSession() returned nil session")
 	}
 }
+
+func TestScreenCaptureKitPlatformSessionConstructsForWindowSource(t *testing.T) {
+	session, err := NewPlatformSession(CaptureConfig{
+		Backend:         "screencapturekit",
+		SourceID:        "window:42",
+		SourceType:      devices.SourceWindow,
+		OutputPath:      filepath.Join(t.TempDir(), "screen.mp4"),
+		DiagnosticsPath: filepath.Join(t.TempDir(), "video-diagnostics.json"),
+	})
+	if err != nil {
+		t.Fatalf("NewPlatformSession() error = %v", err)
+	}
+	if session == nil {
+		t.Fatal("NewPlatformSession() returned nil session")
+	}
+}

@@ -27,7 +27,7 @@ func (s *Service) Capabilities() Capabilities {
 func screenRecordingCapability(platform string) Capability {
 	switch platform {
 	case "darwin":
-		return available("screen-recording", "Screen Recording", "ScreenCaptureKit", PermissionScreenRecording, "ScreenCaptureKit display capture is implemented; window, application, and audio mapping remain queued.")
+		return available("screen-recording", "Screen Recording", "ScreenCaptureKit", PermissionScreenRecording, "ScreenCaptureKit display capture is implemented; program grouping and audio mapping remain queued.")
 	case "windows":
 		return queued("screen-recording", "Screen Recording", "Windows.Graphics.Capture", PermissionNotRequired, "WGC capture backend is queued behind source and package contracts.")
 	case "linux":
@@ -40,7 +40,7 @@ func screenRecordingCapability(platform string) Capability {
 func windowRecordingCapability(platform string) Capability {
 	switch platform {
 	case "darwin":
-		return queued("window-recording", "Window Recording", "ScreenCaptureKit", PermissionScreenRecording, "CoreGraphics can enumerate windows; ScreenCaptureKit capture target mapping is still queued.")
+		return available("window-recording", "Window Recording", "ScreenCaptureKit", PermissionScreenRecording, "ScreenCaptureKit single-window capture is implemented; program grouping and audio mapping remain queued.")
 	case "windows":
 		return queued("window-recording", "Window Recording", "Windows.Graphics.Capture", PermissionNotRequired, "Win32 can enumerate windows; WGC capture target mapping is still queued.")
 	case "linux":

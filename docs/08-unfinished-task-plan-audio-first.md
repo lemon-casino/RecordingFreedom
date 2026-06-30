@@ -201,12 +201,14 @@
 
 ## P0-RECORDING：真实屏幕/窗口/程序录制
 
-状态：macOS ScreenCaptureKit display video session 已接入代码路径：`screen:display-<CGDirectDisplayID>` 会通过 `SCStream` 写入真实 `screen.mp4`，并输出 `video-diagnostics.json`。已新增 `cmd/video-smoke` 作为无 UI 真机验收入口。仍需 macOS 真机 smoke 验证；窗口、程序、系统声音 mux、麦克风 mux、Windows WGC 和 Linux PipeWire 仍未完成。
+状态：macOS ScreenCaptureKit display/window video session 已接入代码路径：`screen:display-<CGDirectDisplayID>` 和 `window:<CGWindowID>` 会通过 `SCStream` 写入真实 `screen.mp4`，并输出 `video-diagnostics.json`。已新增 `cmd/video-smoke` 作为无 UI 真机验收入口。仍需 macOS 真机 smoke 验证；程序、系统声音 mux、麦克风 mux、Windows WGC 和 Linux PipeWire 仍未完成。
 
 任务：
 
 - macOS ScreenCaptureKit 最小 display `screen.mp4` 写盘。代码已接入，待真机录制验收。
+- macOS ScreenCaptureKit 最小 window `screen.mp4` 写盘。代码已接入，待真机录制验收。
 - macOS `cmd/video-smoke` 真实录制验收：`go run ./cmd/video-smoke -duration=1m` 和 `go run ./cmd/video-smoke -duration=5m -pause-after=10s -pause-duration=2s`。
+- macOS window smoke：`go run ./cmd/video-smoke -source-type=window -duration=1m`。
 - Windows Windows.Graphics.Capture 最小 `screen.mp4` 写盘。
 - Linux XDG Desktop Portal + PipeWire experimental 写盘。
 - 将 CoreGraphics/Win32/PipeWire 源 ID 映射为真实 capture target。

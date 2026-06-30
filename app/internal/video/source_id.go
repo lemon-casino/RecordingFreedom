@@ -6,13 +6,22 @@ import (
 )
 
 const darwinDisplaySourcePrefix = "screen:display-"
+const darwinWindowSourcePrefix = "window:"
 
 func DarwinDisplayID(sourceID string) (uint32, bool) {
+	return parseDarwinUint32SourceID(sourceID, darwinDisplaySourcePrefix)
+}
+
+func DarwinWindowID(sourceID string) (uint32, bool) {
+	return parseDarwinUint32SourceID(sourceID, darwinWindowSourcePrefix)
+}
+
+func parseDarwinUint32SourceID(sourceID string, prefix string) (uint32, bool) {
 	raw := strings.TrimSpace(sourceID)
-	if !strings.HasPrefix(raw, darwinDisplaySourcePrefix) {
+	if !strings.HasPrefix(raw, prefix) {
 		return 0, false
 	}
-	value := strings.TrimSpace(strings.TrimPrefix(raw, darwinDisplaySourcePrefix))
+	value := strings.TrimSpace(strings.TrimPrefix(raw, prefix))
 	if value == "" {
 		return 0, false
 	}

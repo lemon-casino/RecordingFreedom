@@ -56,7 +56,8 @@ static int64_t rf_sck_elapsed_ms(CMTime start, CMTime value) {
 }
 
 @interface RFScreenCaptureSession : NSObject <SCStreamDelegate, SCStreamOutput>
-@property(nonatomic, assign) uint32_t displayID;
+@property(nonatomic, assign) int targetKind;
+@property(nonatomic, assign) uint32_t targetID;
 @property(nonatomic, copy) NSString *outputPath;
 @property(nonatomic, copy) NSString *quality;
 @property(nonatomic, assign) int requestedFPS;
@@ -82,7 +83,8 @@ static int64_t rf_sck_elapsed_ms(CMTime start, CMTime value) {
 
 @implementation RFScreenCaptureSession
 
-- (instancetype)initWithDisplayID:(uint32_t)displayID
+- (instancetype)initWithTargetKind:(int)targetKind
+						  targetID:(uint32_t)targetID
 					   outputPath:(NSString *)outputPath
 							  fps:(int)fps
 					captureCursor:(BOOL)captureCursor
@@ -91,7 +93,8 @@ static int64_t rf_sck_elapsed_ms(CMTime start, CMTime value) {
 	if (self == nil) {
 		return nil;
 	}
-	_displayID = displayID;
+	_targetKind = targetKind;
+	_targetID = targetID;
 	_outputPath = [outputPath copy];
 	_requestedFPS = fps > 0 ? fps : 30;
 	_captureCursor = captureCursor;
@@ -140,16 +143,14 @@ static int64_t rf_sck_elapsed_ms(CMTime start, CMTime value) {
 		return NO;
 	}
 
-	SCDisplay *display = [self resolveDisplayWithError:errorMessage];
-	if (display == nil) {
+	SCContentFilter *filter = [self contentFilterWithError:errorMessage];
+	if (filter == nil) {
 		return NO;
 	}
 
-	self.width = (int)display.width;
-	self.height = (int)display.height;
 	if (self.width <= 0 || self.height <= 0) {
 		if (errorMessage != NULL) {
-			*errorMessage = [NSString stringWithFormat:@"ScreenCaptureKit display %u has invalid dimensions", self.displayID];
+			*errorMessage = [NSString stringWithFormat:@"ScreenCaptureKit target %u has invalid dimensions", self.targetID];
 		}
 		return NO;
 	}
@@ -170,9 +171,6 @@ static int64_t rf_sck_elapsed_ms(CMTime start, CMTime value) {
 	configuration.pixelFormat = kCVPixelFormatType_32BGRA;
 	configuration.showsCursor = self.captureCursor;
 
-	SCContentFilter *filter = [[SCContentFilter alloc] initWithDisplay:display
-												  excludingApplications:@[]
-													exceptingWindows:@[]];
 	self.stream = [[SCStream alloc] initWithFilter:filter configuration:configuration delegate:self];
 
 	NSError *outputError = nil;
@@ -207,7 +205,7 @@ static int64_t rf_sck_elapsed_ms(CMTime start, CMTime value) {
 	return YES;
 }
 
-- (SCDisplay *)resolveDisplayWithError:(NSString **)errorMessage API_AVAILABLE(macos(12.3)) {
+- (SCContentFilter *)contentFilterWithError:(NSString **)errorMessage API_AVAILABLE(macos(12.3)) {
 	__block SCShareableContent *content = nil;
 	__block NSError *contentError = nil;
 	dispatch_semaphore_t semaphore = dispatch_semaphore_create(0);
@@ -228,13 +226,45 @@ static int64_t rf_sck_elapsed_ms(CMTime start, CMTime value) {
 		}
 		return nil;
 	}
+	if (self.targetKind == RF_SCK_TARGET_DISPLAY) {
+		return [self displayFilterWithContent:content error:errorMessage];
+	}
+	if (self.targetKind == RF_SCK_TARGET_WINDOW) {
+		return [self windowFilterWithContent:content error:errorMessage];
+	}
+	if (errorMessage != NULL) {
+		*errorMessage = [NSString stringWithFormat:@"ScreenCaptureKit target kind %d is not supported", self.targetKind];
+	}
+	return nil;
+}
+
+- (SCContentFilter *)displayFilterWithContent:(SCShareableContent *)content error:(NSString **)errorMessage API_AVAILABLE(macos(12.3)) {
 	for (SCDisplay *display in content.displays) {
-		if ((uint32_t)display.displayID == self.displayID) {
-			return display;
+		if ((uint32_t)display.displayID == self.targetID) {
+			self.width = (int)display.width;
+			self.height = (int)display.height;
+			return [[SCContentFilter alloc] initWithDisplay:display
+									  excludingApplications:@[]
+										exceptingWindows:@[]];
 		}
 	}
 	if (errorMessage != NULL) {
-		*errorMessage = [NSString stringWithFormat:@"ScreenCaptureKit display %u was not found", self.displayID];
+		*errorMessage = [NSString stringWithFormat:@"ScreenCaptureKit display %u was not found", self.targetID];
+	}
+	return nil;
+}
+
+- (SCContentFilter *)windowFilterWithContent:(SCShareableContent *)content error:(NSString **)errorMessage API_AVAILABLE(macos(12.3)) {
+	for (SCWindow *window in content.windows) {
+		if ((uint32_t)window.windowID == self.targetID) {
+			CGRect frame = window.frame;
+			self.width = (int)ceil(frame.size.width);
+			self.height = (int)ceil(frame.size.height);
+			return [[SCContentFilter alloc] initWithDesktopIndependentWindow:window];
+		}
+	}
+	if (errorMessage != NULL) {
+		*errorMessage = [NSString stringWithFormat:@"ScreenCaptureKit window %u was not found", self.targetID];
 	}
 	return nil;
 }
@@ -464,15 +494,20 @@ static int64_t rf_sck_elapsed_ms(CMTime start, CMTime value) {
 @end
 
 RFSCKSession *rf_sck_session_create(
-	uint32_t display_id,
+	int target_kind,
+	uint32_t target_id,
 	const char *output_path,
 	int fps,
 	int capture_cursor,
 	const char *quality,
 	char **error_message
 ) {
-	if (display_id == 0) {
-		rf_sck_set_error(error_message, @"ScreenCaptureKit display id is required");
+	if (target_kind != RF_SCK_TARGET_DISPLAY && target_kind != RF_SCK_TARGET_WINDOW) {
+		rf_sck_set_error(error_message, @"ScreenCaptureKit target kind is not supported");
+		return NULL;
+	}
+	if (target_id == 0) {
+		rf_sck_set_error(error_message, @"ScreenCaptureKit target id is required");
 		return NULL;
 	}
 	if (output_path == NULL || strlen(output_path) == 0) {
@@ -481,7 +516,8 @@ RFSCKSession *rf_sck_session_create(
 	}
 	NSString *outputPath = [NSString stringWithUTF8String:output_path];
 	NSString *qualityValue = quality == NULL ? @"balanced" : [NSString stringWithUTF8String:quality];
-	RFScreenCaptureSession *impl = [[RFScreenCaptureSession alloc] initWithDisplayID:display_id
+	RFScreenCaptureSession *impl = [[RFScreenCaptureSession alloc] initWithTargetKind:target_kind
+																			targetID:target_id
 																		  outputPath:outputPath
 																				 fps:fps
 																	   captureCursor:capture_cursor != 0

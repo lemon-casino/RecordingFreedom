@@ -5,6 +5,11 @@
 
 typedef struct RFSCKSession RFSCKSession;
 
+enum {
+	RF_SCK_TARGET_DISPLAY = 1,
+	RF_SCK_TARGET_WINDOW = 2
+};
+
 typedef struct {
 	int enabled;
 	int width;
@@ -20,7 +25,8 @@ typedef struct {
 } RFSCKDiagnostics;
 
 RFSCKSession *rf_sck_session_create(
-	uint32_t display_id,
+	int target_kind,
+	uint32_t target_id,
 	const char *output_path,
 	int fps,
 	int capture_cursor,

@@ -177,8 +177,8 @@ macOS：
 - 麦克风使用 AVFoundation 或 ScreenCaptureKit 可用能力采集，并进入统一音频管线。
 - 摄像头使用 AVFoundation 录 sidecar。
 - 编码优先 H.264/AAC，使用系统硬件编码能力。
-- 当前已接入 ScreenCaptureKit display video session：`screen:display-<CGDirectDisplayID>` 会映射为 `SCDisplay`，通过 `SCStream` 接收 screen sample buffer，并用 `AVAssetWriter` 持续写入包内 `screen.mp4`；`Stop()` 会写入 `video-diagnostics.json` 并返回 manifest sync diagnostics。窗口、程序、系统声音 mux 和麦克风 mux 仍按后续任务推进。
-- 当前已新增 `cmd/video-smoke` 无 UI 验收入口，默认走 `native` backend、自动选择可用屏幕源，并验证真实 `.rfrec` 包、`screen.mp4`、`video-diagnostics.json` 和 manifest sync diagnostics。
+- 当前已接入 ScreenCaptureKit display/window video session：`screen:display-<CGDirectDisplayID>` 会映射为 `SCDisplay`，`window:<CGWindowID>` 会映射为 `SCWindow`，二者均通过 `SCStream` 接收 screen sample buffer，并用 `AVAssetWriter` 持续写入包内 `screen.mp4`；`Stop()` 会写入 `video-diagnostics.json` 并返回 manifest sync diagnostics。程序、系统声音 mux 和麦克风 mux 仍按后续任务推进。
+- 当前已新增 `cmd/video-smoke` 无 UI 验收入口，默认走 `native` backend、自动选择可用屏幕源；也可用 `-source-type=window` 验证窗口录制。命令会验证真实 `.rfrec` 包、`screen.mp4`、`video-diagnostics.json` 和 manifest sync diagnostics。
 
 Windows：
 
@@ -206,7 +206,7 @@ Linux：
 
 程序录制默认选择该程序的主窗口；如果平台支持更强的 app capture，再在后端升级，不改变前端接口。
 
-当前 macOS build-tag 已有 CoreGraphics source enumeration；真正开始录制时仍需把这些 `cgdisplay:*` / `cgwindow:*` native ID 映射到 ScreenCaptureKit capture target。
+当前 macOS build-tag 已有 CoreGraphics source enumeration，并已把 `screen:display-<CGDirectDisplayID>` 和 `window:<CGWindowID>` 映射到 ScreenCaptureKit capture target；`application:<pid>` 程序源仍需在后续映射为可录窗口集合或平台 app capture target。
 
 ## 音频管线
 

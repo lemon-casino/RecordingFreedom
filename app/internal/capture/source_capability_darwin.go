@@ -3,5 +3,5 @@
 package capture
 
 func sourceEnumerationCapability() Capability {
-	return available("source-enumeration", "Source Enumeration", "CoreGraphics", PermissionScreenRecording, "CoreGraphics display and visible window enumeration is implemented; ScreenCaptureKit target mapping is still queued.")
+	return available("source-enumeration", "Source Enumeration", "CoreGraphics", PermissionScreenRecording, "CoreGraphics display and visible window enumeration is implemented; ScreenCaptureKit display/window target mapping is wired in code.")
 }
