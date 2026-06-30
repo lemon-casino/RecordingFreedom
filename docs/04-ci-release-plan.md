@@ -65,8 +65,8 @@ SHA256SUMS-linux-x64.txt
 ```bash
 git remote add origin https://github.com/lemon-casino/RecordingFreedom.git
 git push -u origin main
-git tag v0.1.0-preview.1
-git push origin v0.1.0-preview.1
+git tag v0.1.0-preview.2
+git push origin v0.1.0-preview.2
 ```
 
 GitHub Actions 会自动运行 `release.yml`，通过后生成 GitHub Release 和三平台 preview artifacts。这个版本可用于检查：

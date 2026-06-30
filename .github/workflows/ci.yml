@@ -45,7 +45,7 @@ jobs:
       - name: Install Wails v3 CLI
         working-directory: ${{ env.APP_DIR }}
         run: |
-          go install github.com/wailsapp/wails/v3/cmd/wails3@${WAILS_VERSION}
+          go install -tags gtk3 github.com/wailsapp/wails/v3/cmd/wails3@${WAILS_VERSION}
           echo "$(go env GOPATH)/bin" >> "$GITHUB_PATH"
 
       - name: Install frontend dependencies
@@ -54,7 +54,7 @@ jobs:
 
       - name: Generate Wails bindings
         working-directory: ${{ env.APP_DIR }}
-        run: wails3 generate bindings -ts -i
+        run: wails3 generate bindings -ts -i -f "-tags gtk3"
 
       - name: Verify generated bindings are committed
         working-directory: ${{ env.APP_DIR }}
@@ -66,11 +66,11 @@ jobs:
 
       - name: Test Go packages
         working-directory: ${{ env.APP_DIR }}
-        run: go test ./...
+        run: go test -tags gtk3 ./...
 
       - name: Run preview smoke
         working-directory: ${{ env.APP_DIR }}
-        run: go run ./cmd/preview-smoke
+        run: go run -tags gtk3 ./cmd/preview-smoke
 
   macos-native-contract:
     name: macOS Native Capture Contracts
@@ -124,12 +124,26 @@ jobs:
         working-directory: ${{ env.APP_DIR }}
         shell: bash
         run: |
-          go install github.com/wailsapp/wails/v3/cmd/wails3@${WAILS_VERSION}
+          if [ "${{ runner.os }}" = "Linux" ]; then
+            go install -tags gtk3 github.com/wailsapp/wails/v3/cmd/wails3@${WAILS_VERSION}
+          else
+            go install github.com/wailsapp/wails/v3/cmd/wails3@${WAILS_VERSION}
+          fi
           echo "$(go env GOPATH)/bin" >> "$GITHUB_PATH"
+
+      - name: Install frontend dependencies
+        working-directory: ${{ env.APP_DIR }}/frontend
+        run: npm ci
 
       - name: Build app
         working-directory: ${{ env.APP_DIR }}
-        run: wails3 build
+        shell: bash
+        run: |
+          if [ "${{ runner.os }}" = "Linux" ]; then
+            wails3 build -tags gtk3
+          else
+            wails3 build
+          fi
 
       - name: Upload build artifact
         uses: actions/upload-artifact@v5

@@ -44,7 +44,7 @@ jobs:
       - name: Install Wails v3 CLI
         working-directory: ${{ env.APP_DIR }}
         run: |
-          go install github.com/wailsapp/wails/v3/cmd/wails3@${WAILS_VERSION}
+          go install -tags gtk3 github.com/wailsapp/wails/v3/cmd/wails3@${WAILS_VERSION}
           echo "$(go env GOPATH)/bin" >> "$GITHUB_PATH"
 
       - name: Install frontend dependencies
@@ -53,7 +53,7 @@ jobs:
 
       - name: Generate Wails bindings
         working-directory: ${{ env.APP_DIR }}
-        run: wails3 generate bindings -ts -i
+        run: wails3 generate bindings -ts -i -f "-tags gtk3"
 
       - name: Verify generated bindings are committed
         working-directory: ${{ env.APP_DIR }}
@@ -65,11 +65,11 @@ jobs:
 
       - name: Test Go packages
         working-directory: ${{ env.APP_DIR }}
-        run: go test ./...
+        run: go test -tags gtk3 ./...
 
       - name: Run preview smoke
         working-directory: ${{ env.APP_DIR }}
-        run: go run ./cmd/preview-smoke
+        run: go run -tags gtk3 ./cmd/preview-smoke
 
   build:
     name: Build ${{ matrix.name }}
@@ -113,12 +113,26 @@ jobs:
         working-directory: ${{ env.APP_DIR }}
         shell: bash
         run: |
-          go install github.com/wailsapp/wails/v3/cmd/wails3@${WAILS_VERSION}
+          if [ "${{ runner.os }}" = "Linux" ]; then
+            go install -tags gtk3 github.com/wailsapp/wails/v3/cmd/wails3@${WAILS_VERSION}
+          else
+            go install github.com/wailsapp/wails/v3/cmd/wails3@${WAILS_VERSION}
+          fi
           echo "$(go env GOPATH)/bin" >> "$GITHUB_PATH"
+
+      - name: Install frontend dependencies
+        working-directory: ${{ env.APP_DIR }}/frontend
+        run: npm ci
 
       - name: Build app
         working-directory: ${{ env.APP_DIR }}
-        run: wails3 build
+        shell: bash
+        run: |
+          if [ "${{ runner.os }}" = "Linux" ]; then
+            wails3 build -tags gtk3
+          else
+            wails3 build
+          fi
 
       - name: Stage release artifact
         shell: bash
@@ -182,30 +196,29 @@ jobs:
           fi
 
           title="RecordingFreedom ${TAG_NAME}"
-          notes="$(cat <<'NOTES'
-RecordingFreedom Wails v3 preview build.
+          cat > release-notes.md <<'NOTES'
+          RecordingFreedom Wails v3 preview build.
 
-Ready to verify:
-- Capsule recorder UI shell and tray/settings windows.
-- Simplified Chinese / English global language switching.
-- Settings persistence, app-managed data/video storage, storage health, preflight, recovery scan, and capability matrix.
-- Mock .rfrec package flow for UI/package validation.
-- No-GUI preview smoke for settings, storage, preflight, mock start/pause/resume/stop, ready manifest, RNNoise/camera/PIP manifest contract, and recovery scan.
-- Windows, macOS, and Linux Wails build artifacts.
+          Ready to verify:
+          - Capsule recorder UI shell and tray/settings windows.
+          - Simplified Chinese / English global language switching.
+          - Settings persistence, app-managed data/video storage, storage health, preflight, recovery scan, and capability matrix.
+          - Mock .rfrec package flow for UI/package validation.
+          - No-GUI preview smoke for settings, storage, preflight, mock start/pause/resume/stop, ready manifest, RNNoise/camera/PIP manifest contract, and recovery scan.
+          - Windows, macOS, and Linux Wails build artifacts.
 
-Not included yet:
-- Real ScreenCaptureKit / Windows.Graphics.Capture / PipeWire recording.
-- Real system audio or microphone capture.
-- Native RNNoise DSP processing.
-- Camera sidecar capture and PIP export.
-- Signed installers, notarization, or Linux packages.
-NOTES
-)"
+          Not included yet:
+          - Real ScreenCaptureKit / Windows.Graphics.Capture / PipeWire recording.
+          - Real system audio or microphone capture.
+          - Native RNNoise DSP processing.
+          - Camera sidecar capture and PIP export.
+          - Signed installers, notarization, or Linux packages.
+          NOTES
 
           if gh release view "${TAG_NAME}" >/dev/null 2>&1; then
-            gh release edit "${TAG_NAME}" --title "${title}" --notes "${notes}"
+            gh release edit "${TAG_NAME}" --title "${title}" --notes-file release-notes.md
           else
-            gh release create "${TAG_NAME}" --title "${title}" --notes "${notes}"
+            gh release create "${TAG_NAME}" --title "${title}" --notes-file release-notes.md
           fi
 
           gh release upload "${TAG_NAME}" "${assets[@]}" --clobber
