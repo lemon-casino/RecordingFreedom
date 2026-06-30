@@ -1,6 +1,6 @@
 # 06. 当前实现进度
 
-更新时间：2026-06-30
+更新时间：2026-07-01
 
 ## 已完成
 
@@ -59,10 +59,11 @@
   - 正式录制策略调整为 mux 优先：默认目标是把屏幕视频、系统声音和麦克风写入同一个主媒体 `screen.mp4`；包内 WAV sidecar 继续作为 smoke、fallback、恢复和诊断路径。
   - `internal/recpackage` 已新增音频存储形态合同：系统声音和麦克风分别通过 `systemAudioStorage` / `microphoneAudioStorage` 标记为 `sidecar` 或 `muxed`；默认 fallback 写 `system-audio.wav` / `microphone.wav`，未来 mux writer 可把路径指向 `screen.mp4`。
   - `PackageService.ValidateReady()` 已在非 mock 包中校验已启用音频：`sidecar` 模式要求对应 WAV 存在、可读且大于空 header，`muxed` 模式会解析 `screen.mp4` 的 MP4 box 并要求存在 `soun` 音轨。
+  - `internal/recpackage` 已新增 audio-only 包合同：manifest 使用 `recordingMode: "audio-only"` 和 `audioPath`，`CreateAudioOnly()` 不创建 `screen.mp4`，ready 门禁会校验主音频媒体的 `soun` 音轨，或校验明确声明的 WAV fallback sidecar；真实 `audio.m4a` writer、混音/mux、UI 模式入口和三平台 smoke 仍按后续任务推进。
   - Windows 已新增纯 Go WASAPI capture source：麦克风采集会 downmix/resample 为 `48kHz / mono`，系统声音使用 loopback source，二者都走同一 audio pipeline 和 WAV sink。
   - 新增 `internal/audio/rnnoise`：迁移 RNNoise C 源码和旧项目 `LikelyVoiceEnhancement` 为 cgo native wrapper；RNNoise C/H 源码已隔离到 `internal/audio/rnnoise/native` 子包，默认构建返回明确 unavailable，不做假降噪，带 `rnnoise_native` 标签的 cgo 构建才启用原生 DSP。
   - RNNoise UI/preflight capability 当前仍保持 queued；native wrapper 只在 `audio-smoke` 或后续真实 audio backend 显式使用时编译，避免设备枚举和能力矩阵路径过早耦合 native DSP。
-  - 新增 `cmd/audio-smoke`：可在不启动 Wails UI 的情况下真实启动平台音频 source，写入 `<DataRoot>/data/video/audio-smoke-*.rfrec/` 下的 WAV sidecar 和 `audio-diagnostics.json`。
+  - 新增 `cmd/audio-smoke`：可在不启动 Wails UI 的情况下真实启动平台音频 source，当前通过 `recpackage.CreateAudioOnly()` 写入 `<DataRoot>/data/video/recording-*.rfrec/`；单流 fallback 写 `audio.wav`，双流 fallback 写 `system-audio.wav` / `microphone.wav` 分轨 sidecar，停止后写入 `audio-diagnostics.json`、manifest sync diagnostics，并通过 `ValidateReady()` 后标记 `ready`。
   - 新增 `internal/pip` 画中画 preset 合同：`off`、`bottom-right`、`bottom-left`、`free`，并提供基础 overlay layout 计算。
   - 新增 `internal/recordingprofile` 录制参数合同：`standard/balanced/high`、`24/30/60 FPS`、`captureCursor`、`countdownSeconds`，供 settings、recording request 和 manifest 共用。
   - 新增 `recording.NormalizeStartRequest()`，统一校验 `sourceId/sourceType`，归一化系统声音设备、麦克风设备、RNNoise、摄像头设备和 PIP preset。
@@ -215,7 +216,7 @@ go test -tags rnnoise_native ./internal/audio/rnnoise/native ./internal/recordin
 - `internal/recording` 覆盖通过 `RecordingService.RecoverPackage()` 恢复 app-managed `data/video` 内的包。
 - `internal/recpackage` 覆盖 mock 包写入 `diagnostics.sync`、`PatchSyncDiagnostics()` 写入/拒绝逃逸路径、摄像头关闭时清理 webcam media 和 sync 诊断。
 - `internal/recpackage` 覆盖 native 写盘计划初始化 manifest、screen/webcam/diagnostics/cache/exports 路径、摄像头关闭时不返回 webcam 写入路径，以及初始化阶段不创建假媒体文件。
-- `internal/recpackage` 覆盖 ready 前媒体门禁：mock marker 通过、native 缺失 screen 拒绝、0 字节 screen 拒绝、非 mock marker 拒绝、摄像头开启但缺失或 0 字节 webcam sidecar 拒绝、音频 sidecar 缺失拒绝、muxed 音频缺少 MP4 `soun` 音轨拒绝、真实非 0 字节 screen/webcam 和有效音频通过。
+- `internal/recpackage` 覆盖 ready 前媒体门禁：mock marker 通过、native 缺失 screen 拒绝、0 字节 screen 拒绝、非 mock marker 拒绝、摄像头开启但缺失或 0 字节 webcam sidecar 拒绝、音频 sidecar 缺失拒绝、muxed 音频缺少 MP4 `soun` 音轨拒绝、audio-only 缺失 `audio.m4a` 或缺少 `soun` 音轨拒绝、真实非 0 字节 screen/webcam 和有效音频通过。
 
 音频合同测试：
 
@@ -229,7 +230,7 @@ go test -tags rnnoise_native ./internal/audio/rnnoise/native ./internal/recordin
 - `internal/recording` 覆盖 `NativeBackendRuntime`：会创建并控制 video session；有音频时创建并控制 audio session；无音频时不启动 audio session；RNNoise suppressor 会传入并在停止时关闭；视频 session 或 RNNoise 不可用时初始化失败并把已创建 native 包标记为 `failed`。
 - `internal/recording` 覆盖 `NativeBackendRuntime.SyncDiagnostics()`：runtime 生成的 screen/system/microphone track diagnostics 可被 `recpackage.PatchSyncDiagnostics()` 接受并写回 manifest。
 - `internal/recording` 覆盖 `NativeRuntimeBackend`：Start/Pause/Resume/Stop 会驱动 runtime，Stop 返回 sync diagnostics，Start 失败会把已创建 native 包标记为 `failed`；backend registry 可选择注册后的 runtime backend。
-- 本机 Windows audio smoke 已确认默认麦克风 WASAPI capture 生成非空 `microphone.wav`：`framesReceived=99`、`samplesReceived=47520`、`samplesWritten=47520`、duration 约 `990ms`。
+- 本机 Windows audio smoke 已确认默认麦克风 WASAPI capture 生成 ready 的 audio-only `.rfrec` 包：manifest 为 `recordingMode: "audio-only"`、`status: "ready"`、`audioPath: "audio.wav"`，麦克风 track 指向 `audio.wav`，`framesReceived=99`、`samplesReceived=47520`、`samplesWritten=47520`、duration 约 `990ms`。
 - 本机 Windows system audio smoke 已确认 WASAPI loopback source 在有活动系统播放时可以写入真实样本：`system-audio.wav` 614444 bytes，`framesReceived=160`，`samplesReceived=153600`，`samplesWritten=153600`，`sampleRate=48000`，`channels=2`，duration 约 `1600ms`。
 
 PIP 合同测试：
@@ -294,6 +295,7 @@ RecordingFreedom/app/bin/recordingfreedom.exe
 - 真实 PipeWire / XDG Portal 录制。
 - 真实 macOS CoreAudio 麦克风枚举和 Linux PipeWire 音频设备枚举；当前 Windows WASAPI endpoint 枚举已完成，macOS system audio 使用 ScreenCaptureKit 默认系统混音流。
 - 真实 CoreAudio/PipeWire 音频采集；当前 Windows WASAPI 麦克风采集已通过 smoke，Windows system loopback 已通过有播放源真实样本 smoke，native backend 音频运行时边界已落地，但平台视频后端尚未调用该 runtime 完成端到端录制。
+- 真实 audio-only 录制模式；当前已完成 `.rfrec` audio-only 包格式、`audio.m4a` 主媒体路径、WAV fallback ready 门禁和 `audio-smoke` 包级验收入口，尚未接 UI、preflight、真实 `audio.m4a` writer 和混音/mux。
 - 真实 AVFoundation / Media Foundation / PipeWire 摄像头设备枚举；当前只完成 `MediaDeviceProvider` 替换边界和 sidecar eligibility 合同。
 - RNNoise native DSP 的 C 源码和 Go wrapper 已迁移并隔离；CI/release gate 已恢复 native 定向测试，preview artifact 仍保持默认构建，当前 Windows 本机因缺少 `gcc` 只能验证非 cgo fallback，真实 app recording backend 仍未暴露 RNNoise capability。
 - 真实摄像头 sidecar 写入。

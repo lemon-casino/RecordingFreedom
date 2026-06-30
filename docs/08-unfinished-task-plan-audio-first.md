@@ -1,6 +1,6 @@
 # 08. 未完成任务计划：真实音频与 RNNoise 优先
 
-更新时间：2026-06-30
+更新时间：2026-07-01
 
 本文档把初版 preview 之后尚未完成的工作拆成可执行任务。当前策略调整为：先推进真实音频采集与 RNNoise 降噪，再继续屏幕录制、摄像头画中画、导出和正式发布链路。
 
@@ -135,24 +135,26 @@
 
 ### A5b 单独音频录制
 
-状态：未开始。作为后续录制模式支持，不阻塞屏幕录制主线。
+状态：包结构、ready 门禁合同和 `cmd/audio-smoke` 的 manifest-ready fallback 包已落地；真实 `audio.m4a` writer、混音/mux、UI 模式入口和三平台 smoke 仍未完成。作为后续录制模式支持，不阻塞屏幕录制主线。
 
 交付：
 
-- 新增 audio-only recording kind 或 source type，不创建假的 `screen.mp4`。
+- 新增 audio-only recording kind 或 source type，不创建假的 `screen.mp4`。代码已新增 `recordingMode: "audio-only"`、`audioPath` 和 `recpackage.CreateAudioOnly()`。
 - 支持系统声音、麦克风、麦克风 + RNNoise 的单独录音。
-- 默认输出使用可持续写盘的 `audio.m4a`，平台受限时使用 `audio.wav` fallback，仍写入 `<DataRoot>/data/video/<session>.rfrec/`。
+- 默认输出使用可持续写盘的 `audio.m4a`，平台受限时使用 `audio.wav` fallback，仍写入 `<DataRoot>/data/video/<session>.rfrec/`。当前 ready 门禁已能在 audio-only 模式校验主音频媒体 `soun` 音轨，也能校验明确声明的 WAV fallback，不再要求 `screen.mp4`。
 - 复用 `audio.Pipeline`、RNNoise reset、diagnostics 和 bounded buffer 策略。
 
 验收：
 
+- Go 测试覆盖：audio-only 包不创建 screen 路径、默认主媒体为 `audio.m4a`、没有真实音频媒体不能 ready、缺少 `soun` 音轨不能 ready。
+- `cmd/audio-smoke` 使用 `recpackage.CreateAudioOnly()` 创建正式包，单流 fallback 产出 `audio.wav`，停止后写入 sync diagnostics，并通过 `ValidateReady()` 后标记 `ready`。
 - 只录音 1 分钟、5 分钟可播放。
 - 关闭麦克风或系统声音时不会保留旧 device id。
 - audio-only 包可以在 UI 中识别为音频录制，不被误认为损坏的屏幕录制。
 
 ### A5c 内存和磁盘写入优化
 
-状态：设计已明确，待实现。
+状态：设计已明确，底层包合同已支持 mux 优先；具体 bounded queue、flush cadence 和长录内存水位监控仍待在各平台 writer 中实现。
 
 交付：
 

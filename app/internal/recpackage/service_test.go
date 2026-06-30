@@ -192,6 +192,9 @@ func TestCreateNativeInitializesWritePlanWithoutCreatingMedia(t *testing.T) {
 	if manifest.Status != StatusRecording {
 		t.Fatalf("status = %q, want recording", manifest.Status)
 	}
+	if manifest.RecordingMode != RecordingModeScreen || manifest.Media.AudioPath != "" {
+		t.Fatalf("recording mode/audio path = %q/%q, want screen mode without audioPath", manifest.RecordingMode, manifest.Media.AudioPath)
+	}
 	if manifest.Media.ScreenVideoPath != ScreenVideoFile ||
 		manifest.Media.WebcamVideoPath != WebcamVideoFile ||
 		manifest.Media.SystemAudioPath != ScreenVideoFile ||
@@ -211,6 +214,122 @@ func TestCreateNativeInitializesWritePlanWithoutCreatingMedia(t *testing.T) {
 	}
 	if manifest.Camera.PIPPreset != "bottom-left" {
 		t.Fatalf("camera pip preset = %q, want bottom-left", manifest.Camera.PIPPreset)
+	}
+}
+
+func TestCreateAudioOnlyInitializesPrimaryAudioPlan(t *testing.T) {
+	root := t.TempDir()
+	createdAt := time.Date(2026, 7, 1, 9, 30, 0, 789000000, time.UTC)
+	service := NewService()
+
+	plan, err := service.CreateAudioOnly(root, CreateAudioOnlyRequest{
+		CreatedAt: createdAt,
+		Backend:   "native-audio",
+		Audio: ManifestAudio{
+			System:                     true,
+			SystemDeviceID:             "system-audio:default",
+			Microphone:                 true,
+			MicrophoneDeviceID:         "microphone:default",
+			MicrophoneNoiseSuppression: NoiseSuppressionOn,
+		},
+	})
+	if err != nil {
+		t.Fatalf("CreateAudioOnly() error = %v", err)
+	}
+	if filepath.Dir(plan.Package.Dir) != root {
+		t.Fatalf("package parent = %q, want %q", filepath.Dir(plan.Package.Dir), root)
+	}
+	if plan.Package.ID != "2026-07-01-09-30-00-789" {
+		t.Fatalf("package ID = %q, want timestamp ID", plan.Package.ID)
+	}
+	if plan.ScreenVideoPath != "" || plan.VideoDiagnosticsPath != "" {
+		t.Fatalf("audio-only video paths = screen:%q diagnostics:%q, want empty", plan.ScreenVideoPath, plan.VideoDiagnosticsPath)
+	}
+	if plan.AudioOnlyPath != filepath.Join(plan.Package.Dir, AudioOnlyFile) {
+		t.Fatalf("audio-only write path = %q, want package audio file", plan.AudioOnlyPath)
+	}
+	if plan.SystemAudioPath != plan.AudioOnlyPath || plan.MicrophoneAudioPath != plan.AudioOnlyPath {
+		t.Fatalf("audio stream paths = system:%q microphone:%q, want muxed audio path %q", plan.SystemAudioPath, plan.MicrophoneAudioPath, plan.AudioOnlyPath)
+	}
+	if _, err := os.Stat(plan.AudioOnlyPath); err == nil {
+		t.Fatal("CreateAudioOnly() created audio media before native backend wrote samples")
+	}
+	if _, err := os.Stat(plan.CacheDir); err != nil {
+		t.Fatalf("cache dir was not created: %v", err)
+	}
+	if _, err := os.Stat(plan.ExportsDir); err != nil {
+		t.Fatalf("exports dir was not created: %v", err)
+	}
+
+	manifest, err := service.ReadManifest(plan.Package.ManifestPath)
+	if err != nil {
+		t.Fatalf("ReadManifest() error = %v", err)
+	}
+	if manifest.RecordingMode != RecordingModeAudio {
+		t.Fatalf("recordingMode = %q, want %q", manifest.RecordingMode, RecordingModeAudio)
+	}
+	if manifest.Media.ScreenVideoPath != "" || manifest.Media.AudioPath != AudioOnlyFile {
+		t.Fatalf("audio-only media = %#v, want audioPath only", manifest.Media)
+	}
+	if manifest.Media.SystemAudioPath != AudioOnlyFile ||
+		manifest.Media.SystemAudioStorage != AudioStorageMuxed ||
+		manifest.Media.MicrophoneAudioPath != AudioOnlyFile ||
+		manifest.Media.MicrophoneAudioStorage != AudioStorageMuxed {
+		t.Fatalf("audio-only stream media = %#v, want muxed primary audio", manifest.Media)
+	}
+	if manifest.Source.Type != RecordingModeAudio || manifest.Source.ID != "audio:enabled-streams" {
+		t.Fatalf("audio-only source = %#v, want default audio source", manifest.Source)
+	}
+	if manifest.Camera.Enabled || manifest.Camera.PIPPreset != "off" {
+		t.Fatalf("audio-only camera = %#v, want disabled camera", manifest.Camera)
+	}
+	if manifest.Diagnostics.Mock || manifest.Diagnostics.Sync != nil {
+		t.Fatalf("audio-only diagnostics = %#v, want non-mock without sync", manifest.Diagnostics)
+	}
+}
+
+func TestCreateAudioOnlyRequiresEnabledAudio(t *testing.T) {
+	_, err := NewService().CreateAudioOnly(t.TempDir(), CreateAudioOnlyRequest{
+		Audio: ManifestAudio{},
+	})
+	if err == nil || !strings.Contains(err.Error(), "requires system audio or microphone") {
+		t.Fatalf("CreateAudioOnly() error = %v, want enabled audio error", err)
+	}
+}
+
+func TestCreateAudioOnlySupportsWAVFallbackPrimary(t *testing.T) {
+	service := NewService()
+	plan, err := service.CreateAudioOnly(t.TempDir(), CreateAudioOnlyRequest{
+		Audio:                  ManifestAudio{Microphone: true, MicrophoneDeviceID: "microphone:default"},
+		AudioPath:              AudioOnlyWAVFile,
+		MicrophoneAudioPath:    AudioOnlyWAVFile,
+		MicrophoneAudioStorage: AudioStorageSidecar,
+	})
+	if err != nil {
+		t.Fatalf("CreateAudioOnly() error = %v", err)
+	}
+	if plan.AudioOnlyPath != filepath.Join(plan.Package.Dir, AudioOnlyWAVFile) {
+		t.Fatalf("audio-only fallback path = %q, want package audio.wav", plan.AudioOnlyPath)
+	}
+	if plan.MicrophoneAudioPath != plan.AudioOnlyPath {
+		t.Fatalf("microphone fallback path = %q, want audio-only path %q", plan.MicrophoneAudioPath, plan.AudioOnlyPath)
+	}
+
+	manifest, err := service.ReadManifest(plan.Package.ManifestPath)
+	if err != nil {
+		t.Fatalf("ReadManifest() error = %v", err)
+	}
+	if manifest.Media.AudioPath != AudioOnlyWAVFile ||
+		manifest.Media.MicrophoneAudioPath != AudioOnlyWAVFile ||
+		manifest.Media.MicrophoneAudioStorage != AudioStorageSidecar ||
+		manifest.Media.ScreenVideoPath != "" {
+		t.Fatalf("fallback manifest media = %#v, want audio.wav sidecar without screen", manifest.Media)
+	}
+	if err := os.WriteFile(plan.AudioOnlyPath, bytes.Repeat([]byte{1}, 45), 0o644); err != nil {
+		t.Fatalf("WriteFile(audio.wav) error = %v", err)
+	}
+	if err := service.ValidateReady(plan.Package.ManifestPath); err != nil {
+		t.Fatalf("ValidateReady(audio.wav fallback) error = %v", err)
 	}
 }
 
@@ -397,6 +516,46 @@ func TestValidateReadyRequiresMuxedAudioTrackInScreenMP4(t *testing.T) {
 	writeMinimalMP4(t, plan.ScreenVideoPath, "soun")
 	if err := service.ValidateReady(plan.Package.ManifestPath); err != nil {
 		t.Fatalf("ValidateReady(muxed audio) error = %v", err)
+	}
+}
+
+func TestValidateReadyAcceptsAudioOnlyPrimaryAudio(t *testing.T) {
+	service := NewService()
+	plan, err := service.CreateAudioOnly(t.TempDir(), CreateAudioOnlyRequest{
+		Audio: ManifestAudio{Microphone: true},
+	})
+	if err != nil {
+		t.Fatalf("CreateAudioOnly() error = %v", err)
+	}
+
+	if err := service.ValidateReady(plan.Package.ManifestPath); err == nil || !strings.Contains(err.Error(), "audioPath") {
+		t.Fatalf("ValidateReady(missing audio-only media) error = %v, want audioPath error", err)
+	}
+	writeMinimalMP4(t, plan.AudioOnlyPath, "vide")
+	if err := service.ValidateReady(plan.Package.ManifestPath); err == nil || !strings.Contains(err.Error(), "muxed track is missing from audioPath") {
+		t.Fatalf("ValidateReady(audio-only without audio track) error = %v, want audioPath mux rejection", err)
+	}
+	writeMinimalMP4(t, plan.AudioOnlyPath, "soun")
+	if err := service.ValidateReady(plan.Package.ManifestPath); err != nil {
+		t.Fatalf("ValidateReady(audio-only primary audio) error = %v", err)
+	}
+}
+
+func TestWriteManifestRejectsAudioOnlyWithScreenMedia(t *testing.T) {
+	service := NewService()
+	err := service.WriteManifest(filepath.Join(t.TempDir(), ManifestFile), Manifest{
+		SchemaVersion: 1,
+		App:           AppName,
+		Status:        StatusRecording,
+		RecordingMode: RecordingModeAudio,
+		Media: ManifestMedia{
+			ScreenVideoPath: ScreenVideoFile,
+			AudioPath:       AudioOnlyFile,
+		},
+		Audio: ManifestAudio{Microphone: true},
+	})
+	if err == nil || !strings.Contains(err.Error(), "screenVideoPath") {
+		t.Fatalf("WriteManifest(audio-only screen path) error = %v, want screen path rejection", err)
 	}
 }
 

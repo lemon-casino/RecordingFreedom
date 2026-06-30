@@ -46,6 +46,7 @@ func (s *Service) CreateMock(videoDir string, req CreateMockRequest) (Package, e
 		App:           AppName,
 		CreatedAt:     req.CreatedAt,
 		Status:        req.Status,
+		RecordingMode: RecordingModeScreen,
 		Media: ManifestMedia{
 			ScreenVideoPath: MockScreenFile,
 		},
@@ -120,6 +121,7 @@ func (s *Service) CreateNative(videoDir string, req CreateNativeRequest) (Record
 		App:           AppName,
 		CreatedAt:     req.CreatedAt,
 		Status:        req.Status,
+		RecordingMode: RecordingModeScreen,
 		Media:         media,
 		Source:        req.Source,
 		Recording:     recordingprofile.Normalize(req.Recording),
@@ -149,6 +151,102 @@ func (s *Service) CreateNative(videoDir string, req CreateNativeRequest) (Record
 		WebcamVideoPath:      optionalAbsPackagePath(packageDir, manifest.Media.WebcamVideoPath),
 		AudioDiagnosticsPath: filepath.Join(packageDir, AudioDiagnosticsFile),
 		VideoDiagnosticsPath: filepath.Join(packageDir, VideoDiagnosticsFile),
+		CacheDir:             filepath.Join(packageDir, CacheDir),
+		ExportsDir:           filepath.Join(packageDir, ExportsDir),
+	}, nil
+}
+
+func (s *Service) CreateAudioOnly(videoDir string, req CreateAudioOnlyRequest) (RecordingWritePlan, error) {
+	if req.CreatedAt.IsZero() {
+		req.CreatedAt = time.Now()
+	}
+	if req.Status == "" {
+		req.Status = StatusRecording
+	}
+	if strings.TrimSpace(req.Backend) == "" {
+		req.Backend = "native-audio"
+	}
+
+	manifestAudio := normalizeAudio(req.Audio)
+	if !manifestAudio.System && !manifestAudio.Microphone {
+		return RecordingWritePlan{}, errors.New("audio-only package requires system audio or microphone")
+	}
+
+	id, packageDir, err := reservePackageDir(videoDir, SessionID(req.CreatedAt))
+	if err != nil {
+		return RecordingWritePlan{}, err
+	}
+	for _, dir := range []string{CacheDir, ExportsDir} {
+		if err := os.MkdirAll(filepath.Join(packageDir, dir), 0o755); err != nil {
+			return RecordingWritePlan{}, err
+		}
+	}
+
+	source := req.Source
+	if strings.TrimSpace(source.Type) == "" {
+		source.Type = RecordingModeAudio
+	}
+	if strings.TrimSpace(source.ID) == "" {
+		source.ID = "audio:enabled-streams"
+	}
+	if strings.TrimSpace(source.Name) == "" {
+		source.Name = "Audio Only"
+	}
+	media := ManifestMedia{
+		AudioPath: strings.TrimSpace(req.AudioPath),
+	}
+	if media.AudioPath == "" {
+		media.AudioPath = AudioOnlyFile
+	}
+	if manifestAudio.System {
+		media.SystemAudioPath = strings.TrimSpace(req.SystemAudioPath)
+		media.SystemAudioStorage = strings.TrimSpace(req.SystemAudioStorage)
+		if media.SystemAudioPath == "" && media.SystemAudioStorage == "" {
+			media.SystemAudioPath = media.AudioPath
+			media.SystemAudioStorage = AudioStorageMuxed
+		}
+	}
+	if manifestAudio.Microphone {
+		media.MicrophoneAudioPath = strings.TrimSpace(req.MicrophoneAudioPath)
+		media.MicrophoneAudioStorage = strings.TrimSpace(req.MicrophoneAudioStorage)
+		if media.MicrophoneAudioPath == "" && media.MicrophoneAudioStorage == "" {
+			media.MicrophoneAudioPath = media.AudioPath
+			media.MicrophoneAudioStorage = AudioStorageMuxed
+		}
+	}
+	manifest := Manifest{
+		SchemaVersion: 1,
+		App:           AppName,
+		CreatedAt:     req.CreatedAt,
+		Status:        req.Status,
+		RecordingMode: RecordingModeAudio,
+		Media:         media,
+		Source:        source,
+		Recording:     recordingprofile.Normalize(req.Recording),
+		Audio:         manifestAudio,
+		Camera:        normalizeCamera(ManifestCamera{}),
+		Diagnostics: ManifestDiagnostics{
+			Message: fmt.Sprintf("Native backend %q initialized an audio-only package; audio writer must fill package-relative audioPath.", req.Backend),
+		},
+	}
+
+	manifestPath := filepath.Join(packageDir, ManifestFile)
+	if err := s.WriteManifest(manifestPath, manifest); err != nil {
+		return RecordingWritePlan{}, err
+	}
+
+	pkg := Package{
+		ID:           id,
+		Dir:          packageDir,
+		ManifestPath: manifestPath,
+		Manifest:     manifest,
+	}
+	return RecordingWritePlan{
+		Package:              pkg,
+		AudioOnlyPath:        optionalAbsPackagePath(packageDir, manifest.Media.AudioPath),
+		SystemAudioPath:      optionalAbsPackagePath(packageDir, manifest.Media.SystemAudioPath),
+		MicrophoneAudioPath:  optionalAbsPackagePath(packageDir, manifest.Media.MicrophoneAudioPath),
+		AudioDiagnosticsPath: filepath.Join(packageDir, AudioDiagnosticsFile),
 		CacheDir:             filepath.Join(packageDir, CacheDir),
 		ExportsDir:           filepath.Join(packageDir, ExportsDir),
 	}, nil
@@ -204,6 +302,23 @@ func (s *Service) ValidateReady(manifestPath string) error {
 		return requireReadablePackageFile(packageDir, "screenVideoPath", screenPath, true)
 	}
 
+	if manifest.RecordingMode == RecordingModeAudio {
+		if err := requireReadablePackageFile(packageDir, "audioPath", manifest.Media.AudioPath, false); err != nil {
+			return err
+		}
+		if manifest.Audio.System {
+			if err := s.validateReadyAudioTrack(packageDir, "systemAudio", manifest.Media.SystemAudioPath, manifest.Media.SystemAudioStorage, manifest.Media.AudioPath, "audioPath"); err != nil {
+				return err
+			}
+		}
+		if manifest.Audio.Microphone {
+			if err := s.validateReadyAudioTrack(packageDir, "microphoneAudio", manifest.Media.MicrophoneAudioPath, manifest.Media.MicrophoneAudioStorage, manifest.Media.AudioPath, "audioPath"); err != nil {
+				return err
+			}
+		}
+		return nil
+	}
+
 	if err := requireReadablePackageFile(packageDir, "screenVideoPath", screenPath, false); err != nil {
 		return err
 	}
@@ -213,19 +328,19 @@ func (s *Service) ValidateReady(manifestPath string) error {
 		}
 	}
 	if manifest.Audio.System {
-		if err := s.validateReadyAudioTrack(packageDir, "systemAudio", manifest.Media.SystemAudioPath, manifest.Media.SystemAudioStorage, manifest.Media.ScreenVideoPath); err != nil {
+		if err := s.validateReadyAudioTrack(packageDir, "systemAudio", manifest.Media.SystemAudioPath, manifest.Media.SystemAudioStorage, manifest.Media.ScreenVideoPath, "screenVideoPath"); err != nil {
 			return err
 		}
 	}
 	if manifest.Audio.Microphone {
-		if err := s.validateReadyAudioTrack(packageDir, "microphoneAudio", manifest.Media.MicrophoneAudioPath, manifest.Media.MicrophoneAudioStorage, manifest.Media.ScreenVideoPath); err != nil {
+		if err := s.validateReadyAudioTrack(packageDir, "microphoneAudio", manifest.Media.MicrophoneAudioPath, manifest.Media.MicrophoneAudioStorage, manifest.Media.ScreenVideoPath, "screenVideoPath"); err != nil {
 			return err
 		}
 	}
 	return nil
 }
 
-func (s *Service) validateReadyAudioTrack(packageDir string, field string, audioPath string, storage string, screenPath string) error {
+func (s *Service) validateReadyAudioTrack(packageDir string, field string, audioPath string, storage string, primaryPath string, primaryField string) error {
 	switch storage {
 	case AudioStorageSidecar:
 		return requireReadablePackageFileMinSize(packageDir, field+"Path", audioPath, false, 45)
@@ -233,16 +348,19 @@ func (s *Service) validateReadyAudioTrack(packageDir string, field string, audio
 		if audioPath == "" {
 			return fmt.Errorf("%sPath is required before muxed audio can be marked ready", field)
 		}
-		if filepath.Clean(audioPath) != filepath.Clean(screenPath) {
-			return fmt.Errorf("%sPath %q must match screenVideoPath %q for muxed audio", field, audioPath, screenPath)
+		if primaryPath == "" {
+			return fmt.Errorf("%s is required before muxed audio can be marked ready", primaryField)
 		}
-		screenFile := filepath.Join(packageDir, filepath.Clean(screenPath))
-		hasAudioTrack, err := mp4HasAudioTrack(screenFile)
+		if filepath.Clean(audioPath) != filepath.Clean(primaryPath) {
+			return fmt.Errorf("%sPath %q must match %s %q for muxed audio", field, audioPath, primaryField, primaryPath)
+		}
+		primaryFile := filepath.Join(packageDir, filepath.Clean(primaryPath))
+		hasAudioTrack, err := mp4HasAudioTrack(primaryFile)
 		if err != nil {
 			return fmt.Errorf("%s muxed track probe failed: %w", field, err)
 		}
 		if !hasAudioTrack {
-			return fmt.Errorf("%s muxed track is missing from screenVideoPath %q", field, screenPath)
+			return fmt.Errorf("%s muxed track is missing from %s %q", field, primaryField, primaryPath)
 		}
 		return nil
 	default:
@@ -310,10 +428,11 @@ func (s *Service) ReadManifest(manifestPath string) (Manifest, error) {
 }
 
 func (s *Service) WriteManifest(manifestPath string, manifest Manifest) error {
+	manifest.RecordingMode = normalizeRecordingMode(manifest.RecordingMode)
 	manifest.Recording = recordingprofile.Normalize(manifest.Recording)
 	manifest.Audio = normalizeAudio(manifest.Audio)
 	manifest.Camera = normalizeCamera(manifest.Camera)
-	manifest.Media = normalizeMedia(manifest.Media, manifest.Audio, manifest.Camera, manifest.Diagnostics.Mock)
+	manifest.Media = normalizeMedia(manifest.Media, manifest.RecordingMode, manifest.Audio, manifest.Camera, manifest.Diagnostics.Mock)
 	manifest.Diagnostics = normalizeDiagnostics(manifest)
 	if err := validateManifest(manifest); err != nil {
 		return err
@@ -406,6 +525,17 @@ func normalizeAudio(manifestAudio ManifestAudio) ManifestAudio {
 	return manifestAudio
 }
 
+func normalizeRecordingMode(mode string) string {
+	switch strings.TrimSpace(mode) {
+	case RecordingModeAudio:
+		return RecordingModeAudio
+	case "", RecordingModeScreen:
+		return RecordingModeScreen
+	default:
+		return strings.TrimSpace(mode)
+	}
+}
+
 func normalizeCamera(camera ManifestCamera) ManifestCamera {
 	if !camera.Enabled {
 		camera.DeviceID = ""
@@ -420,9 +550,20 @@ func normalizeCamera(camera ManifestCamera) ManifestCamera {
 	return camera
 }
 
-func normalizeMedia(media ManifestMedia, manifestAudio ManifestAudio, camera ManifestCamera, mock bool) ManifestMedia {
-	if media.ScreenVideoPath == "" {
-		media.ScreenVideoPath = ScreenVideoFile
+func normalizeMedia(media ManifestMedia, mode string, manifestAudio ManifestAudio, camera ManifestCamera, mock bool) ManifestMedia {
+	primaryAudioPath := ""
+	if mode == RecordingModeAudio {
+		if media.AudioPath == "" {
+			media.AudioPath = AudioOnlyFile
+		}
+		primaryAudioPath = media.AudioPath
+		media.WebcamVideoPath = ""
+		media.WebcamStartOffsetMs = 0
+	} else {
+		media.AudioPath = ""
+		if media.ScreenVideoPath == "" {
+			media.ScreenVideoPath = ScreenVideoFile
+		}
 	}
 	if !manifestAudio.System {
 		media.SystemAudioPath = ""
@@ -430,9 +571,13 @@ func normalizeMedia(media ManifestMedia, manifestAudio ManifestAudio, camera Man
 	} else if mock && media.SystemAudioPath == "" && media.SystemAudioStorage == "" {
 		media.SystemAudioPath = ""
 	} else {
-		media.SystemAudioStorage = normalizeAudioStorage(media.SystemAudioStorage, media.SystemAudioPath)
+		if mode == RecordingModeAudio && media.SystemAudioPath == "" && media.SystemAudioStorage == "" {
+			media.SystemAudioPath = primaryAudioPath
+			media.SystemAudioStorage = AudioStorageMuxed
+		}
+		media.SystemAudioStorage = normalizeAudioStorage(media.SystemAudioStorage, media.SystemAudioPath, primaryMediaPath(mode, media))
 		if media.SystemAudioStorage == AudioStorageMuxed {
-			media.SystemAudioPath = media.ScreenVideoPath
+			media.SystemAudioPath = primaryMediaPath(mode, media)
 		} else if media.SystemAudioPath == "" {
 			media.SystemAudioPath = SystemAudioFile
 		}
@@ -443,14 +588,18 @@ func normalizeMedia(media ManifestMedia, manifestAudio ManifestAudio, camera Man
 	} else if mock && media.MicrophoneAudioPath == "" && media.MicrophoneAudioStorage == "" {
 		media.MicrophoneAudioPath = ""
 	} else {
-		media.MicrophoneAudioStorage = normalizeAudioStorage(media.MicrophoneAudioStorage, media.MicrophoneAudioPath)
+		if mode == RecordingModeAudio && media.MicrophoneAudioPath == "" && media.MicrophoneAudioStorage == "" {
+			media.MicrophoneAudioPath = primaryAudioPath
+			media.MicrophoneAudioStorage = AudioStorageMuxed
+		}
+		media.MicrophoneAudioStorage = normalizeAudioStorage(media.MicrophoneAudioStorage, media.MicrophoneAudioPath, primaryMediaPath(mode, media))
 		if media.MicrophoneAudioStorage == AudioStorageMuxed {
-			media.MicrophoneAudioPath = media.ScreenVideoPath
+			media.MicrophoneAudioPath = primaryMediaPath(mode, media)
 		} else if media.MicrophoneAudioPath == "" {
 			media.MicrophoneAudioPath = MicrophoneAudioFile
 		}
 	}
-	if !camera.Enabled {
+	if mode == RecordingModeAudio || !camera.Enabled {
 		media.WebcamVideoPath = ""
 		media.WebcamStartOffsetMs = 0
 	}
@@ -458,6 +607,13 @@ func normalizeMedia(media ManifestMedia, manifestAudio ManifestAudio, camera Man
 		media.WebcamStartOffsetMs = 0
 	}
 	return media
+}
+
+func primaryMediaPath(mode string, media ManifestMedia) string {
+	if mode == RecordingModeAudio {
+		return media.AudioPath
+	}
+	return media.ScreenVideoPath
 }
 
 func normalizeDiagnostics(manifest Manifest) ManifestDiagnostics {
@@ -469,7 +625,7 @@ func normalizeDiagnostics(manifest Manifest) ManifestDiagnostics {
 	if syncDiagnostics.TimelineBase == "" {
 		syncDiagnostics.TimelineBase = TimelineBaseMedia
 	}
-	syncDiagnostics.Screen = normalizeTrackDiagnostics(syncDiagnostics.Screen, manifest.Media.ScreenVideoPath != "", manifest.Media.ScreenVideoPath)
+	syncDiagnostics.Screen = normalizeTrackDiagnostics(syncDiagnostics.Screen, manifest.RecordingMode == RecordingModeScreen && manifest.Media.ScreenVideoPath != "", manifest.Media.ScreenVideoPath)
 	syncDiagnostics.SystemAudio = normalizeTrackDiagnostics(syncDiagnostics.SystemAudio, manifest.Audio.System, manifest.Media.SystemAudioPath)
 	syncDiagnostics.Microphone = normalizeTrackDiagnostics(syncDiagnostics.Microphone, manifest.Audio.Microphone, manifest.Media.MicrophoneAudioPath)
 	syncDiagnostics.Webcam = normalizeTrackDiagnostics(syncDiagnostics.Webcam, manifest.Camera.Enabled, manifest.Media.WebcamVideoPath)
@@ -480,7 +636,7 @@ func normalizeDiagnostics(manifest Manifest) ManifestDiagnostics {
 	return diagnostics
 }
 
-func normalizeAudioStorage(storage string, mediaPath string) string {
+func normalizeAudioStorage(storage string, mediaPath string, primaryPath string) string {
 	storage = strings.TrimSpace(storage)
 	switch storage {
 	case AudioStorageMuxed:
@@ -488,7 +644,7 @@ func normalizeAudioStorage(storage string, mediaPath string) string {
 	case AudioStorageSidecar:
 		return AudioStorageSidecar
 	case "":
-		if filepath.Clean(mediaPath) == ScreenVideoFile {
+		if primaryPath != "" && filepath.Clean(mediaPath) == filepath.Clean(primaryPath) {
 			return AudioStorageMuxed
 		}
 		return AudioStorageSidecar
@@ -520,7 +676,33 @@ func validateManifest(manifest Manifest) error {
 	if manifest.Status == "" {
 		return errors.New("manifest status is required")
 	}
+	mode := normalizeRecordingMode(manifest.RecordingMode)
+	switch mode {
+	case RecordingModeScreen, RecordingModeAudio:
+	default:
+		return fmt.Errorf("recordingMode %q is not supported", manifest.RecordingMode)
+	}
+	if mode == RecordingModeAudio {
+		if manifest.Diagnostics.Mock {
+			return errors.New("audio-only packages cannot be marked as mock")
+		}
+		if manifest.Media.ScreenVideoPath != "" {
+			return fmt.Errorf("audio-only package must not set screenVideoPath %q", manifest.Media.ScreenVideoPath)
+		}
+		if manifest.Media.AudioPath == "" {
+			return errors.New("audioPath is required for audio-only package")
+		}
+		if !manifest.Audio.System && !manifest.Audio.Microphone {
+			return errors.New("audio-only package requires system audio or microphone")
+		}
+		if manifest.Camera.Enabled {
+			return errors.New("audio-only package cannot enable camera")
+		}
+	}
 	if err := validatePackageRelativePath("screenVideoPath", manifest.Media.ScreenVideoPath); err != nil {
+		return err
+	}
+	if err := validatePackageRelativePath("audioPath", manifest.Media.AudioPath); err != nil {
 		return err
 	}
 	if err := validatePackageRelativePath("systemAudioPath", manifest.Media.SystemAudioPath); err != nil {

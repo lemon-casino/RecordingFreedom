@@ -12,6 +12,8 @@ const (
 	AudioDiagnosticsFile = "audio-diagnostics.json"
 	VideoDiagnosticsFile = "video-diagnostics.json"
 	ScreenVideoFile      = "screen.mp4"
+	AudioOnlyFile        = "audio.m4a"
+	AudioOnlyWAVFile     = "audio.wav"
 	SystemAudioFile      = "system-audio.wav"
 	MicrophoneAudioFile  = "microphone.wav"
 	WebcamVideoFile      = "webcam.mov"
@@ -32,6 +34,8 @@ const (
 	TimelineBasePlatform = "platform-start-timestamp"
 	AudioStorageSidecar  = "sidecar"
 	AudioStorageMuxed    = "muxed"
+	RecordingModeScreen  = "screen"
+	RecordingModeAudio   = "audio-only"
 )
 
 type Package struct {
@@ -47,6 +51,7 @@ type RecordingWritePlan struct {
 	SystemAudioPath      string
 	MicrophoneAudioPath  string
 	WebcamVideoPath      string
+	AudioOnlyPath        string
 	AudioDiagnosticsPath string
 	VideoDiagnosticsPath string
 	CacheDir             string
@@ -59,6 +64,7 @@ type Manifest struct {
 	CreatedAt     time.Time                `json:"createdAt"`
 	CompletedAt   *time.Time               `json:"completedAt,omitempty"`
 	Status        string                   `json:"status"`
+	RecordingMode string                   `json:"recordingMode"`
 	Media         ManifestMedia            `json:"media"`
 	Source        ManifestSource           `json:"source"`
 	Recording     recordingprofile.Profile `json:"recording"`
@@ -69,6 +75,7 @@ type Manifest struct {
 
 type ManifestMedia struct {
 	ScreenVideoPath        string `json:"screenVideoPath,omitempty"`
+	AudioPath              string `json:"audioPath,omitempty"`
 	SystemAudioPath        string `json:"systemAudioPath,omitempty"`
 	SystemAudioStorage     string `json:"systemAudioStorage,omitempty"`
 	MicrophoneAudioPath    string `json:"microphoneAudioPath,omitempty"`
@@ -158,6 +165,20 @@ type CreateNativeRequest struct {
 	Recording recordingprofile.Profile
 	Audio     ManifestAudio
 	Camera    ManifestCamera
+}
+
+type CreateAudioOnlyRequest struct {
+	CreatedAt              time.Time
+	Status                 string
+	Backend                string
+	Source                 ManifestSource
+	Recording              recordingprofile.Profile
+	Audio                  ManifestAudio
+	AudioPath              string
+	SystemAudioPath        string
+	SystemAudioStorage     string
+	MicrophoneAudioPath    string
+	MicrophoneAudioStorage string
 }
 
 type RecoverySummary struct {
