@@ -101,9 +101,11 @@ func (s *Service) CreateNative(videoDir string, req CreateNativeRequest) (Record
 	}
 	if manifestAudio.System {
 		media.SystemAudioPath = SystemAudioFile
+		media.SystemAudioStorage = AudioStorageSidecar
 	}
 	if manifestAudio.Microphone {
 		media.MicrophoneAudioPath = MicrophoneAudioFile
+		media.MicrophoneAudioStorage = AudioStorageSidecar
 	}
 	if manifestCamera.Enabled {
 		media.WebcamVideoPath = WebcamVideoFile
@@ -202,16 +204,41 @@ func (s *Service) ValidateReady(manifestPath string) error {
 		}
 	}
 	if manifest.Audio.System {
-		if err := requireReadablePackageFileMinSize(packageDir, "systemAudioPath", manifest.Media.SystemAudioPath, false, 45); err != nil {
+		if err := s.validateReadyAudioTrack(packageDir, "systemAudio", manifest.Media.SystemAudioPath, manifest.Media.SystemAudioStorage, manifest.Media.ScreenVideoPath); err != nil {
 			return err
 		}
 	}
 	if manifest.Audio.Microphone {
-		if err := requireReadablePackageFileMinSize(packageDir, "microphoneAudioPath", manifest.Media.MicrophoneAudioPath, false, 45); err != nil {
+		if err := s.validateReadyAudioTrack(packageDir, "microphoneAudio", manifest.Media.MicrophoneAudioPath, manifest.Media.MicrophoneAudioStorage, manifest.Media.ScreenVideoPath); err != nil {
 			return err
 		}
 	}
 	return nil
+}
+
+func (s *Service) validateReadyAudioTrack(packageDir string, field string, audioPath string, storage string, screenPath string) error {
+	switch storage {
+	case AudioStorageSidecar:
+		return requireReadablePackageFileMinSize(packageDir, field+"Path", audioPath, false, 45)
+	case AudioStorageMuxed:
+		if audioPath == "" {
+			return fmt.Errorf("%sPath is required before muxed audio can be marked ready", field)
+		}
+		if filepath.Clean(audioPath) != filepath.Clean(screenPath) {
+			return fmt.Errorf("%sPath %q must match screenVideoPath %q for muxed audio", field, audioPath, screenPath)
+		}
+		screenFile := filepath.Join(packageDir, filepath.Clean(screenPath))
+		hasAudioTrack, err := mp4HasAudioTrack(screenFile)
+		if err != nil {
+			return fmt.Errorf("%s muxed track probe failed: %w", field, err)
+		}
+		if !hasAudioTrack {
+			return fmt.Errorf("%s muxed track is missing from screenVideoPath %q", field, screenPath)
+		}
+		return nil
+	default:
+		return fmt.Errorf("%sStorage %q is not supported", field, storage)
+	}
 }
 
 func (s *Service) Recover(videoDir string, packageDir string, completedAt time.Time) (RecoverySummary, error) {
@@ -277,7 +304,7 @@ func (s *Service) WriteManifest(manifestPath string, manifest Manifest) error {
 	manifest.Recording = recordingprofile.Normalize(manifest.Recording)
 	manifest.Audio = normalizeAudio(manifest.Audio)
 	manifest.Camera = normalizeCamera(manifest.Camera)
-	manifest.Media = normalizeMedia(manifest.Media, manifest.Audio, manifest.Camera)
+	manifest.Media = normalizeMedia(manifest.Media, manifest.Audio, manifest.Camera, manifest.Diagnostics.Mock)
 	manifest.Diagnostics = normalizeDiagnostics(manifest)
 	if err := validateManifest(manifest); err != nil {
 		return err
@@ -384,15 +411,35 @@ func normalizeCamera(camera ManifestCamera) ManifestCamera {
 	return camera
 }
 
-func normalizeMedia(media ManifestMedia, manifestAudio ManifestAudio, camera ManifestCamera) ManifestMedia {
+func normalizeMedia(media ManifestMedia, manifestAudio ManifestAudio, camera ManifestCamera, mock bool) ManifestMedia {
 	if media.ScreenVideoPath == "" {
 		media.ScreenVideoPath = ScreenVideoFile
 	}
 	if !manifestAudio.System {
 		media.SystemAudioPath = ""
+		media.SystemAudioStorage = ""
+	} else if mock && media.SystemAudioPath == "" && media.SystemAudioStorage == "" {
+		media.SystemAudioPath = ""
+	} else {
+		media.SystemAudioStorage = normalizeAudioStorage(media.SystemAudioStorage, media.SystemAudioPath)
+		if media.SystemAudioStorage == AudioStorageMuxed {
+			media.SystemAudioPath = media.ScreenVideoPath
+		} else if media.SystemAudioPath == "" {
+			media.SystemAudioPath = SystemAudioFile
+		}
 	}
 	if !manifestAudio.Microphone {
 		media.MicrophoneAudioPath = ""
+		media.MicrophoneAudioStorage = ""
+	} else if mock && media.MicrophoneAudioPath == "" && media.MicrophoneAudioStorage == "" {
+		media.MicrophoneAudioPath = ""
+	} else {
+		media.MicrophoneAudioStorage = normalizeAudioStorage(media.MicrophoneAudioStorage, media.MicrophoneAudioPath)
+		if media.MicrophoneAudioStorage == AudioStorageMuxed {
+			media.MicrophoneAudioPath = media.ScreenVideoPath
+		} else if media.MicrophoneAudioPath == "" {
+			media.MicrophoneAudioPath = MicrophoneAudioFile
+		}
 	}
 	if !camera.Enabled {
 		media.WebcamVideoPath = ""
@@ -424,6 +471,23 @@ func normalizeDiagnostics(manifest Manifest) ManifestDiagnostics {
 	return diagnostics
 }
 
+func normalizeAudioStorage(storage string, mediaPath string) string {
+	storage = strings.TrimSpace(storage)
+	switch storage {
+	case AudioStorageMuxed:
+		return AudioStorageMuxed
+	case AudioStorageSidecar:
+		return AudioStorageSidecar
+	case "":
+		if filepath.Clean(mediaPath) == ScreenVideoFile {
+			return AudioStorageMuxed
+		}
+		return AudioStorageSidecar
+	default:
+		return storage
+	}
+}
+
 func normalizeTrackDiagnostics(track ManifestTrackDiagnostics, sourceEnabled bool, defaultPath string) ManifestTrackDiagnostics {
 	if !sourceEnabled {
 		return ManifestTrackDiagnostics{}
@@ -453,7 +517,13 @@ func validateManifest(manifest Manifest) error {
 	if err := validatePackageRelativePath("systemAudioPath", manifest.Media.SystemAudioPath); err != nil {
 		return err
 	}
+	if err := validateAudioTrackStorage("systemAudioStorage", manifest.Media.SystemAudioStorage, manifest.Audio.System && !manifest.Diagnostics.Mock); err != nil {
+		return err
+	}
 	if err := validatePackageRelativePath("microphoneAudioPath", manifest.Media.MicrophoneAudioPath); err != nil {
+		return err
+	}
+	if err := validateAudioTrackStorage("microphoneAudioStorage", manifest.Media.MicrophoneAudioStorage, manifest.Audio.Microphone && !manifest.Diagnostics.Mock); err != nil {
 		return err
 	}
 	if err := validatePackageRelativePath("webcamVideoPath", manifest.Media.WebcamVideoPath); err != nil {
@@ -463,6 +533,20 @@ func validateManifest(manifest Manifest) error {
 		return err
 	}
 	return nil
+}
+
+func validateAudioTrackStorage(field string, value string, enabled bool) error {
+	if !enabled && value == "" {
+		return nil
+	}
+	switch value {
+	case AudioStorageSidecar, AudioStorageMuxed:
+		return nil
+	case "":
+		return fmt.Errorf("%s is required when audio is enabled", field)
+	default:
+		return fmt.Errorf("%s %q is not supported", field, value)
+	}
 }
 
 func validateSyncDiagnostics(syncDiagnostics *ManifestSyncDiagnostics) error {

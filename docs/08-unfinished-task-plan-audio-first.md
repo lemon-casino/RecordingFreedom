@@ -115,16 +115,16 @@
 
 ### A5 音频混音、mux 与写盘
 
-状态：首版 smoke/fallback 写盘策略已确定为包内 WAV sidecar：系统声音 `system-audio.wav`，麦克风 `microphone.wav`；正式录制方向调整为优先把系统声音和麦克风 mux 进主媒体 `screen.mp4`。`NativeBackendRuntime` 已提供平台后端可复用的音频启动/暂停/停止入口。还未完成 ScreenCaptureKit/WGC/PipeWire 视频后端调用 runtime 后的端到端 ready package，也未做最终 AAC/mux。
+状态：首版 smoke/fallback 写盘策略已确定为包内 WAV sidecar：系统声音 `system-audio.wav`，麦克风 `microphone.wav`；正式录制方向调整为优先把系统声音和麦克风 mux 进主媒体 `screen.mp4`。`NativeBackendRuntime` 已提供平台后端可复用的音频启动/暂停/停止入口。manifest 已新增 `systemAudioStorage` / `microphoneAudioStorage`，ready 门禁已能区分 `sidecar` 与 `muxed`，并会解析 `screen.mp4` 的 MP4 box 确认 muxed 模式存在 `soun` 音轨。还未完成 ScreenCaptureKit/WGC/PipeWire 视频后端调用 runtime 后的端到端 ready package，也未做最终 AAC/mux。
 
 交付：
 
 - 默认录制优先把音频写入 `screen.mp4`：可以是系统声音和麦克风独立 track，也可以先混成一个 AAC track，但必须记录诊断。
 - WAV sidecar 只作为 smoke、fallback、恢复或平台限制下的过渡输出；不能在最终架构里强迫所有平台重复写两份音频。
-- manifest 需要记录音频存储形态：已 mux 进 `screen.mp4` 的 track 走主媒体探测；fallback sidecar 才检查 `system-audio.wav` / `microphone.wav`。
+- manifest 需要记录音频存储形态：已 mux 进 `screen.mp4` 的 track 走主媒体探测；fallback sidecar 才检查 `system-audio.wav` / `microphone.wav`。代码合同已完成。
 - 音频 writer 持续写入 `screen.mp4` 或包内约定 fallback sidecar；路径必须由 `CreateNativeWritePlan()` 或后续扩展计划返回。
 - 暂停段必须写入 `diagnostics.sync.pauseSegments`。
-- 增加 muxed audio track probe：当 manifest 声明音频已 mux 进 `screen.mp4`，ready 门禁应检查主媒体音轨，而不是要求 `system-audio.wav` / `microphone.wav`。
+- 增加 muxed audio track probe：当 manifest 声明音频已 mux 进 `screen.mp4`，ready 门禁应检查主媒体音轨，而不是要求 `system-audio.wav` / `microphone.wav`。代码合同已完成。
 
 验收：
 

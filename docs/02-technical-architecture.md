@@ -140,7 +140,7 @@ Wails v3 当前仍应按 alpha 风险处理：
 - 调用当前 backend。
 - 写入 `finalizing`、`ready`、`failed` 等 manifest 状态。
 - 在 stop 阶段读取 `BackendStopResult.SyncDiagnostics`，通过 `PackageService.PatchSyncDiagnostics()` 写入音画同步诊断合同，而不是让平台层手写 manifest。
-- 在写入 `ready` 前调用 `PackageService.ValidateReady()`，确保非 mock 包至少有可读、非 0 字节的 screen media；摄像头开启时 webcam sidecar 也必须可读且非 0 字节。
+- 在写入 `ready` 前调用 `PackageService.ValidateReady()`，确保非 mock 包至少有可读、非 0 字节的 screen media；摄像头开启时 webcam sidecar 也必须可读且非 0 字节；音频按 manifest 存储形态校验，`sidecar` 要求非空 WAV，`muxed` 要求主 `screen.mp4` 存在 MP4 `soun` 音轨。
 - 保持 `Session.backend`，让 UI 和诊断能区分 `mock-package`、`screencapturekit`、`windows-graphics-capture`、`pipewire-portal` 等实现。
 
 当前默认 backend 是 `mock-package`，只用于 UI shell 和包结构验证。后续真实后端必须实现同一个接口，不能绕过 `RecordingService` 或 `PackageService`，也不能把视频写到 `data/video` 之外。

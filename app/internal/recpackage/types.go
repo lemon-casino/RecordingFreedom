@@ -30,6 +30,8 @@ const (
 	TimelineBaseMock     = "mock"
 	TimelineBaseMedia    = "media-timestamp"
 	TimelineBasePlatform = "platform-start-timestamp"
+	AudioStorageSidecar  = "sidecar"
+	AudioStorageMuxed    = "muxed"
 )
 
 type Package struct {
@@ -66,11 +68,13 @@ type Manifest struct {
 }
 
 type ManifestMedia struct {
-	ScreenVideoPath     string `json:"screenVideoPath,omitempty"`
-	SystemAudioPath     string `json:"systemAudioPath,omitempty"`
-	MicrophoneAudioPath string `json:"microphoneAudioPath,omitempty"`
-	WebcamVideoPath     string `json:"webcamVideoPath,omitempty"`
-	WebcamStartOffsetMs int    `json:"webcamStartOffsetMs,omitempty"`
+	ScreenVideoPath        string `json:"screenVideoPath,omitempty"`
+	SystemAudioPath        string `json:"systemAudioPath,omitempty"`
+	SystemAudioStorage     string `json:"systemAudioStorage,omitempty"`
+	MicrophoneAudioPath    string `json:"microphoneAudioPath,omitempty"`
+	MicrophoneAudioStorage string `json:"microphoneAudioStorage,omitempty"`
+	WebcamVideoPath        string `json:"webcamVideoPath,omitempty"`
+	WebcamStartOffsetMs    int    `json:"webcamStartOffsetMs,omitempty"`
 }
 
 type ManifestSource struct {

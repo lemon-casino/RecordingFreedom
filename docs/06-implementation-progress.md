@@ -57,8 +57,8 @@
   - 新增 macOS ScreenCaptureKit display/window/program video session：`screen:display-<CGDirectDisplayID>` 通过 `SCDisplay` 采集，`window:<CGWindowID>` 通过 `SCWindow` 采集，`application:<pid>` 选择该 PID 当前最大可见 `SCWindow`，三者都由 `SCStream` 输出真实 screen sample buffer，`AVAssetWriter` 写入包内 `screen.mp4`，停止时写 `video-diagnostics.json`；macOS `native`/`sck` backend 已注册到 `NativeRuntimeBackend`。当前仍需 macOS 真机录制 smoke 验证，系统声音 mux 和麦克风 mux 还未完成。
   - 新增 `cmd/video-smoke`：无 UI 真实视频录制验收入口，默认使用 `native` backend、自动选择第一个可用屏幕源，也支持 `-source-type=window` 和 `-source-type=application` 验证窗口/程序源；默认关闭音频和摄像头，停止后校验 `.rfrec` 包、`screen.mp4` 非 0 字节、`video-diagnostics.json`、manifest `ready` 和 `diagnostics.sync`。
   - 正式录制策略调整为 mux 优先：默认目标是把屏幕视频、系统声音和麦克风写入同一个主媒体 `screen.mp4`；包内 WAV sidecar 继续作为 smoke、fallback、恢复和诊断路径。
-  - `internal/recpackage` 已新增音频 sidecar 合同：系统声音写 `system-audio.wav`，麦克风写 `microphone.wav`；manifest `media` 保存包内相对路径，write plan 返回包内绝对路径。
-  - `PackageService.ValidateReady()` 已在非 mock 包中校验已启用音频 sidecar：系统声音或麦克风开启时，对应 WAV 必须存在、可读且非 0 字节。
+  - `internal/recpackage` 已新增音频存储形态合同：系统声音和麦克风分别通过 `systemAudioStorage` / `microphoneAudioStorage` 标记为 `sidecar` 或 `muxed`；默认 fallback 写 `system-audio.wav` / `microphone.wav`，未来 mux writer 可把路径指向 `screen.mp4`。
+  - `PackageService.ValidateReady()` 已在非 mock 包中校验已启用音频：`sidecar` 模式要求对应 WAV 存在、可读且大于空 header，`muxed` 模式会解析 `screen.mp4` 的 MP4 box 并要求存在 `soun` 音轨。
   - Windows 已新增纯 Go WASAPI capture source：麦克风采集会 downmix/resample 为 `48kHz / mono`，系统声音使用 loopback source，二者都走同一 audio pipeline 和 WAV sink。
   - 新增 `internal/audio/rnnoise`：迁移 RNNoise C 源码和旧项目 `LikelyVoiceEnhancement` 为 cgo native wrapper；RNNoise C/H 源码已隔离到 `internal/audio/rnnoise/native` 子包，默认构建返回明确 unavailable，不做假降噪，带 `rnnoise_native` 标签的 cgo 构建才启用原生 DSP。
   - RNNoise UI/preflight capability 当前仍保持 queued；native wrapper 只在 `audio-smoke` 或后续真实 audio backend 显式使用时编译，避免设备枚举和能力矩阵路径过早耦合 native DSP。
@@ -215,7 +215,7 @@ go test -tags rnnoise_native ./internal/audio/rnnoise/native ./internal/recordin
 - `internal/recording` 覆盖通过 `RecordingService.RecoverPackage()` 恢复 app-managed `data/video` 内的包。
 - `internal/recpackage` 覆盖 mock 包写入 `diagnostics.sync`、`PatchSyncDiagnostics()` 写入/拒绝逃逸路径、摄像头关闭时清理 webcam media 和 sync 诊断。
 - `internal/recpackage` 覆盖 native 写盘计划初始化 manifest、screen/webcam/diagnostics/cache/exports 路径、摄像头关闭时不返回 webcam 写入路径，以及初始化阶段不创建假媒体文件。
-- `internal/recpackage` 覆盖 ready 前媒体门禁：mock marker 通过、native 缺失 screen 拒绝、0 字节 screen 拒绝、非 mock marker 拒绝、摄像头开启但缺失或 0 字节 webcam sidecar 拒绝、真实非 0 字节 screen/webcam 通过。
+- `internal/recpackage` 覆盖 ready 前媒体门禁：mock marker 通过、native 缺失 screen 拒绝、0 字节 screen 拒绝、非 mock marker 拒绝、摄像头开启但缺失或 0 字节 webcam sidecar 拒绝、音频 sidecar 缺失拒绝、muxed 音频缺少 MP4 `soun` 音轨拒绝、真实非 0 字节 screen/webcam 和有效音频通过。
 
 音频合同测试：
 

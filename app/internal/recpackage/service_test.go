@@ -2,6 +2,7 @@ package recpackage
 
 import (
 	"bytes"
+	"encoding/binary"
 	"os"
 	"path/filepath"
 	"strings"
@@ -59,6 +60,9 @@ func TestCreateMockWritesRelativeManifestAndMarker(t *testing.T) {
 	}
 	if filepath.IsAbs(manifest.Media.ScreenVideoPath) {
 		t.Fatalf("screen path must be relative: %q", manifest.Media.ScreenVideoPath)
+	}
+	if manifest.Media.SystemAudioPath != "" || manifest.Media.SystemAudioStorage != "" || manifest.Media.MicrophoneAudioPath != "" || manifest.Media.MicrophoneAudioStorage != "" {
+		t.Fatalf("mock package should not claim real audio media paths: %#v", manifest.Media)
 	}
 	if manifest.Audio.MicrophoneNoiseSuppression != NoiseSuppressionOn {
 		t.Fatalf("noise suppression = %q", manifest.Audio.MicrophoneNoiseSuppression)
@@ -191,7 +195,9 @@ func TestCreateNativeInitializesWritePlanWithoutCreatingMedia(t *testing.T) {
 	if manifest.Media.ScreenVideoPath != ScreenVideoFile ||
 		manifest.Media.WebcamVideoPath != WebcamVideoFile ||
 		manifest.Media.SystemAudioPath != SystemAudioFile ||
-		manifest.Media.MicrophoneAudioPath != MicrophoneAudioFile {
+		manifest.Media.SystemAudioStorage != AudioStorageSidecar ||
+		manifest.Media.MicrophoneAudioPath != MicrophoneAudioFile ||
+		manifest.Media.MicrophoneAudioStorage != AudioStorageSidecar {
 		t.Fatalf("media paths = %#v, want native package defaults", manifest.Media)
 	}
 	if manifest.Diagnostics.Mock {
@@ -359,6 +365,38 @@ func TestValidateReadyRequiresEnabledAudioSidecars(t *testing.T) {
 	}
 	if err := service.ValidateReady(plan.Package.ManifestPath); err != nil {
 		t.Fatalf("ValidateReady(audio sidecars) error = %v", err)
+	}
+}
+
+func TestValidateReadyRequiresMuxedAudioTrackInScreenMP4(t *testing.T) {
+	service := NewService()
+	plan, err := service.CreateNative(t.TempDir(), CreateNativeRequest{
+		Backend: "screencapturekit",
+		Source:  ManifestSource{Type: "screen", ID: "cgdisplay:1"},
+		Audio:   ManifestAudio{System: true},
+	})
+	if err != nil {
+		t.Fatalf("CreateNative() error = %v", err)
+	}
+
+	manifest, err := service.ReadManifest(plan.Package.ManifestPath)
+	if err != nil {
+		t.Fatalf("ReadManifest() error = %v", err)
+	}
+	manifest.Media.SystemAudioStorage = AudioStorageMuxed
+	manifest.Media.SystemAudioPath = ScreenVideoFile
+	if err := service.WriteManifest(plan.Package.ManifestPath, manifest); err != nil {
+		t.Fatalf("WriteManifest(muxed) error = %v", err)
+	}
+
+	writeMinimalMP4(t, plan.ScreenVideoPath, "vide")
+	if err := service.ValidateReady(plan.Package.ManifestPath); err == nil || !strings.Contains(err.Error(), "muxed track is missing") {
+		t.Fatalf("ValidateReady(missing muxed audio) error = %v, want muxed track rejection", err)
+	}
+
+	writeMinimalMP4(t, plan.ScreenVideoPath, "soun")
+	if err := service.ValidateReady(plan.Package.ManifestPath); err != nil {
+		t.Fatalf("ValidateReady(muxed audio) error = %v", err)
 	}
 }
 
@@ -743,4 +781,25 @@ func TestRecoverRejectsPackageOutsideVideoDir(t *testing.T) {
 	if _, err := NewService().Recover(videoDir, outsideDir, time.Now()); err == nil {
 		t.Fatal("Recover() accepted a package outside videoDir")
 	}
+}
+
+func writeMinimalMP4(t *testing.T, path string, handlerType string) {
+	t.Helper()
+	payload := make([]byte, 0, 12)
+	payload = append(payload, 0, 0, 0, 0)
+	payload = append(payload, 0, 0, 0, 0)
+	payload = append(payload, []byte(handlerType)...)
+	data := mp4TestBox("ftyp", []byte("isom0000"))
+	data = append(data, mp4TestBox("moov", mp4TestBox("trak", mp4TestBox("mdia", mp4TestBox("hdlr", payload))))...)
+	if err := os.WriteFile(path, data, 0o644); err != nil {
+		t.Fatalf("WriteFile(minimal mp4) error = %v", err)
+	}
+}
+
+func mp4TestBox(kind string, payload []byte) []byte {
+	box := make([]byte, 8+len(payload))
+	binary.BigEndian.PutUint32(box[0:4], uint32(len(box)))
+	copy(box[4:8], []byte(kind))
+	copy(box[8:], payload)
+	return box
 }
