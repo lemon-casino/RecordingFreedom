@@ -25,7 +25,7 @@
 
 ### A0 音频后端边界
 
-状态：已完成基础代码合同，并新增 `CaptureSession`、`WAVSink`、音频 sidecar 写盘路径和 Windows WASAPI source 复用入口。
+状态：已完成基础代码合同，并新增 `CaptureSession`、`WAVSink`、音频 sidecar 写盘路径、Windows WASAPI source 复用入口和 `recording.NativeBackendRuntime`。
 
 交付：
 
@@ -33,11 +33,13 @@
 - 后端必须能被 ScreenCaptureKit/WASAPI/PipeWire 复用，不把某个平台 API 写进 `RecordingService` 主流程。
 - 已落地 `audio.Pipeline`、`audio.Diagnostics`、`audio.WriteDiagnostics()`、`recording.CreateAudioCaptureConfig()` 和对应单元测试。
 - 已落地 `audio.CaptureSession`、`audio.NewNativeCaptureSession()`、`audio.WAVSink`、`system-audio.wav` / `microphone.wav` sidecar 合同和 ready 前音频 sidecar 校验。
+- 已落地 `recording.NativeBackendRuntime`：真实平台 backend 后续可统一复用 native write plan、audio session 生命周期、RNNoise suppressor 生命周期和启动失败标记 `failed` 的处理。
 
 验收：
 
 - Go 测试已覆盖：打开/关闭系统声音、打开/关闭麦克风、打开/关闭 RNNoise 时，请求合同、输出路径和 diagnostics 路径稳定。
-- `RecordingService` 仍只负责状态机、包状态和 ready 前门禁；音频采集和处理合同位于 `internal/audio` 与 `recording.CreateAudioCaptureConfig()`。
+- Go 测试已覆盖：有音频时 `NativeBackendRuntime` 会创建并控制 audio session；无音频时不创建；RNNoise 不可用时失败且不会假装降噪可用。
+- `RecordingService` 仍只负责状态机、包状态和 ready 前门禁；音频采集和处理合同位于 `internal/audio`、`recording.CreateAudioCaptureConfig()` 与 `recording.NativeBackendRuntime`。
 
 ### A1 真实音频设备枚举
 
@@ -109,7 +111,7 @@
 
 ### A5 音频混音与写盘
 
-状态：首版写盘策略已确定为包内 WAV sidecar：系统声音 `system-audio.wav`，麦克风 `microphone.wav`；还未完成与真实 screen recording backend 的 ready package 集成，也未做最终混音/AAC/mux。
+状态：首版写盘策略已确定为包内 WAV sidecar：系统声音 `system-audio.wav`，麦克风 `microphone.wav`；`NativeBackendRuntime` 已提供平台后端可复用的音频启动/暂停/停止入口。还未完成 ScreenCaptureKit/WGC/PipeWire 视频后端调用 runtime 后的端到端 ready package，也未做最终混音/AAC/mux。
 
 交付：
 
@@ -241,12 +243,12 @@
 
 ## 第一执行顺序
 
-1. A0 音频后端边界。已完成基础代码合同。
+1. A0 音频后端边界。已完成基础代码合同和 `NativeBackendRuntime`。
 2. A1 真实音频设备枚举。Windows 已完成，下一步补 macOS/Linux。
 3. A3 麦克风采集。Windows 已完成并 smoke 验证，下一步补 macOS/Linux。
 4. A4 RNNoise native DSP。wrapper 已迁移并恢复 CI/release gate 定向验证；下一步在有 C 工具链的本机补真实 `audio-smoke -rnnoise`，并在 app recording backend 接入后再开放 UI/preflight capability。
 5. A2 系统声音采集。Windows source 已实现并通过有播放源真实样本 smoke，下一步做长录同步和完整 app recording backend 接入。
-6. A5 音频混音与写盘。
+6. A5 音频混音与写盘。下一步让真实平台视频后端调用 `NativeBackendRuntime`，再做长录同步和 mux 策略。
 7. A6 预检、UI 和设置联动。
 8. A7 三平台手动验证矩阵。
 

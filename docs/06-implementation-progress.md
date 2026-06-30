@@ -49,6 +49,7 @@
   - 新增 `internal/audio.Diagnostics` 和 `WriteDiagnostics()`：定义 `audio-diagnostics.json` 写盘合同，覆盖 target format、system audio、microphone、enhancement 和 mixer 统计。
   - 新增 `recording.CreateAudioCaptureConfig()`：从 `StartRequest + RecordingWritePlan` 生成统一音频采集配置，真实后端复用同一份 system/mic/RNNoise/gain/diagnostics 路径合同。
   - 新增 `internal/audio.WAVSink`、`audio.CaptureSession` 和 `audio.NewNativeCaptureSession()`：把平台 source、pipeline、WAV sidecar 写盘和 `audio-diagnostics.json` 串成可复用运行时。
+  - 新增 `recording.NativeBackendRuntime`：把 native `.rfrec` 写盘计划和音频 session 生命周期串起来，提供 `StartAudio()`、`PauseAudio()`、`ResumeAudio()`、`StopAudio()`、RNNoise suppressor 生命周期和启动失败标记 `failed` 的统一入口。
   - `internal/recpackage` 已新增音频 sidecar 合同：系统声音写 `system-audio.wav`，麦克风写 `microphone.wav`；manifest `media` 保存包内相对路径，write plan 返回包内绝对路径。
   - `PackageService.ValidateReady()` 已在非 mock 包中校验已启用音频 sidecar：系统声音或麦克风开启时，对应 WAV 必须存在、可读且非 0 字节。
   - Windows 已新增纯 Go WASAPI capture source：麦克风采集会 downmix/resample 为 `48kHz / mono`，系统声音使用 loopback source，二者都走同一 audio pipeline 和 WAV sink。
@@ -162,10 +163,10 @@ wails3 build
 有 C 工具链的环境可用以下命令验证 RNNoise 原生 DSP：
 
 ```bash
-go test -tags rnnoise_native ./internal/audio/rnnoise/native
+go test -tags rnnoise_native ./internal/audio/rnnoise/native ./internal/recording
 ```
 
-本机 Windows 当前缺少 `gcc`，因此该命令只作为有 C 工具链环境的本机验证入口；CI/release gate 会在 Linux runner 上执行 RNNoise native 定向测试。
+本机 Windows 当前缺少 `gcc`，因此该命令只作为有 C 工具链环境的本机验证入口；CI/release gate 会在 Linux runner 上执行 RNNoise native DSP 和 recording runtime 定向测试。
 
 视觉检查：
 
@@ -216,6 +217,7 @@ go test -tags rnnoise_native ./internal/audio/rnnoise/native
 - `internal/audio` 覆盖 WAV sidecar header/data 写入、格式变化拒绝、mono resampler、`CaptureSession` source -> pipeline -> sink -> diagnostics 运行时。
 - `internal/audio/rnnoise` 覆盖非 cgo/未带标签 fallback；`rnnoise_native` cgo 构建下会编译 RNNoise C 源并跑 native frame 处理测试。Linux cgo link 的 `-lm` 约束已修正为独立 `linux` / `darwin` LDFLAGS，CI/release gate 执行 native 定向测试，本机 Windows 缺少 `gcc` 时只验证 fallback。
 - `internal/recording` 覆盖 `CreateAudioCaptureConfig()`：打开/关闭系统声音、麦克风和 RNNoise 时，音频设备、sidecar 输出路径、diagnostics 路径和系统声音不降噪策略保持稳定。
+- `internal/recording` 覆盖 `NativeBackendRuntime`：有音频时会创建并控制 audio session；无音频时不启动 audio session；RNNoise suppressor 会传入并在停止时关闭；RNNoise 不可用时初始化失败并把已创建 native 包标记为 `failed`。
 - 本机 Windows audio smoke 已确认默认麦克风 WASAPI capture 生成非空 `microphone.wav`：`framesReceived=99`、`samplesReceived=47520`、`samplesWritten=47520`、duration 约 `990ms`。
 - 本机 Windows system audio smoke 已确认 WASAPI loopback source 在有活动系统播放时可以写入真实样本：`system-audio.wav` 614444 bytes，`framesReceived=160`，`samplesReceived=153600`，`samplesWritten=153600`，`sampleRate=48000`，`channels=2`，duration 约 `1600ms`。
 
@@ -280,7 +282,7 @@ RecordingFreedom/app/bin/recordingfreedom.exe
 - 真实 Windows.Graphics.Capture 录制。
 - 真实 PipeWire / XDG Portal 录制。
 - 真实 CoreAudio / PipeWire 音频设备枚举；当前 Windows WASAPI endpoint 枚举已完成，macOS/Linux 仍是 queued fallback。
-- 真实 CoreAudio/PipeWire 音频采集；当前 Windows WASAPI 麦克风采集已通过 smoke，Windows system loopback 已通过有播放源真实样本 smoke，但长录同步和完整 app recording backend 接入仍未完成。
+- 真实 CoreAudio/PipeWire 音频采集；当前 Windows WASAPI 麦克风采集已通过 smoke，Windows system loopback 已通过有播放源真实样本 smoke，native backend 音频运行时边界已落地，但平台视频后端尚未调用该 runtime 完成端到端录制。
 - 真实 AVFoundation / Media Foundation / PipeWire 摄像头设备枚举；当前只完成 `MediaDeviceProvider` 替换边界和 sidecar eligibility 合同。
 - RNNoise native DSP 的 C 源码和 Go wrapper 已迁移并隔离；CI/release gate 已恢复 native 定向测试，preview artifact 仍保持默认构建，当前 Windows 本机因缺少 `gcc` 只能验证非 cgo fallback，真实 app recording backend 仍未暴露 RNNoise capability。
 - 真实摄像头 sidecar 写入。
@@ -298,6 +300,6 @@ RecordingFreedom/app/bin/recordingfreedom.exe
 
 1. 按 `docs/08-unfinished-task-plan-audio-first.md` 继续推进真实音频采集与 RNNoise 降噪。
 2. A1 已完成 Windows WASAPI system audio/microphone endpoint 枚举；继续补 macOS CoreAudio 与 Linux PipeWire/PulseAudio 枚举。
-3. Windows 麦克风 PCM 采集和系统声音 loopback 样本写盘已完成 smoke；下一步补有 C 工具链本机的 `audio-smoke -rnnoise`、Windows 长录同步、app recording backend 音频接入，以及 macOS/Linux 音频源。
+3. Windows 麦克风 PCM 采集和系统声音 loopback 样本写盘已完成 smoke，`NativeBackendRuntime` 已为真实平台后端提供统一音频生命周期；下一步补有 C 工具链本机的 `audio-smoke -rnnoise`、Windows 长录同步、让 ScreenCaptureKit/WGC/PipeWire 后端实际调用 runtime，以及 macOS/Linux 音频源。
 4. 通过 `recording.RegisterNativeBackend(recording.BackendScreenCaptureKit, ...)` 接入 macOS ScreenCaptureKit 后端，并实现最小可录制 `screen.mp4` 写盘。
 5. 把 release workflow 从 preview executable 升级为正式安装包、签名和公证流水线。

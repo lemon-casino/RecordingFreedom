@@ -63,7 +63,7 @@ go test ./...
 Run RNNoise native tests on a machine with cgo and a C compiler:
 
 ```bash
-go test -tags rnnoise_native ./internal/audio/rnnoise/native
+go test -tags rnnoise_native ./internal/audio/rnnoise/native ./internal/recording
 ```
 
 Run the no-GUI preview smoke:

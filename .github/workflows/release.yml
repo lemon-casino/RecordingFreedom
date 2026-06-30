@@ -71,7 +71,7 @@ jobs:
         working-directory: ${{ env.APP_DIR }}
         env:
           CGO_ENABLED: "1"
-        run: go test -tags rnnoise_native ./internal/audio/rnnoise/native
+        run: go test -tags rnnoise_native ./internal/audio/rnnoise/native ./internal/recording
 
       - name: Run preview smoke
         working-directory: ${{ env.APP_DIR }}
@@ -212,7 +212,7 @@ jobs:
           - Mock .rfrec package flow for UI/package validation.
           - No-GUI preview smoke for settings, storage, preflight, mock start/pause/resume/stop, ready manifest, RNNoise/camera/PIP manifest contract, and recovery scan.
           - Developer audio smoke for Windows WASAPI microphone and system-loopback sidecar capture; not yet connected to the full screen recording backend.
-          - RNNoise native DSP is covered by the release gate as a focused native contract.
+          - RNNoise native DSP and the recording native-audio runtime are covered by the release gate as focused native contracts.
           - Windows, macOS, and Linux Wails build artifacts.
 
           Not included yet:
