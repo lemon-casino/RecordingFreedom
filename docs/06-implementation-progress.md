@@ -36,7 +36,8 @@
   - macOS `darwin && !cgo` 会返回明确错误，避免误报 native source enumeration 已可用。
   - `DeviceService` 新增 `MediaInventory` 合同，统一返回系统声音、麦克风、摄像头和 RNNoise 能力状态。
   - `DeviceService` 已新增 `MediaDeviceProvider` 替换边界；默认平台 provider 当前返回 queued inventory，测试可注入 provider 验证真实枚举、空结果和错误回退不影响前端合同。
-  - 当前媒体设备返回明确的 `native-backend-queued` capability，预留给 CoreAudio/WASAPI/PipeWire 与 AVFoundation/Media Foundation/PipeWire 后续接入。
+  - Windows `MediaDeviceProvider` 已通过 MMDevice API 枚举 WASAPI render/capture endpoint：系统声音和麦克风返回真实 endpoint `NativeID`、friendly name、默认设备和 `enumerated` capability。
+  - macOS/Linux 媒体设备当前仍返回明确的 `native-backend-queued` capability，预留给 CoreAudio/PipeWire 与 AVFoundation/PipeWire 后续接入。
   - Linux 当前返回明确的 `native-backend-queued` capability，占位给 XDG Portal 后端接入，不伪装真实枚举完成。
   - `CaptureService` 已新增平台能力矩阵，覆盖 source enumeration、screen/window/program recording、system audio、microphone、RNNoise、camera sidecar、PIP export 和 package recovery。
   - 能力状态统一为 `available`、`queued`、`blocked`、`unsupported`，并带 backend、permission 和 reason，避免 UI 或文档误报真实录制已完成。
@@ -242,6 +243,7 @@ PIP 合同测试：
 
 - `internal/devices` 覆盖 `MediaDeviceProvider` 注入路径：provider 返回真实设备时会归一化 ID/type/available，不改变 `MediaInventory` 形状。
 - `internal/devices` 覆盖 provider 失败回退：系统声音、麦克风、摄像头和 RNNoise enhancement 均返回带原因的 queued fallback，避免 UI 看到空列表假成功。
+- Windows 本机 smoke 已确认 `DeviceService.ListMediaDevices()` 返回真实 WASAPI system audio 和 microphone endpoint，capability 为 `enumerated`，并保留默认设备 ID。
 
 构建产物：
 
@@ -257,7 +259,8 @@ RecordingFreedom/app/bin/recordingfreedom.exe
 - 真实 native writer 按 `recording.CreateNativeWritePlan()` 返回路径持续写入 `screen.mp4`。
 - 真实 Windows.Graphics.Capture 录制。
 - 真实 PipeWire / XDG Portal 录制。
-- 真实 CoreAudio / WASAPI / PipeWire 音频设备枚举；当前只完成 `MediaDeviceProvider` 替换边界和 queued fallback。
+- 真实 CoreAudio / PipeWire 音频设备枚举；当前 Windows WASAPI endpoint 枚举已完成，macOS/Linux 仍是 queued fallback。
+- 真实 WASAPI/CoreAudio/PipeWire 音频采集；当前只完成 Windows WASAPI 设备枚举和通用 audio pipeline 合同。
 - 真实 AVFoundation / Media Foundation / PipeWire 摄像头设备枚举；当前只完成 `MediaDeviceProvider` 替换边界和 sidecar eligibility 合同。
 - 真实麦克风 RNNoise native DSP 接入。
 - 真实摄像头 sidecar 写入。
@@ -274,7 +277,7 @@ RecordingFreedom/app/bin/recordingfreedom.exe
 ## 下一步
 
 1. 按 `docs/08-unfinished-task-plan-audio-first.md` 继续推进真实音频采集与 RNNoise 降噪。
-2. A0 音频后端边界已完成基础代码合同；下一步进入 A1，在 `MediaDeviceProvider` 后面接入真实 native 音频枚举：系统声音、麦克风、RNNoise 能力状态。
+2. A1 已完成 Windows WASAPI system audio/microphone endpoint 枚举；继续补 macOS CoreAudio 与 Linux PipeWire/PulseAudio 枚举。
 3. 接入麦克风 PCM 采集与 RNNoise native DSP，再接入系统声音采集和音频同步诊断。
 4. 通过 `recording.RegisterNativeBackend(recording.BackendScreenCaptureKit, ...)` 接入 macOS ScreenCaptureKit 后端，并实现最小可录制 `screen.mp4` 写盘。
 5. 把 release workflow 从 preview executable 升级为正式安装包、签名和公证流水线。

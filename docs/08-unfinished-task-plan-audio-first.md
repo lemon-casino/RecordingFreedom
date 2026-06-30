@@ -40,10 +40,12 @@
 
 ### A1 真实音频设备枚举
 
+状态：Windows WASAPI system audio / microphone endpoint 枚举已完成；macOS CoreAudio 与 Linux PipeWire/PulseAudio 待接入。
+
 交付：
 
 - macOS：CoreAudio 枚举输出设备、输入设备、默认设备和权限状态。
-- Windows：WASAPI 枚举 loopback/system audio endpoint 和 capture/microphone endpoint。
+- Windows：WASAPI 枚举 loopback/system audio endpoint 和 capture/microphone endpoint。已完成。
 - Linux：PipeWire/PulseAudio 枚举输入/输出设备，无法可靠枚举时返回 experimental/unavailable 状态。
 - `DeviceService.ListMediaDevices()` 从 queued fallback 升级为真实 provider，失败时保留明确原因。
 
@@ -231,7 +233,7 @@
 ## 第一执行顺序
 
 1. A0 音频后端边界。已完成基础代码合同。
-2. A1 真实音频设备枚举。下一步。
+2. A1 真实音频设备枚举。Windows 已完成，下一步补 macOS/Linux。
 3. A3 麦克风采集。
 4. A4 RNNoise native DSP。
 5. A2 系统声音采集。

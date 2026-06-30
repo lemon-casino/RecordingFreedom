@@ -179,6 +179,7 @@ Windows：
 - 屏幕、窗口、程序窗口录制使用 Windows.Graphics.Capture。
 - 系统声音使用 WASAPI loopback。
 - 麦克风使用 WASAPI capture。
+- 当前已通过 MMDevice API 枚举 Windows WASAPI render/capture endpoint，并保留 `system-audio:default` / `microphone:default` 作为稳定默认设备 ID；真实 endpoint id 写入 `NativeID`。
 - 摄像头使用 Media Foundation，必要时兼容 DirectShow。
 - 编码优先 Media Foundation H.264/AAC，后续导出可接 FFmpeg。
 
