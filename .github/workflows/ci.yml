@@ -68,21 +68,11 @@ jobs:
         working-directory: ${{ env.APP_DIR }}
         run: go test -tags gtk3 ./...
 
-      - name: Diagnose RNNoise native DSP
+      - name: Test RNNoise native DSP
         working-directory: ${{ env.APP_DIR }}
-        shell: bash
         env:
           CGO_ENABLED: "1"
-        run: |
-          set +e
-          go env CGO_ENABLED GOOS GOARCH CC CXX > rnnoise-native-diagnostic.log 2>&1
-          go test -v -tags rnnoise_native ./internal/audio/rnnoise/native >> rnnoise-native-diagnostic.log 2>&1
-          status="$?"
-          if [ "${status}" -ne 0 ]; then
-            message="$(tail -n 120 rnnoise-native-diagnostic.log | sed ':a;N;$!ba;s/%/%25/g;s/\r/%0D/g;s/\n/%0A/g')"
-            echo "::warning title=RNNoise native diagnostic::${message}"
-          fi
-          exit 0
+        run: go test -tags rnnoise_native ./internal/audio/rnnoise/native
 
       - name: Run preview smoke
         working-directory: ${{ env.APP_DIR }}

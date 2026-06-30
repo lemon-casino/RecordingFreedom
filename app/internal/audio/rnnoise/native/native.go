@@ -4,7 +4,8 @@ package native
 
 /*
 #cgo CFLAGS: -std=c99 -O2 -D_GNU_SOURCE -I.
-#cgo linux,darwin LDFLAGS: -lm
+#cgo linux LDFLAGS: -lm
+#cgo darwin LDFLAGS: -lm
 #include "likely_voice_enhancer.h"
 */
 import "C"

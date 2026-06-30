@@ -26,7 +26,7 @@ https://github.com/lemon-casino/RecordingFreedom.git
 
 当前已落地 jobs：
 
-- `validate`：安装 Go、Node、Linux Wails 依赖和 Wails v3 CLI，生成 bindings，校验 `frontend/bindings` 无未提交差异，运行前端 build、`go test ./...` 和 `go run ./cmd/preview-smoke`。
+- `validate`：安装 Go、Node、Linux Wails 依赖和 Wails v3 CLI，生成 bindings，校验 `frontend/bindings` 无未提交差异，运行前端 build、`go test ./...`、RNNoise native DSP 定向测试和 `go run ./cmd/preview-smoke`。
 - `macos-native-contract`：在 `macos-15` 且 `CGO_ENABLED=1` 下验证 CoreGraphics source enumeration 与 `CaptureService` capability 合同。
 - `wails-build`：在 `windows-latest`、`macos-15`、`ubuntu-latest` 上运行默认 `wails3 build`，并上传三平台 preview artifact。RNNoise 原生 DSP 由单独 contract 验证，直到完整 app recording backend 接入前不强制编入 preview artifact。
 
@@ -36,7 +36,7 @@ https://github.com/lemon-casino/RecordingFreedom.git
 
 发布前门禁：
 
-- `Release Gate`：生成 bindings 并校验无差异，运行前端 build、`go test ./...` 和 `go run ./cmd/preview-smoke`。
+- `Release Gate`：生成 bindings 并校验无差异，运行前端 build、`go test ./...`、RNNoise native DSP 定向测试和 `go run ./cmd/preview-smoke`。
 - 三平台 build 只有在 `Release Gate` 通过后才会启动。
 
 平台 runner：
@@ -129,6 +129,7 @@ Linux 初期为 experimental：
 - 同目录生成 `SHA256SUMS-*.txt`。
 - Wails build 在平台 runner 上完成。
 - Release Gate 已运行 `go run ./cmd/preview-smoke`，验证当前可验收能力确实能创建 ready mock `.rfrec` 包到 `data/video`。
+- Release Gate 已运行 RNNoise native DSP 定向测试，验证 native wrapper 能处理 48kHz/480-sample frame。
 - release notes 明确该 artifact 是 UI shell / mock package 验收版本。
 
 正式发布前还必须补齐：
