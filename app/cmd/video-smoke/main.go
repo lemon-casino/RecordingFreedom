@@ -73,7 +73,7 @@ func main() {
 	flag.DurationVar(&opts.duration, "duration", 5*time.Second, "recording duration")
 	flag.DurationVar(&opts.pauseAfter, "pause-after", 0, "optional pause time after start; 0 disables pause/resume smoke")
 	flag.DurationVar(&opts.pauseDuration, "pause-duration", time.Second, "pause duration when -pause-after is set")
-	flag.BoolVar(&opts.systemAudio, "system", false, "capture system audio; disabled by default until mux support lands")
+	flag.BoolVar(&opts.systemAudio, "system", false, "capture system audio into the primary media when the backend supports muxing")
 	flag.BoolVar(&opts.microphone, "microphone", false, "capture microphone; disabled by default until mux support lands")
 	flag.BoolVar(&opts.camera, "camera", false, "capture camera sidecar; disabled by default until sidecar support lands")
 	flag.StringVar(&opts.quality, "quality", recordingprofile.QualityBalanced, "recording quality: standard, balanced, or high")
@@ -180,7 +180,7 @@ func run(opts options) (smokeReport, error) {
 	if err != nil {
 		return smokeReport{}, fmt.Errorf("read manifest: %w", err)
 	}
-	verification, err := verifyPackage(session, manifest)
+	verification, err := verifyPackage(session, manifest, opts.systemAudio)
 	if err != nil {
 		return smokeReport{}, err
 	}
@@ -239,7 +239,7 @@ type packageVerification struct {
 	videoDurationMs      int64
 }
 
-func verifyPackage(session recording.Session, manifest recpackage.Manifest) (packageVerification, error) {
+func verifyPackage(session recording.Session, manifest recpackage.Manifest, wantSystemAudio bool) (packageVerification, error) {
 	if session.Status != recording.StateReady {
 		return packageVerification{}, fmt.Errorf("session status = %q, want %q", session.Status, recording.StateReady)
 	}
@@ -267,6 +267,20 @@ func verifyPackage(session recording.Session, manifest recpackage.Manifest) (pac
 	if manifest.Media.ScreenVideoPath != recpackage.ScreenVideoFile {
 		return packageVerification{}, fmt.Errorf("screenVideoPath = %q, want %q", manifest.Media.ScreenVideoPath, recpackage.ScreenVideoFile)
 	}
+	if wantSystemAudio {
+		if !manifest.Audio.System {
+			return packageVerification{}, errors.New("manifest audio.system is false, want enabled system audio")
+		}
+		if manifest.Media.SystemAudioStorage != recpackage.AudioStorageMuxed || manifest.Media.SystemAudioPath != recpackage.ScreenVideoFile {
+			return packageVerification{}, fmt.Errorf("system audio media = %#v, want muxed screen.mp4", manifest.Media)
+		}
+		if !manifest.Diagnostics.Sync.SystemAudio.Enabled {
+			return packageVerification{}, errors.New("manifest diagnostics.sync.systemAudio is not enabled")
+		}
+		if manifest.Diagnostics.Sync.SystemAudio.Path != recpackage.ScreenVideoFile {
+			return packageVerification{}, fmt.Errorf("diagnostics.sync.systemAudio.path = %q, want %q", manifest.Diagnostics.Sync.SystemAudio.Path, recpackage.ScreenVideoFile)
+		}
+	}
 
 	screenPath := filepath.Join(session.PackageDir, filepath.Clean(manifest.Media.ScreenVideoPath))
 	screenInfo, err := os.Stat(screenPath)
@@ -287,6 +301,14 @@ func verifyPackage(session recording.Session, manifest recpackage.Manifest) (pac
 	}
 	if diagnostics.Screen.FramesWritten <= 0 {
 		return packageVerification{}, fmt.Errorf("video diagnostics framesWritten = %d, want > 0", diagnostics.Screen.FramesWritten)
+	}
+	if wantSystemAudio {
+		if !diagnostics.SystemAudio.Enabled {
+			return packageVerification{}, errors.New("video diagnostics system audio track is not enabled")
+		}
+		if diagnostics.SystemAudio.SamplesWritten <= 0 {
+			return packageVerification{}, fmt.Errorf("video diagnostics system audio samplesWritten = %d, want > 0", diagnostics.SystemAudio.SamplesWritten)
+		}
 	}
 
 	return packageVerification{

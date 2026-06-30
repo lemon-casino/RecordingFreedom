@@ -11,11 +11,11 @@ import (
 
 func TestCreateAudioCaptureConfigKeepsEnabledAudioContract(t *testing.T) {
 	packages := recpackage.NewService()
-	plan, err := CreateNativeWritePlan(packages, BackendScreenCaptureKit, BackendStartRequest{
+	plan, err := CreateNativeWritePlan(packages, BackendWindowsGraphicsCapture, BackendStartRequest{
 		VideoDir:  t.TempDir(),
 		CreatedAt: time.Now(),
 		StartRequest: StartRequest{
-			SourceID:   "cgdisplay:1",
+			SourceID:   "screen:primary",
 			SourceType: SourceScreen,
 			Audio: AudioRequest{
 				System:           true,
@@ -31,7 +31,7 @@ func TestCreateAudioCaptureConfigKeepsEnabledAudioContract(t *testing.T) {
 		t.Fatalf("CreateNativeWritePlan() error = %v", err)
 	}
 
-	config, err := CreateAudioCaptureConfig(BackendScreenCaptureKit, audioStartRequestForTest(plan.Package.Manifest.Audio), plan)
+	config, err := CreateAudioCaptureConfig(BackendWindowsGraphicsCapture, audioStartRequestForTest(plan.Package.Manifest.Audio), plan)
 	if err != nil {
 		t.Fatalf("CreateAudioCaptureConfig() error = %v", err)
 	}
@@ -55,6 +55,36 @@ func TestCreateAudioCaptureConfigKeepsEnabledAudioContract(t *testing.T) {
 	}
 	if !config.SystemAudioIsNeverDenoised {
 		t.Fatal("system audio denoise bypass policy was not carried into config")
+	}
+}
+
+func TestCreateAudioCaptureConfigSkipsScreenCaptureKitMuxedSystemAudio(t *testing.T) {
+	packages := recpackage.NewService()
+	plan, err := CreateNativeWritePlan(packages, BackendScreenCaptureKit, BackendStartRequest{
+		VideoDir:  t.TempDir(),
+		CreatedAt: time.Now(),
+		StartRequest: StartRequest{
+			SourceID:   "screen:display-42",
+			SourceType: SourceScreen,
+			Audio: AudioRequest{
+				System:         true,
+				SystemDeviceID: "system-audio:display",
+			},
+		},
+	})
+	if err != nil {
+		t.Fatalf("CreateNativeWritePlan() error = %v", err)
+	}
+
+	config, err := CreateAudioCaptureConfig(BackendScreenCaptureKit, audioStartRequestForTest(plan.Package.Manifest.Audio), plan)
+	if err != nil {
+		t.Fatalf("CreateAudioCaptureConfig() error = %v", err)
+	}
+	if plan.Package.Manifest.Media.SystemAudioStorage != recpackage.AudioStorageMuxed || plan.Package.Manifest.Media.SystemAudioPath != recpackage.ScreenVideoFile {
+		t.Fatalf("system audio media = %#v, want muxed screen media", plan.Package.Manifest.Media)
+	}
+	if config.SystemAudio.Enabled || config.SystemAudio.DeviceID != "" || config.SystemAudioOutputPath != "" {
+		t.Fatalf("muxed system audio leaked into sidecar config: %#v", config)
 	}
 }
 

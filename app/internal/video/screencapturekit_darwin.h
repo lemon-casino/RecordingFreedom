@@ -23,6 +23,15 @@ typedef struct {
 	int64_t endOffsetMs;
 	int64_t durationMs;
 	char *message;
+	int audioEnabled;
+	int audioSampleRate;
+	int64_t audioSamplesWritten;
+	int64_t audioDroppedSamples;
+	int64_t audioAppendFailures;
+	int64_t audioStartOffsetMs;
+	int64_t audioEndOffsetMs;
+	int64_t audioDurationMs;
+	char *audioMessage;
 } RFSCKDiagnostics;
 
 RFSCKSession *rf_sck_session_create(
@@ -31,6 +40,7 @@ RFSCKSession *rf_sck_session_create(
 	const char *output_path,
 	int fps,
 	int capture_cursor,
+	int capture_system_audio,
 	const char *quality,
 	char **error_message
 );

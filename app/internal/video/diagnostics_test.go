@@ -12,11 +12,12 @@ import (
 
 func TestNewDiagnosticsNormalizesCaptureConfig(t *testing.T) {
 	diagnostics := NewDiagnostics(CaptureConfig{
-		Backend:    " screencapturekit ",
-		SourceID:   " screen:display-1 ",
-		SourceType: devices.SourceScreen,
-		SourceName: " Primary Display ",
-		OutputPath: " screen.mp4 ",
+		Backend:     " screencapturekit ",
+		SourceID:    " screen:display-1 ",
+		SourceType:  devices.SourceScreen,
+		SourceName:  " Primary Display ",
+		OutputPath:  " screen.mp4 ",
+		SystemAudio: true,
 		Profile: recordingprofile.Profile{
 			Quality:          recordingprofile.QualityHigh,
 			FPS:              60,
@@ -39,6 +40,9 @@ func TestNewDiagnosticsNormalizesCaptureConfig(t *testing.T) {
 	}
 	if !diagnostics.Screen.Enabled || diagnostics.Screen.FrameRate != 60 {
 		t.Fatalf("screen diagnostics = %#v", diagnostics.Screen)
+	}
+	if !diagnostics.SystemAudio.Enabled {
+		t.Fatalf("system audio diagnostics = %#v, want enabled", diagnostics.SystemAudio)
 	}
 }
 

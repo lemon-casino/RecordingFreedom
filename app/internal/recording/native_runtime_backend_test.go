@@ -25,11 +25,7 @@ func TestNativeRuntimeBackendRunsMediaLifecycleAndReturnsSyncDiagnostics(t *test
 				EndOffsetMs:   1000,
 				DurationMs:    1000,
 			},
-		},
-	}
-	audioSession := &fakeNativeAudioSession{
-		diagnostics: audio.Diagnostics{
-			SystemAudio: audio.StreamDiagnostics{
+			SystemAudio: video.TrackDiagnostics{
 				Enabled:        true,
 				SampleRate:     48000,
 				SamplesWritten: 48000,
@@ -43,7 +39,8 @@ func TestNativeRuntimeBackendRunsMediaLifecycleAndReturnsSyncDiagnostics(t *test
 			return videoSession, nil
 		},
 		AudioSessionFactory: func(audio.CaptureConfig, audio.NoiseSuppressor) (NativeAudioSession, error) {
-			return audioSession, nil
+			t.Fatal("audio session factory was called for muxed ScreenCaptureKit system audio")
+			return nil, nil
 		},
 	})
 
@@ -76,13 +73,10 @@ func TestNativeRuntimeBackendRunsMediaLifecycleAndReturnsSyncDiagnostics(t *test
 	if videoSession.started != 1 || videoSession.paused != 1 || videoSession.resumed != 1 || videoSession.stopped != 1 {
 		t.Fatalf("video lifecycle = start:%d pause:%d resume:%d stop:%d", videoSession.started, videoSession.paused, videoSession.resumed, videoSession.stopped)
 	}
-	if audioSession.started != 1 || audioSession.paused != 1 || audioSession.resumed != 1 || audioSession.stopped != 1 {
-		t.Fatalf("audio lifecycle = start:%d pause:%d resume:%d stop:%d", audioSession.started, audioSession.paused, audioSession.resumed, audioSession.stopped)
-	}
 	if stopped.SyncDiagnostics == nil {
 		t.Fatal("Stop() did not return sync diagnostics")
 	}
-	if stopped.SyncDiagnostics.Screen.Path != recpackage.ScreenVideoFile || stopped.SyncDiagnostics.SystemAudio.Path != recpackage.SystemAudioFile {
+	if stopped.SyncDiagnostics.Screen.Path != recpackage.ScreenVideoFile || stopped.SyncDiagnostics.SystemAudio.Path != recpackage.ScreenVideoFile || stopped.SyncDiagnostics.SystemAudio.SampleRate != 48000 {
 		t.Fatalf("sync diagnostics = %#v", stopped.SyncDiagnostics)
 	}
 	if _, err := backend.Stop(context.Background(), BackendControlRequest{Session: session}); err == nil {

@@ -150,7 +150,7 @@ func fallbackSources(reason string) []CaptureSource {
 func defaultMediaInventory(platform string) MediaInventory {
 	return MediaInventory{
 		SystemAudio: []MediaDevice{
-			defaultMediaDevice(DeviceSystemAudio, mediaBackendMessage(platform, DeviceSystemAudio)),
+			defaultMediaDeviceForPlatform(platform, DeviceSystemAudio, mediaBackendMessage(platform, DeviceSystemAudio)),
 		},
 		Microphones: []MediaDevice{
 			defaultMediaDevice(DeviceMicrophone, mediaBackendMessage(platform, DeviceMicrophone)),
@@ -169,16 +169,33 @@ func fallbackMediaInventory(platform string, reason string) MediaInventory {
 		return inventory
 	}
 	for index := range inventory.SystemAudio {
+		inventory.SystemAudio[index].Available = false
+		inventory.SystemAudio[index].Capability = CapabilityNativeQueued
 		inventory.SystemAudio[index].UnavailableReason = reason
 	}
 	for index := range inventory.Microphones {
+		inventory.Microphones[index].Available = false
+		inventory.Microphones[index].Capability = CapabilityNativeQueued
 		inventory.Microphones[index].UnavailableReason = reason
 	}
 	for index := range inventory.Cameras {
+		inventory.Cameras[index].Available = false
+		inventory.Cameras[index].Capability = CapabilityNativeQueued
 		inventory.Cameras[index].UnavailableReason = reason
 	}
 	inventory.Enhancement.UnavailableReason = reason
 	return inventory
+}
+
+func defaultMediaDeviceForPlatform(platform string, deviceType MediaDeviceType, reason string) MediaDevice {
+	device := defaultMediaDevice(deviceType, reason)
+	if platform == "darwin" && deviceType == DeviceSystemAudio {
+		device.Available = true
+		device.Capability = CapabilityEnumerated
+		device.UnavailableReason = ""
+		device.Subtitle = "ScreenCaptureKit system audio stream"
+	}
+	return device
 }
 
 func defaultMediaDevice(deviceType MediaDeviceType, reason string) MediaDevice {
@@ -233,7 +250,7 @@ func mediaBackendMessage(platform string, deviceType MediaDeviceType) string {
 	case DeviceSystemAudio:
 		switch platform {
 		case "darwin":
-			return "ScreenCaptureKit system audio selection is queued for the macOS backend."
+			return "ScreenCaptureKit system audio uses the default system mix stream."
 		case "windows":
 			return "WASAPI loopback endpoint enumeration is queued for the Windows backend."
 		case "linux":

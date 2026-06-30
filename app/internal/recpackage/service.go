@@ -100,8 +100,13 @@ func (s *Service) CreateNative(videoDir string, req CreateNativeRequest) (Record
 		ScreenVideoPath: ScreenVideoFile,
 	}
 	if manifestAudio.System {
-		media.SystemAudioPath = SystemAudioFile
-		media.SystemAudioStorage = AudioStorageSidecar
+		if nativeBackendMuxesSystemAudio(req.Backend) {
+			media.SystemAudioPath = ScreenVideoFile
+			media.SystemAudioStorage = AudioStorageMuxed
+		} else {
+			media.SystemAudioPath = SystemAudioFile
+			media.SystemAudioStorage = AudioStorageSidecar
+		}
 	}
 	if manifestAudio.Microphone {
 		media.MicrophoneAudioPath = MicrophoneAudioFile
@@ -166,6 +171,10 @@ func optionalAbsPackagePath(packageDir string, relativePath string) string {
 		return ""
 	}
 	return filepath.Join(packageDir, filepath.Clean(relativePath))
+}
+
+func nativeBackendMuxesSystemAudio(backend string) bool {
+	return strings.EqualFold(strings.TrimSpace(backend), "screencapturekit")
 }
 
 func (s *Service) PatchSyncDiagnostics(manifestPath string, sync ManifestSyncDiagnostics) error {

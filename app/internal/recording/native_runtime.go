@@ -209,10 +209,15 @@ func (r *NativeBackendRuntime) SyncDiagnostics() *recpackage.ManifestSyncDiagnos
 	}
 	if videoDiagnostics, ok := r.VideoDiagnostics(); ok {
 		diagnostics.Screen = screenSyncTrack(videoDiagnostics, r.Plan.Package.Manifest.Media.ScreenVideoPath)
+		if videoDiagnostics.SystemAudio.Enabled {
+			diagnostics.SystemAudio = videoSystemAudioSyncTrack(videoDiagnostics.SystemAudio, r.Plan.Package.Manifest.Media.SystemAudioPath)
+		}
 	}
 	if audioDiagnostics, ok := r.AudioDiagnostics(); ok {
 		diagnostics.AudioDiagnosticsPath = recpackage.AudioDiagnosticsFile
-		diagnostics.SystemAudio = audioSyncTrack(audioDiagnostics.SystemAudio, r.Plan.Package.Manifest.Media.SystemAudioPath)
+		if !diagnostics.SystemAudio.Enabled {
+			diagnostics.SystemAudio = audioSyncTrack(audioDiagnostics.SystemAudio, r.Plan.Package.Manifest.Media.SystemAudioPath)
+		}
 		diagnostics.Microphone = audioSyncTrack(audioDiagnostics.Microphone, r.Plan.Package.Manifest.Media.MicrophoneAudioPath)
 	}
 	return diagnostics
@@ -353,5 +358,26 @@ func audioSyncTrack(diagnostics audio.StreamDiagnostics, defaultPath string) rec
 		AppendFailures: diagnostics.AppendFailures,
 		SampleRate:     diagnostics.SampleRate,
 		Message:        diagnostics.Message,
+	}
+}
+
+func videoSystemAudioSyncTrack(track video.TrackDiagnostics, defaultPath string) recpackage.ManifestTrackDiagnostics {
+	if !track.Enabled {
+		return recpackage.ManifestTrackDiagnostics{}
+	}
+	if defaultPath == "" {
+		defaultPath = recpackage.ScreenVideoFile
+	}
+	return recpackage.ManifestTrackDiagnostics{
+		Enabled:        true,
+		Path:           defaultPath,
+		Clock:          recpackage.TimelineBaseMedia,
+		StartOffsetMs:  track.StartOffsetMs,
+		EndOffsetMs:    track.EndOffsetMs,
+		DurationMs:     track.DurationMs,
+		DroppedSamples: track.DroppedSamples,
+		AppendFailures: track.AppendFailures,
+		SampleRate:     track.SampleRate,
+		Message:        track.Message,
 	}
 }

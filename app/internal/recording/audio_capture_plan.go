@@ -32,6 +32,11 @@ func CreateAudioCaptureConfig(backendID string, req StartRequest, plan recpackag
 	if !config.SystemAudio.Enabled {
 		config.SystemAudioOutputPath = ""
 	}
+	if plan.Package.Manifest.Media.SystemAudioStorage == recpackage.AudioStorageMuxed {
+		config.SystemAudio.Enabled = false
+		config.SystemAudio.DeviceID = ""
+		config.SystemAudioOutputPath = ""
+	}
 	if !config.Microphone.Enabled {
 		config.MicrophoneAudioPath = ""
 		config.NoiseSuppression = false

@@ -185,8 +185,8 @@ macOS：
 - 麦克风使用 AVFoundation 或 ScreenCaptureKit 可用能力采集，并进入统一音频管线。
 - 摄像头使用 AVFoundation 录 sidecar。
 - 编码优先 H.264/AAC，使用系统硬件编码能力。
-- 当前已接入 ScreenCaptureKit display/window/program video session：`screen:display-<CGDirectDisplayID>` 会映射为 `SCDisplay`，`window:<CGWindowID>` 会映射为 `SCWindow`，`application:<pid>` 会映射为该 PID 当前最大可见 `SCWindow`，三者均通过 `SCStream` 接收 screen sample buffer，并用 `AVAssetWriter` 持续写入包内 `screen.mp4`；`Stop()` 会写入 `video-diagnostics.json` 并返回 manifest sync diagnostics。系统声音 mux 和麦克风 mux 仍按后续任务推进。
-- 当前已新增 `cmd/video-smoke` 无 UI 验收入口，默认走 `native` backend、自动选择可用屏幕源；也可用 `-source-type=window` 验证窗口录制，或用 `-source-type=application` 验证程序源。命令会验证真实 `.rfrec` 包、`screen.mp4`、`video-diagnostics.json` 和 manifest sync diagnostics。
+- 当前已接入 ScreenCaptureKit display/window/program video session：`screen:display-<CGDirectDisplayID>` 会映射为 `SCDisplay`，`window:<CGWindowID>` 会映射为 `SCWindow`，`application:<pid>` 会映射为该 PID 当前最大可见 `SCWindow`，三者均通过 `SCStream` 接收 screen sample buffer，并用 `AVAssetWriter` 持续写入包内 `screen.mp4`；系统声音开启时，ScreenCaptureKit audio sample 会写入同一个 `screen.mp4` 的 AAC 音轨，manifest 使用 `systemAudioStorage: "muxed"`。`Stop()` 会写入 `video-diagnostics.json` 并返回 manifest sync diagnostics。麦克风 mux 仍按后续任务推进。
+- 当前已新增 `cmd/video-smoke` 无 UI 验收入口，默认走 `native` backend、自动选择可用屏幕源；也可用 `-source-type=window` 验证窗口录制，或用 `-source-type=application` 验证程序源。系统声音真机验收使用 `-system`。命令会验证真实 `.rfrec` 包、`screen.mp4`、`video-diagnostics.json` 和 manifest sync diagnostics。
 
 Windows：
 

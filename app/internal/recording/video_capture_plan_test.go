@@ -18,6 +18,7 @@ func TestCreateVideoCaptureConfigMapsNativeWritePlan(t *testing.T) {
 			SourceID:   "screen:display-42",
 			SourceType: SourceScreen,
 			SourceName: "Primary Display",
+			Audio:      AudioRequest{System: true},
 			Recording: recordingprofile.Profile{
 				Quality:       recordingprofile.QualityHigh,
 				FPS:           60,
@@ -33,6 +34,7 @@ func TestCreateVideoCaptureConfigMapsNativeWritePlan(t *testing.T) {
 		SourceID:   " screen:display-42 ",
 		SourceType: SourceScreen,
 		SourceName: " Primary Display ",
+		Audio:      AudioRequest{System: true},
 		Recording:  recordingprofile.Profile{Quality: recordingprofile.QualityHigh, FPS: 60, CaptureCursor: true},
 	}, plan)
 	if err != nil {
@@ -53,5 +55,8 @@ func TestCreateVideoCaptureConfigMapsNativeWritePlan(t *testing.T) {
 	}
 	if config.Profile.Quality != recordingprofile.QualityHigh || config.Profile.FPS != 60 || !config.Profile.CaptureCursor {
 		t.Fatalf("profile = %#v", config.Profile)
+	}
+	if !config.SystemAudio {
+		t.Fatal("ScreenCaptureKit muxed system audio was not carried into video config")
 	}
 }

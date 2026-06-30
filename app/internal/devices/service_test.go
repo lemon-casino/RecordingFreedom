@@ -91,6 +91,17 @@ func TestNormalizeMediaInventoryAddsFallbackDevices(t *testing.T) {
 	}
 }
 
+func TestDarwinDefaultSystemAudioUsesScreenCaptureKitStream(t *testing.T) {
+	inventory := defaultMediaInventory("darwin")
+	if len(inventory.SystemAudio) == 0 {
+		t.Fatal("darwin system audio devices are empty")
+	}
+	device := inventory.SystemAudio[0]
+	if !device.Available || device.Capability != CapabilityEnumerated || device.ID != "system-audio:default" {
+		t.Fatalf("darwin system audio device = %#v, want available ScreenCaptureKit default", device)
+	}
+}
+
 func TestListMediaDevicesUsesInjectedProvider(t *testing.T) {
 	service := NewServiceWithMediaProvider(stubMediaProvider{
 		inventory: MediaInventory{

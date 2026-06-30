@@ -64,11 +64,11 @@
 
 ### A2 系统声音采集
 
-状态：Windows WASAPI loopback source 已实现，并已在有活动系统播放时通过真实样本 smoke；长录同步、ready 包集成和完整 app recording backend 接入仍待完成。macOS/Linux 待接入。
+状态：Windows WASAPI loopback source 已实现，并已在有活动系统播放时通过真实样本 smoke；macOS ScreenCaptureKit system audio 已接入同容器 `screen.mp4` AAC mux 代码路径，待 macOS 真机 smoke。Windows 长录同步、ready 包集成和完整 app recording backend 接入仍待完成。Linux 待接入。
 
 交付：
 
-- macOS：优先使用 ScreenCaptureKit system audio；若当前 macOS 版本或权限不支持，返回 blocked reason。
+- macOS：优先使用 ScreenCaptureKit system audio；代码路径已接入 `screen.mp4` mux，待真机验证；若当前 macOS 版本或权限不支持，返回 blocked reason。
 - Windows：WASAPI loopback 采集系统声音。
 - Linux：PipeWire/PulseAudio 采集系统声音，首版标注 experimental。
 - 采集 sample 必须带 timestamp 或可映射到录制 timeline 的 sample time。
@@ -115,7 +115,7 @@
 
 ### A5 音频混音、mux 与写盘
 
-状态：首版 smoke/fallback 写盘策略已确定为包内 WAV sidecar：系统声音 `system-audio.wav`，麦克风 `microphone.wav`；正式录制方向调整为优先把系统声音和麦克风 mux 进主媒体 `screen.mp4`。`NativeBackendRuntime` 已提供平台后端可复用的音频启动/暂停/停止入口。manifest 已新增 `systemAudioStorage` / `microphoneAudioStorage`，ready 门禁已能区分 `sidecar` 与 `muxed`，并会解析 `screen.mp4` 的 MP4 box 确认 muxed 模式存在 `soun` 音轨。还未完成 ScreenCaptureKit/WGC/PipeWire 视频后端调用 runtime 后的端到端 ready package，也未做最终 AAC/mux。
+状态：首版 smoke/fallback 写盘策略已确定为包内 WAV sidecar：系统声音 `system-audio.wav`，麦克风 `microphone.wav`；正式录制方向调整为优先把系统声音和麦克风 mux 进主媒体 `screen.mp4`。`NativeBackendRuntime` 已提供平台后端可复用的音频启动/暂停/停止入口。manifest 已新增 `systemAudioStorage` / `microphoneAudioStorage`，ready 门禁已能区分 `sidecar` 与 `muxed`，并会解析 `screen.mp4` 的 MP4 box 确认 muxed 模式存在 `soun` 音轨。macOS ScreenCaptureKit 系统声音已接入同容器 AAC mux 代码路径，待真机 smoke；麦克风 mux、Windows/WGC mux 和 Linux/PipeWire mux 仍未完成。
 
 交付：
 
@@ -204,13 +204,14 @@
 
 ## P0-RECORDING：真实屏幕/窗口/程序录制
 
-状态：macOS ScreenCaptureKit display/window/program video session 已接入代码路径：`screen:display-<CGDirectDisplayID>`、`window:<CGWindowID>` 和 `application:<pid>` 会通过 `SCStream` 写入真实 `screen.mp4`，并输出 `video-diagnostics.json`；`application:<pid>` 首版选择该 PID 当前最大可见窗口。已新增 `cmd/video-smoke` 作为无 UI 真机验收入口。仍需 macOS 真机 smoke 验证；系统声音 mux、麦克风 mux、Windows WGC 和 Linux PipeWire 仍未完成。
+状态：macOS ScreenCaptureKit display/window/program video session 已接入代码路径：`screen:display-<CGDirectDisplayID>`、`window:<CGWindowID>` 和 `application:<pid>` 会通过 `SCStream` 写入真实 `screen.mp4`，并输出 `video-diagnostics.json`；`application:<pid>` 首版选择该 PID 当前最大可见窗口。macOS system audio 已接入 ScreenCaptureKit audio output，并通过 `AVAssetWriter` mux 到同一个 `screen.mp4`。已新增 `cmd/video-smoke` 作为无 UI 真机验收入口。仍需 macOS 真机 smoke 验证；麦克风 mux、Windows WGC 和 Linux PipeWire 仍未完成。
 
 任务：
 
 - macOS ScreenCaptureKit 最小 display `screen.mp4` 写盘。代码已接入，待真机录制验收。
 - macOS ScreenCaptureKit 最小 window `screen.mp4` 写盘。代码已接入，待真机录制验收。
 - macOS ScreenCaptureKit 最小 program `screen.mp4` 写盘。代码已接入，待真机录制验收。
+- macOS ScreenCaptureKit system audio mux 到 `screen.mp4`。代码已接入，待真机录制验收：`go run ./cmd/video-smoke -system -duration=1m`。
 - macOS `cmd/video-smoke` 真实录制验收：`go run ./cmd/video-smoke -duration=1m` 和 `go run ./cmd/video-smoke -duration=5m -pause-after=10s -pause-duration=2s`。
 - macOS window smoke：`go run ./cmd/video-smoke -source-type=window -duration=1m`。
 - macOS program smoke：`go run ./cmd/video-smoke -source-type=application -duration=1m`。

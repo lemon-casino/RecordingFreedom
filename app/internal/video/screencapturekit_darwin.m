@@ -1,5 +1,6 @@
 #import "screencapturekit_darwin.h"
 
+#import <AudioToolbox/AudioToolbox.h>
 #import <AVFoundation/AVFoundation.h>
 #import <CoreMedia/CoreMedia.h>
 #import <CoreVideo/CoreVideo.h>
@@ -62,9 +63,11 @@ static int64_t rf_sck_elapsed_ms(CMTime start, CMTime value) {
 @property(nonatomic, copy) NSString *quality;
 @property(nonatomic, assign) int requestedFPS;
 @property(nonatomic, assign) BOOL captureCursor;
+@property(nonatomic, assign) BOOL captureSystemAudio;
 @property(nonatomic, strong) SCStream *stream;
 @property(nonatomic, strong) AVAssetWriter *writer;
 @property(nonatomic, strong) AVAssetWriterInput *videoInput;
+@property(nonatomic, strong) AVAssetWriterInput *audioInput;
 @property(nonatomic, strong) dispatch_queue_t sampleQueue;
 @property(nonatomic, assign) BOOL started;
 @property(nonatomic, assign) BOOL stopped;
@@ -72,13 +75,20 @@ static int64_t rf_sck_elapsed_ms(CMTime start, CMTime value) {
 @property(nonatomic, assign) BOOL writerStarted;
 @property(nonatomic, assign) CMTime firstPTS;
 @property(nonatomic, assign) CMTime lastPTS;
+@property(nonatomic, assign) CMTime firstAudioPTS;
+@property(nonatomic, assign) CMTime lastAudioPTS;
 @property(nonatomic, assign) int width;
 @property(nonatomic, assign) int height;
 @property(nonatomic, assign) int frameRate;
 @property(nonatomic, assign) int64_t framesWritten;
 @property(nonatomic, assign) int64_t droppedFrames;
 @property(nonatomic, assign) int64_t appendFailures;
+@property(nonatomic, assign) int audioSampleRate;
+@property(nonatomic, assign) int64_t audioSamplesWritten;
+@property(nonatomic, assign) int64_t audioDroppedSamples;
+@property(nonatomic, assign) int64_t audioAppendFailures;
 @property(nonatomic, copy) NSString *lastMessage;
+@property(nonatomic, copy) NSString *lastAudioMessage;
 @end
 
 @implementation RFScreenCaptureSession
@@ -88,6 +98,7 @@ static int64_t rf_sck_elapsed_ms(CMTime start, CMTime value) {
 					   outputPath:(NSString *)outputPath
 							  fps:(int)fps
 					captureCursor:(BOOL)captureCursor
+				captureSystemAudio:(BOOL)captureSystemAudio
 						  quality:(NSString *)quality {
 	self = [super init];
 	if (self == nil) {
@@ -98,10 +109,13 @@ static int64_t rf_sck_elapsed_ms(CMTime start, CMTime value) {
 	_outputPath = [outputPath copy];
 	_requestedFPS = fps > 0 ? fps : 30;
 	_captureCursor = captureCursor;
+	_captureSystemAudio = captureSystemAudio;
 	_quality = quality.length > 0 ? [quality copy] : @"balanced";
 	_sampleQueue = dispatch_queue_create("casino.lemon.recordingfreedom.sck-video", DISPATCH_QUEUE_SERIAL);
 	_firstPTS = kCMTimeInvalid;
 	_lastPTS = kCMTimeInvalid;
+	_firstAudioPTS = kCMTimeInvalid;
+	_lastAudioPTS = kCMTimeInvalid;
 	_frameRate = _requestedFPS;
 	return self;
 }
@@ -170,6 +184,16 @@ static int64_t rf_sck_elapsed_ms(CMTime start, CMTime value) {
 	configuration.queueDepth = 6;
 	configuration.pixelFormat = kCVPixelFormatType_32BGRA;
 	configuration.showsCursor = self.captureCursor;
+	if (self.captureSystemAudio) {
+		if (@available(macOS 13.0, *)) {
+			configuration.capturesAudio = YES;
+		} else {
+			if (errorMessage != NULL) {
+				*errorMessage = @"ScreenCaptureKit system audio capture requires macOS 13.0 or newer";
+			}
+			return NO;
+		}
+	}
 
 	self.stream = [[SCStream alloc] initWithFilter:filter configuration:configuration delegate:self];
 
@@ -179,6 +203,16 @@ static int64_t rf_sck_elapsed_ms(CMTime start, CMTime value) {
 			*errorMessage = rf_sck_error_message(outputError, @"Could not attach ScreenCaptureKit stream output");
 		}
 		return NO;
+	}
+	if (self.captureSystemAudio) {
+		if (@available(macOS 13.0, *)) {
+			if (![self.stream addStreamOutput:self type:SCStreamOutputTypeAudio sampleHandlerQueue:self.sampleQueue error:&outputError]) {
+				if (errorMessage != NULL) {
+					*errorMessage = rf_sck_error_message(outputError, @"Could not attach ScreenCaptureKit audio output");
+				}
+				return NO;
+			}
+		}
 	}
 
 	__block NSError *startError = nil;
@@ -352,6 +386,26 @@ static int64_t rf_sck_elapsed_ms(CMTime start, CMTime value) {
 		return NO;
 	}
 	[self.writer addInput:self.videoInput];
+	if (self.captureSystemAudio) {
+		NSDictionary *audioSettings = @{
+			AVFormatIDKey: @(kAudioFormatMPEG4AAC),
+			AVSampleRateKey: @48000,
+			AVNumberOfChannelsKey: @2,
+			AVEncoderBitRateKey: @128000,
+		};
+		self.audioInput = [AVAssetWriterInput assetWriterInputWithMediaType:AVMediaTypeAudio outputSettings:audioSettings];
+		self.audioInput.expectsMediaDataInRealTime = YES;
+		if (![self.writer canAddInput:self.audioInput]) {
+			if (error != NULL) {
+				*error = [NSError errorWithDomain:@"RecordingFreedom.ScreenCaptureKit"
+											 code:1003
+										 userInfo:@{NSLocalizedDescriptionKey: @"AVAssetWriter cannot add AAC audio input"}];
+			}
+			return NO;
+		}
+		[self.writer addInput:self.audioInput];
+		self.audioSampleRate = 48000;
+	}
 	return YES;
 }
 
@@ -448,6 +502,9 @@ static int64_t rf_sck_elapsed_ms(CMTime start, CMTime value) {
 		return self.writer.error;
 	}
 	[self.videoInput markAsFinished];
+	if (self.audioInput != nil) {
+		[self.audioInput markAsFinished];
+	}
 	dispatch_semaphore_t writerSemaphore = dispatch_semaphore_create(0);
 	[self.writer finishWritingWithCompletionHandler:^{
 		dispatch_semaphore_signal(writerSemaphore);
@@ -464,6 +521,12 @@ static int64_t rf_sck_elapsed_ms(CMTime start, CMTime value) {
 }
 
 - (void)stream:(SCStream *)stream didOutputSampleBuffer:(CMSampleBufferRef)sampleBuffer ofType:(SCStreamOutputType)type {
+	if (@available(macOS 13.0, *)) {
+		if (type == SCStreamOutputTypeAudio) {
+			[self handleAudioSampleBuffer:sampleBuffer];
+			return;
+		}
+	}
 	if (type != SCStreamOutputTypeScreen) {
 		return;
 	}
@@ -507,6 +570,51 @@ static int64_t rf_sck_elapsed_ms(CMTime start, CMTime value) {
 	self.framesWritten++;
 }
 
+- (void)handleAudioSampleBuffer:(CMSampleBufferRef)sampleBuffer API_AVAILABLE(macos(13.0)) {
+	CMItemCount sampleCount = sampleBuffer == NULL ? 0 : CMSampleBufferGetNumSamples(sampleBuffer);
+	if (sampleCount <= 0) {
+		sampleCount = 1;
+	}
+	if (!self.captureSystemAudio || self.audioInput == nil) {
+		self.audioDroppedSamples += sampleCount;
+		return;
+	}
+	if (self.paused || self.stopped) {
+		self.audioDroppedSamples += sampleCount;
+		return;
+	}
+	if (sampleBuffer == NULL || !CMSampleBufferIsValid(sampleBuffer) || !CMSampleBufferDataIsReady(sampleBuffer)) {
+		self.audioDroppedSamples += sampleCount;
+		return;
+	}
+
+	CMTime pts = CMSampleBufferGetPresentationTimeStamp(sampleBuffer);
+	if (!CMTIME_IS_NUMERIC(pts)) {
+		self.audioDroppedSamples += sampleCount;
+		return;
+	}
+	if (!self.writerStarted) {
+		self.audioDroppedSamples += sampleCount;
+		self.lastAudioMessage = @"ScreenCaptureKit audio arrived before the first video frame";
+		return;
+	}
+	if (!self.audioInput.readyForMoreMediaData) {
+		self.audioDroppedSamples += sampleCount;
+		return;
+	}
+	if (![self.audioInput appendSampleBuffer:sampleBuffer]) {
+		self.audioAppendFailures++;
+		self.lastAudioMessage = rf_sck_error_message(self.writer.error, @"AVAssetWriter audio append failed");
+		return;
+	}
+
+	if (!CMTIME_IS_NUMERIC(self.firstAudioPTS)) {
+		self.firstAudioPTS = pts;
+	}
+	self.lastAudioPTS = pts;
+	self.audioSamplesWritten += sampleCount;
+}
+
 - (void)stream:(SCStream *)stream didStopWithError:(NSError *)error {
 	if (error != nil) {
 		self.lastMessage = rf_sck_error_message(error, @"ScreenCaptureKit stream stopped with an error");
@@ -529,6 +637,21 @@ static int64_t rf_sck_elapsed_ms(CMTime start, CMTime value) {
 	diagnostics->endOffsetMs = rf_sck_elapsed_ms(self.firstPTS, self.lastPTS);
 	diagnostics->durationMs = diagnostics->endOffsetMs;
 	diagnostics->message = rf_sck_copy_message(self.lastMessage);
+	if (self.captureSystemAudio) {
+		diagnostics->audioEnabled = 1;
+		diagnostics->audioSampleRate = self.audioSampleRate;
+		diagnostics->audioSamplesWritten = self.audioSamplesWritten;
+		diagnostics->audioDroppedSamples = self.audioDroppedSamples;
+		diagnostics->audioAppendFailures = self.audioAppendFailures;
+		diagnostics->audioStartOffsetMs = rf_sck_elapsed_ms(self.firstPTS, self.firstAudioPTS);
+		diagnostics->audioEndOffsetMs = rf_sck_elapsed_ms(self.firstPTS, self.lastAudioPTS);
+		diagnostics->audioDurationMs = rf_sck_elapsed_ms(self.firstAudioPTS, self.lastAudioPTS);
+		if (self.lastAudioMessage.length == 0 && self.audioSamplesWritten > 0) {
+			diagnostics->audioMessage = rf_sck_copy_message(@"ScreenCaptureKit system audio muxed into screen.mp4");
+		} else {
+			diagnostics->audioMessage = rf_sck_copy_message(self.lastAudioMessage);
+		}
+	}
 }
 
 @end
@@ -539,6 +662,7 @@ RFSCKSession *rf_sck_session_create(
 	const char *output_path,
 	int fps,
 	int capture_cursor,
+	int capture_system_audio,
 	const char *quality,
 	char **error_message
 ) {
@@ -561,6 +685,7 @@ RFSCKSession *rf_sck_session_create(
 																		  outputPath:outputPath
 																				 fps:fps
 																	   captureCursor:capture_cursor != 0
+																 captureSystemAudio:capture_system_audio != 0
 																			 quality:qualityValue];
 	if (impl == nil) {
 		rf_sck_set_error(error_message, @"Could not allocate ScreenCaptureKit session");

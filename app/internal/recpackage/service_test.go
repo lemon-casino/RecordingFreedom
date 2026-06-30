@@ -157,8 +157,8 @@ func TestCreateNativeInitializesWritePlanWithoutCreatingMedia(t *testing.T) {
 	if plan.WebcamVideoPath != filepath.Join(plan.Package.Dir, WebcamVideoFile) {
 		t.Fatalf("webcam write path = %q, want package webcam file", plan.WebcamVideoPath)
 	}
-	if plan.SystemAudioPath != filepath.Join(plan.Package.Dir, SystemAudioFile) {
-		t.Fatalf("system audio write path = %q, want package system audio file", plan.SystemAudioPath)
+	if plan.SystemAudioPath != filepath.Join(plan.Package.Dir, ScreenVideoFile) {
+		t.Fatalf("system audio write path = %q, want muxed screen file", plan.SystemAudioPath)
 	}
 	if plan.MicrophoneAudioPath != filepath.Join(plan.Package.Dir, MicrophoneAudioFile) {
 		t.Fatalf("microphone write path = %q, want package microphone file", plan.MicrophoneAudioPath)
@@ -194,8 +194,8 @@ func TestCreateNativeInitializesWritePlanWithoutCreatingMedia(t *testing.T) {
 	}
 	if manifest.Media.ScreenVideoPath != ScreenVideoFile ||
 		manifest.Media.WebcamVideoPath != WebcamVideoFile ||
-		manifest.Media.SystemAudioPath != SystemAudioFile ||
-		manifest.Media.SystemAudioStorage != AudioStorageSidecar ||
+		manifest.Media.SystemAudioPath != ScreenVideoFile ||
+		manifest.Media.SystemAudioStorage != AudioStorageMuxed ||
 		manifest.Media.MicrophoneAudioPath != MicrophoneAudioFile ||
 		manifest.Media.MicrophoneAudioStorage != AudioStorageSidecar {
 		t.Fatalf("media paths = %#v, want native package defaults", manifest.Media)
@@ -340,7 +340,7 @@ func TestValidateReadyRequiresCameraSidecarWhenCameraEnabled(t *testing.T) {
 func TestValidateReadyRequiresEnabledAudioSidecars(t *testing.T) {
 	service := NewService()
 	plan, err := service.CreateNative(t.TempDir(), CreateNativeRequest{
-		Backend: "screencapturekit",
+		Backend: "windows-graphics-capture",
 		Source:  ManifestSource{Type: "screen", ID: "cgdisplay:1"},
 		Audio:   ManifestAudio{System: true, Microphone: true},
 	})

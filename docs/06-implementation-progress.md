@@ -54,7 +54,7 @@
   - 新增 `recording.NativeBackendRuntime`：把 native `.rfrec` 写盘计划、视频 session 生命周期和音频 session 生命周期串起来，提供 `Start()`、`Pause()`、`Resume()`、`Stop()`、单独 video/audio 控制、RNNoise suppressor 生命周期和启动失败标记 `failed` 的统一入口。
   - 新增 `NativeBackendRuntime.SyncDiagnostics()`：把 video/audio diagnostics 转成 manifest `diagnostics.sync`，统一输出 screen、system audio、microphone track 起止、duration、drop count、append failure、sample rate 和 diagnostics 相对路径。
   - 新增 `recording.NativeRuntimeBackend`：把 runtime 包装成可注册的真实 `Backend`，平台后端只需要提供 video/audio session factory，不需要重复实现包创建、状态转换、失败标记和 sync diagnostics。
-  - 新增 macOS ScreenCaptureKit display/window/program video session：`screen:display-<CGDirectDisplayID>` 通过 `SCDisplay` 采集，`window:<CGWindowID>` 通过 `SCWindow` 采集，`application:<pid>` 选择该 PID 当前最大可见 `SCWindow`，三者都由 `SCStream` 输出真实 screen sample buffer，`AVAssetWriter` 写入包内 `screen.mp4`，停止时写 `video-diagnostics.json`；macOS `native`/`sck` backend 已注册到 `NativeRuntimeBackend`。当前仍需 macOS 真机录制 smoke 验证，系统声音 mux 和麦克风 mux 还未完成。
+  - 新增 macOS ScreenCaptureKit display/window/program video session：`screen:display-<CGDirectDisplayID>` 通过 `SCDisplay` 采集，`window:<CGWindowID>` 通过 `SCWindow` 采集，`application:<pid>` 选择该 PID 当前最大可见 `SCWindow`，三者都由 `SCStream` 输出真实 screen sample buffer，`AVAssetWriter` 写入包内 `screen.mp4`，停止时写 `video-diagnostics.json`；开启系统声音时，ScreenCaptureKit audio sample 写入同一个 `screen.mp4` 的 AAC 音轨，manifest 记录 `systemAudioStorage: "muxed"`。macOS `native`/`sck` backend 已注册到 `NativeRuntimeBackend`。当前仍需 macOS 真机录制 smoke 验证，麦克风 mux 还未完成。
   - 新增 `cmd/video-smoke`：无 UI 真实视频录制验收入口，默认使用 `native` backend、自动选择第一个可用屏幕源，也支持 `-source-type=window` 和 `-source-type=application` 验证窗口/程序源；默认关闭音频和摄像头，停止后校验 `.rfrec` 包、`screen.mp4` 非 0 字节、`video-diagnostics.json`、manifest `ready` 和 `diagnostics.sync`。
   - 正式录制策略调整为 mux 优先：默认目标是把屏幕视频、系统声音和麦克风写入同一个主媒体 `screen.mp4`；包内 WAV sidecar 继续作为 smoke、fallback、恢复和诊断路径。
   - `internal/recpackage` 已新增音频存储形态合同：系统声音和麦克风分别通过 `systemAudioStorage` / `microphoneAudioStorage` 标记为 `sidecar` 或 `muxed`；默认 fallback 写 `system-audio.wav` / `microphone.wav`，未来 mux writer 可把路径指向 `screen.mp4`。
@@ -289,10 +289,10 @@ RecordingFreedom/app/bin/recordingfreedom.exe
 以下能力尚未实现，不能对外宣称可用：
 
 - macOS ScreenCaptureKit display/window/program 录制已接入代码路径，但仍需要真机 smoke：授权屏幕录制后运行 `go run ./cmd/video-smoke -duration=1m`、`go run ./cmd/video-smoke -source-type=window -duration=1m`、`go run ./cmd/video-smoke -source-type=application -duration=1m` 和 `go run ./cmd/video-smoke -duration=5m -pause-after=10s -pause-duration=2s`，并确认 `screen.mp4` 可播放、包进入 `ready`、`video-diagnostics.json` 和 `diagnostics.sync` 正确。
-- ScreenCaptureKit 系统声音 mux、麦克风 mux 仍未完成。
+- ScreenCaptureKit 系统声音 mux 已接入代码路径但仍需 macOS 真机 smoke；麦克风 mux 仍未完成。
 - 真实 Windows.Graphics.Capture 录制。
 - 真实 PipeWire / XDG Portal 录制。
-- 真实 CoreAudio / PipeWire 音频设备枚举；当前 Windows WASAPI endpoint 枚举已完成，macOS/Linux 仍是 queued fallback。
+- 真实 macOS CoreAudio 麦克风枚举和 Linux PipeWire 音频设备枚举；当前 Windows WASAPI endpoint 枚举已完成，macOS system audio 使用 ScreenCaptureKit 默认系统混音流。
 - 真实 CoreAudio/PipeWire 音频采集；当前 Windows WASAPI 麦克风采集已通过 smoke，Windows system loopback 已通过有播放源真实样本 smoke，native backend 音频运行时边界已落地，但平台视频后端尚未调用该 runtime 完成端到端录制。
 - 真实 AVFoundation / Media Foundation / PipeWire 摄像头设备枚举；当前只完成 `MediaDeviceProvider` 替换边界和 sidecar eligibility 合同。
 - RNNoise native DSP 的 C 源码和 Go wrapper 已迁移并隔离；CI/release gate 已恢复 native 定向测试，preview artifact 仍保持默认构建，当前 Windows 本机因缺少 `gcc` 只能验证非 cgo fallback，真实 app recording backend 仍未暴露 RNNoise capability。

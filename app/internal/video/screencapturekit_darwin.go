@@ -4,7 +4,7 @@ package video
 
 /*
 #cgo darwin CFLAGS: -x objective-c -fobjc-arc -fblocks -Wno-deprecated-declarations -mmacosx-version-min=12.3
-#cgo darwin LDFLAGS: -framework ScreenCaptureKit -framework AVFoundation -framework CoreMedia -framework CoreVideo -framework Foundation -mmacosx-version-min=12.3
+#cgo darwin LDFLAGS: -framework ScreenCaptureKit -framework AVFoundation -framework AudioToolbox -framework CoreMedia -framework CoreVideo -framework Foundation -mmacosx-version-min=12.3
 #include "screencapturekit_darwin.h"
 #include <stdlib.h>
 */
@@ -102,6 +102,7 @@ func (s *screenCaptureKitSession) Start(ctx context.Context) error {
 		outputPath,
 		C.int(s.config.Profile.FPS),
 		boolToCInt(s.config.Profile.CaptureCursor),
+		boolToCInt(s.config.SystemAudio),
 		quality,
 		&errMessage,
 	)
@@ -178,6 +179,7 @@ func (s *screenCaptureKitSession) patchDiagnosticsLocked() {
 	var raw C.RFSCKDiagnostics
 	C.rf_sck_session_diagnostics(s.handle, &raw)
 	defer C.rf_sck_free_string(raw.message)
+	defer C.rf_sck_free_string(raw.audioMessage)
 
 	s.diagnostics.Screen.Enabled = raw.enabled != 0
 	s.diagnostics.Screen.Path = filepath.Base(s.config.OutputPath)
@@ -193,6 +195,19 @@ func (s *screenCaptureKitSession) patchDiagnosticsLocked() {
 	s.diagnostics.Screen.DurationMs = int64(raw.durationMs)
 	if raw.message != nil {
 		s.diagnostics.Screen.Message = C.GoString(raw.message)
+	}
+	s.diagnostics.SystemAudio.Enabled = raw.audioEnabled != 0
+	s.diagnostics.SystemAudio.Path = filepath.Base(s.config.OutputPath)
+	s.diagnostics.SystemAudio.Clock = "media-timestamp"
+	s.diagnostics.SystemAudio.SampleRate = int(raw.audioSampleRate)
+	s.diagnostics.SystemAudio.SamplesWritten = int64(raw.audioSamplesWritten)
+	s.diagnostics.SystemAudio.DroppedSamples = int64(raw.audioDroppedSamples)
+	s.diagnostics.SystemAudio.AppendFailures = int64(raw.audioAppendFailures)
+	s.diagnostics.SystemAudio.StartOffsetMs = int64(raw.audioStartOffsetMs)
+	s.diagnostics.SystemAudio.EndOffsetMs = int64(raw.audioEndOffsetMs)
+	s.diagnostics.SystemAudio.DurationMs = int64(raw.audioDurationMs)
+	if raw.audioMessage != nil {
+		s.diagnostics.SystemAudio.Message = C.GoString(raw.audioMessage)
 	}
 }
 

@@ -18,5 +18,6 @@ func CreateVideoCaptureConfig(backendID string, req StartRequest, plan recpackag
 		OutputPath:      plan.ScreenVideoPath,
 		DiagnosticsPath: plan.VideoDiagnosticsPath,
 		Profile:         normalized.Recording,
+		SystemAudio:     normalized.Audio.System && plan.Package.Manifest.Media.SystemAudioStorage == recpackage.AudioStorageMuxed,
 	}), nil
 }

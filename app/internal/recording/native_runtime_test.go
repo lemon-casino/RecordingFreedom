@@ -241,6 +241,66 @@ func TestNativeBackendRuntimeSkipsAudioWhenNoStreamsEnabled(t *testing.T) {
 	}
 }
 
+func TestNativeBackendRuntimeUsesVideoDiagnosticsForMuxedSystemAudio(t *testing.T) {
+	videoSession := &fakeNativeVideoSession{
+		diagnostics: video.Diagnostics{
+			Backend: BackendScreenCaptureKit,
+			Screen: video.TrackDiagnostics{
+				Enabled:       true,
+				FrameRate:     30,
+				FramesWritten: 90,
+				EndOffsetMs:   3000,
+				DurationMs:    3000,
+			},
+			SystemAudio: video.TrackDiagnostics{
+				Enabled:        true,
+				SampleRate:     48000,
+				SamplesWritten: 144000,
+				DroppedSamples: 480,
+				AppendFailures: 1,
+				StartOffsetMs:  20,
+				EndOffsetMs:    3020,
+				DurationMs:     3000,
+				Message:        "system audio muxed",
+			},
+		},
+	}
+	runtime, err := NewNativeBackendRuntime(recpackage.NewService(), BackendScreenCaptureKit, BackendStartRequest{
+		VideoDir:  t.TempDir(),
+		CreatedAt: time.Now(),
+		StartRequest: StartRequest{
+			SourceID:   "screen:display-1",
+			SourceType: SourceScreen,
+			Audio: AudioRequest{
+				System:         true,
+				SystemDeviceID: "system-audio:default",
+			},
+		},
+	}, NativeBackendRuntimeOptions{
+		VideoSessionFactory: func(config video.CaptureConfig) (NativeVideoSession, error) {
+			if !config.SystemAudio {
+				t.Fatal("muxed system audio was not enabled in video config")
+			}
+			return videoSession, nil
+		},
+		AudioSessionFactory: func(audio.CaptureConfig, audio.NoiseSuppressor) (NativeAudioSession, error) {
+			t.Fatal("audio session factory was called for ScreenCaptureKit muxed system audio")
+			return nil, nil
+		},
+	})
+	if err != nil {
+		t.Fatalf("NewNativeBackendRuntime() error = %v", err)
+	}
+
+	sync := runtime.SyncDiagnostics()
+	if sync.AudioDiagnosticsPath != "" {
+		t.Fatalf("audio diagnostics path = %q, want empty for muxed SCK system audio", sync.AudioDiagnosticsPath)
+	}
+	if sync.SystemAudio.Path != recpackage.ScreenVideoFile || sync.SystemAudio.SampleRate != 48000 || sync.SystemAudio.DroppedSamples != 480 || sync.SystemAudio.AppendFailures != 1 || sync.SystemAudio.DurationMs != 3000 {
+		t.Fatalf("system audio sync = %#v", sync.SystemAudio)
+	}
+}
+
 func TestNativeBackendRuntimeMarksPackageFailedWhenVideoSessionFails(t *testing.T) {
 	packages := recpackage.NewService()
 	videoDir := t.TempDir()

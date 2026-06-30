@@ -19,6 +19,7 @@ type CaptureConfig struct {
 	OutputPath      string
 	DiagnosticsPath string
 	Profile         recordingprofile.Profile
+	SystemAudio     bool
 }
 
 type Session interface {
@@ -37,6 +38,7 @@ type Diagnostics struct {
 	Recording     RecordingProfile `json:"recording"`
 	OutputPath    string           `json:"outputPath,omitempty"`
 	Screen        TrackDiagnostics `json:"screen"`
+	SystemAudio   TrackDiagnostics `json:"systemAudio"`
 	Messages      []string         `json:"messages,omitempty"`
 }
 
@@ -62,7 +64,10 @@ type TrackDiagnostics struct {
 	FrameRate      int    `json:"frameRate,omitempty"`
 	FramesWritten  int64  `json:"framesWritten"`
 	DroppedFrames  int64  `json:"droppedFrames"`
+	SamplesWritten int64  `json:"samplesWritten,omitempty"`
+	DroppedSamples int64  `json:"droppedSamples,omitempty"`
 	AppendFailures int64  `json:"appendFailures"`
+	SampleRate     int    `json:"sampleRate,omitempty"`
 	StartOffsetMs  int64  `json:"startOffsetMs"`
 	EndOffsetMs    int64  `json:"endOffsetMs"`
 	DurationMs     int64  `json:"durationMs"`
@@ -103,6 +108,9 @@ func NewDiagnostics(config CaptureConfig) Diagnostics {
 		Screen: TrackDiagnostics{
 			Enabled:   true,
 			FrameRate: config.Profile.FPS,
+		},
+		SystemAudio: TrackDiagnostics{
+			Enabled: config.SystemAudio,
 		},
 	}
 }
