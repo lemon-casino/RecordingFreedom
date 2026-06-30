@@ -227,6 +227,10 @@ Linux：
 - `StreamSystemAudio` 会直接 bypass，测试覆盖“系统声音请求 rnnoise 也不会进入 suppressor”。
 - 非 48kHz 或非 mono 的麦克风 RNNoise 输入会被拒绝；重采样和 downmix 必须在平台采集层完成。
 - 不足 480 samples 的尾部会进入 pending buffer；暂停/继续时必须 `Reset()`。
+- `Enhancer` 已输出可审计统计：processed frames、processed samples、pending samples、reset count、bypassed samples、rejected frames 和 last error。
+- `Pipeline` 已定义真实音频采集边界：平台后端推入 `TimedPCMBuffer`，pipeline 按配置区分 system audio、microphone 和 RNNoise，输出 `ProcessedBuffer` 并累计 diagnostics。
+- `Diagnostics` / `WriteDiagnostics()` 已定义 `audio-diagnostics.json` 合同，记录 target format、system audio、microphone、enhancement 和 mixer 统计。
+- `recording.CreateAudioCaptureConfig()` 已把 `StartRequest + RecordingWritePlan` 转成统一 `audio.CaptureConfig`，真实后端不需要重复拼接设备、RNNoise、gain 和 diagnostics 路径。
 
 真实 RNNoise native DSP 尚未接入；当前合同用于保证后续接入时不改变音频安全边界。
 

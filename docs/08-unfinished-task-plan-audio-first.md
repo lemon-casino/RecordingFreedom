@@ -25,15 +25,18 @@
 
 ### A0 音频后端边界
 
+状态：已完成基础代码合同，尚未接入真实平台设备源。
+
 交付：
 
 - 新增 `internal/audio` 或 `internal/recording` 下的 native audio capture 接口，区分 system audio、microphone、enhancer、mixer、diagnostics。
 - 后端必须能被 ScreenCaptureKit/WASAPI/PipeWire 复用，不把某个平台 API 写进 `RecordingService` 主流程。
+- 已落地 `audio.Pipeline`、`audio.Diagnostics`、`audio.WriteDiagnostics()`、`recording.CreateAudioCaptureConfig()` 和对应单元测试。
 
 验收：
 
-- Go 测试覆盖：打开/关闭系统声音、打开/关闭麦克风、打开/关闭 RNNoise 时，请求合同和 manifest 字段稳定。
-- `RecordingService` 仍只负责状态机、包状态和 ready 前门禁。
+- Go 测试已覆盖：打开/关闭系统声音、打开/关闭麦克风、打开/关闭 RNNoise 时，请求合同、输出路径和 diagnostics 路径稳定。
+- `RecordingService` 仍只负责状态机、包状态和 ready 前门禁；音频采集和处理合同位于 `internal/audio` 与 `recording.CreateAudioCaptureConfig()`。
 
 ### A1 真实音频设备枚举
 
@@ -227,8 +230,8 @@
 
 ## 第一执行顺序
 
-1. A0 音频后端边界。
-2. A1 真实音频设备枚举。
+1. A0 音频后端边界。已完成基础代码合同。
+2. A1 真实音频设备枚举。下一步。
 3. A3 麦克风采集。
 4. A4 RNNoise native DSP。
 5. A2 系统声音采集。

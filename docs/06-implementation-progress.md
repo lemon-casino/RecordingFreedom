@@ -43,6 +43,10 @@
   - 新增 `internal/preflight` 录制预检合同：开始录制前统一检查 source、媒体设备、平台 capability、目标 backend 和 storage health，返回 `ready` / `warning` / `blocked`。
   - `mock-package` backend 遇到真实录制能力仍为 `queued` 时返回 `warning` 并允许 UI 继续 mock 验证；真实 backend 遇到 `queued`、`blocked` 或 `unsupported` 时返回 `blocked`，避免误入不可录制流程。
   - 新增 `internal/audio` 音频增强合同：48kHz、10ms、480 samples RNNoise frame，麦克风 mono PCM 才可进入 suppressor，系统声音始终 bypass。
+  - `internal/audio.Enhancer` 已新增可审计统计：processed frames、processed samples、pending samples、reset count、bypassed samples、rejected frames 和 last error。
+  - 新增 `internal/audio.Pipeline` 音频处理边界：平台采集层推入 `TimedPCMBuffer`，pipeline 按配置处理 system audio、microphone、RNNoise，并输出 `ProcessedBuffer`。
+  - 新增 `internal/audio.Diagnostics` 和 `WriteDiagnostics()`：定义 `audio-diagnostics.json` 写盘合同，覆盖 target format、system audio、microphone、enhancement 和 mixer 统计。
+  - 新增 `recording.CreateAudioCaptureConfig()`：从 `StartRequest + RecordingWritePlan` 生成统一音频采集配置，真实后端复用同一份 system/mic/RNNoise/gain/diagnostics 路径合同。
   - 新增 `internal/pip` 画中画 preset 合同：`off`、`bottom-right`、`bottom-left`、`free`，并提供基础 overlay layout 计算。
   - 新增 `internal/recordingprofile` 录制参数合同：`standard/balanced/high`、`24/30/60 FPS`、`captureCursor`、`countdownSeconds`，供 settings、recording request 和 manifest 共用。
   - 新增 `recording.NormalizeStartRequest()`，统一校验 `sourceId/sourceType`，归一化系统声音设备、麦克风设备、RNNoise、摄像头设备和 PIP preset。
@@ -191,6 +195,8 @@ wails3 build
 音频合同测试：
 
 - `internal/audio` 覆盖系统声音绕过 RNNoise、麦克风按 480-sample frame 进入 suppressor、partial frame pending、reset 清理 pending 和 suppressor 状态、拒绝 stereo microphone RNNoise 输入。
+- `internal/audio` 覆盖音频 pipeline：系统声音即使请求 RNNoise 也会 bypass、麦克风按配置进入 RNNoise、禁用流拒收、reset 清理 enhancer 状态、`audio-diagnostics.json` 可写入可读 JSON。
+- `internal/recording` 覆盖 `CreateAudioCaptureConfig()`：打开/关闭系统声音、麦克风和 RNNoise 时，音频设备、输出路径、diagnostics 路径和系统声音不降噪策略保持稳定。
 
 PIP 合同测试：
 
@@ -267,9 +273,8 @@ RecordingFreedom/app/bin/recordingfreedom.exe
 
 ## 下一步
 
-1. 按 `docs/08-unfinished-task-plan-audio-first.md` 先推进真实音频采集与 RNNoise 降噪。
-2. 建立真实音频后端边界：系统声音、麦克风、RNNoise、混音/写盘和 diagnostics 分层，避免平台 API 进入 `RecordingService` 主流程。
-3. 在 `MediaDeviceProvider` 后面接入真实 native 音频枚举：系统声音、麦克风、RNNoise 能力状态。
-4. 接入麦克风 PCM 采集与 RNNoise native DSP，再接入系统声音采集和音频同步诊断。
-5. 通过 `recording.RegisterNativeBackend(recording.BackendScreenCaptureKit, ...)` 接入 macOS ScreenCaptureKit 后端，并实现最小可录制 `screen.mp4` 写盘。
-6. 把 release workflow 从 preview executable 升级为正式安装包、签名和公证流水线。
+1. 按 `docs/08-unfinished-task-plan-audio-first.md` 继续推进真实音频采集与 RNNoise 降噪。
+2. A0 音频后端边界已完成基础代码合同；下一步进入 A1，在 `MediaDeviceProvider` 后面接入真实 native 音频枚举：系统声音、麦克风、RNNoise 能力状态。
+3. 接入麦克风 PCM 采集与 RNNoise native DSP，再接入系统声音采集和音频同步诊断。
+4. 通过 `recording.RegisterNativeBackend(recording.BackendScreenCaptureKit, ...)` 接入 macOS ScreenCaptureKit 后端，并实现最小可录制 `screen.mp4` 写盘。
+5. 把 release workflow 从 preview executable 升级为正式安装包、签名和公证流水线。
