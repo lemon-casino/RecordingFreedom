@@ -165,12 +165,12 @@ Wails v3 当前仍应按 alpha 风险处理：
 当前代码已新增 `internal/recording` backend selector：
 
 - 默认值、`auto`、`mock`、`mock-package` 都选择 `mock-package`，保证 UI shell 和 `.rfrec` 包结构可持续验证。
-- `RECORDINGFREEDOM_RECORDING_BACKEND=native` 会按平台选择 queued native backend：macOS `screencapturekit`、Windows `windows-graphics-capture`、Linux `pipewire-portal`。
-- 也可以显式请求 `screencapturekit`、`windows-graphics-capture` 或 `pipewire-portal`，当前都会进入 queued native backend。
-- queued native backend 不创建录制包、不写媒体文件，`Start()` 会返回明确错误。
+- `RECORDINGFREEDOM_RECORDING_BACKEND=native` 会按平台选择 native backend ID：macOS `screencapturekit`、Windows `windows-graphics-capture`、Linux `pipewire-portal`。
+- 也可以显式请求 `screencapturekit`、`windows-graphics-capture` 或 `pipewire-portal`。macOS 和 Windows 已注册到 `NativeRuntimeBackend`；Linux 在真实 factory 注册前仍回退 queued native backend。
+- queued native backend 不创建录制包、不写媒体文件，`Start()` 会返回明确错误。已注册但 writer 未完成的 backend 必须在启动失败时标记 failed package，且不能写假媒体或 ready manifest。
 - `Bootstrap()` 返回当前 `backend`，前端底部状态条和预检都使用同一个 backend ID。
 
-这个合同用于后续替换真实后端，而不是临时开关。真实 backend 未实现前，native backend 会被 `PreflightRecording()` 阻止；只有 `mock-package` 可以在 UI shell 阶段继续生成明确标记为 mock 的 `.rfrec` 包。
+这个合同用于后续替换真实后端，而不是临时开关。真实 writer 或平台能力未实现前，native backend 会被 `PreflightRecording()` 阻止；只有 `mock-package` 可以在 UI shell 阶段继续生成明确标记为 mock 的 `.rfrec` 包。
 
 ## 录制预检合同
 

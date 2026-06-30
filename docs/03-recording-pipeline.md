@@ -199,7 +199,7 @@ Windows：
 - 麦克风使用 WASAPI capture。
 - 当前已通过 MMDevice API 枚举 Windows WASAPI render/capture endpoint，并保留 `system-audio:default` / `microphone:default` 作为稳定默认设备 ID；真实 endpoint id 写入 `NativeID`。
 - 当前已新增纯 Go WASAPI capture source：麦克风流会 downmix/resample 为 `48kHz / mono` 后写入 `microphone.wav`；系统声音 loopback source 已在有活动系统播放时写入真实 `system-audio.wav` 样本。长录同步、ready 包集成和完整 app recording backend 接入仍是后续工作。
-- 当前已新增 Windows WGC target 合同：`screen:<display-token>`、`window:<HWND hex>` 和 `application:<pid>` 可被 `internal/video` 解析成平台 capture target。真实 WGC MP4 writer 仍未实现，因此 capability 继续保持 `queued`，不会让 UI 或 smoke 误报可录制。
+- 当前已新增 Windows WGC target 合同并注册到 `NativeRuntimeBackend`：`screen:<display-token>`、`window:<HWND hex>` 和 `application:<pid>` 可被 `internal/video` 解析成平台 capture target。真实 WGC MP4 writer 仍未实现，因此 capability 继续保持 `queued`，preflight 会阻止 UI 和 smoke 误报可录制；绕过 preflight 直接启动也只会得到 failed package，不会写假媒体或 ready manifest。
 - 摄像头使用 Media Foundation，必要时兼容 DirectShow。
 - 编码优先 Media Foundation H.264/AAC，后续导出可接 FFmpeg。
 
@@ -219,7 +219,7 @@ Linux：
 
 程序录制默认选择该程序的主窗口；如果平台支持更强的 app capture，再在后端升级，不改变前端接口。
 
-当前 macOS build-tag 已有 CoreGraphics source enumeration，并已把 `screen:display-<CGDirectDisplayID>`、`window:<CGWindowID>` 和 `application:<pid>` 映射到 ScreenCaptureKit capture target。`application:<pid>` 首版选择该 PID 当前最大可见窗口；后续可升级为多窗口组合或平台 app capture target。当前 Windows build-tag 已有 Win32 source enumeration，并已把 `screen:<display-token>`、`window:<HWND hex>` 和 `application:<pid>` 解析为 WGC target 合同；真实 Windows writer 接入前仍保持 queued。
+当前 macOS build-tag 已有 CoreGraphics source enumeration，并已把 `screen:display-<CGDirectDisplayID>`、`window:<CGWindowID>` 和 `application:<pid>` 映射到 ScreenCaptureKit capture target。`application:<pid>` 首版选择该 PID 当前最大可见窗口；后续可升级为多窗口组合或平台 app capture target。当前 Windows build-tag 已有 Win32 source enumeration，并已把 `screen:<display-token>`、`window:<HWND hex>` 和 `application:<pid>` 解析为 WGC target 合同；Windows backend 已注册到统一 runtime，但真实 writer 接入前 capability 仍保持 queued。
 
 ## 音频管线
 
