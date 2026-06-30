@@ -1,0 +1,15 @@
+{
+	"fixed": {
+		"file_version": "0.1.0"
+	},
+	"info": {
+		"0000": {
+			"ProductVersion": "0.1.0",
+			"CompanyName": "lemon-casino",
+			"FileDescription": "A modern capsule screen recorder built with Go, React, and Wails v3",
+			"LegalCopyright": "© 2026, My Company",
+			"ProductName": "RecordingFreedom",
+			"Comments": "RecordingFreedom desktop recorder"
+		}
+	}
+}

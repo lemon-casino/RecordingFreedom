@@ -17,6 +17,24 @@ coverage/
 app/.task/
 app/bin/
 
+# Wails desktop build assets are required for CI/release builds.
+!app/build/
+!app/build/Taskfile.yml
+!app/build/config.yml
+!app/build/appicon.png
+!app/build/appicon.icon/
+!app/build/appicon.icon/**
+!app/build/docker/
+!app/build/docker/**
+!app/build/darwin/
+!app/build/darwin/**
+!app/build/linux/
+!app/build/linux/**
+!app/build/windows/
+!app/build/windows/**
+app/build/android/
+app/build/ios/
+
 # App-managed local data
 app/data/*
 !app/data/

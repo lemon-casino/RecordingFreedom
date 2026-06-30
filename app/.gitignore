@@ -11,6 +11,25 @@ data/*
 !data/
 !data/video/
 !data/video/.gitkeep
+
+# Wails desktop build assets are source files; keep generated caches ignored below.
+!build/
+!build/Taskfile.yml
+!build/config.yml
+!build/appicon.png
+!build/appicon.icon/
+!build/appicon.icon/**
+!build/docker/
+!build/docker/**
+!build/darwin/
+!build/darwin/**
+!build/linux/
+!build/linux/**
+!build/windows/
+!build/windows/**
+build/android/
+build/ios/
+
 build/linux/appimage/build
 build/windows/nsis/MicrosoftEdgeWebview2Setup.exe
 # Mobile generated (per-machine; overlays hold absolute paths)
