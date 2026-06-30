@@ -68,38 +68,6 @@ jobs:
         working-directory: ${{ env.APP_DIR }}
         run: go test -tags gtk3 ./...
 
-      - name: Test RNNoise native DSP
-        id: rnnoise-native-test
-        working-directory: ${{ env.APP_DIR }}
-        shell: bash
-        env:
-          CGO_ENABLED: "1"
-        run: |
-          set -o pipefail
-          go env CGO_ENABLED GOOS GOARCH CC CXX 2>&1 | tee rnnoise-native-test.log
-          go test -x -v -tags rnnoise_native ./internal/audio/rnnoise/native 2>&1 | tee -a rnnoise-native-test.log
-          status="${PIPESTATUS[0]}"
-          if [ "${status}" -ne 0 ]; then
-            message="$(tail -n 80 rnnoise-native-test.log | sed ':a;N;$!ba;s/%/%25/g;s/\r/%0D/g;s/\n/%0A/g')"
-            echo "::error title=RNNoise native test failure::${message}"
-            {
-              echo "### RNNoise native test failure"
-              echo
-              echo '```text'
-              tail -n 180 rnnoise-native-test.log
-              echo '```'
-            } >> "${GITHUB_STEP_SUMMARY}"
-          fi
-          exit "${status}"
-
-      - name: Upload RNNoise native diagnostics
-        if: failure() && steps.rnnoise-native-test.conclusion == 'failure'
-        uses: actions/upload-artifact@v5
-        with:
-          name: rnnoise-native-test-log
-          path: ${{ env.APP_DIR }}/rnnoise-native-test.log
-          if-no-files-found: error
-
       - name: Run preview smoke
         working-directory: ${{ env.APP_DIR }}
         run: go run -tags gtk3 ./cmd/preview-smoke

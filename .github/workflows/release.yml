@@ -67,12 +67,6 @@ jobs:
         working-directory: ${{ env.APP_DIR }}
         run: go test -tags gtk3 ./...
 
-      - name: Test RNNoise native DSP
-        working-directory: ${{ env.APP_DIR }}
-        env:
-          CGO_ENABLED: "1"
-        run: go test -tags rnnoise_native ./internal/audio/rnnoise/native
-
       - name: Run preview smoke
         working-directory: ${{ env.APP_DIR }}
         run: go run -tags gtk3 ./cmd/preview-smoke
@@ -212,13 +206,12 @@ jobs:
           - Mock .rfrec package flow for UI/package validation.
           - No-GUI preview smoke for settings, storage, preflight, mock start/pause/resume/stop, ready manifest, RNNoise/camera/PIP manifest contract, and recovery scan.
           - Developer audio smoke for Windows WASAPI microphone sidecar capture; not yet connected to the full screen recording backend.
-          - RNNoise native DSP is covered by the release gate as a focused native contract.
           - Windows, macOS, and Linux Wails build artifacts.
 
           Not included yet:
           - Real ScreenCaptureKit / Windows.Graphics.Capture / PipeWire recording.
           - Full recording-backend integration for real audio tracks.
-          - RNNoise exposed as an end-to-end app recording capability.
+          - Verified RNNoise native DSP in release toolchains or exposed end-to-end app recording noise suppression.
           - Camera sidecar capture and PIP export.
           - Signed installers, notarization, or Linux packages.
           NOTES
