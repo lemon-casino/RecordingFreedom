@@ -133,12 +133,11 @@ func TestDefaultBackendHonorsNativeEnvironment(t *testing.T) {
 	}
 }
 
-func TestServiceNativeBackendCannotCreatePackage(t *testing.T) {
-	t.Setenv(EnvRecordingBackend, "native")
+func TestServiceQueuedNativeBackendCannotCreatePackage(t *testing.T) {
 	root := t.TempDir()
-	service := NewService(appdata.NewService(root))
+	service := NewServiceWithBackend(appdata.NewService(root), NewQueuedNativeBackend(BackendScreenCaptureKit))
 
-	if service.BackendID() == BackendMockPackage {
+	if service.BackendID() != BackendScreenCaptureKit {
 		t.Fatalf("BackendID() = %q, want queued native backend", service.BackendID())
 	}
 	_, err := service.StartRecording(StartRequest{SourceID: "screen:primary", SourceType: SourceScreen})

@@ -54,6 +54,7 @@
   - 新增 `recording.NativeBackendRuntime`：把 native `.rfrec` 写盘计划、视频 session 生命周期和音频 session 生命周期串起来，提供 `Start()`、`Pause()`、`Resume()`、`Stop()`、单独 video/audio 控制、RNNoise suppressor 生命周期和启动失败标记 `failed` 的统一入口。
   - 新增 `NativeBackendRuntime.SyncDiagnostics()`：把 video/audio diagnostics 转成 manifest `diagnostics.sync`，统一输出 screen、system audio、microphone track 起止、duration、drop count、append failure、sample rate 和 diagnostics 相对路径。
   - 新增 `recording.NativeRuntimeBackend`：把 runtime 包装成可注册的真实 `Backend`，平台后端只需要提供 video/audio session factory，不需要重复实现包创建、状态转换、失败标记和 sync diagnostics。
+  - 新增 macOS ScreenCaptureKit display video session：`screen:display-<CGDirectDisplayID>` 通过 `SCStream` 采集真实屏幕 sample buffer，`AVAssetWriter` 写入包内 `screen.mp4`，停止时写 `video-diagnostics.json`；macOS `native`/`sck` backend 已注册到 `NativeRuntimeBackend`。当前仍需 macOS 真机录制 smoke 验证，窗口/程序 capture target、系统声音 mux 和麦克风 mux 还未完成。
   - 正式录制策略调整为 mux 优先：默认目标是把屏幕视频、系统声音和麦克风写入同一个主媒体 `screen.mp4`；包内 WAV sidecar 继续作为 smoke、fallback、恢复和诊断路径。
   - `internal/recpackage` 已新增音频 sidecar 合同：系统声音写 `system-audio.wav`，麦克风写 `microphone.wav`；manifest `media` 保存包内相对路径，write plan 返回包内绝对路径。
   - `PackageService.ValidateReady()` 已在非 mock 包中校验已启用音频 sidecar：系统声音或麦克风开启时，对应 WAV 必须存在、可读且非 0 字节。
@@ -286,8 +287,8 @@ RecordingFreedom/app/bin/recordingfreedom.exe
 
 以下能力尚未实现，不能对外宣称可用：
 
-- 真实 ScreenCaptureKit 录制。
-- 真实 native writer 按 `recording.CreateNativeWritePlan()` 返回路径持续写入 `screen.mp4`。
+- macOS ScreenCaptureKit display 录制已接入代码路径，但仍需要真机 smoke：授权屏幕录制后录制 1 分钟、5 分钟并确认 `screen.mp4` 可播放、包进入 `ready`、`video-diagnostics.json` 和 `diagnostics.sync` 正确。
+- ScreenCaptureKit window/application target mapping、系统声音 mux、麦克风 mux 仍未完成。
 - 真实 Windows.Graphics.Capture 录制。
 - 真实 PipeWire / XDG Portal 录制。
 - 真实 CoreAudio / PipeWire 音频设备枚举；当前 Windows WASAPI endpoint 枚举已完成，macOS/Linux 仍是 queued fallback。

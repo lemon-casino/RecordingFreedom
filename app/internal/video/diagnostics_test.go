@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
-	"strings"
 	"testing"
 
 	"github.com/lemon-casino/RecordingFreedom/app/internal/devices"
@@ -66,15 +65,5 @@ func TestWriteDiagnosticsWritesJSON(t *testing.T) {
 	}
 	if decoded.SchemaVersion != 1 || decoded.Screen.FramesWritten != 12 {
 		t.Fatalf("decoded diagnostics = %#v", decoded)
-	}
-}
-
-func TestNewPlatformSessionIsExplicitlyUnsupportedByDefault(t *testing.T) {
-	_, err := NewPlatformSession(CaptureConfig{
-		Backend:  "screencapturekit",
-		SourceID: "screen:display-1",
-	})
-	if err == nil || !strings.Contains(err.Error(), "not implemented") {
-		t.Fatalf("NewPlatformSession() error = %v, want not implemented", err)
 	}
 }

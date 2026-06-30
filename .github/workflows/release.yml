@@ -216,7 +216,7 @@ jobs:
           - Windows, macOS, and Linux Wails build artifacts.
 
           Not included yet:
-          - Real ScreenCaptureKit / Windows.Graphics.Capture / PipeWire recording.
+          - End-to-end verified native recording. macOS ScreenCaptureKit display capture is wired in code but still needs real-device smoke validation; window/program capture, Windows.Graphics.Capture, and PipeWire are not complete.
           - Full recording-backend integration for real audio tracks.
           - RNNoise exposed as an end-to-end app recording noise suppression capability.
           - Camera sidecar capture and PIP export.

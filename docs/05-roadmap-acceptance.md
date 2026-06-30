@@ -55,6 +55,8 @@
 
 ## M3 macOS 录制
 
+状态：ScreenCaptureKit display `screen.mp4` 写盘代码已接入，待 macOS 真机录制 smoke 验收；窗口录制、系统声音、麦克风和完整音画同步仍是本里程碑后续任务。
+
 目标：
 
 - 使用 `recording.CreateNativeWritePlan()` 初始化 `.rfrec` 写盘计划。

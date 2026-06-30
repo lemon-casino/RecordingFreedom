@@ -27,7 +27,7 @@ func (s *Service) Capabilities() Capabilities {
 func screenRecordingCapability(platform string) Capability {
 	switch platform {
 	case "darwin":
-		return queued("screen-recording", "Screen Recording", "ScreenCaptureKit", PermissionScreenRecording, "ScreenCaptureKit capture backend is the next macOS milestone.")
+		return available("screen-recording", "Screen Recording", "ScreenCaptureKit", PermissionScreenRecording, "ScreenCaptureKit display capture is implemented; window, application, and audio mapping remain queued.")
 	case "windows":
 		return queued("screen-recording", "Screen Recording", "Windows.Graphics.Capture", PermissionNotRequired, "WGC capture backend is queued behind source and package contracts.")
 	case "linux":

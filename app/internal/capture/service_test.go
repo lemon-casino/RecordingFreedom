@@ -22,6 +22,16 @@ func TestCapabilitiesContract(t *testing.T) {
 	}
 }
 
+func TestDarwinScreenRecordingCapabilityAvailable(t *testing.T) {
+	capability := screenRecordingCapability("darwin")
+	if capability.Status != StatusAvailable {
+		t.Fatalf("darwin screen recording status = %q, want %q", capability.Status, StatusAvailable)
+	}
+	if capability.Backend != "ScreenCaptureKit" {
+		t.Fatalf("darwin screen recording backend = %q, want ScreenCaptureKit", capability.Backend)
+	}
+}
+
 func assertCapability(t *testing.T, capability Capability) {
 	t.Helper()
 	if capability.ID == "" {

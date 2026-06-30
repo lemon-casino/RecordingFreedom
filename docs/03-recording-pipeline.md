@@ -177,6 +177,7 @@ macOS：
 - 麦克风使用 AVFoundation 或 ScreenCaptureKit 可用能力采集，并进入统一音频管线。
 - 摄像头使用 AVFoundation 录 sidecar。
 - 编码优先 H.264/AAC，使用系统硬件编码能力。
+- 当前已接入 ScreenCaptureKit display video session：`screen:display-<CGDirectDisplayID>` 会映射为 `SCDisplay`，通过 `SCStream` 接收 screen sample buffer，并用 `AVAssetWriter` 持续写入包内 `screen.mp4`；`Stop()` 会写入 `video-diagnostics.json` 并返回 manifest sync diagnostics。窗口、程序、系统声音 mux 和麦克风 mux 仍按后续任务推进。
 
 Windows：
 

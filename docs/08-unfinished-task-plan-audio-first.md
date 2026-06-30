@@ -201,9 +201,11 @@
 
 ## P0-RECORDING：真实屏幕/窗口/程序录制
 
+状态：macOS ScreenCaptureKit display video session 已接入代码路径：`screen:display-<CGDirectDisplayID>` 会通过 `SCStream` 写入真实 `screen.mp4`，并输出 `video-diagnostics.json`。仍需 macOS 真机 smoke 验证；窗口、程序、系统声音 mux、麦克风 mux、Windows WGC 和 Linux PipeWire 仍未完成。
+
 任务：
 
-- macOS ScreenCaptureKit 最小 `screen.mp4` 写盘。
+- macOS ScreenCaptureKit 最小 display `screen.mp4` 写盘。代码已接入，待真机录制验收。
 - Windows Windows.Graphics.Capture 最小 `screen.mp4` 写盘。
 - Linux XDG Desktop Portal + PipeWire experimental 写盘。
 - 将 CoreGraphics/Win32/PipeWire 源 ID 映射为真实 capture target。
