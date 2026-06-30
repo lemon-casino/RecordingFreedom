@@ -58,7 +58,7 @@
 
 ### A2 系统声音采集
 
-状态：Windows WASAPI loopback source 已实现并可启动；本轮在无活动系统播放的 smoke 中未收到 system audio packet，仍需带播放源验证真实样本和长录同步。macOS/Linux 待接入。
+状态：Windows WASAPI loopback source 已实现，并已在有活动系统播放时通过真实样本 smoke；长录同步、ready 包集成和完整 app recording backend 接入仍待完成。macOS/Linux 待接入。
 
 交付：
 
@@ -245,7 +245,7 @@
 2. A1 真实音频设备枚举。Windows 已完成，下一步补 macOS/Linux。
 3. A3 麦克风采集。Windows 已完成并 smoke 验证，下一步补 macOS/Linux。
 4. A4 RNNoise native DSP。wrapper 已迁移并恢复 CI/release gate 定向验证；下一步在有 C 工具链的本机补真实 `audio-smoke -rnnoise`，并在 app recording backend 接入后再开放 UI/preflight capability。
-5. A2 系统声音采集。Windows source 已实现，下一步做有播放源的 loopback 样本验证和长录同步。
+5. A2 系统声音采集。Windows source 已实现并通过有播放源真实样本 smoke，下一步做长录同步和完整 app recording backend 接入。
 6. A5 音频混音与写盘。
 7. A6 预检、UI 和设置联动。
 8. A7 三平台手动验证矩阵。

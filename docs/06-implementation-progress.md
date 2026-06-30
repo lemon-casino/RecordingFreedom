@@ -217,7 +217,7 @@ go test -tags rnnoise_native ./internal/audio/rnnoise/native
 - `internal/audio/rnnoise` 覆盖非 cgo/未带标签 fallback；`rnnoise_native` cgo 构建下会编译 RNNoise C 源并跑 native frame 处理测试。Linux cgo link 的 `-lm` 约束已修正为独立 `linux` / `darwin` LDFLAGS，CI/release gate 执行 native 定向测试，本机 Windows 缺少 `gcc` 时只验证 fallback。
 - `internal/recording` 覆盖 `CreateAudioCaptureConfig()`：打开/关闭系统声音、麦克风和 RNNoise 时，音频设备、sidecar 输出路径、diagnostics 路径和系统声音不降噪策略保持稳定。
 - 本机 Windows audio smoke 已确认默认麦克风 WASAPI capture 生成非空 `microphone.wav`：`framesReceived=99`、`samplesReceived=47520`、`samplesWritten=47520`、duration 约 `990ms`。
-- 本机 Windows system audio smoke 已确认 WASAPI loopback source 可启动并写入 WAV header；本轮无活动系统播放时未收到 system audio packet，后续需带播放源补真实样本验证。
+- 本机 Windows system audio smoke 已确认 WASAPI loopback source 在有活动系统播放时可以写入真实样本：`system-audio.wav` 614444 bytes，`framesReceived=160`，`samplesReceived=153600`，`samplesWritten=153600`，`sampleRate=48000`，`channels=2`，duration 约 `1600ms`。
 
 PIP 合同测试：
 
@@ -280,7 +280,7 @@ RecordingFreedom/app/bin/recordingfreedom.exe
 - 真实 Windows.Graphics.Capture 录制。
 - 真实 PipeWire / XDG Portal 录制。
 - 真实 CoreAudio / PipeWire 音频设备枚举；当前 Windows WASAPI endpoint 枚举已完成，macOS/Linux 仍是 queued fallback。
-- 真实 CoreAudio/PipeWire 音频采集；当前 Windows WASAPI 麦克风采集已通过 smoke，Windows system loopback source 已实现但仍需带播放源验证真实样本。
+- 真实 CoreAudio/PipeWire 音频采集；当前 Windows WASAPI 麦克风采集已通过 smoke，Windows system loopback 已通过有播放源真实样本 smoke，但长录同步和完整 app recording backend 接入仍未完成。
 - 真实 AVFoundation / Media Foundation / PipeWire 摄像头设备枚举；当前只完成 `MediaDeviceProvider` 替换边界和 sidecar eligibility 合同。
 - RNNoise native DSP 的 C 源码和 Go wrapper 已迁移并隔离；CI/release gate 已恢复 native 定向测试，preview artifact 仍保持默认构建，当前 Windows 本机因缺少 `gcc` 只能验证非 cgo fallback，真实 app recording backend 仍未暴露 RNNoise capability。
 - 真实摄像头 sidecar 写入。
@@ -298,6 +298,6 @@ RecordingFreedom/app/bin/recordingfreedom.exe
 
 1. 按 `docs/08-unfinished-task-plan-audio-first.md` 继续推进真实音频采集与 RNNoise 降噪。
 2. A1 已完成 Windows WASAPI system audio/microphone endpoint 枚举；继续补 macOS CoreAudio 与 Linux PipeWire/PulseAudio 枚举。
-3. Windows 麦克风 PCM 采集和 audio sidecar 写盘已完成 smoke；下一步补有 C 工具链本机的 `audio-smoke -rnnoise`、带播放源的 WASAPI loopback 样本验证、app recording backend 音频接入，以及 macOS/Linux 音频源。
+3. Windows 麦克风 PCM 采集和系统声音 loopback 样本写盘已完成 smoke；下一步补有 C 工具链本机的 `audio-smoke -rnnoise`、Windows 长录同步、app recording backend 音频接入，以及 macOS/Linux 音频源。
 4. 通过 `recording.RegisterNativeBackend(recording.BackendScreenCaptureKit, ...)` 接入 macOS ScreenCaptureKit 后端，并实现最小可录制 `screen.mp4` 写盘。
 5. 把 release workflow 从 preview executable 升级为正式安装包、签名和公证流水线。

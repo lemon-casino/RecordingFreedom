@@ -211,7 +211,7 @@ jobs:
           - Settings persistence, app-managed data/video storage, storage health, preflight, recovery scan, and capability matrix.
           - Mock .rfrec package flow for UI/package validation.
           - No-GUI preview smoke for settings, storage, preflight, mock start/pause/resume/stop, ready manifest, RNNoise/camera/PIP manifest contract, and recovery scan.
-          - Developer audio smoke for Windows WASAPI microphone sidecar capture; not yet connected to the full screen recording backend.
+          - Developer audio smoke for Windows WASAPI microphone and system-loopback sidecar capture; not yet connected to the full screen recording backend.
           - RNNoise native DSP is covered by the release gate as a focused native contract.
           - Windows, macOS, and Linux Wails build artifacts.
 

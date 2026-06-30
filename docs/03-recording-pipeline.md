@@ -183,7 +183,7 @@ Windows：
 - 系统声音使用 WASAPI loopback。
 - 麦克风使用 WASAPI capture。
 - 当前已通过 MMDevice API 枚举 Windows WASAPI render/capture endpoint，并保留 `system-audio:default` / `microphone:default` 作为稳定默认设备 ID；真实 endpoint id 写入 `NativeID`。
-- 当前已新增纯 Go WASAPI capture source：麦克风流会 downmix/resample 为 `48kHz / mono` 后写入 `microphone.wav`；系统声音 loopback source 可以启动并写入 `system-audio.wav`，本轮无活动系统播放时 smoke 未收到 system audio packet。
+- 当前已新增纯 Go WASAPI capture source：麦克风流会 downmix/resample 为 `48kHz / mono` 后写入 `microphone.wav`；系统声音 loopback source 已在有活动系统播放时写入真实 `system-audio.wav` 样本。长录同步、ready 包集成和完整 app recording backend 接入仍是后续工作。
 - 摄像头使用 Media Foundation，必要时兼容 DirectShow。
 - 编码优先 Media Foundation H.264/AAC，后续导出可接 FFmpeg。
 
