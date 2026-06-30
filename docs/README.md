@@ -18,6 +18,8 @@ RecordingFreedom 是一个全新的录制软件重构项目，目标技术栈为
    定义阶段路线、开发顺序和每个阶段的验收条件。
 7. [06-implementation-progress.md](06-implementation-progress.md)  
    记录当前 Wails v3 + React UI Shell 的实际落地状态、验证结果和下一步。
+8. [07-icon-workflow.md](07-icon-workflow.md)
+   记录电脑端图标替换、多尺寸 PNG 重建、Wails `.ico/.icns` 生成和提交检查流程。
 
 ## 当前硬性决策
 

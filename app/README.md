@@ -45,6 +45,8 @@ go run ./cmd/icon-build -source "D:\图库\43574409.png" -sizes "16,24,32,48,64,
 
 Use `-skip-wails` to generate only `build/icons/icon-*.png`, `build/appicon.png`, and frontend favicon PNGs.
 
+See [../docs/07-icon-workflow.md](../docs/07-icon-workflow.md) for the full desktop icon replacement checklist.
+
 Build frontend assets:
 
 ```bash

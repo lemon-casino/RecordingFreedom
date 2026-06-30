@@ -78,6 +78,8 @@ go run ./cmd/icon-build -source "D:\图库\43574409.png" -sizes "16,24,32,48,64,
 
 The command writes `build/icons/icon-*.png`, updates the Wails source icon at `build/appicon.png`, updates the frontend favicon, and regenerates the Windows `.ico` and macOS `.icns` files. Use `-skip-wails` when Wails CLI is not installed and only PNG outputs are needed.
 
+Full replacement steps are documented in [docs/07-icon-workflow.md](docs/07-icon-workflow.md).
+
 ## Verification
 
 From `app/frontend`:
