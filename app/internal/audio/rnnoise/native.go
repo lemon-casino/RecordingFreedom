@@ -3,7 +3,7 @@
 package rnnoise
 
 /*
-#cgo CFLAGS: -std=c99 -O2 -I.
+#cgo CFLAGS: -std=c99 -O2 -D_GNU_SOURCE -I.
 #cgo linux,darwin LDFLAGS: -lm
 #include "likely_voice_enhancer.h"
 */
