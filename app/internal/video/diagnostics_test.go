@@ -1,0 +1,80 @@
+package video
+
+import (
+	"encoding/json"
+	"os"
+	"path/filepath"
+	"strings"
+	"testing"
+
+	"github.com/lemon-casino/RecordingFreedom/app/internal/devices"
+	"github.com/lemon-casino/RecordingFreedom/app/internal/recordingprofile"
+)
+
+func TestNewDiagnosticsNormalizesCaptureConfig(t *testing.T) {
+	diagnostics := NewDiagnostics(CaptureConfig{
+		Backend:    " screencapturekit ",
+		SourceID:   " screen:display-1 ",
+		SourceType: devices.SourceScreen,
+		SourceName: " Primary Display ",
+		OutputPath: " screen.mp4 ",
+		Profile: recordingprofile.Profile{
+			Quality:          recordingprofile.QualityHigh,
+			FPS:              60,
+			CaptureCursor:    true,
+			CountdownSeconds: 3,
+		},
+	})
+
+	if diagnostics.Backend != "screencapturekit" {
+		t.Fatalf("backend = %q, want screencapturekit", diagnostics.Backend)
+	}
+	if diagnostics.Source.ID != "screen:display-1" || diagnostics.Source.Name != "Primary Display" || diagnostics.Source.Type != devices.SourceScreen {
+		t.Fatalf("source = %#v", diagnostics.Source)
+	}
+	if diagnostics.OutputPath != "screen.mp4" {
+		t.Fatalf("output path = %q, want screen.mp4", diagnostics.OutputPath)
+	}
+	if diagnostics.Recording.Quality != recordingprofile.QualityHigh || diagnostics.Recording.FPS != 60 || !diagnostics.Recording.CaptureCursor || diagnostics.Recording.CountdownSeconds != 3 {
+		t.Fatalf("recording = %#v", diagnostics.Recording)
+	}
+	if !diagnostics.Screen.Enabled || diagnostics.Screen.FrameRate != 60 {
+		t.Fatalf("screen diagnostics = %#v", diagnostics.Screen)
+	}
+}
+
+func TestWriteDiagnosticsWritesJSON(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "video-diagnostics.json")
+	diagnostics := NewDiagnostics(CaptureConfig{
+		Backend:    "windows-graphics-capture",
+		SourceID:   "screen:primary",
+		SourceType: devices.SourceScreen,
+		OutputPath: "screen.mp4",
+	})
+	diagnostics.Screen.FramesWritten = 12
+
+	if err := WriteDiagnostics(path, diagnostics); err != nil {
+		t.Fatalf("WriteDiagnostics() error = %v", err)
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("ReadFile() error = %v", err)
+	}
+	var decoded Diagnostics
+	if err := json.Unmarshal(data, &decoded); err != nil {
+		t.Fatalf("diagnostics JSON invalid: %v", err)
+	}
+	if decoded.SchemaVersion != 1 || decoded.Screen.FramesWritten != 12 {
+		t.Fatalf("decoded diagnostics = %#v", decoded)
+	}
+}
+
+func TestNewPlatformSessionIsExplicitlyUnsupportedByDefault(t *testing.T) {
+	_, err := NewPlatformSession(CaptureConfig{
+		Backend:  "screencapturekit",
+		SourceID: "screen:display-1",
+	})
+	if err == nil || !strings.Contains(err.Error(), "not implemented") {
+		t.Fatalf("NewPlatformSession() error = %v, want not implemented", err)
+	}
+}

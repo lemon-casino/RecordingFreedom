@@ -10,15 +10,20 @@ import (
 
 	"github.com/lemon-casino/RecordingFreedom/app/internal/audio"
 	"github.com/lemon-casino/RecordingFreedom/app/internal/recpackage"
+	"github.com/lemon-casino/RecordingFreedom/app/internal/video"
 )
 
-func TestNativeBackendRuntimeStartsPausesResumesAndStopsAudio(t *testing.T) {
+func TestNativeBackendRuntimeStartsPausesResumesAndStopsMedia(t *testing.T) {
 	packages := recpackage.NewService()
 	videoDir := t.TempDir()
 	audioSession := &fakeNativeAudioSession{
 		diagnostics: audio.Diagnostics{Backend: BackendWindowsGraphicsCapture},
 	}
-	var gotConfig audio.CaptureConfig
+	videoSession := &fakeNativeVideoSession{
+		diagnostics: video.Diagnostics{Backend: BackendWindowsGraphicsCapture},
+	}
+	var gotAudioConfig audio.CaptureConfig
+	var gotVideoConfig video.CaptureConfig
 	runtime, err := NewNativeBackendRuntime(packages, BackendWindowsGraphicsCapture, BackendStartRequest{
 		VideoDir:  videoDir,
 		CreatedAt: time.Now(),
@@ -33,8 +38,12 @@ func TestNativeBackendRuntimeStartsPausesResumesAndStopsAudio(t *testing.T) {
 			},
 		},
 	}, NativeBackendRuntimeOptions{
+		VideoSessionFactory: func(config video.CaptureConfig) (NativeVideoSession, error) {
+			gotVideoConfig = config
+			return videoSession, nil
+		},
 		AudioSessionFactory: func(config audio.CaptureConfig, suppressor audio.NoiseSuppressor) (NativeAudioSession, error) {
-			gotConfig = config
+			gotAudioConfig = config
 			if suppressor != nil {
 				t.Fatalf("suppressor = %#v, want nil when RNNoise is off", suppressor)
 			}
@@ -48,33 +57,48 @@ func TestNativeBackendRuntimeStartsPausesResumesAndStopsAudio(t *testing.T) {
 	if filepath.Dir(runtime.Plan.Package.Dir) != videoDir {
 		t.Fatalf("package parent = %q, want %q", filepath.Dir(runtime.Plan.Package.Dir), videoDir)
 	}
-	if gotConfig.Backend != BackendWindowsGraphicsCapture {
-		t.Fatalf("audio backend = %q, want %q", gotConfig.Backend, BackendWindowsGraphicsCapture)
+	if gotVideoConfig.Backend != BackendWindowsGraphicsCapture {
+		t.Fatalf("video backend = %q, want %q", gotVideoConfig.Backend, BackendWindowsGraphicsCapture)
 	}
-	if gotConfig.SystemAudioOutputPath != filepath.Join(runtime.Plan.Package.Dir, recpackage.SystemAudioFile) {
-		t.Fatalf("system audio path = %q, want package sidecar", gotConfig.SystemAudioOutputPath)
+	if gotVideoConfig.OutputPath != filepath.Join(runtime.Plan.Package.Dir, recpackage.ScreenVideoFile) {
+		t.Fatalf("video output path = %q, want package screen media", gotVideoConfig.OutputPath)
 	}
-	if gotConfig.MicrophoneAudioPath != filepath.Join(runtime.Plan.Package.Dir, recpackage.MicrophoneAudioFile) {
-		t.Fatalf("microphone path = %q, want package sidecar", gotConfig.MicrophoneAudioPath)
+	if gotVideoConfig.DiagnosticsPath != filepath.Join(runtime.Plan.Package.Dir, recpackage.VideoDiagnosticsFile) {
+		t.Fatalf("video diagnostics path = %q, want package diagnostics", gotVideoConfig.DiagnosticsPath)
 	}
-	if gotConfig.DiagnosticsPath != filepath.Join(runtime.Plan.Package.Dir, recpackage.AudioDiagnosticsFile) {
-		t.Fatalf("diagnostics path = %q, want package diagnostics", gotConfig.DiagnosticsPath)
+	if gotAudioConfig.Backend != BackendWindowsGraphicsCapture {
+		t.Fatalf("audio backend = %q, want %q", gotAudioConfig.Backend, BackendWindowsGraphicsCapture)
+	}
+	if gotAudioConfig.SystemAudioOutputPath != filepath.Join(runtime.Plan.Package.Dir, recpackage.SystemAudioFile) {
+		t.Fatalf("system audio path = %q, want package sidecar", gotAudioConfig.SystemAudioOutputPath)
+	}
+	if gotAudioConfig.MicrophoneAudioPath != filepath.Join(runtime.Plan.Package.Dir, recpackage.MicrophoneAudioFile) {
+		t.Fatalf("microphone path = %q, want package sidecar", gotAudioConfig.MicrophoneAudioPath)
+	}
+	if gotAudioConfig.DiagnosticsPath != filepath.Join(runtime.Plan.Package.Dir, recpackage.AudioDiagnosticsFile) {
+		t.Fatalf("audio diagnostics path = %q, want package diagnostics", gotAudioConfig.DiagnosticsPath)
 	}
 
-	if err := runtime.StartAudio(context.Background()); err != nil {
-		t.Fatalf("StartAudio() error = %v", err)
+	if err := runtime.Start(context.Background()); err != nil {
+		t.Fatalf("Start() error = %v", err)
 	}
-	if err := runtime.PauseAudio(); err != nil {
-		t.Fatalf("PauseAudio() error = %v", err)
+	if err := runtime.Pause(); err != nil {
+		t.Fatalf("Pause() error = %v", err)
 	}
-	if err := runtime.ResumeAudio(); err != nil {
-		t.Fatalf("ResumeAudio() error = %v", err)
+	if err := runtime.Resume(); err != nil {
+		t.Fatalf("Resume() error = %v", err)
 	}
-	if err := runtime.StopAudio(); err != nil {
-		t.Fatalf("StopAudio() error = %v", err)
+	if err := runtime.Stop(); err != nil {
+		t.Fatalf("Stop() error = %v", err)
+	}
+	if videoSession.started != 1 || videoSession.paused != 1 || videoSession.resumed != 1 || videoSession.stopped != 1 {
+		t.Fatalf("video controls = start:%d pause:%d resume:%d stop:%d, want 1 each", videoSession.started, videoSession.paused, videoSession.resumed, videoSession.stopped)
 	}
 	if audioSession.started != 1 || audioSession.paused != 1 || audioSession.resumed != 1 || audioSession.stopped != 1 {
 		t.Fatalf("audio controls = start:%d pause:%d resume:%d stop:%d, want 1 each", audioSession.started, audioSession.paused, audioSession.resumed, audioSession.stopped)
+	}
+	if diagnostics, ok := runtime.VideoDiagnostics(); !ok || diagnostics.Backend != BackendWindowsGraphicsCapture {
+		t.Fatalf("VideoDiagnostics() = (%#v, %v), want backend diagnostics", diagnostics, ok)
 	}
 	if diagnostics, ok := runtime.AudioDiagnostics(); !ok || diagnostics.Backend != BackendWindowsGraphicsCapture {
 		t.Fatalf("AudioDiagnostics() = (%#v, %v), want backend diagnostics", diagnostics, ok)
@@ -97,6 +121,9 @@ func TestNativeBackendRuntimeRequiresAvailableRNNoise(t *testing.T) {
 			},
 		},
 	}, NativeBackendRuntimeOptions{
+		VideoSessionFactory: func(video.CaptureConfig) (NativeVideoSession, error) {
+			return &fakeNativeVideoSession{}, nil
+		},
 		NoiseSuppressorFactory: func(float64) (audio.NoiseSuppressor, func(), error) {
 			return nil, nil, errors.New("rnnoise native unavailable")
 		},
@@ -146,6 +173,9 @@ func TestNativeBackendRuntimePassesAndClosesRNNoiseSuppressor(t *testing.T) {
 			},
 		},
 	}, NativeBackendRuntimeOptions{
+		VideoSessionFactory: func(video.CaptureConfig) (NativeVideoSession, error) {
+			return &fakeNativeVideoSession{}, nil
+		},
 		NoiseSuppressorFactory: func(outputGain float64) (audio.NoiseSuppressor, func(), error) {
 			if outputGain != 1.5 {
 				t.Fatalf("outputGain = %v, want 1.5", outputGain)
@@ -186,6 +216,9 @@ func TestNativeBackendRuntimeSkipsAudioWhenNoStreamsEnabled(t *testing.T) {
 			SourceType: SourceScreen,
 		},
 	}, NativeBackendRuntimeOptions{
+		VideoSessionFactory: func(video.CaptureConfig) (NativeVideoSession, error) {
+			return &fakeNativeVideoSession{}, nil
+		},
 		AudioSessionFactory: func(audio.CaptureConfig, audio.NoiseSuppressor) (NativeAudioSession, error) {
 			t.Fatal("audio session factory was called with all audio streams disabled")
 			return nil, nil
@@ -202,6 +235,41 @@ func TestNativeBackendRuntimeSkipsAudioWhenNoStreamsEnabled(t *testing.T) {
 	}
 	if _, ok := runtime.AudioDiagnostics(); ok {
 		t.Fatal("AudioDiagnostics() reported diagnostics with no audio session")
+	}
+}
+
+func TestNativeBackendRuntimeMarksPackageFailedWhenVideoSessionFails(t *testing.T) {
+	packages := recpackage.NewService()
+	videoDir := t.TempDir()
+	_, err := NewNativeBackendRuntime(packages, BackendScreenCaptureKit, BackendStartRequest{
+		VideoDir:  videoDir,
+		CreatedAt: time.Now(),
+		StartRequest: StartRequest{
+			SourceID:   "screen:display-1",
+			SourceType: SourceScreen,
+		},
+	}, NativeBackendRuntimeOptions{
+		VideoSessionFactory: func(video.CaptureConfig) (NativeVideoSession, error) {
+			return nil, errors.New("screencapturekit unavailable")
+		},
+	})
+	if err == nil || !strings.Contains(err.Error(), "screencapturekit unavailable") {
+		t.Fatalf("NewNativeBackendRuntime() error = %v, want video setup error", err)
+	}
+
+	manifestPaths, globErr := filepath.Glob(filepath.Join(videoDir, "*"+recpackage.PackageDirSuffix, recpackage.ManifestFile))
+	if globErr != nil {
+		t.Fatalf("Glob() error = %v", globErr)
+	}
+	if len(manifestPaths) != 1 {
+		t.Fatalf("manifest count = %d, want 1", len(manifestPaths))
+	}
+	manifest, readErr := packages.ReadManifest(manifestPaths[0])
+	if readErr != nil {
+		t.Fatalf("ReadManifest() error = %v", readErr)
+	}
+	if manifest.Status != recpackage.StatusFailed {
+		t.Fatalf("manifest status = %q, want failed after video setup failure", manifest.Status)
 	}
 }
 
@@ -235,6 +303,39 @@ func (s *fakeNativeAudioSession) Stop() error {
 }
 
 func (s *fakeNativeAudioSession) Diagnostics() audio.Diagnostics {
+	return s.diagnostics
+}
+
+type fakeNativeVideoSession struct {
+	startErr    error
+	started     int
+	paused      int
+	resumed     int
+	stopped     int
+	diagnostics video.Diagnostics
+}
+
+func (s *fakeNativeVideoSession) Start(context.Context) error {
+	s.started++
+	return s.startErr
+}
+
+func (s *fakeNativeVideoSession) Pause() error {
+	s.paused++
+	return nil
+}
+
+func (s *fakeNativeVideoSession) Resume() error {
+	s.resumed++
+	return nil
+}
+
+func (s *fakeNativeVideoSession) Stop() error {
+	s.stopped++
+	return nil
+}
+
+func (s *fakeNativeVideoSession) Diagnostics() video.Diagnostics {
 	return s.diagnostics
 }
 

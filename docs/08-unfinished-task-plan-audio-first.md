@@ -109,21 +109,57 @@
 - 真实录制验证：开启 RNNoise 后麦克风音轨可播放，无爆音、无明显断裂。
 - `audio-diagnostics.json` 记录 RNNoise enabled、processedFrames、droppedFrames、resetCount、sampleRate、channels。
 
-### A5 音频混音与写盘
+### A5 音频混音、mux 与写盘
 
-状态：首版写盘策略已确定为包内 WAV sidecar：系统声音 `system-audio.wav`，麦克风 `microphone.wav`；`NativeBackendRuntime` 已提供平台后端可复用的音频启动/暂停/停止入口。还未完成 ScreenCaptureKit/WGC/PipeWire 视频后端调用 runtime 后的端到端 ready package，也未做最终混音/AAC/mux。
+状态：首版 smoke/fallback 写盘策略已确定为包内 WAV sidecar：系统声音 `system-audio.wav`，麦克风 `microphone.wav`；正式录制方向调整为优先把系统声音和麦克风 mux 进主媒体 `screen.mp4`。`NativeBackendRuntime` 已提供平台后端可复用的音频启动/暂停/停止入口。还未完成 ScreenCaptureKit/WGC/PipeWire 视频后端调用 runtime 后的端到端 ready package，也未做最终 AAC/mux。
 
 交付：
 
-- 明确首版写盘策略：系统声音和麦克风可以先作为同一容器内独立 track，或先混成一个 AAC track，但必须记录诊断。
-- 音频 writer 持续写入 `screen.mp4` 或包内约定音频 sidecar；路径必须由 `CreateNativeWritePlan()` 或后续扩展计划返回。
+- 默认录制优先把音频写入 `screen.mp4`：可以是系统声音和麦克风独立 track，也可以先混成一个 AAC track，但必须记录诊断。
+- WAV sidecar 只作为 smoke、fallback、恢复或平台限制下的过渡输出；不能在最终架构里强迫所有平台重复写两份音频。
+- 音频 writer 持续写入 `screen.mp4` 或包内约定 fallback sidecar；路径必须由 `CreateNativeWritePlan()` 或后续扩展计划返回。
 - 暂停段必须写入 `diagnostics.sync.pauseSegments`。
+- 增加 muxed audio track probe：当 manifest 声明音频已 mux 进 `screen.mp4`，ready 门禁应检查主媒体音轨，而不是要求 `system-audio.wav` / `microphone.wav`。
 
 验收：
 
-- 1 分钟、5 分钟录制停止后音频可播放。
+- 1 分钟、5 分钟录制停止后，主媒体中的音频可播放且和视频同步。
 - 开启/关闭系统声音、麦克风、RNNoise 的组合都能停止并生成 ready package。
 - audio diagnostics 路径不能是绝对路径，不能逃逸 `.rfrec` 包目录。
+
+### A5b 单独音频录制
+
+状态：未开始。作为后续录制模式支持，不阻塞屏幕录制主线。
+
+交付：
+
+- 新增 audio-only recording kind 或 source type，不创建假的 `screen.mp4`。
+- 支持系统声音、麦克风、麦克风 + RNNoise 的单独录音。
+- 默认输出使用可持续写盘的 `audio.m4a` 或 `audio.wav`，仍写入 `<DataRoot>/data/video/<session>.rfrec/`。
+- 复用 `audio.Pipeline`、RNNoise reset、diagnostics 和 bounded buffer 策略。
+
+验收：
+
+- 只录音 1 分钟、5 分钟可播放。
+- 关闭麦克风或系统声音时不会保留旧 device id。
+- audio-only 包可以在 UI 中识别为音频录制，不被误认为损坏的屏幕录制。
+
+### A5c 内存和磁盘写入优化
+
+状态：设计已明确，待实现。
+
+交付：
+
+- 使用有限环形缓冲和编码队列，不能把完整录制放进内存。
+- 主录制优先 mux 到单个 `screen.mp4`，减少重复写长期音频 sidecar。
+- diagnostics 和 manifest 低频批量 flush，状态切换时强制落盘。
+- 预览、波形、缩略图和导出 cache 按需写入包内 `cache/`，不在录制时反复读取完整媒体。
+
+验收：
+
+- 30 分钟录制内存占用保持稳定，不随时长线性增长。
+- 录制中主媒体持续顺序增长，崩溃后保留可检查媒体。
+- 关闭 fallback sidecar 后，启用音频的录制不会重复写长期 WAV 文件。
 
 ### A6 预检、UI 和设置联动
 
@@ -248,7 +284,7 @@
 3. A3 麦克风采集。Windows 已完成并 smoke 验证，下一步补 macOS/Linux。
 4. A4 RNNoise native DSP。wrapper 已迁移并恢复 CI/release gate 定向验证；下一步在有 C 工具链的本机补真实 `audio-smoke -rnnoise`，并在 app recording backend 接入后再开放 UI/preflight capability。
 5. A2 系统声音采集。Windows source 已实现并通过有播放源真实样本 smoke，下一步做长录同步和完整 app recording backend 接入。
-6. A5 音频混音与写盘。下一步让真实平台视频后端调用 `NativeBackendRuntime`，再做长录同步和 mux 策略。
+6. A5 音频混音、mux 与写盘。下一步让真实平台视频后端调用 `NativeBackendRuntime`，再做长录同步和 mux 策略。
 7. A6 预检、UI 和设置联动。
 8. A7 三平台手动验证矩阵。
 

@@ -49,7 +49,10 @@
   - 新增 `internal/audio.Diagnostics` 和 `WriteDiagnostics()`：定义 `audio-diagnostics.json` 写盘合同，覆盖 target format、system audio、microphone、enhancement 和 mixer 统计。
   - 新增 `recording.CreateAudioCaptureConfig()`：从 `StartRequest + RecordingWritePlan` 生成统一音频采集配置，真实后端复用同一份 system/mic/RNNoise/gain/diagnostics 路径合同。
   - 新增 `internal/audio.WAVSink`、`audio.CaptureSession` 和 `audio.NewNativeCaptureSession()`：把平台 source、pipeline、WAV sidecar 写盘和 `audio-diagnostics.json` 串成可复用运行时。
-  - 新增 `recording.NativeBackendRuntime`：把 native `.rfrec` 写盘计划和音频 session 生命周期串起来，提供 `StartAudio()`、`PauseAudio()`、`ResumeAudio()`、`StopAudio()`、RNNoise suppressor 生命周期和启动失败标记 `failed` 的统一入口。
+  - 新增 `internal/video` 视频采集合约：`CaptureConfig`、`Session`、`video-diagnostics.json` 和默认 unsupported 平台入口，为 ScreenCaptureKit/WGC/PipeWire writer 提供同一生命周期目标。
+  - 新增 `recording.CreateVideoCaptureConfig()`：从 `StartRequest + RecordingWritePlan` 生成统一视频采集配置，真实后端复用同一份 source、profile、`screen.mp4` 和 `video-diagnostics.json` 路径合同。
+  - 新增 `recording.NativeBackendRuntime`：把 native `.rfrec` 写盘计划、视频 session 生命周期和音频 session 生命周期串起来，提供 `Start()`、`Pause()`、`Resume()`、`Stop()`、单独 video/audio 控制、RNNoise suppressor 生命周期和启动失败标记 `failed` 的统一入口。
+  - 正式录制策略调整为 mux 优先：默认目标是把屏幕视频、系统声音和麦克风写入同一个主媒体 `screen.mp4`；包内 WAV sidecar 继续作为 smoke、fallback、恢复和诊断路径。
   - `internal/recpackage` 已新增音频 sidecar 合同：系统声音写 `system-audio.wav`，麦克风写 `microphone.wav`；manifest `media` 保存包内相对路径，write plan 返回包内绝对路径。
   - `PackageService.ValidateReady()` 已在非 mock 包中校验已启用音频 sidecar：系统声音或麦克风开启时，对应 WAV 必须存在、可读且非 0 字节。
   - Windows 已新增纯 Go WASAPI capture source：麦克风采集会 downmix/resample 为 `48kHz / mono`，系统声音使用 loopback source，二者都走同一 audio pipeline 和 WAV sink。
@@ -215,9 +218,11 @@ go test -tags rnnoise_native ./internal/audio/rnnoise/native ./internal/recordin
 - `internal/audio` 覆盖系统声音绕过 RNNoise、麦克风按 480-sample frame 进入 suppressor、partial frame pending、reset 清理 pending 和 suppressor 状态、拒绝 stereo microphone RNNoise 输入。
 - `internal/audio` 覆盖音频 pipeline：系统声音即使请求 RNNoise 也会 bypass、麦克风按配置进入 RNNoise、禁用流拒收、reset 清理 enhancer 状态、`audio-diagnostics.json` 可写入可读 JSON。
 - `internal/audio` 覆盖 WAV sidecar header/data 写入、格式变化拒绝、mono resampler、`CaptureSession` source -> pipeline -> sink -> diagnostics 运行时。
+- `internal/video` 覆盖视频 capture config 归一化、`video-diagnostics.json` 写盘和默认平台 session 明确 unsupported。
 - `internal/audio/rnnoise` 覆盖非 cgo/未带标签 fallback；`rnnoise_native` cgo 构建下会编译 RNNoise C 源并跑 native frame 处理测试。Linux cgo link 的 `-lm` 约束已修正为独立 `linux` / `darwin` LDFLAGS，CI/release gate 执行 native 定向测试，本机 Windows 缺少 `gcc` 时只验证 fallback。
 - `internal/recording` 覆盖 `CreateAudioCaptureConfig()`：打开/关闭系统声音、麦克风和 RNNoise 时，音频设备、sidecar 输出路径、diagnostics 路径和系统声音不降噪策略保持稳定。
-- `internal/recording` 覆盖 `NativeBackendRuntime`：有音频时会创建并控制 audio session；无音频时不启动 audio session；RNNoise suppressor 会传入并在停止时关闭；RNNoise 不可用时初始化失败并把已创建 native 包标记为 `failed`。
+- `internal/recording` 覆盖 `CreateVideoCaptureConfig()`：source、profile、`screen.mp4` 输出路径和 `video-diagnostics.json` 路径保持稳定。
+- `internal/recording` 覆盖 `NativeBackendRuntime`：会创建并控制 video session；有音频时创建并控制 audio session；无音频时不启动 audio session；RNNoise suppressor 会传入并在停止时关闭；视频 session 或 RNNoise 不可用时初始化失败并把已创建 native 包标记为 `failed`。
 - 本机 Windows audio smoke 已确认默认麦克风 WASAPI capture 生成非空 `microphone.wav`：`framesReceived=99`、`samplesReceived=47520`、`samplesWritten=47520`、duration 约 `990ms`。
 - 本机 Windows system audio smoke 已确认 WASAPI loopback source 在有活动系统播放时可以写入真实样本：`system-audio.wav` 614444 bytes，`framesReceived=160`，`samplesReceived=153600`，`samplesWritten=153600`，`sampleRate=48000`，`channels=2`，duration 约 `1600ms`。
 
@@ -300,6 +305,6 @@ RecordingFreedom/app/bin/recordingfreedom.exe
 
 1. 按 `docs/08-unfinished-task-plan-audio-first.md` 继续推进真实音频采集与 RNNoise 降噪。
 2. A1 已完成 Windows WASAPI system audio/microphone endpoint 枚举；继续补 macOS CoreAudio 与 Linux PipeWire/PulseAudio 枚举。
-3. Windows 麦克风 PCM 采集和系统声音 loopback 样本写盘已完成 smoke，`NativeBackendRuntime` 已为真实平台后端提供统一音频生命周期；下一步补有 C 工具链本机的 `audio-smoke -rnnoise`、Windows 长录同步、让 ScreenCaptureKit/WGC/PipeWire 后端实际调用 runtime，以及 macOS/Linux 音频源。
+3. Windows 麦克风 PCM 采集和系统声音 loopback 样本写盘已完成 smoke，`NativeBackendRuntime` 已为真实平台后端提供统一视频和音频生命周期；下一步补有 C 工具链本机的 `audio-smoke -rnnoise`、Windows 长录同步、让 ScreenCaptureKit/WGC/PipeWire 后端实际调用 runtime，以及 macOS/Linux 音频源。
 4. 通过 `recording.RegisterNativeBackend(recording.BackendScreenCaptureKit, ...)` 接入 macOS ScreenCaptureKit 后端，并实现最小可录制 `screen.mp4` 写盘。
 5. 把 release workflow 从 preview executable 升级为正式安装包、签名和公证流水线。

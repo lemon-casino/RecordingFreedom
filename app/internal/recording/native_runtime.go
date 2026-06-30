@@ -9,6 +9,7 @@ import (
 	"github.com/lemon-casino/RecordingFreedom/app/internal/audio"
 	"github.com/lemon-casino/RecordingFreedom/app/internal/audio/rnnoise"
 	"github.com/lemon-casino/RecordingFreedom/app/internal/recpackage"
+	"github.com/lemon-casino/RecordingFreedom/app/internal/video"
 )
 
 type NativeAudioSession interface {
@@ -19,12 +20,22 @@ type NativeAudioSession interface {
 	Diagnostics() audio.Diagnostics
 }
 
+type NativeVideoSession interface {
+	Start(context.Context) error
+	Pause() error
+	Resume() error
+	Stop() error
+	Diagnostics() video.Diagnostics
+}
+
 type NativeAudioSessionFactory func(audio.CaptureConfig, audio.NoiseSuppressor) (NativeAudioSession, error)
 type NativeNoiseSuppressorFactory func(outputGain float64) (audio.NoiseSuppressor, func(), error)
+type NativeVideoSessionFactory func(video.CaptureConfig) (NativeVideoSession, error)
 
 type NativeBackendRuntimeOptions struct {
 	AudioSessionFactory    NativeAudioSessionFactory
 	NoiseSuppressorFactory NativeNoiseSuppressorFactory
+	VideoSessionFactory    NativeVideoSessionFactory
 }
 
 type NativeBackendRuntime struct {
@@ -32,6 +43,10 @@ type NativeBackendRuntime struct {
 
 	BackendID string
 	Plan      recpackage.RecordingWritePlan
+
+	videoSession NativeVideoSession
+	videoStarted bool
+	videoStopped bool
 
 	audioSession    NativeAudioSession
 	closeSuppressor func()
@@ -53,10 +68,84 @@ func NewNativeBackendRuntime(packages *recpackage.Service, backendID string, req
 		BackendID: backendID,
 		Plan:      plan,
 	}
+	if err := runtime.prepareVideo(req.StartRequest, options); err != nil {
+		return nil, errors.Join(err, runtime.markPackageFailed())
+	}
 	if err := runtime.prepareAudio(req.StartRequest, options); err != nil {
 		return nil, errors.Join(err, runtime.markPackageFailed())
 	}
 	return runtime, nil
+}
+
+func (r *NativeBackendRuntime) Start(ctx context.Context) error {
+	if err := r.StartVideo(ctx); err != nil {
+		return err
+	}
+	if err := r.StartAudio(ctx); err != nil {
+		return errors.Join(err, r.StopVideo())
+	}
+	return nil
+}
+
+func (r *NativeBackendRuntime) Pause() error {
+	return errors.Join(r.PauseVideo(), r.PauseAudio())
+}
+
+func (r *NativeBackendRuntime) Resume() error {
+	return errors.Join(r.ResumeVideo(), r.ResumeAudio())
+}
+
+func (r *NativeBackendRuntime) Stop() error {
+	return errors.Join(r.StopAudio(), r.StopVideo())
+}
+
+func (r *NativeBackendRuntime) StartVideo(ctx context.Context) error {
+	if r == nil || r.videoSession == nil {
+		return nil
+	}
+	if r.videoStarted {
+		return errors.New("native backend video is already started")
+	}
+	if r.videoStopped {
+		return errors.New("native backend video is stopped")
+	}
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	if err := r.videoSession.Start(ctx); err != nil {
+		return errors.Join(fmt.Errorf("start native backend video: %w", err), r.Stop(), r.markPackageFailed())
+	}
+	r.videoStarted = true
+	return nil
+}
+
+func (r *NativeBackendRuntime) PauseVideo() error {
+	if r == nil || r.videoSession == nil || !r.videoStarted || r.videoStopped {
+		return nil
+	}
+	return r.videoSession.Pause()
+}
+
+func (r *NativeBackendRuntime) ResumeVideo() error {
+	if r == nil || r.videoSession == nil || !r.videoStarted || r.videoStopped {
+		return nil
+	}
+	return r.videoSession.Resume()
+}
+
+func (r *NativeBackendRuntime) StopVideo() error {
+	if r == nil || r.videoSession == nil || r.videoStopped {
+		return nil
+	}
+	r.videoStopped = true
+	return r.videoSession.Stop()
+}
+
+func (r *NativeBackendRuntime) VideoDiagnostics() (video.Diagnostics, bool) {
+	if r == nil || r.videoSession == nil {
+		return video.Diagnostics{}, false
+	}
+	return r.videoSession.Diagnostics(), true
 }
 
 func (r *NativeBackendRuntime) StartAudio(ctx context.Context) error {
@@ -115,6 +204,26 @@ func (r *NativeBackendRuntime) MarkPackageFailed() error {
 		return nil
 	}
 	return r.markPackageFailed()
+}
+
+func (r *NativeBackendRuntime) prepareVideo(req StartRequest, options NativeBackendRuntimeOptions) error {
+	config, err := CreateVideoCaptureConfig(r.BackendID, req, r.Plan)
+	if err != nil {
+		return err
+	}
+	factory := options.VideoSessionFactory
+	if factory == nil {
+		factory = defaultNativeVideoSessionFactory
+	}
+	session, err := factory(config)
+	if err != nil {
+		return err
+	}
+	if session == nil {
+		return errors.New("native video session factory returned nil")
+	}
+	r.videoSession = session
+	return nil
 }
 
 func (r *NativeBackendRuntime) prepareAudio(req StartRequest, options NativeBackendRuntimeOptions) error {
@@ -177,6 +286,10 @@ func (r *NativeBackendRuntime) markPackageFailed() error {
 
 func defaultNativeAudioSessionFactory(config audio.CaptureConfig, suppressor audio.NoiseSuppressor) (NativeAudioSession, error) {
 	return audio.NewNativeCaptureSession(config, suppressor)
+}
+
+func defaultNativeVideoSessionFactory(config video.CaptureConfig) (NativeVideoSession, error) {
+	return video.NewPlatformSession(config)
 }
 
 func defaultNativeNoiseSuppressorFactory(outputGain float64) (audio.NoiseSuppressor, func(), error) {
