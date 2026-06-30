@@ -148,7 +148,7 @@ manifest 里所有媒体路径必须是包内相对路径。
 - backend registry：`SelectBackend()` 先解析 `auto`、`mock-package`、`native`、`sck`、`wgc` 和 `pipewire`，再从 registry 查找已注册的真实平台 factory；未注册时回退到 queued native backend，避免 UI 或服务层误报可录制。
 - queued native backend：通过 `RECORDINGFREEDOM_RECORDING_BACKEND=native` 或显式 backend ID 选择，按平台暴露 `screencapturekit`、`windows-graphics-capture` 或 `pipewire-portal` ID；未注册真实实现时只用于预检阻断和后续替换点，不创建包、不写媒体。
 
-真实平台实现接入时应调用 `recording.RegisterNativeBackend("<backend-id>", factory)` 注册 factory。factory 返回的 backend 仍必须遵守同一个 `Backend` 接口、`CreateNativeWritePlan()`、`BackendStopResult.SyncDiagnostics` 和 ready 前媒体门禁；不能绕过 `RecordingService` 直接写 `ready`。
+真实平台实现接入时应调用 `recording.RegisterNativeBackend("<backend-id>", factory)` 注册 factory。factory 返回的 backend 仍必须遵守同一个 `Backend` 接口、`CreateNativeWritePlan()`、`BackendStopResult.SyncDiagnostics` 和 ready 前媒体门禁；不能绕过 `RecordingService` 直接写 `ready`。推荐平台实现直接返回 `recording.NewNativeRuntimeBackend()`，只提供 ScreenCaptureKit/WGC/PipeWire 的 video/audio session factory。
 
 真实 native backend 开始采样前必须调用 `recording.CreateNativeWritePlan()` 初始化包和写盘计划；该 helper 内部统一归一化 `StartRequest` 并调用 `recpackage.CreateNative()`：
 
@@ -242,6 +242,7 @@ Linux：
 - `recording.CreateAudioCaptureConfig()` 已把 `StartRequest + RecordingWritePlan` 转成统一 `audio.CaptureConfig`，真实后端不需要重复拼接设备、RNNoise、gain、audio sidecar 和 diagnostics 路径。
 - `recording.NativeBackendRuntime` 已把 native `.rfrec` 写盘计划与音频 session 生命周期接起来：真实平台后端创建包后可以统一启动、暂停、恢复和停止音频；暂停会走音频 `Pause()` 并 reset RNNoise；RNNoise 请求在 native suppressor 不可用时会失败并把包标记为 `failed`，不会静默降级成未降噪录制。
 - `NativeBackendRuntime.SyncDiagnostics()` 已把 video/audio runtime diagnostics 转成 manifest `diagnostics.sync` 合同，真实平台后端停止时应直接返回它，让 `RecordingService.Stop()` 统一 patch 和校验。
+- `recording.NativeRuntimeBackend` 已把 `NativeBackendRuntime` 包装成真正的 `recording.Backend`：Start 创建包并启动 video/audio runtime，Pause/Resume 转发到 runtime，Stop flush runtime 并返回 `SyncDiagnostics()`。后续 macOS/Windows/Linux 平台文件只需要注册该 backend factory。
 
 RNNoise native DSP 已迁移为 `internal/audio/rnnoise` cgo 包，并把 C 源码隔离到 `internal/audio/rnnoise/native` 子包：带 `rnnoise_native` 标签的 cgo 构建会链接旧项目 RNNoise + `LikelyVoiceEnhancement`，非 cgo 或未带标签构建返回明确 unavailable，不会假装降噪已生效。RNNoise native DSP 已作为 CI/release gate 的定向测试；preview artifact 仍保持默认构建，直到 RNNoise 接入完整 app recording backend 后再作为用户可用能力发布。本机 Windows 若缺少 `gcc`，只能验证默认 fallback。当前 UI capability 仍保持 queued。
 

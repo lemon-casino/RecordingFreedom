@@ -7,6 +7,7 @@ import (
 
 	"github.com/lemon-casino/RecordingFreedom/app/internal/appdata"
 	"github.com/lemon-casino/RecordingFreedom/app/internal/recpackage"
+	"github.com/lemon-casino/RecordingFreedom/app/internal/video"
 )
 
 func TestSelectBackendDefaultsToMockPackage(t *testing.T) {
@@ -54,6 +55,25 @@ func TestBackendRegistrySelectsRegisteredNativeBackend(t *testing.T) {
 	backend = registry.Select(packages, "windows", "sck")
 	if backend.ID() != BackendScreenCaptureKit {
 		t.Fatalf("registry.Select(sck) = %q, want %q", backend.ID(), BackendScreenCaptureKit)
+	}
+}
+
+func TestBackendRegistryCanSelectNativeRuntimeBackend(t *testing.T) {
+	registry := NewBackendRegistry().WithNativeBackend(BackendScreenCaptureKit, func(packages *recpackage.Service) Backend {
+		return NewNativeRuntimeBackend(BackendScreenCaptureKit, packages, NativeBackendRuntimeOptions{
+			VideoSessionFactory: func(video.CaptureConfig) (NativeVideoSession, error) {
+				return &fakeNativeVideoSession{}, nil
+			},
+		})
+	})
+
+	backend := registry.Select(recpackage.NewService(), "darwin", "native")
+	runtimeBackend, ok := backend.(*NativeRuntimeBackend)
+	if !ok {
+		t.Fatalf("registry.Select(native darwin) = %T, want *NativeRuntimeBackend", backend)
+	}
+	if runtimeBackend.ID() != BackendScreenCaptureKit {
+		t.Fatalf("runtime backend id = %q, want %q", runtimeBackend.ID(), BackendScreenCaptureKit)
 	}
 }
 
