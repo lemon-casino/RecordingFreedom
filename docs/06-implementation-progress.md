@@ -52,7 +52,7 @@
   - `internal/recpackage` 已新增音频 sidecar 合同：系统声音写 `system-audio.wav`，麦克风写 `microphone.wav`；manifest `media` 保存包内相对路径，write plan 返回包内绝对路径。
   - `PackageService.ValidateReady()` 已在非 mock 包中校验已启用音频 sidecar：系统声音或麦克风开启时，对应 WAV 必须存在、可读且非 0 字节。
   - Windows 已新增纯 Go WASAPI capture source：麦克风采集会 downmix/resample 为 `48kHz / mono`，系统声音使用 loopback source，二者都走同一 audio pipeline 和 WAV sink。
-  - 新增 `internal/audio/rnnoise`：迁移 RNNoise C 源码和旧项目 `LikelyVoiceEnhancement` 为 cgo native wrapper；非 cgo 构建返回明确 unavailable，不做假降噪。
+  - 新增 `internal/audio/rnnoise`：迁移 RNNoise C 源码和旧项目 `LikelyVoiceEnhancement` 为 cgo native wrapper；RNNoise C/H 源码已隔离到 `internal/audio/rnnoise/native` 子包，默认构建返回明确 unavailable，不做假降噪，带 `rnnoise_native` 标签的 cgo 构建才启用原生 DSP。
   - RNNoise UI/preflight capability 当前仍保持 queued；native wrapper 只在 `audio-smoke` 或后续真实 audio backend 显式使用时编译，避免设备枚举和能力矩阵路径过早耦合 native DSP。
   - 新增 `cmd/audio-smoke`：可在不启动 Wails UI 的情况下真实启动平台音频 source，写入 `<DataRoot>/data/video/audio-smoke-*.rfrec/` 下的 WAV sidecar 和 `audio-diagnostics.json`。
   - 新增 `internal/pip` 画中画 preset 合同：`off`、`bottom-right`、`bottom-left`、`free`，并提供基础 overlay layout 计算。
@@ -159,6 +159,14 @@ go run ./cmd/audio-smoke -duration=1s -keep
 wails3 build
 ```
 
+CI/release gate 新增 RNNoise 原生 DSP 验证命令：
+
+```bash
+go test -tags rnnoise_native ./internal/audio/rnnoise ./internal/audio/rnnoise/native ./internal/audio
+```
+
+本机 Windows 当前缺少 `gcc`，因此该命令在本机只作为有 C 工具链环境的验证入口，不计入本机已通过项。
+
 视觉检查：
 
 - 本地预览服务：`http://127.0.0.1:9245/`
@@ -206,7 +214,7 @@ wails3 build
 - `internal/audio` 覆盖系统声音绕过 RNNoise、麦克风按 480-sample frame 进入 suppressor、partial frame pending、reset 清理 pending 和 suppressor 状态、拒绝 stereo microphone RNNoise 输入。
 - `internal/audio` 覆盖音频 pipeline：系统声音即使请求 RNNoise 也会 bypass、麦克风按配置进入 RNNoise、禁用流拒收、reset 清理 enhancer 状态、`audio-diagnostics.json` 可写入可读 JSON。
 - `internal/audio` 覆盖 WAV sidecar header/data 写入、格式变化拒绝、mono resampler、`CaptureSession` source -> pipeline -> sink -> diagnostics 运行时。
-- `internal/audio/rnnoise` 覆盖非 cgo fallback；cgo 构建下会编译 RNNoise C 源并跑 native frame 处理测试。
+- `internal/audio/rnnoise` 覆盖非 cgo/未带标签 fallback；`rnnoise_native` cgo 构建下会编译 RNNoise C 源并跑 native frame 处理测试。CI/release gate 在 Linux runner 上执行该测试，本机 Windows 缺少 `gcc` 时只验证 fallback。
 - `internal/recording` 覆盖 `CreateAudioCaptureConfig()`：打开/关闭系统声音、麦克风和 RNNoise 时，音频设备、sidecar 输出路径、diagnostics 路径和系统声音不降噪策略保持稳定。
 - 本机 Windows audio smoke 已确认默认麦克风 WASAPI capture 生成非空 `microphone.wav`：`framesReceived=99`、`samplesReceived=47520`、`samplesWritten=47520`、duration 约 `990ms`。
 - 本机 Windows system audio smoke 已确认 WASAPI loopback source 可启动并写入 WAV header；本轮无活动系统播放时未收到 system audio packet，后续需带播放源补真实样本验证。
@@ -274,7 +282,7 @@ RecordingFreedom/app/bin/recordingfreedom.exe
 - 真实 CoreAudio / PipeWire 音频设备枚举；当前 Windows WASAPI endpoint 枚举已完成，macOS/Linux 仍是 queued fallback。
 - 真实 CoreAudio/PipeWire 音频采集；当前 Windows WASAPI 麦克风采集已通过 smoke，Windows system loopback source 已实现但仍需带播放源验证真实样本。
 - 真实 AVFoundation / Media Foundation / PipeWire 摄像头设备枚举；当前只完成 `MediaDeviceProvider` 替换边界和 sidecar eligibility 合同。
-- RNNoise native DSP 的三平台工具链验证；当前 native wrapper 已迁移，Windows 本机因缺少 `gcc` 只验证了非 cgo fallback。
+- RNNoise native DSP 已进入 CI/release gate 的 Linux cgo 测试和三平台 preview build 标签；当前 Windows 本机因缺少 `gcc` 只能验证非 cgo fallback，真实 app recording backend 仍未暴露 RNNoise capability。
 - 真实摄像头 sidecar 写入。
 - 真实 PIP 预览与导出。
 - 真实 FFmpeg/原生流式导出执行；当前只完成导出计划和路径/同步/PIP 校验合同。
@@ -290,6 +298,6 @@ RecordingFreedom/app/bin/recordingfreedom.exe
 
 1. 按 `docs/08-unfinished-task-plan-audio-first.md` 继续推进真实音频采集与 RNNoise 降噪。
 2. A1 已完成 Windows WASAPI system audio/microphone endpoint 枚举；继续补 macOS CoreAudio 与 Linux PipeWire/PulseAudio 枚举。
-3. Windows 麦克风 PCM 采集和 audio sidecar 写盘已完成 smoke；下一步补 RNNoise cgo CI/工具链验证、带播放源的 WASAPI loopback 样本验证，以及 macOS/Linux 音频源。
+3. Windows 麦克风 PCM 采集和 audio sidecar 写盘已完成 smoke；RNNoise native DSP 已进入 CI/release gate 验证。下一步补带播放源的 WASAPI loopback 样本验证、app recording backend 音频接入，以及 macOS/Linux 音频源。
 4. 通过 `recording.RegisterNativeBackend(recording.BackendScreenCaptureKit, ...)` 接入 macOS ScreenCaptureKit 后端，并实现最小可录制 `screen.mp4` 写盘。
 5. 把 release workflow 从 preview executable 升级为正式安装包、签名和公证流水线。

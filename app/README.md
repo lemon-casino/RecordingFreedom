@@ -6,7 +6,7 @@ Current state:
 
 - Wails v3 React + TypeScript + Vite project scaffold is in place.
 - The first capsule recorder UI shell is implemented with mock state.
-- Go backend services provide app data discovery and mock `.rfrec` package creation under `data/video`.
+- Go backend services provide app data discovery, mock `.rfrec` package creation, Windows WASAPI audio smoke capture, and RNNoise native DSP build coverage under `data/video`.
 - Native recording backends are intentionally not implemented in this milestone.
 
 ## Development
@@ -60,6 +60,12 @@ Run Go tests:
 go test ./...
 ```
 
+Run RNNoise native tests on a machine with cgo and a C compiler:
+
+```bash
+go test -tags rnnoise_native ./internal/audio/rnnoise ./internal/audio/rnnoise/native ./internal/audio
+```
+
 Run the no-GUI preview smoke:
 
 ```bash
@@ -67,6 +73,18 @@ go run ./cmd/preview-smoke
 ```
 
 The smoke command uses a temporary data root, verifies settings persistence, storage health, preflight, mock start/pause/resume/stop, and confirms the ready `.rfrec` package is created under `data/video`. Add `-keep` to keep the generated package for inspection.
+
+Run the no-GUI audio smoke:
+
+```bash
+go run ./cmd/audio-smoke -duration=3s -keep
+```
+
+Enable RNNoise in the audio smoke only on machines with cgo and a C compiler:
+
+```bash
+go run -tags rnnoise_native ./cmd/audio-smoke -duration=3s -rnnoise -keep
+```
 
 ## Data Directory
 

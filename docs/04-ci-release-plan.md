@@ -26,9 +26,9 @@ https://github.com/lemon-casino/RecordingFreedom.git
 
 当前已落地 jobs：
 
-- `validate`：安装 Go、Node、Linux Wails 依赖和 Wails v3 CLI，生成 bindings，校验 `frontend/bindings` 无未提交差异，运行前端 build、`go test ./...` 和 `go run ./cmd/preview-smoke`。
+- `validate`：安装 Go、Node、Linux Wails 依赖和 Wails v3 CLI，生成 bindings，校验 `frontend/bindings` 无未提交差异，运行前端 build、`go test ./...`、`go test -tags rnnoise_native` 的 RNNoise 原生 DSP 定向测试，以及 `go run ./cmd/preview-smoke`。
 - `macos-native-contract`：在 `macos-15` 且 `CGO_ENABLED=1` 下验证 CoreGraphics source enumeration 与 `CaptureService` capability 合同。
-- `wails-build`：在 `windows-latest`、`macos-15`、`ubuntu-latest` 上运行 `wails3 build`，并上传三平台 preview artifact。
+- `wails-build`：在 `windows-latest`、`macos-15`、`ubuntu-latest` 上运行带 `rnnoise_native` 标签的 `wails3 build`，并上传三平台 preview artifact。Windows runner 会安装 MinGW C 工具链用于编译 RNNoise C 源码。
 
 ## 当前 Release 工作流
 
@@ -36,7 +36,7 @@ https://github.com/lemon-casino/RecordingFreedom.git
 
 发布前门禁：
 
-- `Release Gate`：生成 bindings 并校验无差异，运行前端 build、`go test ./...` 和 `go run ./cmd/preview-smoke`。
+- `Release Gate`：生成 bindings 并校验无差异，运行前端 build、`go test ./...`、RNNoise 原生 DSP 定向测试和 `go run ./cmd/preview-smoke`。
 - 三平台 build 只有在 `Release Gate` 通过后才会启动。
 
 平台 runner：
@@ -76,9 +76,10 @@ GitHub Actions 会自动运行 `release.yml`，通过后生成 GitHub prerelease
 - 设置、存储目录、预检、恢复扫描和能力矩阵是否能显示。
 - mock `.rfrec` 录制包是否仍写入应用内部 `data/video`。
 - 无 GUI preview smoke 是否能完成设置持久化、storage health、预检、mock 开始/暂停/继续/结束、manifest ready 校验和恢复扫描。
+- RNNoise 原生 DSP 是否已在 release gate 中编译并处理一帧测试音频。
 - Windows、macOS、Linux 三个平台是否能完成 Wails 构建。
 
-当前 preview release 必须在 release notes 中明确：真实 ScreenCaptureKit/WGC/PipeWire 录制、真实系统声音/麦克风采集、RNNoise 原生 DSP、摄像头 sidecar 和 PIP 导出仍属于后续里程碑，不能把 mock package 说成真实录制。
+当前 preview release 必须在 release notes 中明确：真实 ScreenCaptureKit/WGC/PipeWire 录制、完整 app recording backend 音频接入、摄像头 sidecar 和 PIP 导出仍属于后续里程碑，不能把 mock package 或 `audio-smoke` 说成完整真实录制。
 
 `preview`、`alpha`、`beta`、`rc` 标签会被 workflow 自动标记为 GitHub prerelease；正式稳定版本再移除这些后缀。
 
@@ -127,8 +128,9 @@ Linux 初期为 experimental：
 
 - 应用二进制存在且非空。
 - 同目录生成 `SHA256SUMS-*.txt`。
-- Wails build 在平台 runner 上完成。
+- 带 `rnnoise_native` 的 Wails build 在平台 runner 上完成。
 - Release Gate 已运行 `go run ./cmd/preview-smoke`，验证当前可验收能力确实能创建 ready mock `.rfrec` 包到 `data/video`。
+- Release Gate 已运行 RNNoise 原生 DSP 定向测试，验证 native wrapper 能处理 48kHz/480-sample 麦克风 frame。
 - release notes 明确该 artifact 是 UI shell / mock package 验收版本。
 
 正式发布前还必须补齐：

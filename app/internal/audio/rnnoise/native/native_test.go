@@ -1,6 +1,6 @@
-//go:build cgo
+//go:build cgo && rnnoise_native
 
-package rnnoise
+package native
 
 import "testing"
 

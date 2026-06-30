@@ -92,7 +92,7 @@
 
 ### A4 RNNoise native DSP 接入
 
-状态：RNNoise C 源码和旧项目 `LikelyVoiceEnhancement` 已迁移为 `internal/audio/rnnoise` cgo 包；非 cgo 构建会明确返回 unavailable。本机 Windows 缺少 `gcc`，native cgo 实编译需由 CI 或安装工具链后验证。
+状态：RNNoise C 源码和旧项目 `LikelyVoiceEnhancement` 已迁移为 `internal/audio/rnnoise` cgo 包，C/H 源码已隔离到 `internal/audio/rnnoise/native` 子包；非 cgo 或未带 `rnnoise_native` 标签的构建会明确返回 unavailable。CI/release gate 已加入 Linux 原生 frame 处理测试，三平台 preview build 已带 `rnnoise_native` 标签；本机 Windows 缺少 `gcc` 时只能验证 fallback。
 
 交付：
 
@@ -244,7 +244,7 @@
 1. A0 音频后端边界。已完成基础代码合同。
 2. A1 真实音频设备枚举。Windows 已完成，下一步补 macOS/Linux。
 3. A3 麦克风采集。Windows 已完成并 smoke 验证，下一步补 macOS/Linux。
-4. A4 RNNoise native DSP。wrapper 已迁移，下一步补 cgo CI/工具链验证和真实 RNNoise smoke。
+4. A4 RNNoise native DSP。wrapper 已迁移并进入 CI/release gate；下一步在有 C 工具链的本机补真实 `audio-smoke -rnnoise`，并在 app recording backend 接入后再开放 UI/preflight capability。
 5. A2 系统声音采集。Windows source 已实现，下一步做有播放源的 loopback 样本验证和长录同步。
 6. A5 音频混音与写盘。
 7. A6 预检、UI 和设置联动。

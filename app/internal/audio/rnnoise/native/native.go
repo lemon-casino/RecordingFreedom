@@ -1,6 +1,6 @@
-//go:build cgo
+//go:build cgo && rnnoise_native
 
-package rnnoise
+package native
 
 /*
 #cgo CFLAGS: -std=c99 -O2 -D_GNU_SOURCE -I.

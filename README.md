@@ -101,6 +101,13 @@ wails3 build
 
 `go run ./cmd/audio-smoke -duration=3s -keep` records real platform audio into a temporary `data/video/audio-smoke-*.rfrec/` folder. On Windows today, microphone capture writes `microphone.wav` and `audio-diagnostics.json`; RNNoise requires a cgo-enabled build and a C compiler.
 
+To test and smoke the RNNoise path on a machine with a C toolchain:
+
+```bash
+go test -tags rnnoise_native ./internal/audio/rnnoise ./internal/audio/rnnoise/native ./internal/audio
+go run -tags rnnoise_native ./cmd/audio-smoke -duration=3s -rnnoise -keep
+```
+
 ## Preview Release
 
 After `RecordingFreedom/` becomes the new repository root, pushing a `v*` tag publishes a GitHub Release with Windows, macOS, and Linux preview binaries plus SHA256 files:
@@ -110,7 +117,7 @@ git tag v0.1.0-preview.5
 git push origin v0.1.0-preview.5
 ```
 
-Preview tags are published as GitHub prereleases. This preview release is for UI shell, settings, mock package, and full-platform build verification. It is not a signed installer release, and it does not claim real native screen/audio/camera capture yet. See [docs/04-ci-release-plan.md](docs/04-ci-release-plan.md).
+Preview tags are published as GitHub prereleases. This preview release is for UI shell, settings, mock package, developer audio smoke, RNNoise native build verification, and full-platform build verification. It is not a signed installer release, and it does not claim full native screen/audio/camera recording yet. See [docs/04-ci-release-plan.md](docs/04-ci-release-plan.md).
 
 ## Data Directory
 
@@ -148,5 +155,5 @@ User settings are persisted in:
 2. Replace queued media-device placeholders with native macOS/Windows/Linux audio and camera enumeration.
 3. Implement macOS ScreenCaptureKit recording.
 4. Finish Windows WGC recording and connect the implemented WASAPI audio session to the real backend.
-5. Verify RNNoise native DSP in cgo CI/toolchains and expose it through preflight/UI.
+5. Connect the verified RNNoise native DSP into the full app recording backend and expose it through preflight/UI after real audio capture is active there.
 6. Add camera sidecar recording and later PIP preview/export.
