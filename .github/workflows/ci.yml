@@ -69,10 +69,25 @@ jobs:
         run: go test -tags gtk3 ./...
 
       - name: Test RNNoise native DSP
+        id: rnnoise-native-test
         working-directory: ${{ env.APP_DIR }}
+        shell: bash
         env:
           CGO_ENABLED: "1"
-        run: go test -tags rnnoise_native ./internal/audio/rnnoise/native
+        run: |
+          set -o pipefail
+          {
+            go env CGO_ENABLED GOOS GOARCH CC CXX
+            go test -x -v -tags rnnoise_native ./internal/audio/rnnoise/native
+          } 2>&1 | tee rnnoise-native-test.log
+
+      - name: Upload RNNoise native diagnostics
+        if: failure() && steps.rnnoise-native-test.conclusion == 'failure'
+        uses: actions/upload-artifact@v5
+        with:
+          name: rnnoise-native-test-log
+          path: ${{ env.APP_DIR }}/rnnoise-native-test.log
+          if-no-files-found: error
 
       - name: Run preview smoke
         working-directory: ${{ env.APP_DIR }}
