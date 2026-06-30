@@ -67,9 +67,13 @@ func (s *CaptureSession) Start(ctx context.Context) error {
 }
 
 func (s *CaptureSession) Pause() error {
-	return eachSource(s.sources, func(source CaptureSource) error {
+	sourceErr := eachSource(s.sources, func(source CaptureSource) error {
 		return source.Pause()
 	})
+	s.mu.Lock()
+	resetErr := s.pipeline.Reset()
+	s.mu.Unlock()
+	return errors.Join(sourceErr, resetErr)
 }
 
 func (s *CaptureSession) Resume() error {

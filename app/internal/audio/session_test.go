@@ -85,6 +85,57 @@ func TestCaptureSessionStopBeforeStartClosesSinkAndWritesDiagnostics(t *testing.
 	}
 }
 
+func TestCaptureSessionPauseResetsRNNoiseState(t *testing.T) {
+	source := &scriptedSource{
+		id:   "mic",
+		kind: StreamMicrophone,
+		frames: []TimedPCMBuffer{{
+			Buffer: PCMBuffer{
+				Kind:       StreamMicrophone,
+				SampleRate: RNNoiseSampleRate,
+				Channels:   1,
+				Samples:    make([]float32, RNNoiseFrameSamples+17),
+			},
+		}},
+	}
+	sink := &memorySink{id: "microphone"}
+	suppressor := &spySuppressor{}
+	session, err := NewCaptureSession(CaptureConfig{
+		Backend:          "test-audio",
+		Microphone:       StreamConfig{Enabled: true, DeviceID: "microphone:default"},
+		NoiseSuppression: true,
+		DiagnosticsPath:  filepath.Join(t.TempDir(), "audio-diagnostics.json"),
+	}, NewEnhancer(suppressor), []CaptureSource{source}, map[StreamKind]CaptureSink{
+		StreamMicrophone: sink,
+	})
+	if err != nil {
+		t.Fatalf("NewCaptureSession() error = %v", err)
+	}
+	if err := session.Start(context.Background()); err != nil {
+		t.Fatalf("Start() error = %v", err)
+	}
+	if pending := session.Diagnostics().Enhancement.PendingSamples; pending != 17 {
+		t.Fatalf("pending before pause = %d, want 17", pending)
+	}
+
+	if err := session.Pause(); err != nil {
+		t.Fatalf("Pause() error = %v", err)
+	}
+	diagnostics := session.Diagnostics()
+	if !source.paused {
+		t.Fatal("source was not paused")
+	}
+	if diagnostics.Enhancement.PendingSamples != 0 || diagnostics.Enhancement.ResetCount != 1 {
+		t.Fatalf("enhancement after pause = %#v, want pending 0 and reset count 1", diagnostics.Enhancement)
+	}
+	if suppressor.resets != 1 {
+		t.Fatalf("suppressor resets = %d, want 1", suppressor.resets)
+	}
+	if err := session.Stop(); err != nil {
+		t.Fatalf("Stop() error = %v", err)
+	}
+}
+
 type scriptedSource struct {
 	id      string
 	kind    StreamKind
