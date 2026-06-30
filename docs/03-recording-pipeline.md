@@ -143,7 +143,10 @@ manifest 里所有媒体路径必须是包内相对路径。
 当前默认实现：
 
 - `mock-package`：生成 `.rfrec` 包和 `screen.mock.txt`，manifest 标记 `diagnostics.mock = true`、`audio.mockPipeline = true`。它只用于 UI shell 和包结构验证，不代表真实录制能力。
-- queued native backend：通过 `RECORDINGFREEDOM_RECORDING_BACKEND=native` 或显式 backend ID 选择，按平台暴露 `screencapturekit`、`windows-graphics-capture` 或 `pipewire-portal` ID；当前只用于预检阻断和后续替换点，不创建包、不写媒体。
+- backend registry：`SelectBackend()` 先解析 `auto`、`mock-package`、`native`、`sck`、`wgc` 和 `pipewire`，再从 registry 查找已注册的真实平台 factory；未注册时回退到 queued native backend，避免 UI 或服务层误报可录制。
+- queued native backend：通过 `RECORDINGFREEDOM_RECORDING_BACKEND=native` 或显式 backend ID 选择，按平台暴露 `screencapturekit`、`windows-graphics-capture` 或 `pipewire-portal` ID；未注册真实实现时只用于预检阻断和后续替换点，不创建包、不写媒体。
+
+真实平台实现接入时应调用 `recording.RegisterNativeBackend("<backend-id>", factory)` 注册 factory。factory 返回的 backend 仍必须遵守同一个 `Backend` 接口、`CreateNativeWritePlan()`、`BackendStopResult.SyncDiagnostics` 和 ready 前媒体门禁；不能绕过 `RecordingService` 直接写 `ready`。
 
 真实 native backend 开始采样前必须调用 `recording.CreateNativeWritePlan()` 初始化包和写盘计划；该 helper 内部统一归一化 `StartRequest` 并调用 `recpackage.CreateNative()`：
 

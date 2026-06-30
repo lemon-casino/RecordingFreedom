@@ -52,6 +52,7 @@
   - `RecordingService.Stop()` 已在写入 `ready` 前接入 `PackageService.ValidateReady()`，非 mock/native 包缺失非 0 字节 screen media 时会失败并把 manifest 标为 `failed`；摄像头开启时 webcam sidecar 也必须通过同一可读性门禁。
   - 新增 `recording.CreateNativeWritePlan()`，真实 ScreenCaptureKit/WGC/PipeWire 后端后续应通过它统一创建 native `.rfrec` 写盘计划，避免各平台重复手写 source/audio/camera/recording manifest 映射。
   - 新增 backend selector 合同：默认/`auto`/`mock-package` 选择 `mock-package`；`RECORDINGFREEDOM_RECORDING_BACKEND=native` 按平台选择 queued native backend。
+  - backend selector 已升级为 native backend registry：真实平台后端可通过 `recording.RegisterNativeBackend()` 注册 factory；`native`、`sck`、`wgc`、`pipewire` 会优先选择已注册实现，未注册时才回退 queued backend。
   - queued native backend 当前 ID 为 `screencapturekit`、`windows-graphics-capture`、`pipewire-portal` 或 `native-unsupported`；它不会创建包或写媒体，`Start()` 返回明确 queued error。
   - `Bootstrap()` 已返回当前 backend 和 storage health，前端启动后底部状态条不必等第一次录制也能显示当前后端。
   - `Session` 新增 `backend` 字段，前端底部状态条显示当前录制后端，便于验证 mock 与真实平台后端切换。
@@ -207,6 +208,8 @@ PIP 合同测试：
 
 - `internal/recording` 覆盖默认 backend 为 `mock-package`。
 - `internal/recording` 覆盖 `native` 请求按平台映射到 `screencapturekit`、`windows-graphics-capture`、`pipewire-portal` 或 `native-unsupported`。
+- `internal/recording` 覆盖 backend registry 已注册真实 native factory 时会优先返回注册实现，并把同一个 `recpackage.Service` 传入 factory。
+- `internal/recording` 覆盖 backend registry 未注册或 factory 为空时回退 queued native backend，不误创建真实 backend。
 - `internal/recording` 覆盖 queued native backend 不能开始录制且不会返回录制包。
 - `internal/recording` 覆盖 `RECORDINGFREEDOM_RECORDING_BACKEND=native` 会影响默认 backend 选择。
 - `internal/recording` 覆盖 `RecordingService` 在 native queued 模式下即使被直接调用也会失败，并且不会在 `data/video` 下创建 `.rfrec` 包。
@@ -266,5 +269,5 @@ RecordingFreedom/app/bin/recordingfreedom.exe
 
 1. 补齐 macOS ScreenCaptureKit source enumeration，替换当前 macOS `native-backend-queued` 占位。
 2. 在 `MediaDeviceProvider` 后面接入真实 native 枚举：系统声音、麦克风、RNNoise 能力状态、摄像头。
-3. 开始 macOS ScreenCaptureKit 后端设计与最小可录制实现。
+3. 通过 `recording.RegisterNativeBackend(recording.BackendScreenCaptureKit, ...)` 接入 macOS ScreenCaptureKit 后端，并实现最小可录制 `screen.mp4` 写盘。
 4. 把 release workflow 从 preview executable 升级为正式安装包、签名和公证流水线。

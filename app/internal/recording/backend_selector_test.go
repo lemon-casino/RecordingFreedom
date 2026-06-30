@@ -35,6 +35,40 @@ func TestSelectBackendNativeUsesPlatformBackendID(t *testing.T) {
 	}
 }
 
+func TestBackendRegistrySelectsRegisteredNativeBackend(t *testing.T) {
+	packages := recpackage.NewService()
+	var receivedPackages *recpackage.Service
+	registry := NewBackendRegistry().WithNativeBackend(BackendScreenCaptureKit, func(p *recpackage.Service) Backend {
+		receivedPackages = p
+		return &registryBackend{id: BackendScreenCaptureKit}
+	})
+
+	backend := registry.Select(packages, "darwin", "native")
+	if backend.ID() != BackendScreenCaptureKit {
+		t.Fatalf("registry.Select(native darwin) = %q, want %q", backend.ID(), BackendScreenCaptureKit)
+	}
+	if receivedPackages != packages {
+		t.Fatalf("registered factory received packages %p, want %p", receivedPackages, packages)
+	}
+
+	backend = registry.Select(packages, "windows", "sck")
+	if backend.ID() != BackendScreenCaptureKit {
+		t.Fatalf("registry.Select(sck) = %q, want %q", backend.ID(), BackendScreenCaptureKit)
+	}
+}
+
+func TestBackendRegistryFallsBackToQueuedNativeBackend(t *testing.T) {
+	registry := NewBackendRegistry().WithNativeBackend(BackendScreenCaptureKit, nil)
+
+	backend := registry.Select(nil, "darwin", "native")
+	if backend.ID() != BackendScreenCaptureKit {
+		t.Fatalf("registry.Select(native darwin) = %q, want queued %q", backend.ID(), BackendScreenCaptureKit)
+	}
+	if _, ok := backend.(*QueuedNativeBackend); !ok {
+		t.Fatalf("registry.Select(native darwin) = %T, want queued backend fallback", backend)
+	}
+}
+
 func TestQueuedNativeBackendCannotStartCapture(t *testing.T) {
 	backend := NewQueuedNativeBackend(BackendScreenCaptureKit)
 	result, err := backend.Start(context.Background(), BackendStartRequest{})
@@ -44,6 +78,30 @@ func TestQueuedNativeBackendCannotStartCapture(t *testing.T) {
 	if result.Package.Dir != "" {
 		t.Fatalf("Start() package dir = %q, want empty result", result.Package.Dir)
 	}
+}
+
+type registryBackend struct {
+	id string
+}
+
+func (b *registryBackend) ID() string {
+	return b.id
+}
+
+func (b *registryBackend) Start(context.Context, BackendStartRequest) (BackendStartResult, error) {
+	return BackendStartResult{}, nil
+}
+
+func (b *registryBackend) Pause(context.Context, BackendControlRequest) error {
+	return nil
+}
+
+func (b *registryBackend) Resume(context.Context, BackendControlRequest) error {
+	return nil
+}
+
+func (b *registryBackend) Stop(context.Context, BackendControlRequest) (BackendStopResult, error) {
+	return BackendStopResult{}, nil
 }
 
 func TestDefaultBackendHonorsNativeEnvironment(t *testing.T) {
