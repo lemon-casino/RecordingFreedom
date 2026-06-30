@@ -29,7 +29,7 @@ func screenRecordingCapability(platform string) Capability {
 	case "darwin":
 		return available("screen-recording", "Screen Recording", "ScreenCaptureKit", PermissionScreenRecording, "ScreenCaptureKit display capture is implemented; system-audio mux is wired in code and still needs real-device smoke validation.")
 	case "windows":
-		return queued("screen-recording", "Screen Recording", "Windows.Graphics.Capture", PermissionNotRequired, "WGC capture backend is queued behind source and package contracts.")
+		return queued("screen-recording", "Screen Recording", "Windows.Graphics.Capture", PermissionNotRequired, "WGC source enumeration and target parsing are in place; the MP4 writer is still queued.")
 	case "linux":
 		return queued("screen-recording", "Screen Recording", "XDG Desktop Portal + PipeWire", PermissionUnknown, "Linux capture backend is experimental and queued.")
 	default:
@@ -42,7 +42,7 @@ func windowRecordingCapability(platform string) Capability {
 	case "darwin":
 		return available("window-recording", "Window Recording", "ScreenCaptureKit", PermissionScreenRecording, "ScreenCaptureKit single-window capture is implemented; system-audio mux is wired in code and still needs real-device smoke validation.")
 	case "windows":
-		return queued("window-recording", "Window Recording", "Windows.Graphics.Capture", PermissionNotRequired, "Win32 can enumerate windows; WGC capture target mapping is still queued.")
+		return queued("window-recording", "Window Recording", "Windows.Graphics.Capture", PermissionNotRequired, "Win32 can enumerate windows and map HWND source ids; the WGC MP4 writer is still queued.")
 	case "linux":
 		return queued("window-recording", "Window Recording", "XDG Desktop Portal + PipeWire", PermissionUnknown, "Portal-based window capture is queued.")
 	default:
@@ -55,7 +55,7 @@ func applicationRecordingCapability(platform string) Capability {
 	case "darwin":
 		return available("application-recording", "Program Recording", "ScreenCaptureKit", PermissionScreenRecording, "ScreenCaptureKit program capture maps a PID group to its largest visible window; multi-window composition and microphone audio mapping remain queued.")
 	case "windows":
-		return queued("application-recording", "Program Recording", "Windows.Graphics.Capture", PermissionNotRequired, "Program sources are currently process groups that must map to WGC windows.")
+		return queued("application-recording", "Program Recording", "Windows.Graphics.Capture", PermissionNotRequired, "Program sources map to process ids for the WGC target contract; multi-window capture and the MP4 writer are still queued.")
 	case "linux":
 		return queued("application-recording", "Program Recording", "XDG Desktop Portal + PipeWire", PermissionUnknown, "Program grouping depends on portal/PipeWire source metadata.")
 	default:

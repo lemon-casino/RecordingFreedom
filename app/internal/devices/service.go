@@ -237,7 +237,7 @@ func platformBackendMessage(platform string) string {
 	case "darwin":
 		return "ScreenCaptureKit source enumeration is the next macOS backend milestone."
 	case "windows":
-		return "Windows.Graphics.Capture source enumeration is the next Windows backend milestone."
+		return "Windows source enumeration is implemented; the Windows.Graphics.Capture writer is the next Windows backend milestone."
 	case "linux":
 		return "XDG Desktop Portal and PipeWire source enumeration is the next Linux backend milestone."
 	default:

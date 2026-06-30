@@ -50,6 +50,7 @@
   - 新增 `recording.CreateAudioCaptureConfig()`：从 `StartRequest + RecordingWritePlan` 生成统一音频采集配置，真实后端复用同一份 system/mic/RNNoise/gain/diagnostics 路径合同。
   - 新增 `internal/audio.WAVSink`、`audio.CaptureSession` 和 `audio.NewNativeCaptureSession()`：把平台 source、pipeline、WAV sidecar 写盘和 `audio-diagnostics.json` 串成可复用运行时。
   - 新增 `internal/video` 视频采集合约：`CaptureConfig`、`Session`、`video-diagnostics.json` 和默认 unsupported 平台入口，为 ScreenCaptureKit/WGC/PipeWire writer 提供同一生命周期目标。
+  - 新增 Windows WGC target 合同：`screen:<display-token>`、`window:<HWND hex>` 和 `application:<pid>` 会在 `internal/video` 解析成平台 capture target；Windows `NewPlatformSession()` 目前只完成构造和诊断边界，`Start()` 明确返回 writer 未实现，不写假媒体。
   - 新增 `recording.CreateVideoCaptureConfig()`：从 `StartRequest + RecordingWritePlan` 生成统一视频采集配置，真实后端复用同一份 source、profile、`screen.mp4` 和 `video-diagnostics.json` 路径合同。
   - 新增 `recording.NativeBackendRuntime`：把 native `.rfrec` 写盘计划、视频 session 生命周期和音频 session 生命周期串起来，提供 `Start()`、`Pause()`、`Resume()`、`Stop()`、单独 video/audio 控制、RNNoise suppressor 生命周期和启动失败标记 `failed` 的统一入口。
   - 新增 `NativeBackendRuntime.SyncDiagnostics()`：把 video/audio diagnostics 转成 manifest `diagnostics.sync`，统一输出 screen、system audio、microphone track 起止、duration、drop count、append failure、sample rate 和 diagnostics 相对路径。
@@ -292,7 +293,7 @@ RecordingFreedom/app/bin/recordingfreedom.exe
 
 - macOS ScreenCaptureKit display/window/program 录制已接入代码路径，但仍需要真机 smoke：授权屏幕录制后运行 `go run ./cmd/video-smoke -duration=1m`、`go run ./cmd/video-smoke -source-type=window -duration=1m`、`go run ./cmd/video-smoke -source-type=application -duration=1m` 和 `go run ./cmd/video-smoke -duration=5m -pause-after=10s -pause-duration=2s`，并确认 `screen.mp4` 可播放、包进入 `ready`、`video-diagnostics.json` 和 `diagnostics.sync` 正确。
 - ScreenCaptureKit 系统声音 mux 已接入代码路径但仍需 macOS 真机 smoke；麦克风 mux 仍未完成。
-- 真实 Windows.Graphics.Capture 录制。
+- 真实 Windows.Graphics.Capture 录制；当前只完成 Win32 源枚举和 WGC target 解析合同，尚未实现 MP4 writer。
 - 真实 PipeWire / XDG Portal 录制。
 - 真实 macOS CoreAudio 麦克风枚举和 Linux PipeWire 音频设备枚举；当前 Windows WASAPI endpoint 枚举已完成，macOS system audio 使用 ScreenCaptureKit 默认系统混音流。
 - 真实 CoreAudio/PipeWire 音频采集；当前 Windows WASAPI 麦克风采集已通过 smoke，Windows system loopback 已通过有播放源真实样本 smoke，native backend 音频运行时边界已落地，但平台视频后端尚未调用该 runtime 完成端到端录制。
@@ -314,6 +315,6 @@ RecordingFreedom/app/bin/recordingfreedom.exe
 
 1. 按 `docs/08-unfinished-task-plan-audio-first.md` 继续推进真实音频采集与 RNNoise 降噪。
 2. A1 已完成 Windows WASAPI system audio/microphone endpoint 枚举；继续补 macOS CoreAudio 与 Linux PipeWire/PulseAudio 枚举。
-3. Windows 麦克风 PCM 采集和系统声音 loopback 样本写盘已完成 smoke，`NativeBackendRuntime` 已为真实平台后端提供统一视频和音频生命周期；下一步补有 C 工具链本机的 `audio-smoke -rnnoise`、Windows 长录同步、让 ScreenCaptureKit/WGC/PipeWire 后端实际调用 runtime，以及 macOS/Linux 音频源。
+3. Windows 麦克风 PCM 采集和系统声音 loopback 样本写盘已完成 smoke，WGC target 解析合同已落地，`NativeBackendRuntime` 已为真实平台后端提供统一视频和音频生命周期；下一步补 Windows WGC MP4 writer、有 C 工具链本机的 `audio-smoke -rnnoise`、Windows 长录同步，以及 macOS/Linux 音频源。
 4. 通过 `recording.RegisterNativeBackend(recording.BackendScreenCaptureKit, ...)` 注册 `NativeRuntimeBackend`，接入 macOS ScreenCaptureKit video session factory，并实现最小可录制 `screen.mp4` 写盘。
 5. 把 release workflow 从 preview executable 升级为正式安装包、签名和公证流水线。

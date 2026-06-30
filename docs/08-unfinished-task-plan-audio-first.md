@@ -210,7 +210,7 @@
 
 ## P0-RECORDING：真实屏幕/窗口/程序录制
 
-状态：macOS ScreenCaptureKit display/window/program video session 已接入代码路径：`screen:display-<CGDirectDisplayID>`、`window:<CGWindowID>` 和 `application:<pid>` 会通过 `SCStream` 写入真实 `screen.mp4`，并输出 `video-diagnostics.json`；`application:<pid>` 首版选择该 PID 当前最大可见窗口。macOS system audio 已接入 ScreenCaptureKit audio output，并通过 `AVAssetWriter` mux 到同一个 `screen.mp4`。已新增 `cmd/video-smoke` 作为无 UI 真机验收入口。仍需 macOS 真机 smoke 验证；麦克风 mux、Windows WGC 和 Linux PipeWire 仍未完成。
+状态：macOS ScreenCaptureKit display/window/program video session 已接入代码路径：`screen:display-<CGDirectDisplayID>`、`window:<CGWindowID>` 和 `application:<pid>` 会通过 `SCStream` 写入真实 `screen.mp4`，并输出 `video-diagnostics.json`；`application:<pid>` 首版选择该 PID 当前最大可见窗口。macOS system audio 已接入 ScreenCaptureKit audio output，并通过 `AVAssetWriter` mux 到同一个 `screen.mp4`。Windows 已完成 Win32 源枚举和 WGC target 解析合同：`screen:<display-token>`、`window:<HWND hex>`、`application:<pid>`；真实 WGC MP4 writer 仍保持 queued，不写假媒体。已新增 `cmd/video-smoke` 作为无 UI 真机验收入口。仍需 macOS 真机 smoke 验证；麦克风 mux、Windows WGC writer 和 Linux PipeWire 仍未完成。
 
 任务：
 
@@ -221,7 +221,7 @@
 - macOS `cmd/video-smoke` 真实录制验收：`go run ./cmd/video-smoke -duration=1m` 和 `go run ./cmd/video-smoke -duration=5m -pause-after=10s -pause-duration=2s`。
 - macOS window smoke：`go run ./cmd/video-smoke -source-type=window -duration=1m`。
 - macOS program smoke：`go run ./cmd/video-smoke -source-type=application -duration=1m`。
-- Windows Windows.Graphics.Capture 最小 `screen.mp4` 写盘。
+- Windows Windows.Graphics.Capture 最小 `screen.mp4` 写盘；当前 source id 到 target 的合同已完成，下一步是接入真实 MP4 writer。
 - Linux XDG Desktop Portal + PipeWire experimental 写盘。
 - 将 CoreGraphics/Win32/PipeWire 源 ID 映射为真实 capture target。
 - 录制中 `screen.mp4` 持续增长。
