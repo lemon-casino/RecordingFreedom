@@ -17,6 +17,7 @@ const (
 	BackendScreenCaptureKit       = "screencapturekit"
 	BackendWindowsGraphicsCapture = "windows-graphics-capture"
 	BackendPipeWirePortal         = "pipewire-portal"
+	BackendAudioOnlyNative        = "audio-only-native"
 	BackendNativeUnsupported      = "native-unsupported"
 )
 

@@ -87,6 +87,10 @@ export function ShowSettingsWindow(): $CancellablePromise<void> {
     return $Call.ByID(795547170);
 }
 
+export function StartAudioOnlyRecording(req: recording$0.AudioOnlyRequest): $CancellablePromise<recording$0.Session> {
+    return $Call.ByID(3205009257, req);
+}
+
 export function StartMockRecording(req: recording$0.StartRequest): $CancellablePromise<recording$0.Session> {
     return $Call.ByID(989661299, req);
 }

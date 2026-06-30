@@ -120,6 +120,7 @@
 交付：
 
 - 默认录制优先把音频写入 `screen.mp4`：可以是系统声音和麦克风独立 track，也可以先混成一个 AAC track，但必须记录诊断。
+- 默认视频产物必须是用户可直接播放的音画合一文件，不能把“录完后再手动合并音频”作为正常路径。
 - WAV sidecar 只作为 smoke、fallback、恢复或平台限制下的过渡输出；不能在最终架构里强迫所有平台重复写两份音频。
 - manifest 需要记录音频存储形态：已 mux 进 `screen.mp4` 的 track 走主媒体探测；fallback sidecar 才检查 `system-audio.wav` / `microphone.wav`。代码合同已完成。
 - 音频 writer 持续写入 `screen.mp4` 或包内约定 fallback sidecar；路径必须由 `CreateNativeWritePlan()` 或后续扩展计划返回。
@@ -135,19 +136,21 @@
 
 ### A5b 单独音频录制
 
-状态：包结构、ready 门禁合同和 `cmd/audio-smoke` 的 manifest-ready fallback 包已落地；真实 `audio.m4a` writer、混音/mux、UI 模式入口和三平台 smoke 仍未完成。作为后续录制模式支持，不阻塞屏幕录制主线。
+状态：包结构、ready 门禁合同、`cmd/audio-smoke` 的 manifest-ready fallback 包，以及 RecordingService/Wails 后端入口已落地；真实 `audio.m4a` writer、混音/mux、UI 模式入口、preflight 和三平台 smoke 仍未完成。作为后续录制模式支持，不阻塞屏幕录制主线。
 
 交付：
 
 - 新增 audio-only recording kind 或 source type，不创建假的 `screen.mp4`。代码已新增 `recordingMode: "audio-only"`、`audioPath` 和 `recpackage.CreateAudioOnly()`。
 - 支持系统声音、麦克风、麦克风 + RNNoise 的单独录音。
+- 单独录音必须走正式 `RecordingService.StartAudioOnlyRecording()` 入口和统一状态机，不能由 CLI 或 UI 绕过服务层临时拼包。
 - 默认输出使用可持续写盘的 `audio.m4a`，平台受限时使用 `audio.wav` fallback，仍写入 `<DataRoot>/data/video/<session>.rfrec/`。当前 ready 门禁已能在 audio-only 模式校验主音频媒体 `soun` 音轨，也能校验明确声明的 WAV fallback，不再要求 `screen.mp4`。
 - 复用 `audio.Pipeline`、RNNoise reset、diagnostics 和 bounded buffer 策略。
 
 验收：
 
 - Go 测试覆盖：audio-only 包不创建 screen 路径、默认主媒体为 `audio.m4a`、没有真实音频媒体不能 ready、缺少 `soun` 音轨不能 ready。
-- `cmd/audio-smoke` 使用 `recpackage.CreateAudioOnly()` 创建正式包，单流 fallback 产出 `audio.wav`，停止后写入 sync diagnostics，并通过 `ValidateReady()` 后标记 `ready`。
+- `cmd/audio-smoke` 使用 `RecordingService.StartAudioOnlyRecording()` 创建正式包，单流 fallback 产出 `audio.wav`，停止后写入 sync diagnostics，并通过 `ValidateReady()` 后标记 `ready`。
+- `RecordingService.StartAudioOnlyRecording()` 使用 audio-only runtime，不创建 video session，暂停/继续/停止走同一状态机，停止后通过 `ValidateReady()` 才写 `ready`。代码已覆盖。
 - 只录音 1 分钟、5 分钟可播放。
 - 关闭麦克风或系统声音时不会保留旧 device id。
 - audio-only 包可以在 UI 中识别为音频录制，不被误认为损坏的屏幕录制。
@@ -160,6 +163,7 @@
 
 - 使用有限环形缓冲和编码队列，不能把完整录制放进内存。
 - 主录制优先 mux 到单个 `screen.mp4`，减少重复写长期音频 sidecar。
+- 内存只用于 sample 队列、短环形缓冲、暂停边界和低频 checkpoint；最终媒体必须持续顺序落盘，避免崩溃时丢失整段录制。
 - 队列需要有明确容量、背压和失败诊断；不能因为编码或磁盘变慢而无限吃内存。
 - diagnostics 和 manifest 低频批量 flush，状态切换时强制落盘。
 - 预览、波形、缩略图和导出 cache 按需写入包内 `cache/`，不在录制时反复读取完整媒体。

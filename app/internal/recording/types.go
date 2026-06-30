@@ -51,14 +51,20 @@ type StartRequest struct {
 	Camera     CameraRequest            `json:"camera"`
 }
 
+type AudioOnlyRequest struct {
+	Recording recordingprofile.Profile `json:"recording"`
+	Audio     AudioRequest             `json:"audio"`
+}
+
 type Session struct {
-	ID          string    `json:"id"`
-	PackageDir  string    `json:"packageDir"`
-	Manifest    string    `json:"manifest"`
-	Backend     string    `json:"backend"`
-	Status      State     `json:"status"`
-	StartedAt   time.Time `json:"startedAt"`
-	CompletedAt time.Time `json:"completedAt,omitempty"`
+	ID            string    `json:"id"`
+	PackageDir    string    `json:"packageDir"`
+	Manifest      string    `json:"manifest"`
+	Backend       string    `json:"backend"`
+	RecordingMode string    `json:"recordingMode"`
+	Status        State     `json:"status"`
+	StartedAt     time.Time `json:"startedAt"`
+	CompletedAt   time.Time `json:"completedAt,omitempty"`
 }
 
 type StatusEvent struct {

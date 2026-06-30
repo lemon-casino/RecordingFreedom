@@ -11,6 +11,11 @@ import * as recordingprofile$0 from "../recordingprofile/models.js";
 // @ts-ignore: Unused imports
 import * as time$0 from "../../../../../../time/models.js";
 
+export interface AudioOnlyRequest {
+    "recording": recordingprofile$0.Profile;
+    "audio": AudioRequest;
+}
+
 export interface AudioRequest {
     "system": boolean;
     "systemDeviceId"?: string;
@@ -33,6 +38,7 @@ export interface Session {
     "packageDir": string;
     "manifest": string;
     "backend": string;
+    "recordingMode": string;
     "status": State;
     "startedAt": time$0.Time;
     "completedAt"?: time$0.Time;

@@ -12,21 +12,23 @@ import (
 )
 
 type Service struct {
-	appData  *appdata.Service
-	packages *recpackage.Service
-	backend  Backend
-	mu       sync.Mutex
-	state    State
-	session  *Session
+	appData          *appdata.Service
+	packages         *recpackage.Service
+	backend          Backend
+	audioOnlyBackend *AudioOnlyRuntimeBackend
+	mu               sync.Mutex
+	state            State
+	session          *Session
 }
 
 func NewService(appData *appdata.Service) *Service {
 	packages := recpackage.NewService()
 	return &Service{
-		appData:  appData,
-		packages: packages,
-		backend:  DefaultBackend(packages),
-		state:    StateIdle,
+		appData:          appData,
+		packages:         packages,
+		backend:          DefaultBackend(packages),
+		audioOnlyBackend: NewAudioOnlyRuntimeBackend(packages, AudioOnlyRuntimeOptions{}),
+		state:            StateIdle,
 	}
 }
 
@@ -36,10 +38,11 @@ func NewServiceWithBackend(appData *appdata.Service, backend Backend) *Service {
 		backend = NewMockBackend(packages)
 	}
 	return &Service{
-		appData:  appData,
-		packages: packages,
-		backend:  backend,
-		state:    StateIdle,
+		appData:          appData,
+		packages:         packages,
+		backend:          backend,
+		audioOnlyBackend: NewAudioOnlyRuntimeBackend(packages, AudioOnlyRuntimeOptions{}),
+		state:            StateIdle,
 	}
 }
 
@@ -112,12 +115,56 @@ func (s *Service) StartRecording(req StartRequest) (Session, error) {
 	}
 
 	session := Session{
-		ID:         result.Package.ID,
-		PackageDir: result.Package.Dir,
-		Manifest:   result.Package.ManifestPath,
-		Backend:    s.backend.ID(),
-		Status:     StateRecording,
-		StartedAt:  now,
+		ID:            result.Package.ID,
+		PackageDir:    result.Package.Dir,
+		Manifest:      result.Package.ManifestPath,
+		Backend:       s.backend.ID(),
+		RecordingMode: recpackage.RecordingModeScreen,
+		Status:        StateRecording,
+		StartedAt:     now,
+	}
+	s.state = StateRecording
+	s.session = &session
+	return session, nil
+}
+
+func (s *Service) StartAudioOnlyRecording(req AudioOnlyRequest) (Session, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	if s.state == StateRecording || s.state == StatePaused || s.state == StateStopping || s.state == StatePreparing {
+		return Session{}, errors.New("recording is already active")
+	}
+	req, err := NormalizeAudioOnlyRequest(req)
+	if err != nil {
+		return Session{}, err
+	}
+
+	videoDir, err := s.appData.VideoDir()
+	if err != nil {
+		s.state = StateFailed
+		return Session{}, err
+	}
+	if s.audioOnlyBackend == nil {
+		s.audioOnlyBackend = NewAudioOnlyRuntimeBackend(s.packages, AudioOnlyRuntimeOptions{})
+	}
+
+	now := time.Now()
+	s.state = StatePreparing
+	result, err := s.audioOnlyBackend.Start(context.Background(), videoDir, now, req)
+	if err != nil {
+		s.state = StateFailed
+		return Session{}, err
+	}
+
+	session := Session{
+		ID:            result.Package.ID,
+		PackageDir:    result.Package.Dir,
+		Manifest:      result.Package.ManifestPath,
+		Backend:       s.audioOnlyBackend.ID(),
+		RecordingMode: recpackage.RecordingModeAudio,
+		Status:        StateRecording,
+		StartedAt:     now,
 	}
 	s.state = StateRecording
 	s.session = &session
@@ -151,7 +198,7 @@ func (s *Service) Stop() (Session, error) {
 		s.session.Status = StateFailed
 		return *s.session, err
 	}
-	stopResult, err := s.backend.Stop(context.Background(), BackendControlRequest{Session: *s.session})
+	stopResult, err := s.stopActiveBackend()
 	if err != nil {
 		s.state = StateFailed
 		s.session.Status = StateFailed
@@ -211,12 +258,25 @@ func (s *Service) setActiveState(from State, to State) (Session, error) {
 func (s *Service) applyBackendTransition(to State) error {
 	switch to {
 	case StatePaused:
+		if s.session != nil && s.session.RecordingMode == recpackage.RecordingModeAudio {
+			return s.audioOnlyBackend.Pause(context.Background(), BackendControlRequest{Session: *s.session})
+		}
 		return s.backend.Pause(context.Background(), BackendControlRequest{Session: *s.session})
 	case StateRecording:
+		if s.session != nil && s.session.RecordingMode == recpackage.RecordingModeAudio {
+			return s.audioOnlyBackend.Resume(context.Background(), BackendControlRequest{Session: *s.session})
+		}
 		return s.backend.Resume(context.Background(), BackendControlRequest{Session: *s.session})
 	default:
 		return nil
 	}
+}
+
+func (s *Service) stopActiveBackend() (BackendStopResult, error) {
+	if s.session != nil && s.session.RecordingMode == recpackage.RecordingModeAudio {
+		return s.audioOnlyBackend.Stop(context.Background(), BackendControlRequest{Session: *s.session})
+	}
+	return s.backend.Stop(context.Background(), BackendControlRequest{Session: *s.session})
 }
 
 func noiseSuppressionLabel(enabled bool) string {

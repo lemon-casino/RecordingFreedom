@@ -235,6 +235,25 @@ func (s *RecordingFreedomService) StartMockRecording(req recording.StartRequest)
 	return s.StartRecording(req)
 }
 
+func (s *RecordingFreedomService) StartAudioOnlyRecording(req recording.AudioOnlyRequest) (recording.Session, error) {
+	s.emitRecordingStatus(recording.StatusEvent{
+		Status:  recording.StatePreparing,
+		Backend: recording.BackendAudioOnlyNative,
+		Message: "Preparing audio-only recording package",
+	})
+	session, err := s.recorder.StartAudioOnlyRecording(req)
+	if err != nil {
+		s.emitRecordingStatus(recording.StatusEvent{
+			Status:  recording.StateFailed,
+			Backend: recording.BackendAudioOnlyNative,
+			Message: err.Error(),
+		})
+		return recording.Session{}, err
+	}
+	s.emitSessionStatus(session, "Audio-only recording started")
+	return session, nil
+}
+
 func (s *RecordingFreedomService) PauseRecording() (recording.Session, error) {
 	session, err := s.recorder.Pause()
 	if err != nil {

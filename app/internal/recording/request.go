@@ -28,30 +28,11 @@ func NormalizeStartRequest(req StartRequest) (StartRequest, error) {
 	}
 	req.Recording = recordingprofile.Normalize(req.Recording)
 
-	req.Audio.SystemDeviceID = strings.TrimSpace(req.Audio.SystemDeviceID)
-	req.Audio.MicrophoneID = strings.TrimSpace(req.Audio.MicrophoneID)
-	if req.Audio.System {
-		if req.Audio.SystemDeviceID == "" {
-			req.Audio.SystemDeviceID = defaultSystemAudioID
-		}
-	} else {
-		req.Audio.SystemDeviceID = ""
+	audioRequest, err := normalizeAudioRequest(req.Audio)
+	if err != nil {
+		return StartRequest{}, err
 	}
-	if req.Audio.Microphone {
-		if req.Audio.MicrophoneID == "" {
-			req.Audio.MicrophoneID = defaultMicrophoneID
-		}
-		if req.Audio.MicrophoneGain == 0 {
-			req.Audio.MicrophoneGain = defaultMicrophoneGain
-		}
-		if req.Audio.MicrophoneGain < 0 || req.Audio.MicrophoneGain > maxMicrophoneGain {
-			return StartRequest{}, fmt.Errorf("microphoneGain must be between 0 and %d", maxMicrophoneGain)
-		}
-	} else {
-		req.Audio.MicrophoneID = ""
-		req.Audio.NoiseSuppression = false
-		req.Audio.MicrophoneGain = 0
-	}
+	req.Audio = audioRequest
 
 	req.Camera.DeviceID = strings.TrimSpace(req.Camera.DeviceID)
 	if req.Camera.Enabled {
@@ -62,6 +43,47 @@ func NormalizeStartRequest(req StartRequest) (StartRequest, error) {
 	} else {
 		req.Camera.DeviceID = ""
 		req.Camera.PIPPreset = string(pip.PresetOff)
+	}
+	return req, nil
+}
+
+func NormalizeAudioOnlyRequest(req AudioOnlyRequest) (AudioOnlyRequest, error) {
+	req.Recording = recordingprofile.Normalize(req.Recording)
+	audioRequest, err := normalizeAudioRequest(req.Audio)
+	if err != nil {
+		return AudioOnlyRequest{}, err
+	}
+	if !audioRequest.System && !audioRequest.Microphone {
+		return AudioOnlyRequest{}, errors.New("audio-only recording requires system audio or microphone")
+	}
+	req.Audio = audioRequest
+	return req, nil
+}
+
+func normalizeAudioRequest(req AudioRequest) (AudioRequest, error) {
+	req.SystemDeviceID = strings.TrimSpace(req.SystemDeviceID)
+	req.MicrophoneID = strings.TrimSpace(req.MicrophoneID)
+	if req.System {
+		if req.SystemDeviceID == "" {
+			req.SystemDeviceID = defaultSystemAudioID
+		}
+	} else {
+		req.SystemDeviceID = ""
+	}
+	if req.Microphone {
+		if req.MicrophoneID == "" {
+			req.MicrophoneID = defaultMicrophoneID
+		}
+		if req.MicrophoneGain == 0 {
+			req.MicrophoneGain = defaultMicrophoneGain
+		}
+		if req.MicrophoneGain < 0 || req.MicrophoneGain > maxMicrophoneGain {
+			return AudioRequest{}, fmt.Errorf("microphoneGain must be between 0 and %d", maxMicrophoneGain)
+		}
+	} else {
+		req.MicrophoneID = ""
+		req.NoiseSuppression = false
+		req.MicrophoneGain = 0
 	}
 	return req, nil
 }

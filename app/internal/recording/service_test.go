@@ -1,6 +1,7 @@
 package recording
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"os"
@@ -8,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/lemon-casino/RecordingFreedom/app/internal/appdata"
+	"github.com/lemon-casino/RecordingFreedom/app/internal/audio"
 	"github.com/lemon-casino/RecordingFreedom/app/internal/recordingprofile"
 	"github.com/lemon-casino/RecordingFreedom/app/internal/recpackage"
 )
@@ -132,6 +134,74 @@ func TestStartRecordingDelegatesToBackend(t *testing.T) {
 	}
 	if backend.paused != 1 || backend.resumed != 1 || backend.stopped != 1 {
 		t.Fatalf("backend controls = pause:%d resume:%d stop:%d, want 1 each", backend.paused, backend.resumed, backend.stopped)
+	}
+}
+
+func TestStartAudioOnlyRecordingCreatesReadyPackage(t *testing.T) {
+	service := NewService(appdata.NewService(t.TempDir()))
+	audioSession := &fileWritingAudioSession{
+		diagnostics: audio.Diagnostics{
+			Backend: BackendAudioOnlyNative,
+			Microphone: audio.StreamDiagnostics{
+				Enabled:        true,
+				SampleRate:     audio.RNNoiseSampleRate,
+				SamplesWritten: 48000,
+				EndOffsetMs:    1000,
+				DurationMs:     1000,
+			},
+		},
+	}
+	service.audioOnlyBackend = NewAudioOnlyRuntimeBackend(service.packages, AudioOnlyRuntimeOptions{
+		AudioSessionFactory: func(config audio.CaptureConfig, suppressor audio.NoiseSuppressor) (NativeAudioSession, error) {
+			if suppressor != nil {
+				t.Fatalf("suppressor = %#v, want nil", suppressor)
+			}
+			audioSession.path = config.MicrophoneAudioPath
+			return audioSession, nil
+		},
+	})
+
+	session, err := service.StartAudioOnlyRecording(AudioOnlyRequest{
+		Audio: AudioRequest{Microphone: true},
+	})
+	if err != nil {
+		t.Fatalf("StartAudioOnlyRecording() error = %v", err)
+	}
+	if session.RecordingMode != recpackage.RecordingModeAudio || session.Backend != BackendAudioOnlyNative {
+		t.Fatalf("session = %#v, want audio-only backend", session)
+	}
+	if _, err := os.Stat(filepath.Join(session.PackageDir, recpackage.ScreenVideoFile)); err == nil {
+		t.Fatal("audio-only recording created screen media")
+	}
+	if _, err := service.Pause(); err != nil {
+		t.Fatalf("Pause() error = %v", err)
+	}
+	if _, err := service.Resume(); err != nil {
+		t.Fatalf("Resume() error = %v", err)
+	}
+	stopped, err := service.Stop()
+	if err != nil {
+		t.Fatalf("Stop() error = %v", err)
+	}
+	if stopped.Status != StateReady || service.State() != StateReady {
+		t.Fatalf("stop state = session:%q service:%q, want ready", stopped.Status, service.State())
+	}
+	if audioSession.started != 1 || audioSession.paused != 1 || audioSession.resumed != 1 || audioSession.stopped != 1 {
+		t.Fatalf("audio lifecycle = start:%d pause:%d resume:%d stop:%d", audioSession.started, audioSession.paused, audioSession.resumed, audioSession.stopped)
+	}
+
+	manifest, err := recpackage.NewService().ReadManifest(session.Manifest)
+	if err != nil {
+		t.Fatalf("ReadManifest() error = %v", err)
+	}
+	if manifest.Status != recpackage.StatusReady || manifest.RecordingMode != recpackage.RecordingModeAudio {
+		t.Fatalf("manifest status/mode = %q/%q, want ready audio-only", manifest.Status, manifest.RecordingMode)
+	}
+	if manifest.Media.ScreenVideoPath != "" || manifest.Media.AudioPath != recpackage.AudioOnlyWAVFile || manifest.Media.MicrophoneAudioPath != recpackage.AudioOnlyWAVFile {
+		t.Fatalf("audio-only media = %#v", manifest.Media)
+	}
+	if manifest.Diagnostics.Sync == nil || manifest.Diagnostics.Sync.Microphone.Path != recpackage.AudioOnlyWAVFile {
+		t.Fatalf("sync diagnostics = %#v, want microphone audio.wav", manifest.Diagnostics.Sync)
 	}
 }
 
@@ -447,6 +517,39 @@ func (b *nativeProbeBackend) Resume(context.Context, BackendControlRequest) erro
 
 func (b *nativeProbeBackend) Stop(context.Context, BackendControlRequest) (BackendStopResult, error) {
 	return BackendStopResult{SyncDiagnostics: b.stopSync}, nil
+}
+
+type fileWritingAudioSession struct {
+	path        string
+	started     int
+	paused      int
+	resumed     int
+	stopped     int
+	diagnostics audio.Diagnostics
+}
+
+func (s *fileWritingAudioSession) Start(context.Context) error {
+	s.started++
+	return nil
+}
+
+func (s *fileWritingAudioSession) Pause() error {
+	s.paused++
+	return nil
+}
+
+func (s *fileWritingAudioSession) Resume() error {
+	s.resumed++
+	return nil
+}
+
+func (s *fileWritingAudioSession) Stop() error {
+	s.stopped++
+	return os.WriteFile(s.path, bytes.Repeat([]byte{1}, 45), 0o644)
+}
+
+func (s *fileWritingAudioSession) Diagnostics() audio.Diagnostics {
+	return s.diagnostics
 }
 
 func nativeSyncDiagnostics(includeWebcam bool) *recpackage.ManifestSyncDiagnostics {

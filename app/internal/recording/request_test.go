@@ -107,3 +107,34 @@ func TestNormalizeStartRequestRejectsInvalidGain(t *testing.T) {
 		t.Fatal("NormalizeStartRequest() accepted gain above max")
 	}
 }
+
+func TestNormalizeAudioOnlyRequestDefaultsDevices(t *testing.T) {
+	got, err := NormalizeAudioOnlyRequest(AudioOnlyRequest{
+		Audio: AudioRequest{
+			System:           true,
+			Microphone:       true,
+			NoiseSuppression: true,
+		},
+	})
+	if err != nil {
+		t.Fatalf("NormalizeAudioOnlyRequest() error = %v", err)
+	}
+	if got.Recording != recordingprofile.Default() {
+		t.Fatalf("recording profile = %#v, want default", got.Recording)
+	}
+	if got.Audio.SystemDeviceID != defaultSystemAudioID {
+		t.Fatalf("system device = %q, want default", got.Audio.SystemDeviceID)
+	}
+	if got.Audio.MicrophoneID != defaultMicrophoneID {
+		t.Fatalf("microphone device = %q, want default", got.Audio.MicrophoneID)
+	}
+	if got.Audio.MicrophoneGain != defaultMicrophoneGain {
+		t.Fatalf("microphone gain = %v, want default", got.Audio.MicrophoneGain)
+	}
+}
+
+func TestNormalizeAudioOnlyRequestRejectsNoStreams(t *testing.T) {
+	if _, err := NormalizeAudioOnlyRequest(AudioOnlyRequest{}); err == nil {
+		t.Fatal("NormalizeAudioOnlyRequest() accepted no audio streams")
+	}
+}

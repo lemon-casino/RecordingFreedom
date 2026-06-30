@@ -172,6 +172,8 @@ manifest 里所有媒体路径必须是包内相对路径。
 - 屏幕、窗口和程序录制的正式主产物是 `screen.mp4`，视频轨和已启用音频轨应在同一个容器内完成同步封装。首版可以把系统声音和麦克风混成一个 AAC 音轨；后续如果平台能力稳定，再升级为系统声音、麦克风独立音轨，但不能改变用户拿到的默认文件。
 - 单独录音必须作为 `audio-only` 录制模式实现，不创建假的 `screen.mp4`，默认输出 `audio.m4a`，平台受限时才使用 `audio.wav` fallback。
 - fallback sidecar 只用于 smoke、恢复、平台限制和诊断场景。manifest 使用 `systemAudioStorage` / `microphoneAudioStorage` 表达每条音频是 `muxed` 还是 `sidecar`，ready 门禁据此检查 `screen.mp4` 内音轨或包内 sidecar，避免长期重复写盘。
+- 用户可见的默认视频文件必须可以直接播放出图像和声音；不能要求用户在普通播放场景手动再合并 `screen.mp4` 与音频 sidecar。
+- 后期单独录制音频是正式能力，不是从屏幕录制里裁掉画面的替代方案；它复用同一录制包、音频管线、降噪和诊断合同，但 manifest 必须标明 `recordingMode: "audio-only"`。
 
 后续真实实现命名建议：
 
@@ -266,18 +268,20 @@ audio-only 录制模式用于只录系统声音、麦克风或麦克风 + RNNois
 - 默认输出使用可流式写入、可恢复的音频容器 `audio.m4a`；平台受限时可使用 `audio.wav` fallback，但必须仍由 manifest 明确记录，不能生成假 screen media。
 - audio-only 可复用同一 `audio.Pipeline`、RNNoise suppressor、pause reset、diagnostics 和 bounded buffer 策略。
 - UI 上作为录制源的一种模式呈现，不和 screen/window/program 源混在一个假 source 里。
-- 当前代码已落地 `recpackage.CreateAudioOnly()`、`audioPath`、主音频媒体 ready 门禁、WAV fallback 门禁和单元测试；`cmd/audio-smoke` 已改为生成带 manifest 的 audio-only `.rfrec` 包，停止后写入 `diagnostics.sync` 并通过 `ValidateReady()` 才标记 `ready`。真实 `audio.m4a` writer、混音/mux、UI 模式入口和三平台 smoke 仍按后续任务推进。
+- 当前代码已落地 `recpackage.CreateAudioOnly()`、`audioPath`、主音频媒体 ready 门禁、WAV fallback 门禁和单元测试；`cmd/audio-smoke` 已改为生成带 manifest 的 audio-only `.rfrec` 包，停止后写入 `diagnostics.sync` 并通过 `ValidateReady()` 才标记 `ready`。`RecordingService.StartAudioOnlyRecording()` 和 Wails `StartAudioOnlyRecording()` 后端入口已接入同一状态机，支持开始、暂停、继续、停止和 ready 校验。真实 `audio.m4a` writer、混音/mux、UI 模式入口和三平台 smoke 仍按后续任务推进。
 
 ## 内存与写盘策略
 
 长录制不能整段放进内存，也不能等停止时一次性保存。降低硬盘读写的策略是减少重复写、顺序写和限额缓冲：
 
 - 主录制优先 mux 到 `screen.mp4`，避免同时写 `screen.mp4`、`system-audio.wav`、`microphone.wav` 三份长期媒体。
+- 音视频 sample 进入平台编码器或 muxer 前可以使用内存环形缓冲，但缓冲只服务于抖动吸收、暂停边界、编码队列和短时恢复，不作为最终媒体的主存储。
 - 内存只保留有限环形缓冲和编码队列，例如最近几秒的音视频 sample、暂停边界和恢复用元数据；队列满时必须做背压、丢帧或失败诊断，不能无上限增长。
 - 所有媒体 writer 使用顺序 append；不做频繁随机写，不在录制中反复 probe 大文件。
 - `audio-diagnostics.json`、`video-diagnostics.json` 和 manifest 采用低频批量 flush 或状态切换时写入，避免每帧写 JSON。
 - 缩略图、波形、代理文件和导出 cache 放到包内 `cache/`，按需生成，不能在录制时为了预览重复读写完整源媒体。
 - 崩溃恢复优先依赖已经顺序写入的媒体文件和最小 manifest/checkpoint；内存缓冲丢失不能导致整段录制丢失。
+- 长录验收必须看两个指标：主媒体文件在录制中持续顺序增长，进程内存不随录制时长线性增长。
 
 ## 音画同步规则
 
