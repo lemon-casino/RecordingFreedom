@@ -72,7 +72,7 @@ jobs:
         working-directory: ${{ env.APP_DIR }}
         env:
           CGO_ENABLED: "1"
-        run: go test -tags rnnoise_native ./internal/audio/rnnoise ./internal/audio/rnnoise/native ./internal/audio
+        run: go test -tags rnnoise_native ./internal/audio/rnnoise/native
 
       - name: Run preview smoke
         working-directory: ${{ env.APP_DIR }}
@@ -116,15 +116,6 @@ jobs:
           cache: npm
           cache-dependency-path: ${{ env.APP_DIR }}/frontend/package-lock.json
 
-      - name: Install Windows C toolchain for RNNoise
-        if: runner.os == 'Windows'
-        uses: msys2/setup-msys2@v2
-        with:
-          msystem: UCRT64
-          update: true
-          path-type: inherit
-          install: mingw-w64-ucrt-x86_64-gcc
-
       - name: Install Linux Wails build dependencies
         if: runner.os == 'Linux'
         run: |
@@ -153,13 +144,11 @@ jobs:
       - name: Build app
         working-directory: ${{ env.APP_DIR }}
         shell: bash
-        env:
-          CGO_ENABLED: "1"
         run: |
           if [ "${{ runner.os }}" = "Linux" ]; then
-            wails3 build -tags "gtk3 rnnoise_native"
+            wails3 build -tags gtk3
           else
-            wails3 build -tags rnnoise_native
+            wails3 build
           fi
 
       - name: Upload build artifact

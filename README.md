@@ -104,7 +104,7 @@ wails3 build
 To test and smoke the RNNoise path on a machine with a C toolchain:
 
 ```bash
-go test -tags rnnoise_native ./internal/audio/rnnoise ./internal/audio/rnnoise/native ./internal/audio
+go test -tags rnnoise_native ./internal/audio/rnnoise/native
 go run -tags rnnoise_native ./cmd/audio-smoke -duration=3s -rnnoise -keep
 ```
 

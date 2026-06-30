@@ -240,7 +240,7 @@ Linux：
 - `CaptureSession` 已把 `CaptureSource -> Pipeline -> WAVSink -> audio-diagnostics.json` 串成可复用运行时，后续 ScreenCaptureKit/WGC/PipeWire backend 只需要启动同一个 session。
 - `recording.CreateAudioCaptureConfig()` 已把 `StartRequest + RecordingWritePlan` 转成统一 `audio.CaptureConfig`，真实后端不需要重复拼接设备、RNNoise、gain、audio sidecar 和 diagnostics 路径。
 
-RNNoise native DSP 已迁移为 `internal/audio/rnnoise` cgo 包，并把 C 源码隔离到 `internal/audio/rnnoise/native` 子包：带 `rnnoise_native` 标签的 cgo 构建会链接旧项目 RNNoise + `LikelyVoiceEnhancement`，非 cgo 或未带标签构建返回明确 unavailable，不会假装降噪已生效。CI 和 release gate 会在 Linux 上运行 RNNoise 原生 frame 处理测试，三平台 Wails preview build 会带 `rnnoise_native` 标签编译；本机 Windows 若缺少 `gcc`，只能验证默认 fallback。当前 UI capability 仍保持 queued，直到 RNNoise 接入完整 app recording backend。
+RNNoise native DSP 已迁移为 `internal/audio/rnnoise` cgo 包，并把 C 源码隔离到 `internal/audio/rnnoise/native` 子包：带 `rnnoise_native` 标签的 cgo 构建会链接旧项目 RNNoise + `LikelyVoiceEnhancement`，非 cgo 或未带标签构建返回明确 unavailable，不会假装降噪已生效。CI 和 release gate 会运行 RNNoise 原生 frame 处理测试；preview artifact 仍保持默认构建，直到 RNNoise 接入完整 app recording backend 后再作为用户可用能力发布。本机 Windows 若缺少 `gcc`，只能验证默认 fallback。当前 UI capability 仍保持 queued。
 
 ## 音画同步规则
 

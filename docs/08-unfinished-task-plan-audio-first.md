@@ -92,7 +92,7 @@
 
 ### A4 RNNoise native DSP 接入
 
-状态：RNNoise C 源码和旧项目 `LikelyVoiceEnhancement` 已迁移为 `internal/audio/rnnoise` cgo 包，C/H 源码已隔离到 `internal/audio/rnnoise/native` 子包；非 cgo 或未带 `rnnoise_native` 标签的构建会明确返回 unavailable。CI/release gate 已加入 Linux 原生 frame 处理测试，三平台 preview build 已带 `rnnoise_native` 标签；本机 Windows 缺少 `gcc` 时只能验证 fallback。
+状态：RNNoise C 源码和旧项目 `LikelyVoiceEnhancement` 已迁移为 `internal/audio/rnnoise` cgo 包，C/H 源码已隔离到 `internal/audio/rnnoise/native` 子包；非 cgo 或未带 `rnnoise_native` 标签的构建会明确返回 unavailable。CI/release gate 已加入原生 frame 处理测试；preview artifact 仍保持默认构建，直到完整 app recording backend 接入前不对用户宣称 RNNoise 已可用。本机 Windows 缺少 `gcc` 时只能验证 fallback。
 
 交付：
 
