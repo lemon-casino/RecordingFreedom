@@ -20,6 +20,8 @@ RecordingFreedom 是一个全新的录制软件重构项目，目标技术栈为
    记录当前 Wails v3 + React UI Shell 的实际落地状态、验证结果和下一步。
 8. [07-icon-workflow.md](07-icon-workflow.md)
    记录电脑端图标替换、多尺寸 PNG 重建、Wails `.ico/.icns` 生成和提交检查流程。
+9. [08-unfinished-task-plan-audio-first.md](08-unfinished-task-plan-audio-first.md)
+   记录初版 preview 后未完成任务，并把真实音频采集与 RNNoise 降噪列为第一优先级。
 
 ## 当前硬性决策
 
@@ -31,6 +33,7 @@ RecordingFreedom 是一个全新的录制软件重构项目，目标技术栈为
 - 麦克风降噪继承旧项目 RNNoise 原生处理思路，但要抽成新项目的跨平台音频 DSP 模块。
 - 后续画中画摄像头从 v1 数据模型开始预留，先录 webcam sidecar，不把摄像头硬烘焙进屏幕视频。
 - 当前已生成 Wails v3 React 工程骨架，并实现第一版胶囊 UI Shell 与 mock `.rfrec` 包创建服务。
+- 初版 preview 后的未完成任务以 `08-unfinished-task-plan-audio-first.md` 为执行清单，优先推进真实系统声音、麦克风采集和 RNNoise 降噪。
 
 ## 外部技术依据
 

@@ -267,7 +267,9 @@ RecordingFreedom/app/bin/recordingfreedom.exe
 
 ## 下一步
 
-1. 补齐 macOS ScreenCaptureKit source enumeration，替换当前 macOS `native-backend-queued` 占位。
-2. 在 `MediaDeviceProvider` 后面接入真实 native 枚举：系统声音、麦克风、RNNoise 能力状态、摄像头。
-3. 通过 `recording.RegisterNativeBackend(recording.BackendScreenCaptureKit, ...)` 接入 macOS ScreenCaptureKit 后端，并实现最小可录制 `screen.mp4` 写盘。
-4. 把 release workflow 从 preview executable 升级为正式安装包、签名和公证流水线。
+1. 按 `docs/08-unfinished-task-plan-audio-first.md` 先推进真实音频采集与 RNNoise 降噪。
+2. 建立真实音频后端边界：系统声音、麦克风、RNNoise、混音/写盘和 diagnostics 分层，避免平台 API 进入 `RecordingService` 主流程。
+3. 在 `MediaDeviceProvider` 后面接入真实 native 音频枚举：系统声音、麦克风、RNNoise 能力状态。
+4. 接入麦克风 PCM 采集与 RNNoise native DSP，再接入系统声音采集和音频同步诊断。
+5. 通过 `recording.RegisterNativeBackend(recording.BackendScreenCaptureKit, ...)` 接入 macOS ScreenCaptureKit 后端，并实现最小可录制 `screen.mp4` 写盘。
+6. 把 release workflow 从 preview executable 升级为正式安装包、签名和公证流水线。
