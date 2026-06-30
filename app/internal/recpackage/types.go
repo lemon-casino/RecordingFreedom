@@ -12,6 +12,8 @@ const (
 	AudioDiagnosticsFile = "audio-diagnostics.json"
 	VideoDiagnosticsFile = "video-diagnostics.json"
 	ScreenVideoFile      = "screen.mp4"
+	SystemAudioFile      = "system-audio.wav"
+	MicrophoneAudioFile  = "microphone.wav"
 	WebcamVideoFile      = "webcam.mov"
 	MockScreenFile       = "screen.mock.txt"
 	CacheDir             = "cache"
@@ -40,6 +42,8 @@ type Package struct {
 type RecordingWritePlan struct {
 	Package              Package
 	ScreenVideoPath      string
+	SystemAudioPath      string
+	MicrophoneAudioPath  string
 	WebcamVideoPath      string
 	AudioDiagnosticsPath string
 	VideoDiagnosticsPath string
@@ -63,6 +67,8 @@ type Manifest struct {
 
 type ManifestMedia struct {
 	ScreenVideoPath     string `json:"screenVideoPath,omitempty"`
+	SystemAudioPath     string `json:"systemAudioPath,omitempty"`
+	MicrophoneAudioPath string `json:"microphoneAudioPath,omitempty"`
 	WebcamVideoPath     string `json:"webcamVideoPath,omitempty"`
 	WebcamStartOffsetMs int    `json:"webcamStartOffsetMs,omitempty"`
 }

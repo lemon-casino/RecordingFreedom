@@ -1,6 +1,7 @@
 package recpackage
 
 import (
+	"bytes"
 	"os"
 	"path/filepath"
 	"strings"
@@ -152,6 +153,12 @@ func TestCreateNativeInitializesWritePlanWithoutCreatingMedia(t *testing.T) {
 	if plan.WebcamVideoPath != filepath.Join(plan.Package.Dir, WebcamVideoFile) {
 		t.Fatalf("webcam write path = %q, want package webcam file", plan.WebcamVideoPath)
 	}
+	if plan.SystemAudioPath != filepath.Join(plan.Package.Dir, SystemAudioFile) {
+		t.Fatalf("system audio write path = %q, want package system audio file", plan.SystemAudioPath)
+	}
+	if plan.MicrophoneAudioPath != filepath.Join(plan.Package.Dir, MicrophoneAudioFile) {
+		t.Fatalf("microphone write path = %q, want package microphone file", plan.MicrophoneAudioPath)
+	}
 	if plan.AudioDiagnosticsPath != filepath.Join(plan.Package.Dir, AudioDiagnosticsFile) {
 		t.Fatalf("audio diagnostics path = %q, want package diagnostics file", plan.AudioDiagnosticsPath)
 	}
@@ -167,6 +174,12 @@ func TestCreateNativeInitializesWritePlanWithoutCreatingMedia(t *testing.T) {
 	if _, err := os.Stat(plan.WebcamVideoPath); err == nil {
 		t.Fatal("CreateNative() created webcam media before native backend wrote samples")
 	}
+	if _, err := os.Stat(plan.SystemAudioPath); err == nil {
+		t.Fatal("CreateNative() created system audio media before native backend wrote samples")
+	}
+	if _, err := os.Stat(plan.MicrophoneAudioPath); err == nil {
+		t.Fatal("CreateNative() created microphone media before native backend wrote samples")
+	}
 
 	manifest, err := service.ReadManifest(plan.Package.ManifestPath)
 	if err != nil {
@@ -175,7 +188,10 @@ func TestCreateNativeInitializesWritePlanWithoutCreatingMedia(t *testing.T) {
 	if manifest.Status != StatusRecording {
 		t.Fatalf("status = %q, want recording", manifest.Status)
 	}
-	if manifest.Media.ScreenVideoPath != ScreenVideoFile || manifest.Media.WebcamVideoPath != WebcamVideoFile {
+	if manifest.Media.ScreenVideoPath != ScreenVideoFile ||
+		manifest.Media.WebcamVideoPath != WebcamVideoFile ||
+		manifest.Media.SystemAudioPath != SystemAudioFile ||
+		manifest.Media.MicrophoneAudioPath != MicrophoneAudioFile {
 		t.Fatalf("media paths = %#v, want native package defaults", manifest.Media)
 	}
 	if manifest.Diagnostics.Mock {
@@ -312,6 +328,37 @@ func TestValidateReadyRequiresCameraSidecarWhenCameraEnabled(t *testing.T) {
 	}
 	if err := service.ValidateReady(plan.Package.ManifestPath); err != nil {
 		t.Fatalf("ValidateReady(webcam sidecar) error = %v", err)
+	}
+}
+
+func TestValidateReadyRequiresEnabledAudioSidecars(t *testing.T) {
+	service := NewService()
+	plan, err := service.CreateNative(t.TempDir(), CreateNativeRequest{
+		Backend: "screencapturekit",
+		Source:  ManifestSource{Type: "screen", ID: "cgdisplay:1"},
+		Audio:   ManifestAudio{System: true, Microphone: true},
+	})
+	if err != nil {
+		t.Fatalf("CreateNative() error = %v", err)
+	}
+	if err := os.WriteFile(plan.ScreenVideoPath, []byte("real screen media"), 0o644); err != nil {
+		t.Fatalf("WriteFile(screen) error = %v", err)
+	}
+
+	if err := service.ValidateReady(plan.Package.ManifestPath); err == nil || !strings.Contains(err.Error(), "systemAudioPath") {
+		t.Fatalf("ValidateReady(missing system audio) error = %v, want systemAudioPath error", err)
+	}
+	if err := os.WriteFile(plan.SystemAudioPath, bytes.Repeat([]byte{1}, 45), 0o644); err != nil {
+		t.Fatalf("WriteFile(system audio) error = %v", err)
+	}
+	if err := service.ValidateReady(plan.Package.ManifestPath); err == nil || !strings.Contains(err.Error(), "microphoneAudioPath") {
+		t.Fatalf("ValidateReady(missing microphone) error = %v, want microphoneAudioPath error", err)
+	}
+	if err := os.WriteFile(plan.MicrophoneAudioPath, bytes.Repeat([]byte{1}, 45), 0o644); err != nil {
+		t.Fatalf("WriteFile(microphone) error = %v", err)
+	}
+	if err := service.ValidateReady(plan.Package.ManifestPath); err != nil {
+		t.Fatalf("ValidateReady(audio sidecars) error = %v", err)
 	}
 }
 

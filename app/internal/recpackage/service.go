@@ -95,8 +95,15 @@ func (s *Service) CreateNative(videoDir string, req CreateNativeRequest) (Record
 	}
 
 	manifestCamera := normalizeCamera(req.Camera)
+	manifestAudio := normalizeAudio(req.Audio)
 	media := ManifestMedia{
 		ScreenVideoPath: ScreenVideoFile,
+	}
+	if manifestAudio.System {
+		media.SystemAudioPath = SystemAudioFile
+	}
+	if manifestAudio.Microphone {
+		media.MicrophoneAudioPath = MicrophoneAudioFile
 	}
 	if manifestCamera.Enabled {
 		media.WebcamVideoPath = WebcamVideoFile
@@ -109,7 +116,7 @@ func (s *Service) CreateNative(videoDir string, req CreateNativeRequest) (Record
 		Media:         media,
 		Source:        req.Source,
 		Recording:     recordingprofile.Normalize(req.Recording),
-		Audio:         normalizeAudio(req.Audio),
+		Audio:         manifestAudio,
 		Camera:        manifestCamera,
 		Diagnostics: ManifestDiagnostics{
 			Message: fmt.Sprintf("Native backend %q initialized the package; media writers must fill package-relative paths.", req.Backend),
@@ -130,6 +137,8 @@ func (s *Service) CreateNative(videoDir string, req CreateNativeRequest) (Record
 	return RecordingWritePlan{
 		Package:              pkg,
 		ScreenVideoPath:      filepath.Join(packageDir, ScreenVideoFile),
+		SystemAudioPath:      optionalAbsPackagePath(packageDir, manifest.Media.SystemAudioPath),
+		MicrophoneAudioPath:  optionalAbsPackagePath(packageDir, manifest.Media.MicrophoneAudioPath),
 		WebcamVideoPath:      optionalAbsPackagePath(packageDir, manifest.Media.WebcamVideoPath),
 		AudioDiagnosticsPath: filepath.Join(packageDir, AudioDiagnosticsFile),
 		VideoDiagnosticsPath: filepath.Join(packageDir, VideoDiagnosticsFile),
@@ -189,6 +198,16 @@ func (s *Service) ValidateReady(manifestPath string) error {
 	}
 	if manifest.Camera.Enabled {
 		if err := requireReadablePackageFile(packageDir, "webcamVideoPath", manifest.Media.WebcamVideoPath, false); err != nil {
+			return err
+		}
+	}
+	if manifest.Audio.System {
+		if err := requireReadablePackageFileMinSize(packageDir, "systemAudioPath", manifest.Media.SystemAudioPath, false, 45); err != nil {
+			return err
+		}
+	}
+	if manifest.Audio.Microphone {
+		if err := requireReadablePackageFileMinSize(packageDir, "microphoneAudioPath", manifest.Media.MicrophoneAudioPath, false, 45); err != nil {
 			return err
 		}
 	}
@@ -258,7 +277,7 @@ func (s *Service) WriteManifest(manifestPath string, manifest Manifest) error {
 	manifest.Recording = recordingprofile.Normalize(manifest.Recording)
 	manifest.Audio = normalizeAudio(manifest.Audio)
 	manifest.Camera = normalizeCamera(manifest.Camera)
-	manifest.Media = normalizeMedia(manifest.Media, manifest.Camera)
+	manifest.Media = normalizeMedia(manifest.Media, manifest.Audio, manifest.Camera)
 	manifest.Diagnostics = normalizeDiagnostics(manifest)
 	if err := validateManifest(manifest); err != nil {
 		return err
@@ -365,7 +384,16 @@ func normalizeCamera(camera ManifestCamera) ManifestCamera {
 	return camera
 }
 
-func normalizeMedia(media ManifestMedia, camera ManifestCamera) ManifestMedia {
+func normalizeMedia(media ManifestMedia, manifestAudio ManifestAudio, camera ManifestCamera) ManifestMedia {
+	if media.ScreenVideoPath == "" {
+		media.ScreenVideoPath = ScreenVideoFile
+	}
+	if !manifestAudio.System {
+		media.SystemAudioPath = ""
+	}
+	if !manifestAudio.Microphone {
+		media.MicrophoneAudioPath = ""
+	}
 	if !camera.Enabled {
 		media.WebcamVideoPath = ""
 		media.WebcamStartOffsetMs = 0
@@ -386,8 +414,8 @@ func normalizeDiagnostics(manifest Manifest) ManifestDiagnostics {
 		syncDiagnostics.TimelineBase = TimelineBaseMedia
 	}
 	syncDiagnostics.Screen = normalizeTrackDiagnostics(syncDiagnostics.Screen, manifest.Media.ScreenVideoPath != "", manifest.Media.ScreenVideoPath)
-	syncDiagnostics.SystemAudio = normalizeTrackDiagnostics(syncDiagnostics.SystemAudio, manifest.Audio.System, "")
-	syncDiagnostics.Microphone = normalizeTrackDiagnostics(syncDiagnostics.Microphone, manifest.Audio.Microphone, "")
+	syncDiagnostics.SystemAudio = normalizeTrackDiagnostics(syncDiagnostics.SystemAudio, manifest.Audio.System, manifest.Media.SystemAudioPath)
+	syncDiagnostics.Microphone = normalizeTrackDiagnostics(syncDiagnostics.Microphone, manifest.Audio.Microphone, manifest.Media.MicrophoneAudioPath)
 	syncDiagnostics.Webcam = normalizeTrackDiagnostics(syncDiagnostics.Webcam, manifest.Camera.Enabled, manifest.Media.WebcamVideoPath)
 	if syncDiagnostics.Webcam.Enabled && manifest.Media.WebcamStartOffsetMs != 0 && syncDiagnostics.Webcam.StartOffsetMs == 0 {
 		syncDiagnostics.Webcam.StartOffsetMs = int64(manifest.Media.WebcamStartOffsetMs)
@@ -420,6 +448,12 @@ func validateManifest(manifest Manifest) error {
 		return errors.New("manifest status is required")
 	}
 	if err := validatePackageRelativePath("screenVideoPath", manifest.Media.ScreenVideoPath); err != nil {
+		return err
+	}
+	if err := validatePackageRelativePath("systemAudioPath", manifest.Media.SystemAudioPath); err != nil {
+		return err
+	}
+	if err := validatePackageRelativePath("microphoneAudioPath", manifest.Media.MicrophoneAudioPath); err != nil {
 		return err
 	}
 	if err := validatePackageRelativePath("webcamVideoPath", manifest.Media.WebcamVideoPath); err != nil {
@@ -509,6 +543,10 @@ func validatePackageRelativePath(field string, value string) error {
 }
 
 func requireReadablePackageFile(packageDir string, field string, relativePath string, allowMockMarker bool) error {
+	return requireReadablePackageFileMinSize(packageDir, field, relativePath, allowMockMarker, 1)
+}
+
+func requireReadablePackageFileMinSize(packageDir string, field string, relativePath string, allowMockMarker bool, minBytes int64) error {
 	relativePath = strings.TrimSpace(relativePath)
 	if relativePath == "" {
 		return fmt.Errorf("%s is required before package can be marked ready", field)
@@ -525,7 +563,7 @@ func requireReadablePackageFile(packageDir string, field string, relativePath st
 	if err != nil {
 		return fmt.Errorf("%s %q is not readable: %w", field, relativePath, err)
 	}
-	if info.IsDir() || info.Size() == 0 {
+	if info.IsDir() || info.Size() < minBytes {
 		return fmt.Errorf("%s %q is not readable media", field, relativePath)
 	}
 	return nil

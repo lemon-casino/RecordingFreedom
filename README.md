@@ -93,10 +93,13 @@ From `app`:
 ```bash
 go test ./...
 go run ./cmd/preview-smoke
+go run ./cmd/audio-smoke -duration=3s -keep
 wails3 build
 ```
 
 `go run ./cmd/preview-smoke -keep` keeps the generated temporary data root so the `.rfrec` package can be inspected manually.
+
+`go run ./cmd/audio-smoke -duration=3s -keep` records real platform audio into a temporary `data/video/audio-smoke-*.rfrec/` folder. On Windows today, microphone capture writes `microphone.wav` and `audio-diagnostics.json`; RNNoise requires a cgo-enabled build and a C compiler.
 
 ## Preview Release
 
@@ -144,6 +147,6 @@ User settings are persisted in:
 1. Validate CI on the new GitHub repository.
 2. Replace queued media-device placeholders with native macOS/Windows/Linux audio and camera enumeration.
 3. Implement macOS ScreenCaptureKit recording.
-4. Implement Windows WGC/WASAPI recording.
-5. Port RNNoise microphone enhancement into the new Go/native audio pipeline.
+4. Finish Windows WGC recording and connect the implemented WASAPI audio session to the real backend.
+5. Verify RNNoise native DSP in cgo CI/toolchains and expose it through preflight/UI.
 6. Add camera sidecar recording and later PIP preview/export.

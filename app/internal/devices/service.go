@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"runtime"
 	"strings"
+
+	"github.com/lemon-casino/RecordingFreedom/app/internal/audio/rnnoise"
 )
 
 type MediaDeviceProvider interface {
@@ -203,13 +205,24 @@ func defaultMediaDevice(deviceType MediaDeviceType, reason string) MediaDevice {
 }
 
 func defaultAudioEnhancement(reason string) AudioEnhancement {
-	return AudioEnhancement{
+	enhancement := AudioEnhancement{
 		Engine:            "rnnoise",
 		AppliesTo:         "microphone-only",
 		Available:         false,
 		Capability:        CapabilityNativeQueued,
 		UnavailableReason: reason,
 	}
+	if rnnoise.Available() {
+		enhancement.Engine = "rnnoise-native"
+		enhancement.Available = true
+		enhancement.Capability = CapabilityEnumerated
+		enhancement.UnavailableReason = ""
+		return enhancement
+	}
+	if strings.TrimSpace(enhancement.UnavailableReason) == "" {
+		enhancement.UnavailableReason = "RNNoise native DSP requires a cgo-enabled build."
+	}
+	return enhancement
 }
 
 func platformBackendMessage(platform string) string {

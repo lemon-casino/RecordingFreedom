@@ -1,6 +1,10 @@
 package capture
 
-import "runtime"
+import (
+	"runtime"
+
+	"github.com/lemon-casino/RecordingFreedom/app/internal/audio/rnnoise"
+)
 
 type Service struct{}
 
@@ -68,7 +72,7 @@ func systemAudioCapability(platform string) Capability {
 	case "darwin":
 		return queued("system-audio", "System Audio", "ScreenCaptureKit", PermissionScreenRecording, "ScreenCaptureKit system audio capture is queued.")
 	case "windows":
-		return queued("system-audio", "System Audio", "WASAPI loopback", PermissionNotRequired, "WASAPI loopback capture is queued.")
+		return available("system-audio", "System Audio", "WASAPI loopback", PermissionNotRequired, "WASAPI loopback capture source is implemented; active samples require system playback.")
 	case "linux":
 		return queued("system-audio", "System Audio", "PipeWire/PulseAudio", PermissionUnknown, "PipeWire monitor source enumeration and capture are queued.")
 	default:
@@ -81,7 +85,7 @@ func microphoneCapability(platform string) Capability {
 	case "darwin":
 		return queued("microphone", "Microphone", "CoreAudio", PermissionMicrophone, "CoreAudio microphone capture is queued.")
 	case "windows":
-		return queued("microphone", "Microphone", "WASAPI capture", PermissionNotRequired, "WASAPI microphone capture is queued.")
+		return available("microphone", "Microphone", "WASAPI capture", PermissionNotRequired, "WASAPI microphone PCM capture is implemented and writes package audio sidecars.")
 	case "linux":
 		return queued("microphone", "Microphone", "PipeWire/PulseAudio", PermissionUnknown, "PipeWire microphone capture is queued.")
 	default:
@@ -90,6 +94,9 @@ func microphoneCapability(platform string) Capability {
 }
 
 func microphoneEnhancementCapability() Capability {
+	if rnnoise.Available() {
+		return available("microphone-enhancement", "Microphone RNNoise", "RNNoise native DSP", PermissionNotRequired, "RNNoise native DSP is linked in this build for 48kHz mono microphone frames.")
+	}
 	return queued("microphone-enhancement", "Microphone RNNoise", "RNNoise native DSP", PermissionNotRequired, "RNNoise frame contract is implemented for microphone-only PCM; native DSP is queued behind microphone capture.")
 }
 

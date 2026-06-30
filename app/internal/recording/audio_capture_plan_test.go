@@ -50,8 +50,8 @@ func TestCreateAudioCaptureConfigKeepsEnabledAudioContract(t *testing.T) {
 	if config.DiagnosticsPath != filepath.Join(plan.Package.Dir, recpackage.AudioDiagnosticsFile) {
 		t.Fatalf("diagnostics path = %q, want package audio diagnostics path", config.DiagnosticsPath)
 	}
-	if config.SystemAudioOutputPath != plan.ScreenVideoPath || config.MicrophoneAudioPath != plan.ScreenVideoPath {
-		t.Fatalf("audio output paths = system:%q mic:%q screen:%q", config.SystemAudioOutputPath, config.MicrophoneAudioPath, plan.ScreenVideoPath)
+	if config.SystemAudioOutputPath != plan.SystemAudioPath || config.MicrophoneAudioPath != plan.MicrophoneAudioPath {
+		t.Fatalf("audio output paths = system:%q mic:%q want system:%q mic:%q", config.SystemAudioOutputPath, config.MicrophoneAudioPath, plan.SystemAudioPath, plan.MicrophoneAudioPath)
 	}
 	if !config.SystemAudioIsNeverDenoised {
 		t.Fatal("system audio denoise bypass policy was not carried into config")
@@ -63,6 +63,8 @@ func TestCreateAudioCaptureConfigClearsDisabledAudio(t *testing.T) {
 	plan := recpackage.RecordingWritePlan{
 		Package:              recpackage.Package{Dir: packageDir},
 		ScreenVideoPath:      filepath.Join(packageDir, recpackage.ScreenVideoFile),
+		SystemAudioPath:      filepath.Join(packageDir, recpackage.SystemAudioFile),
+		MicrophoneAudioPath:  filepath.Join(packageDir, recpackage.MicrophoneAudioFile),
 		AudioDiagnosticsPath: filepath.Join(packageDir, recpackage.AudioDiagnosticsFile),
 	}
 

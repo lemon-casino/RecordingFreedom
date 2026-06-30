@@ -32,6 +32,8 @@
   "status": "recording",
   "media": {
     "screenVideoPath": "screen.mp4",
+    "systemAudioPath": "system-audio.wav",
+    "microphoneAudioPath": "microphone.wav",
     "webcamVideoPath": "webcam.mov",
     "webcamStartOffsetMs": 120
   },
@@ -78,7 +80,7 @@
       },
       "systemAudio": {
         "enabled": true,
-        "path": "screen.mp4",
+        "path": "system-audio.wav",
         "clock": "media-timestamp",
         "startOffsetMs": 0,
         "endOffsetMs": 120000,
@@ -89,7 +91,7 @@
       },
       "microphone": {
         "enabled": true,
-        "path": "screen.mp4",
+        "path": "microphone.wav",
         "clock": "media-timestamp",
         "startOffsetMs": 0,
         "endOffsetMs": 120000,
@@ -151,6 +153,7 @@ manifest 里所有媒体路径必须是包内相对路径。
 真实 native backend 开始采样前必须调用 `recording.CreateNativeWritePlan()` 初始化包和写盘计划；该 helper 内部统一归一化 `StartRequest` 并调用 `recpackage.CreateNative()`：
 
 - manifest 先写 `recording`，`screenVideoPath` 固定为 `screen.mp4`。
+- 系统声音开启时 `systemAudioPath` 固定为 `system-audio.wav`；麦克风开启时 `microphoneAudioPath` 固定为 `microphone.wav`。
 - 摄像头开启时 `webcamVideoPath` 固定为 `webcam.mov`；摄像头关闭时不写 webcam 路径。
 - `cache/` 和 `exports/` 目录会提前创建。
 - 返回的绝对路径只允许指向当前 `.rfrec` 包内的 screen、webcam、audio diagnostics、video diagnostics 和 cache/export 目录。
@@ -180,6 +183,7 @@ Windows：
 - 系统声音使用 WASAPI loopback。
 - 麦克风使用 WASAPI capture。
 - 当前已通过 MMDevice API 枚举 Windows WASAPI render/capture endpoint，并保留 `system-audio:default` / `microphone:default` 作为稳定默认设备 ID；真实 endpoint id 写入 `NativeID`。
+- 当前已新增纯 Go WASAPI capture source：麦克风流会 downmix/resample 为 `48kHz / mono` 后写入 `microphone.wav`；系统声音 loopback source 可以启动并写入 `system-audio.wav`，本轮无活动系统播放时 smoke 未收到 system audio packet。
 - 摄像头使用 Media Foundation，必要时兼容 DirectShow。
 - 编码优先 Media Foundation H.264/AAC，后续导出可接 FFmpeg。
 
@@ -231,9 +235,12 @@ Linux：
 - `Enhancer` 已输出可审计统计：processed frames、processed samples、pending samples、reset count、bypassed samples、rejected frames 和 last error。
 - `Pipeline` 已定义真实音频采集边界：平台后端推入 `TimedPCMBuffer`，pipeline 按配置区分 system audio、microphone 和 RNNoise，输出 `ProcessedBuffer` 并累计 diagnostics。
 - `Diagnostics` / `WriteDiagnostics()` 已定义 `audio-diagnostics.json` 合同，记录 target format、system audio、microphone、enhancement 和 mixer 统计。
-- `recording.CreateAudioCaptureConfig()` 已把 `StartRequest + RecordingWritePlan` 转成统一 `audio.CaptureConfig`，真实后端不需要重复拼接设备、RNNoise、gain 和 diagnostics 路径。
+- `WAVSink` 已定义首版 audio sidecar 写盘策略：系统声音写 `system-audio.wav`，麦克风写 `microphone.wav`，两者仍位于 `.rfrec` 包内。
+- ready 门禁会拒绝只有 44-byte WAV header 的音频 sidecar；启用的音频流必须写入至少一个样本，避免无 packet 的系统声音被误标为真实音频。
+- `CaptureSession` 已把 `CaptureSource -> Pipeline -> WAVSink -> audio-diagnostics.json` 串成可复用运行时，后续 ScreenCaptureKit/WGC/PipeWire backend 只需要启动同一个 session。
+- `recording.CreateAudioCaptureConfig()` 已把 `StartRequest + RecordingWritePlan` 转成统一 `audio.CaptureConfig`，真实后端不需要重复拼接设备、RNNoise、gain、audio sidecar 和 diagnostics 路径。
 
-真实 RNNoise native DSP 尚未接入；当前合同用于保证后续接入时不改变音频安全边界。
+RNNoise native DSP 已迁移为 `internal/audio/rnnoise` cgo 包：cgo 构建会链接旧项目 RNNoise + `LikelyVoiceEnhancement`，非 cgo 构建返回明确 unavailable，不会假装降噪已生效。本机 Windows 环境缺少 `gcc`，因此本轮只验证了非 cgo fallback；CI 的 Linux/macOS cgo test 用于验证 native 包编译。
 
 ## 音画同步规则
 

@@ -4,7 +4,7 @@
 
 本文档把初版 preview 之后尚未完成的工作拆成可执行任务。当前策略调整为：先推进真实音频采集与 RNNoise 降噪，再继续屏幕录制、摄像头画中画、导出和正式发布链路。
 
-当前 `v0.1.0-preview.6` 只证明 UI Shell、设置、语言、图标、mock `.rfrec` 包、`data/video` 写盘结构和全平台 preview build 可用。它不能证明真实系统声音、麦克风、RNNoise DSP、ScreenCaptureKit、Windows.Graphics.Capture、PipeWire、摄像头 sidecar 或导出已完成。
+当前 `v0.1.0-preview.6` 只证明 UI Shell、设置、语言、图标、mock `.rfrec` 包、`data/video` 写盘结构和全平台 preview build 可用。后续代码已新增 Windows WASAPI 麦克风真实采集 smoke 和 RNNoise native wrapper，但尚未接入完整 screen recording backend，因此不能对外宣称完整真实录制已完成。
 
 ## P0-AUDIO：真实音频与 RNNoise 降噪
 
@@ -25,13 +25,14 @@
 
 ### A0 音频后端边界
 
-状态：已完成基础代码合同，尚未接入真实平台设备源。
+状态：已完成基础代码合同，并新增 `CaptureSession`、`WAVSink`、音频 sidecar 写盘路径和 Windows WASAPI source 复用入口。
 
 交付：
 
 - 新增 `internal/audio` 或 `internal/recording` 下的 native audio capture 接口，区分 system audio、microphone、enhancer、mixer、diagnostics。
 - 后端必须能被 ScreenCaptureKit/WASAPI/PipeWire 复用，不把某个平台 API 写进 `RecordingService` 主流程。
 - 已落地 `audio.Pipeline`、`audio.Diagnostics`、`audio.WriteDiagnostics()`、`recording.CreateAudioCaptureConfig()` 和对应单元测试。
+- 已落地 `audio.CaptureSession`、`audio.NewNativeCaptureSession()`、`audio.WAVSink`、`system-audio.wav` / `microphone.wav` sidecar 合同和 ready 前音频 sidecar 校验。
 
 验收：
 
@@ -57,6 +58,8 @@
 
 ### A2 系统声音采集
 
+状态：Windows WASAPI loopback source 已实现并可启动；本轮在无活动系统播放的 smoke 中未收到 system audio packet，仍需带播放源验证真实样本和长录同步。macOS/Linux 待接入。
+
 交付：
 
 - macOS：优先使用 ScreenCaptureKit system audio；若当前 macOS 版本或权限不支持，返回 blocked reason。
@@ -72,10 +75,12 @@
 
 ### A3 麦克风采集
 
+状态：Windows WASAPI 麦克风 PCM 采集已完成并本机 smoke 验证；macOS CoreAudio/AVFoundation 与 Linux PipeWire/PulseAudio 待接入。
+
 交付：
 
 - macOS：AVFoundation/CoreAudio 麦克风 PCM 采集。
-- Windows：WASAPI capture 麦克风 PCM 采集。
+- Windows：WASAPI capture 麦克风 PCM 采集。已完成，`go run ./cmd/audio-smoke -duration=1s -keep` 生成了非空 `microphone.wav` 和 `audio-diagnostics.json`。
 - Linux：PipeWire/PulseAudio 麦克风 PCM 采集。
 - 采集层输出统一 PCM frame，进入音频处理链路。
 
@@ -86,6 +91,8 @@
 - 暂停/继续不会让麦克风时间线漂移。
 
 ### A4 RNNoise native DSP 接入
+
+状态：RNNoise C 源码和旧项目 `LikelyVoiceEnhancement` 已迁移为 `internal/audio/rnnoise` cgo 包；非 cgo 构建会明确返回 unavailable。本机 Windows 缺少 `gcc`，native cgo 实编译需由 CI 或安装工具链后验证。
 
 交付：
 
@@ -101,6 +108,8 @@
 - `audio-diagnostics.json` 记录 RNNoise enabled、processedFrames、droppedFrames、resetCount、sampleRate、channels。
 
 ### A5 音频混音与写盘
+
+状态：首版写盘策略已确定为包内 WAV sidecar：系统声音 `system-audio.wav`，麦克风 `microphone.wav`；还未完成与真实 screen recording backend 的 ready package 集成，也未做最终混音/AAC/mux。
 
 交付：
 
@@ -234,11 +243,11 @@
 
 1. A0 音频后端边界。已完成基础代码合同。
 2. A1 真实音频设备枚举。Windows 已完成，下一步补 macOS/Linux。
-3. A3 麦克风采集。
-4. A4 RNNoise native DSP。
-5. A2 系统声音采集。
+3. A3 麦克风采集。Windows 已完成并 smoke 验证，下一步补 macOS/Linux。
+4. A4 RNNoise native DSP。wrapper 已迁移，下一步补 cgo CI/工具链验证和真实 RNNoise smoke。
+5. A2 系统声音采集。Windows source 已实现，下一步做有播放源的 loopback 样本验证和长录同步。
 6. A5 音频混音与写盘。
 7. A6 预检、UI 和设置联动。
 8. A7 三平台手动验证矩阵。
 
-完成 A0-A7 前，不对外宣称 RecordingFreedom 已支持真实音频录制或真实 RNNoise 降噪。
+完成 A0-A7 并接入真实 screen recording backend 前，不对外宣称 RecordingFreedom 的正式录制流程已支持完整真实音频录制或真实 RNNoise 降噪。

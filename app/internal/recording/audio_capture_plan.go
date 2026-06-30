@@ -24,8 +24,8 @@ func CreateAudioCaptureConfig(backendID string, req StartRequest, plan recpackag
 		},
 		NoiseSuppression:           normalized.Audio.Microphone && normalized.Audio.NoiseSuppression,
 		MicrophoneGain:             normalized.Audio.MicrophoneGain,
-		SystemAudioOutputPath:      plan.ScreenVideoPath,
-		MicrophoneAudioPath:        plan.ScreenVideoPath,
+		SystemAudioOutputPath:      plan.SystemAudioPath,
+		MicrophoneAudioPath:        plan.MicrophoneAudioPath,
 		DiagnosticsPath:            plan.AudioDiagnosticsPath,
 		SystemAudioIsNeverDenoised: true,
 	}
