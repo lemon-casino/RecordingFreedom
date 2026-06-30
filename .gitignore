@@ -22,8 +22,8 @@ app/bin/
 !app/build/Taskfile.yml
 !app/build/config.yml
 !app/build/appicon.png
-!app/build/appicon.icon/
-!app/build/appicon.icon/**
+!app/build/icons/
+!app/build/icons/**
 !app/build/docker/
 !app/build/docker/**
 !app/build/darwin/

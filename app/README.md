@@ -37,6 +37,14 @@ Run the Wails app:
 wails3 dev
 ```
 
+Regenerate app icons from a source image:
+
+```bash
+go run ./cmd/icon-build -source "D:\图库\43574409.png" -sizes "16,24,32,48,64,128,256,512,1024"
+```
+
+Use `-skip-wails` to generate only `build/icons/icon-*.png`, `build/appicon.png`, and frontend favicon PNGs.
+
 Build frontend assets:
 
 ```bash

@@ -4,6 +4,7 @@ go 1.25.0
 
 require (
 	github.com/wailsapp/wails/v3 v3.0.0-alpha2.109
+	golang.org/x/image v0.40.0
 	golang.org/x/sys v0.43.0
 )
 

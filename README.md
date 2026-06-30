@@ -67,6 +67,17 @@ wails3 dev
 
 The desktop shell creates a tray icon. Clicking the tray icon toggles the capsule recorder window; right-click opens a menu with show, hide, and quit actions.
 
+## Icons
+
+Regenerate all preview icon sizes from a source image:
+
+```bash
+cd app
+go run ./cmd/icon-build -source "D:\图库\43574409.png" -sizes "16,24,32,48,64,128,256,512,1024"
+```
+
+The command writes `build/icons/icon-*.png`, updates the Wails source icon at `build/appicon.png`, updates the frontend favicon, and regenerates the Windows `.ico` and macOS `.icns` files. Use `-skip-wails` when Wails CLI is not installed and only PNG outputs are needed.
+
 ## Verification
 
 From `app/frontend`:
@@ -90,8 +101,8 @@ wails3 build
 After `RecordingFreedom/` becomes the new repository root, pushing a `v*` tag publishes a GitHub Release with Windows, macOS, and Linux preview binaries plus SHA256 files:
 
 ```bash
-git tag v0.1.0-preview.3
-git push origin v0.1.0-preview.3
+git tag v0.1.0-preview.4
+git push origin v0.1.0-preview.4
 ```
 
 This preview release is for UI shell, settings, mock package, and full-platform build verification. It is not a signed installer release, and it does not claim real native screen/audio/camera capture yet. See [docs/04-ci-release-plan.md](docs/04-ci-release-plan.md).

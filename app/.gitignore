@@ -17,8 +17,8 @@ data/*
 !build/Taskfile.yml
 !build/config.yml
 !build/appicon.png
-!build/appicon.icon/
-!build/appicon.icon/**
+!build/icons/
+!build/icons/**
 !build/docker/
 !build/docker/**
 !build/darwin/
