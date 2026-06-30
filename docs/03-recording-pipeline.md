@@ -240,7 +240,7 @@ Linux：
 - `CaptureSession` 已把 `CaptureSource -> Pipeline -> WAVSink -> audio-diagnostics.json` 串成可复用运行时，后续 ScreenCaptureKit/WGC/PipeWire backend 只需要启动同一个 session。
 - `recording.CreateAudioCaptureConfig()` 已把 `StartRequest + RecordingWritePlan` 转成统一 `audio.CaptureConfig`，真实后端不需要重复拼接设备、RNNoise、gain、audio sidecar 和 diagnostics 路径。
 
-RNNoise native DSP 已迁移为 `internal/audio/rnnoise` cgo 包：cgo 构建会链接旧项目 RNNoise + `LikelyVoiceEnhancement`，非 cgo 构建返回明确 unavailable，不会假装降噪已生效。本机 Windows 环境缺少 `gcc`，因此本轮只验证了非 cgo fallback；CI 的 Linux/macOS cgo test 用于验证 native 包编译。
+RNNoise native DSP 已迁移为 `internal/audio/rnnoise` cgo 包：cgo 构建会链接旧项目 RNNoise + `LikelyVoiceEnhancement`，非 cgo 构建返回明确 unavailable，不会假装降噪已生效。本机 Windows 环境缺少 `gcc`，因此本轮只验证了非 cgo fallback；CI 的 Linux cgo test 用于验证 native 包编译。当前 UI capability 仍保持 queued，直到 RNNoise 接入完整 app recording backend。
 
 ## 音画同步规则
 

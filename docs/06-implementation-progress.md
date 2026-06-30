@@ -53,6 +53,7 @@
   - `PackageService.ValidateReady()` 已在非 mock 包中校验已启用音频 sidecar：系统声音或麦克风开启时，对应 WAV 必须存在、可读且非 0 字节。
   - Windows 已新增纯 Go WASAPI capture source：麦克风采集会 downmix/resample 为 `48kHz / mono`，系统声音使用 loopback source，二者都走同一 audio pipeline 和 WAV sink。
   - 新增 `internal/audio/rnnoise`：迁移 RNNoise C 源码和旧项目 `LikelyVoiceEnhancement` 为 cgo native wrapper；非 cgo 构建返回明确 unavailable，不做假降噪。
+  - RNNoise UI/preflight capability 当前仍保持 queued；native wrapper 只在 `audio-smoke` 或后续真实 audio backend 显式使用时编译，避免设备枚举和能力矩阵路径过早耦合 native DSP。
   - 新增 `cmd/audio-smoke`：可在不启动 Wails UI 的情况下真实启动平台音频 source，写入 `<DataRoot>/data/video/audio-smoke-*.rfrec/` 下的 WAV sidecar 和 `audio-diagnostics.json`。
   - 新增 `internal/pip` 画中画 preset 合同：`off`、`bottom-right`、`bottom-left`、`free`，并提供基础 overlay layout 计算。
   - 新增 `internal/recordingprofile` 录制参数合同：`standard/balanced/high`、`24/30/60 FPS`、`captureCursor`、`countdownSeconds`，供 settings、recording request 和 manifest 共用。

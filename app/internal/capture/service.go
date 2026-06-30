@@ -1,10 +1,6 @@
 package capture
 
-import (
-	"runtime"
-
-	"github.com/lemon-casino/RecordingFreedom/app/internal/audio/rnnoise"
-)
+import "runtime"
 
 type Service struct{}
 
@@ -94,10 +90,7 @@ func microphoneCapability(platform string) Capability {
 }
 
 func microphoneEnhancementCapability() Capability {
-	if rnnoise.Available() {
-		return available("microphone-enhancement", "Microphone RNNoise", "RNNoise native DSP", PermissionNotRequired, "RNNoise native DSP is linked in this build for 48kHz mono microphone frames.")
-	}
-	return queued("microphone-enhancement", "Microphone RNNoise", "RNNoise native DSP", PermissionNotRequired, "RNNoise frame contract is implemented for microphone-only PCM; native DSP is queued behind microphone capture.")
+	return queued("microphone-enhancement", "Microphone RNNoise", "RNNoise native DSP", PermissionNotRequired, "RNNoise native wrapper is implemented for the audio pipeline, but it is not wired into the app recording backend yet.")
 }
 
 func cameraSidecarCapability(platform string) Capability {
