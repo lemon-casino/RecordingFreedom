@@ -126,6 +126,10 @@
   - 默认使用临时 data root，不污染开发目录；可通过 `-keep` 保留生成包。
   - 验证 settings 持久化、`data/video` storage health、preflight、mock start/pause/resume/stop、ready manifest、`screen.mock.txt` 非空、RNNoise/camera/PIP manifest 合同和恢复扫描。
 - 新增 `RecordingFreedom/README.md`，用于新仓库根目录说明、开发命令、验证命令和 roadmap。
+- 已在 GitHub runner 上验证 preview release 链路：
+  - `v0.1.0-preview.4` 的 Release Gate、Windows build、macOS build、Linux build 和 Publish GitHub Release 均已通过。
+  - GitHub Release 已产出 Windows x64、macOS arm64、Linux x64 三个平台 preview 二进制和对应 SHA256SUMS。
+  - 后续 preview tag 会自动标记为 GitHub prerelease。
 
 ## 验证结果
 
@@ -242,7 +246,6 @@ RecordingFreedom/app/bin/recordingfreedom.exe
 
 - 真实 ScreenCaptureKit 录制。
 - 真实 native writer 按 `recording.CreateNativeWritePlan()` 返回路径持续写入 `screen.mp4`。
-- macOS CoreGraphics source enumeration 尚未在真实 macOS runner 上执行验证。
 - 真实 Windows.Graphics.Capture 录制。
 - 真实 PipeWire / XDG Portal 录制。
 - 真实 CoreAudio / WASAPI / PipeWire 音频设备枚举；当前只完成 `MediaDeviceProvider` 替换边界和 queued fallback。
@@ -252,7 +255,6 @@ RecordingFreedom/app/bin/recordingfreedom.exe
 - 真实 PIP 预览与导出。
 - 真实 FFmpeg/原生流式导出执行；当前只完成导出计划和路径/同步/PIP 校验合同。
 - 真实音画同步时间戳采集和容器级媒体 probe；当前只完成 manifest 诊断合同、mock 标记、ready 前非 0 字节媒体门禁。
-- GitHub Actions 尚未在 GitHub runner 上真实执行。
 
 ## 已知提示
 
@@ -262,9 +264,7 @@ RecordingFreedom/app/bin/recordingfreedom.exe
 
 ## 下一步
 
-1. 把 `RecordingFreedom/` 推送为 `lemon-casino/RecordingFreedom.git` 的仓库根目录，并启用 Actions 验证 Windows/macOS/Linux runner 的 Wails build 依赖。
-2. 补齐 macOS ScreenCaptureKit source enumeration，替换当前 macOS `native-backend-queued` 占位。
-3. 在 macOS runner 或真实 macOS 本机验证 `darwin && cgo` CoreGraphics 源枚举和 `CaptureService` capability 返回。
-4. 在 `MediaDeviceProvider` 后面接入真实 native 枚举：系统声音、麦克风、RNNoise 能力状态、摄像头。
-5. 开始 macOS ScreenCaptureKit 后端设计与最小可录制实现。
-6. 把 release workflow 从 preview executable 升级为正式安装包、签名和公证流水线。
+1. 补齐 macOS ScreenCaptureKit source enumeration，替换当前 macOS `native-backend-queued` 占位。
+2. 在 `MediaDeviceProvider` 后面接入真实 native 枚举：系统声音、麦克风、RNNoise 能力状态、摄像头。
+3. 开始 macOS ScreenCaptureKit 后端设计与最小可录制实现。
+4. 把 release workflow 从 preview executable 升级为正式安装包、签名和公证流水线。

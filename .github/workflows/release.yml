@@ -215,10 +215,15 @@ jobs:
           - Signed installers, notarization, or Linux packages.
           NOTES
 
+          release_flags=(--title "${title}" --notes-file release-notes.md)
+          if [[ "${TAG_NAME}" == *preview* || "${TAG_NAME}" == *alpha* || "${TAG_NAME}" == *beta* || "${TAG_NAME}" == *rc* ]]; then
+            release_flags+=(--prerelease)
+          fi
+
           if gh release view "${TAG_NAME}" >/dev/null 2>&1; then
-            gh release edit "${TAG_NAME}" --title "${title}" --notes-file release-notes.md
+            gh release edit "${TAG_NAME}" "${release_flags[@]}"
           else
-            gh release create "${TAG_NAME}" --title "${title}" --notes-file release-notes.md
+            gh release create "${TAG_NAME}" "${release_flags[@]}"
           fi
 
           gh release upload "${TAG_NAME}" "${assets[@]}" --clobber

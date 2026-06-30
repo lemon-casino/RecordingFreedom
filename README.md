@@ -103,11 +103,11 @@ wails3 build
 After `RecordingFreedom/` becomes the new repository root, pushing a `v*` tag publishes a GitHub Release with Windows, macOS, and Linux preview binaries plus SHA256 files:
 
 ```bash
-git tag v0.1.0-preview.4
-git push origin v0.1.0-preview.4
+git tag v0.1.0-preview.5
+git push origin v0.1.0-preview.5
 ```
 
-This preview release is for UI shell, settings, mock package, and full-platform build verification. It is not a signed installer release, and it does not claim real native screen/audio/camera capture yet. See [docs/04-ci-release-plan.md](docs/04-ci-release-plan.md).
+Preview tags are published as GitHub prereleases. This preview release is for UI shell, settings, mock package, and full-platform build verification. It is not a signed installer release, and it does not claim real native screen/audio/camera capture yet. See [docs/04-ci-release-plan.md](docs/04-ci-release-plan.md).
 
 ## Data Directory
 
