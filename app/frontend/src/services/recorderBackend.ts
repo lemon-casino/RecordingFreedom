@@ -270,6 +270,14 @@ export async function cancelRegionSelector(): Promise<RegionSelectionResult> {
   }
 }
 
+export async function hideRegionFrame(): Promise<void> {
+  try {
+    await RecordingFreedomService.HideRegionFrame()
+  } catch (error) {
+    console.info('Using browser region frame hide fallback:', error)
+  }
+}
+
 export async function showScreenIndicator(sourceId: string): Promise<ScreenIndicatorResult | null> {
   try {
     return fromBoundScreenIndicatorResult(await RecordingFreedomService.ShowScreenIndicator(toBoundScreenIndicatorRequest(sourceId)))

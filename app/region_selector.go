@@ -46,6 +46,10 @@ type RegionSelectionResult struct {
 	Error     string                `json:"error,omitempty"`
 }
 
+type RegionFrameState struct {
+	Bounds RegionRect `json:"bounds"`
+}
+
 func (s *RecordingFreedomService) ShowRegionSelector() (RegionSelectionSession, error) {
 	if recorderIsActive(s.recorder.State()) {
 		return RegionSelectionSession{}, errors.New("cannot select a region while recording is active")
@@ -122,6 +126,7 @@ func (s *RecordingFreedomService) CompleteRegionSelection(req RegionSelectionReq
 		Source:    source,
 		Geometry:  regionRectFromAppRect(captureRect),
 	}
+	_ = s.showRegionFrame(absoluteDIP)
 	s.emitRegionSelection(result)
 	if s.regionOverlay != nil {
 		s.regionOverlay.Hide()
@@ -144,6 +149,36 @@ func (s *RecordingFreedomService) CancelRegionSelection() RegionSelectionResult 
 		s.regionOverlay.Hide()
 	}
 	return result
+}
+
+func (s *RecordingFreedomService) HideRegionFrame() error {
+	if s.regionFrame == nil {
+		return nil
+	}
+	s.regionFrame.Hide()
+	return nil
+}
+
+func (s *RecordingFreedomService) showRegionFrame(bounds application.Rect) error {
+	if s.regionFrame == nil {
+		return nil
+	}
+	if bounds.Width <= 0 || bounds.Height <= 0 {
+		return nil
+	}
+	state := RegionFrameState{Bounds: regionRectFromAppRect(bounds)}
+	s.regionFrame.SetIgnoreMouseEvents(true)
+	s.regionFrame.SetAlwaysOnTop(true)
+	s.regionFrame.SetBounds(bounds)
+	s.regionFrame.Show()
+	s.regionFrame.SetBounds(bounds)
+	if payload, err := json.Marshal(state); err == nil {
+		s.regionFrame.ExecJS(fmt.Sprintf(
+			"window.__RF_REGION_FRAME__=%s;window.dispatchEvent(new CustomEvent('rf-region-frame',{detail:window.__RF_REGION_FRAME__}));",
+			string(payload),
+		))
+	}
+	return nil
 }
 
 func (s *RecordingFreedomService) emitRegionSelection(result RegionSelectionResult) {

@@ -50,12 +50,12 @@
 - Windows 能列出屏幕和窗口。
 - 程序视图能按应用分组显示窗口。
 - 媒体设备枚举通过 `MediaDeviceProvider` 接入，不让 UI 直接依赖平台 API。
-- 麦克风和摄像头设备名称稳定显示。
+- Windows 麦克风、macOS CoreAudio 麦克风和摄像头设备名称稳定显示；无真实设备时不能展示假设备。
 - 无权限时 UI 给出明确动作，不出现空列表假成功。
 
 ## M3 macOS 录制
 
-状态：ScreenCaptureKit display/window/region `screen.mp4` 写盘代码已接入，ScreenCaptureKit system audio 已接入同容器 AAC mux 代码路径，均待 macOS 真机录制 smoke 验收；Program/Application 当前为 queued 后续项，不作为初版验收完成项；麦克风和完整音画同步仍是本里程碑后续任务。
+状态：ScreenCaptureKit display/window/region `screen.mp4` 写盘代码已接入，ScreenCaptureKit system audio 已接入同容器 AAC mux 代码路径，CoreAudio 麦克风枚举和 PCM 采集代码路径已接入，均待 macOS 真机录制 smoke、麦克风 mux/sync 和长录验收；Program/Application 当前为 queued 后续项，不作为初版验收完成项。
 
 目标：
 
@@ -77,7 +77,7 @@
 
 ## M4 Windows 录制
 
-状态：FFmpeg gdigrab writer、WASAPI 音频采集、停止阶段音视频 mux、Windows FFmpeg dependency bootstrap 和 portable zip 打包路径已接入。本机 smoke 已通过 screen、all-screens、region、locked-window、pause/resume segment merge、系统声音 mux、麦克风 mux、系统声音 + 麦克风混音 mux，以及 1 分钟、5 分钟和 20 分钟可解码长录；仍需 release artifact 解压后的 clean machine 验证。
+状态：FFmpeg gdigrab writer、WASAPI 音频采集、停止阶段音视频 mux、Windows FFmpeg dependency bootstrap 和 portable zip 打包路径已接入。本机 smoke 已通过 screen、all-screens、region、locked-window、pause/resume segment merge、系统声音 mux、麦克风 mux、系统声音 + 麦克风混音 mux，以及 1 分钟、5 分钟和 20 分钟可解码长录；Windows GUI subsystem 和 FFmpeg/DirectShow 子进程隐藏窗口配置已纳入 release 配置检查；仍需 release artifact 解压后的 clean machine 验证。
 
 目标：
 

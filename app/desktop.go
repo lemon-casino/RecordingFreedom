@@ -15,15 +15,15 @@ const (
 
 func createCapsuleWindow(app *application.App) *application.WebviewWindow {
 	window := app.Window.NewWithOptions(application.WebviewWindowOptions{
-		Name:            "capsule-recorder",
-		Title:           "RecordingFreedom",
-		Width:           capsuleWindowWidth,
-		Height:          capsuleWindowCollapsedHeight,
-		Frameless:       true,
-		AlwaysOnTop:     true,
-		DisableResize:   true,
-		HideOnEscape:    true,
-		BackgroundType:  application.BackgroundTypeTransparent,
+		Name:           "capsule-recorder",
+		Title:          "RecordingFreedom",
+		Width:          capsuleWindowWidth,
+		Height:         capsuleWindowCollapsedHeight,
+		Frameless:      true,
+		AlwaysOnTop:    true,
+		DisableResize:  true,
+		HideOnEscape:   true,
+		BackgroundType: application.BackgroundTypeTransparent,
 		Mac: application.MacWindow{
 			InvisibleTitleBarHeight: 50,
 			Backdrop:                application.MacBackdropTranslucent,
@@ -164,11 +164,55 @@ func createScreenIndicatorWindow(app *application.App) *application.WebviewWindo
 	return window
 }
 
+func createRegionFrameWindow(app *application.App) *application.WebviewWindow {
+	window := app.Window.NewWithOptions(application.WebviewWindowOptions{
+		Name:              "region-frame",
+		Title:             "RecordingFreedom Region Frame",
+		Width:             640,
+		Height:            360,
+		Frameless:         true,
+		AlwaysOnTop:       true,
+		DisableResize:     true,
+		Hidden:            true,
+		IgnoreMouseEvents: true,
+		BackgroundType:    application.BackgroundTypeTransparent,
+		BackgroundColour:  application.NewRGBA(0, 0, 0, 0),
+		Mac: application.MacWindow{
+			Backdrop: application.MacBackdropTransparent,
+			TitleBar: application.MacTitleBar{
+				AppearsTransparent: true,
+				Hide:               true,
+				HideTitle:          true,
+				FullSizeContent:    true,
+			},
+			CollectionBehavior: application.MacWindowCollectionBehaviorCanJoinAllSpaces |
+				application.MacWindowCollectionBehaviorFullScreenAuxiliary,
+			WindowLevel: application.MacWindowLevelFloating,
+		},
+		Windows: application.WindowsWindow{
+			HiddenOnTaskbar:                   true,
+			DisableFramelessWindowDecorations: true,
+		},
+		Linux: application.LinuxWindow{
+			Icon:                appIcon,
+			WindowIsTranslucent: true,
+		},
+		URL: "/#/region-frame",
+	})
+
+	window.RegisterHook(events.Common.WindowClosing, func(e *application.WindowEvent) {
+		window.Hide()
+		e.Cancel()
+	})
+
+	return window
+}
+
 type trayMenuCopy struct {
 	ShowRecorder string
 	ShowSettings string
 	HideRecorder string
-	Quit          string
+	Quit         string
 }
 
 func trayCopy(locale settings.Locale) trayMenuCopy {
@@ -178,14 +222,14 @@ func trayCopy(locale settings.Locale) trayMenuCopy {
 			ShowRecorder: "Show Recorder",
 			ShowSettings: "Show Settings",
 			HideRecorder: "Hide Recorder",
-			Quit:          "Quit RecordingFreedom",
+			Quit:         "Quit RecordingFreedom",
 		}
 	default:
 		return trayMenuCopy{
 			ShowRecorder: "显示录制窗口",
 			ShowSettings: "显示设置",
 			HideRecorder: "隐藏录制窗口",
-			Quit:          "退出 RecordingFreedom",
+			Quit:         "退出 RecordingFreedom",
 		}
 	}
 }

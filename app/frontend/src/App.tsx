@@ -47,7 +47,7 @@ import {
   fallbackCapabilities,
   fallbackStorageStatus,
 } from './services/mockBackend'
-import {cancelRegionSelector, completeRegionSelection, hideScreenIndicator, hideSettingsWindow, loadBootstrap, loadSettings, pauseRecording, preflightAudioOnlyRecording, preflightRecording, recoverRecordingPackage, resumeRecording, saveSettings, setCapsuleWindowExpanded, setDataRoot, showRegionSelector, showScreenIndicator, showSettingsWindow, startAudioOnlyRecording, startMicrophoneLevelMonitor, startRecording, stopMicrophoneLevelMonitor, stopRecording, subscribeAudioLevel, subscribeRecordingStatus, subscribeRegionSelection, subscribeSettingsChanged, type AudioLevelUpdate, type RecordingRecovery, type RecordingStatusUpdate, type RegionSelectionSession} from './services/recorderBackend'
+import {cancelRegionSelector, completeRegionSelection, hideRegionFrame, hideScreenIndicator, hideSettingsWindow, loadBootstrap, loadSettings, pauseRecording, preflightAudioOnlyRecording, preflightRecording, recoverRecordingPackage, resumeRecording, saveSettings, setCapsuleWindowExpanded, setDataRoot, showRegionSelector, showScreenIndicator, showSettingsWindow, startAudioOnlyRecording, startMicrophoneLevelMonitor, startRecording, stopMicrophoneLevelMonitor, stopRecording, subscribeAudioLevel, subscribeRecordingStatus, subscribeRegionSelection, subscribeSettingsChanged, type AudioLevelUpdate, type RecordingRecovery, type RecordingStatusUpdate, type RegionSelectionSession} from './services/recorderBackend'
 
 const sourceIcon = {
   screen: Monitor,
@@ -150,8 +150,12 @@ function App() {
   const isSettingsWindow = route === '/settings'
   const isRegionOverlayWindow = route === '/region-overlay'
   const isScreenIndicatorWindow = route === '/screen-indicator'
+  const isRegionFrameWindow = route === '/region-frame'
   if (isScreenIndicatorWindow) {
     return <ScreenIndicatorWindow />
+  }
+  if (isRegionFrameWindow) {
+    return <RegionFrameWindow />
   }
   if (isRegionOverlayWindow) {
     return <RegionOverlayWindow />
@@ -209,6 +213,7 @@ function App() {
   const storageText = storageMessage ? formatStorageMessage(storageMessage, copy) : ''
   const sourceSelectionText = sourceSelectionMessage ? formatSourceSelectionMessage(sourceSelectionMessage, copy) : ''
   const isRecording = state === 'recording' || state === 'paused' || state === 'preparing' || state === 'stopping'
+  const recordingConfigLocked = isRecording
   const SourceIcon = recordingMode === 'audio' ? Volume2 : sourceIcon[selectedSource.type]
   const sourceTitle = recordingMode === 'audio' ? copy.recordingModes.audio : sourceTypeLabel(selectedSource, copy)
   const sourceSubtitle = recordingMode === 'audio' ? audioOnlySourceMeta(systemAudio, microphone, copy) : sourceName(selectedSource, copy)
@@ -381,6 +386,13 @@ function App() {
       setActivePanel(null)
     }
   }, [activePanel, recordingMode])
+
+  useEffect(() => {
+    if (!recordingConfigLocked) return
+    if (activePanel === 'source' || activePanel === 'audio' || activePanel === 'camera') {
+      setActivePanel(null)
+    }
+  }, [activePanel, recordingConfigLocked])
 
   useEffect(() => {
     if (isSettingsWindow) return
@@ -680,7 +692,11 @@ function App() {
   }
 
   const chooseSource = (source: CaptureSource) => {
+    if (recordingConfigLocked) return
     void hideScreenIndicator()
+    if (source.type !== 'region') {
+      void hideRegionFrame()
+    }
     setSelectedSource(source)
     setSourceSelectionMessage(source.available === false ? {key: 'sourceQueued'} : null)
     setActivePanel(null)
@@ -688,6 +704,7 @@ function App() {
   }
 
   const chooseRegion = async (source: CaptureSource) => {
+    if (recordingConfigLocked) return
     await hideScreenIndicator()
     setActivePanel(null)
     setSourcePickerView('overview')
@@ -835,6 +852,7 @@ function App() {
             className="source-pill"
             type="button"
             aria-expanded={activePanel === 'source'}
+            disabled={recordingConfigLocked}
             onClick={() => setActivePanel(activePanel === 'source' ? null : 'source')}
           >
             <SourceIcon size={18} />
@@ -852,6 +870,7 @@ function App() {
               aria-label={copy.aria.openAudioSettings}
               title={copy.panels.audio}
               aria-expanded={activePanel === 'audio'}
+              disabled={recordingConfigLocked}
               onClick={() => setActivePanel(activePanel === 'audio' ? null : 'audio')}
             >
               <Volume2 size={18} />
@@ -861,7 +880,7 @@ function App() {
               type="button"
               aria-label={copy.aria.openCameraSettings}
               title={copy.panels.cameraSidecar}
-              disabled={recordingMode === 'audio'}
+              disabled={recordingConfigLocked || recordingMode === 'audio'}
               onClick={() => setActivePanel(activePanel === 'camera' ? null : 'camera')}
             >
               <Camera size={18} />
@@ -931,7 +950,10 @@ function App() {
                         className={selected ? 'selected' : ''}
                         aria-pressed={selected}
                         disabled={isRecording}
-                        onClick={() => setRecordingMode(mode)}
+                        onClick={() => {
+                          setRecordingMode(mode)
+                          if (mode === 'audio') void hideRegionFrame()
+                        }}
                       >
                         <ModeIcon size={16} />
                         <span>{copy.recordingModes[mode]}</span>
@@ -959,6 +981,7 @@ function App() {
                             source={source}
                             copy={copy}
                             selected={selectedSource.id === source.id}
+                            disabled={recordingConfigLocked}
                             onSelect={() => chooseSource(source)}
                           />
                         )) : (
@@ -977,6 +1000,7 @@ function App() {
                             source={allScreensSource}
                             copy={copy}
                             selected={selectedSource.id === allScreensSource.id}
+                            disabled={recordingConfigLocked}
                             onSelect={() => chooseSource(allScreensSource)}
                           />
                         )}
@@ -986,6 +1010,7 @@ function App() {
                             source={source}
                             copy={copy}
                             selected={selectedSource.id === source.id}
+                            disabled={recordingConfigLocked}
                             onSelect={() => chooseSource(source)}
                             onPreviewStart={() => showScreenMarker(source)}
                             onPreviewEnd={hideScreenMarker}
@@ -1000,6 +1025,7 @@ function App() {
                             copy={copy}
                             selected={selectedSource.id === regionSource.id}
                             actionLabel={copy.sourceActions.chooseRegion}
+                            disabled={recordingConfigLocked}
                             onSelect={() => void chooseRegion(regionSource)}
                           />
                         ) : (
@@ -1011,7 +1037,7 @@ function App() {
                       </SourceGroup>
 
                       <SourceGroup title={copy.sourceGroups.window}>
-                        <button className={`menu-row ${selectedWindowSource ? 'selected' : ''}`} type="button" onClick={() => setSourcePickerView('windows')}>
+                        <button className={`menu-row ${selectedWindowSource ? 'selected' : ''}`} type="button" disabled={recordingConfigLocked} onClick={() => setSourcePickerView('windows')}>
                           <AppWindow size={18} />
                           <span>
                             <strong>{copy.sourceActions.chooseLockedWindow}</strong>
@@ -1039,15 +1065,15 @@ function App() {
 
             {activePanel === 'audio' && (
               <div className="menu-stack">
-                <SwitchRow label={copy.panels.systemAudio} checked={systemAudio} onChange={setSystemAudio} />
+                <SwitchRow label={copy.panels.systemAudio} checked={systemAudio} disabled={recordingConfigLocked} onChange={setSystemAudio} />
                 <label className="field-label" htmlFor="system-audio-device">{copy.panels.systemAudioDevice}</label>
-                <select id="system-audio-device" value={selectedSystemAudio} onChange={(event) => setSelectedSystemAudio(event.target.value)}>
+                <select id="system-audio-device" value={selectedSystemAudio} disabled={recordingConfigLocked} onChange={(event) => setSelectedSystemAudio(event.target.value)}>
                   {availableSystemAudio.map((device) => <option key={device.id} value={device.id}>{mediaDeviceName(device, copy)}</option>)}
                 </select>
                 <SwitchRow
                   label={copy.panels.microphone}
                   checked={microphone && hasAvailableMicrophone}
-                  disabled={!hasAvailableMicrophone}
+                  disabled={recordingConfigLocked || !hasAvailableMicrophone}
                   onChange={(value) => {
                     setMicrophone(value)
                     if (!value) {
@@ -1059,14 +1085,14 @@ function App() {
                 <SwitchRow
                   label={copy.panels.rnnoise}
                   checked={rnnoiseActive}
-                  disabled={!microphone || selectedMicrophoneDevice?.rnnoiseEligible === false}
+                  disabled={recordingConfigLocked || !microphone || selectedMicrophoneDevice?.rnnoiseEligible === false}
                   onChange={setNoiseSuppression}
                 />
                 <label className="field-label" htmlFor="mic-device">{copy.panels.microphoneDevice}</label>
                 <select
                   id="mic-device"
                   value={selectedMic}
-                  disabled={!microphone || !hasAvailableMicrophone}
+                  disabled={recordingConfigLocked || !microphone || !hasAvailableMicrophone}
                   onChange={(event) => setSelectedMic(event.target.value)}
                 >
                   {availableMicrophones.length === 0 && <option value="">{copy.panels.noMicrophones}</option>}
@@ -1094,13 +1120,13 @@ function App() {
 
             {activePanel === 'camera' && (
               <div className="menu-stack">
-                <SwitchRow label={copy.panels.cameraSidecar} checked={camera} onChange={setCamera} />
+                <SwitchRow label={copy.panels.cameraSidecar} checked={camera} disabled={recordingConfigLocked} onChange={setCamera} />
                 <label className="field-label" htmlFor="camera-device">{copy.panels.cameraDevice}</label>
-                <select id="camera-device" value={selectedCamera} onChange={(event) => setSelectedCamera(event.target.value)}>
+                <select id="camera-device" value={selectedCamera} disabled={recordingConfigLocked} onChange={(event) => setSelectedCamera(event.target.value)}>
                   {availableCameras.map((device) => <option key={device.id} value={device.id}>{mediaDeviceName(device, copy)}</option>)}
                 </select>
                 <label className="field-label" htmlFor="pip-preset">{copy.panels.pipPreset}</label>
-                <select id="pip-preset" value={pipPreset} onChange={(event) => setPipPreset(event.target.value as PIPPreset)}>
+                <select id="pip-preset" value={pipPreset} disabled={recordingConfigLocked} onChange={(event) => setPipPreset(event.target.value as PIPPreset)}>
                   {pipPresetOptions.map((preset) => <option key={preset} value={preset}>{copy.pipPresetLabels[preset]}</option>)}
                 </select>
                 <div className="camera-preview">
@@ -1171,6 +1197,44 @@ function ScreenIndicatorWindow() {
   return (
     <main className="screen-indicator-shell" aria-hidden="true">
       <span>{label || '1'}</span>
+    </main>
+  )
+}
+
+type RegionFrameState = {
+  bounds: {x: number; y: number; width: number; height: number}
+}
+
+function RegionFrameWindow() {
+  const frameWindow = window as Window & {__RF_REGION_FRAME__?: RegionFrameState}
+  const [frame, setFrame] = useState<RegionFrameState | undefined>(frameWindow.__RF_REGION_FRAME__)
+
+  useEffect(() => {
+    document.body.classList.add('rf-region-frame-window')
+    return () => document.body.classList.remove('rf-region-frame-window')
+  }, [])
+
+  useEffect(() => {
+    const onFrame = (event: Event) => {
+      const next = (event as CustomEvent<RegionFrameState>).detail
+      if (next) setFrame(next)
+    }
+    window.addEventListener('rf-region-frame', onFrame)
+    return () => window.removeEventListener('rf-region-frame', onFrame)
+  }, [])
+
+  const width = frame?.bounds.width ?? 0
+  const height = frame?.bounds.height ?? 0
+
+  return (
+    <main className="region-frame-shell" aria-hidden="true">
+      <div className="region-frame-line top" />
+      <div className="region-frame-line right" />
+      <div className="region-frame-line bottom" />
+      <div className="region-frame-line left" />
+      {width > 0 && height > 0 && (
+        <b className="region-frame-badge">{width} x {height}</b>
+      )}
     </main>
   )
 }
@@ -1338,6 +1402,7 @@ function SourceMenuRow({
   copy,
   selected,
   actionLabel,
+  disabled = false,
   onSelect,
   onPreviewStart,
   onPreviewEnd,
@@ -1346,6 +1411,7 @@ function SourceMenuRow({
   copy: RecorderCopy
   selected: boolean
   actionLabel?: string
+  disabled?: boolean
   onSelect: () => void
   onPreviewStart?: () => void
   onPreviewEnd?: () => void
@@ -1355,10 +1421,11 @@ function SourceMenuRow({
     <button
       className={`menu-row ${selected ? 'selected' : ''} ${source.available === false ? 'queued' : ''}`}
       type="button"
+      disabled={disabled}
       onClick={onSelect}
-      onPointerEnter={onPreviewStart}
-      onPointerLeave={onPreviewEnd}
-      onFocus={onPreviewStart}
+      onPointerEnter={disabled ? undefined : onPreviewStart}
+      onPointerLeave={disabled ? undefined : onPreviewEnd}
+      onFocus={disabled ? undefined : onPreviewStart}
       onBlur={onPreviewEnd}
     >
       <Icon size={18} />

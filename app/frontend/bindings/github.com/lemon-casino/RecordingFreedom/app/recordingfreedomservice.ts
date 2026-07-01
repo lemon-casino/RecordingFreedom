@@ -51,6 +51,10 @@ export function GetSettings(): $CancellablePromise<settings$0.Settings> {
     return $Call.ByID(1085525119);
 }
 
+export function HideRegionFrame(): $CancellablePromise<void> {
+    return $Call.ByID(1481407147);
+}
+
 export function HideScreenIndicator(): $CancellablePromise<void> {
     return $Call.ByID(3727544311);
 }

@@ -269,9 +269,20 @@ func findSource(sources []devices.CaptureSource, id string, sourceType devices.C
 }
 
 func findMediaDevice(inventory []devices.MediaDevice, id string) (devices.MediaDevice, bool) {
+	id = strings.TrimSpace(id)
 	for _, device := range inventory {
 		if device.ID == id {
 			return device, true
+		}
+	}
+	if strings.HasSuffix(id, ":default") {
+		for _, device := range inventory {
+			if device.IsDefault {
+				return device, true
+			}
+		}
+		if len(inventory) > 0 {
+			return inventory[0], true
 		}
 	}
 	return devices.MediaDevice{}, false

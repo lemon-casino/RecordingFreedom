@@ -177,6 +177,9 @@
   - GitHub Release 已产出 Windows x64、macOS arm64、Linux x64 三个平台 preview 二进制和对应 SHA256SUMS。
   - `v0.1.0-preview.9` 已发布为 GitHub prerelease：Release Gate、Windows x64、macOS arm64、Linux x64 和 Publish GitHub Release 均通过。Release URL：`https://github.com/lemon-casino/RecordingFreedom/releases/tag/v0.1.0-preview.9`。
   - `v0.1.0-preview.9` 产物包含 `RecordingFreedom-windows-x64-v0.1.0-preview.9-portable.zip`、`RecordingFreedom-macos-arm64-v0.1.0-preview.9`、`RecordingFreedom-linux-x64-v0.1.0-preview.9` 和三个平台 SHA256SUMS。
+  - `v0.1.0-preview.10` 已发布为 GitHub prerelease：Release Gate、Windows x64、macOS arm64、Linux x64 和 Publish GitHub Release 均通过。Release URL：`https://github.com/lemon-casino/RecordingFreedom/releases/tag/v0.1.0-preview.10`。
+  - `v0.1.0-preview.10` 产物包含 `RecordingFreedom-windows-x64-v0.1.0-preview.10-portable.zip`、`RecordingFreedom-macos-arm64-v0.1.0-preview.10`、`RecordingFreedom-linux-x64-v0.1.0-preview.10` 和三个平台 SHA256SUMS。
+  - `v0.1.0-preview.10` 纳入真实麦克风设备枚举、真实麦克风电平事件 `audio.level`、macOS CoreAudio 输入设备/PCM 采集代码路径、Windows GUI subsystem 检查和 FFmpeg/DirectShow 子进程隐藏窗口配置。
   - `v0.1.0-preview.7` 曾因 Linux Wails build tag 使用空格拼接 `gtk3 rnnoise_native` 导致 Linux build 失败，已在 `v0.1.0-preview.8` 前修正为 `gtk3,rnnoise_native` 并纳入 `cmd/release-config-check` 门禁。
   - `v0.1.0-preview.8` 曾因 Windows runner 的 FFmpeg 准备脚本下载链路失败而未发布，已在 `v0.1.0-preview.9` 前改为 BtbN FFmpeg-Builds GitHub 源、`curl.exe` 重试下载和按 asset name 校验 `checksums.sha256`。
   - 最新 `main` CI 已通过 Bindings/Frontend/Go、macOS Native Capture Contracts、Windows/macOS/Linux Wails Build；其中 Windows Wails Build 已通过 FFmpeg bootstrap、RNNoise gate 和 video gate。
@@ -215,7 +218,7 @@ wails3 build
 .\scripts\ensure-windows-ffmpeg.ps1
 ```
 
-该脚本本机已下载并校验 FFmpeg `N-125365-g9a01c1cb6a-20260630` BtbN static build，写入 `RecordingFreedom/app/tools/ffmpeg.exe`；随后 `go run ./cmd/desktop-doctor -require-video` 返回 `ok: true`，screen/window/ffmpeg required checks 均为 `ready`。GitHub Windows runner 也已在 `v0.1.0-preview.9` release workflow 中通过该脚本准备 FFmpeg，并通过 portable zip 验证。
+该脚本本机已下载并校验 FFmpeg `N-125365-g9a01c1cb6a-20260630` BtbN static build，写入 `RecordingFreedom/app/tools/ffmpeg.exe`；随后 `go run ./cmd/desktop-doctor -require-video` 返回 `ok: true`，screen/window/ffmpeg required checks 均为 `ready`。GitHub Windows runner 也已在 `v0.1.0-preview.10` release workflow 中通过该脚本准备 FFmpeg，并通过 portable zip 验证。
 
 本机 Windows 未准备 FFmpeg 时的预期阻断：
 
@@ -261,6 +264,9 @@ go run ./cmd/video-smoke -duration=1s
 - `5m screen + pause/resume`：`recording-2026-07-01-09-38-35-292.rfrec` 进入 `ready`，`screen.mp4` 5161172 bytes，9017 frames，duration 300574ms；manifest sync message 为 `FFmpeg desktop capture wrote 2 segment(s).`，确认暂停/继续分段合并路径生效；`ffmpeg -v error -i screen.mp4 -f null -` 通过。
 - `20m screen + system audio + microphone + pause/resume`：`recording-2026-07-01-09-46-38-233.rfrec` 进入 `ready`，`screen.mp4` 119345863 bytes，36028 frames，duration 1200935ms；系统声音和麦克风均 mux 到 `screen.mp4`，`systemAudioStorage=muxed`，`microphoneAudioStorage=muxed`，`systemAudioSamples=114340800`，`microphoneSamples=57609600`；manifest sync message 为 `FFmpeg desktop capture wrote 2 segment(s).`，确认暂停/继续分段合并路径在 20 分钟长录中生效；`ffmpeg -v error -i screen.mp4 -f null -` 通过。
 - 仍未完成：release portable zip 解压后的 clean-machine 验收、目标桌面 RNNoise 实录听感/诊断，以及 macOS/Linux 真机录制验收。
+- 用户反馈“麦克风设备展示是假的、语音波动没有监听”后，已删除前端假麦克风列表和假波形初始化；后端新增真实麦克风电平监听入口，前端订阅 `audio.level` 事件显示 RMS/peak 推导的真实电平。无可用麦克风时 UI 显示不可用，不再展示虚构设备。
+- 用户反馈 Windows 默认麦克风仍像假设备后，Windows WASAPI 枚举已改为保留真实 `microphone:wasapi:<endpoint-id>` / `system-audio:wasapi:<endpoint-id>` 作为选择 ID，默认设备只通过 `isDefault` 和 subtitle 标记；旧请求 `microphone:default` / `system-audio:default` 在 preflight 中会映射到真实默认 endpoint，避免 UI 能选真实设备但预检误挡。
+- 录制开始后，胶囊 UI 会锁定来源、区域、系统声音、麦克风、RNNoise 和摄像头选择；只有结束录制后重新启用。区域录制完成框选后会显示独立的鼠标穿透 `region-frame` 窗口，录制过程中持续标识被录制范围。
 
 有 C 工具链的环境可用以下命令验证 RNNoise 原生 DSP：
 
@@ -391,7 +397,7 @@ RecordingFreedom/app/bin/recordingfreedom.exe
 - 真实全部屏幕多显示器合成录制：当前已有 `all-screens` 源类型和虚拟桌面 bounds；Windows FFmpeg 可按虚拟桌面录制，macOS/Linux 多屏合成仍保持 queued。
 - 真实 PipeWire / XDG Portal 录制。
 - 真实 macOS CoreAudio 麦克风枚举和 Linux PipeWire 音频设备枚举；当前 Windows WASAPI endpoint 枚举已完成，macOS system audio 使用 ScreenCaptureKit 默认系统混音流。
-- 真实 CoreAudio/PipeWire 音频采集；当前 Windows WASAPI 麦克风采集已通过 smoke，Windows system loopback 已通过有播放源真实样本 smoke，Windows FFmpeg 视频后端已通过 `NativeBackendRuntime` 调用 WASAPI 音频运行时，并在停止阶段把系统声音/麦克风 mux 到主 `screen.mp4`。macOS 麦克风、Linux 音频源和长录同步仍未完成。
+- 真实 CoreAudio/PipeWire 音频采集；当前 Windows WASAPI 麦克风采集已通过 smoke，Windows system loopback 已通过有播放源真实样本 smoke，Windows FFmpeg 视频后端已通过 `NativeBackendRuntime` 调用 WASAPI 音频运行时，并在停止阶段把系统声音/麦克风 mux 到主 `screen.mp4`。macOS CoreAudio 麦克风枚举和 PCM 采集代码路径已完成，仍需 macOS 真机 smoke、视频麦克风 mux/sync 验收；Linux 音频源和长录同步仍未完成。
 - 真实 audio-only 录制模式；当前已完成 `.rfrec` audio-only 包格式、`audio.m4a` 主媒体路径、WAV sidecar 写盘、停止阶段 FFmpeg M4A 封装、ready 前 `soun` 音轨门禁、`audio-smoke` 包级验收入口、RecordingService/Wails 后端入口、胶囊 UI 模式入口和 audio-only preflight。macOS/Linux 真实音频源、RNNoise 目标桌面实录听感和长录同步仍未完成。
 - 摄像头/画中画当前暂停开发与验收，等待视频录制和语音/音频录制验收后再恢复；Windows 摄像头设备枚举和 FFmpeg DirectShow sidecar writer 已接入，但最新本机 `video-smoke -camera` 因没有可用 sidecar 摄像头未能做真实摄像头录制，不能计入当前完成项。
 - RNNoise native DSP 的 C 源码和 Go wrapper 已迁移并隔离；CI/release gate 已恢复 native 定向测试。当前能力矩阵会按 `rnnoise.Available()` 动态显示：带 `rnnoise_native` 的 release artifact 显示可用并允许预检，未带标签的本地开发构建仍显示 queued/blocked。三平台 preview artifact 构建已要求 `desktop-doctor -require-rnnoise` 通过；目标桌面的 `audio-smoke -rnnoise` 实录听感和长录诊断仍需补。

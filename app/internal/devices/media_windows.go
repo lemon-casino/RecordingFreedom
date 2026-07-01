@@ -152,9 +152,6 @@ func windowsMediaDevices(deviceType MediaDeviceType, endpoints []windowsAudioEnd
 	devices := make([]MediaDevice, 0, len(endpoints)+1)
 	for _, endpoint := range endpoints {
 		id := fmt.Sprintf("%s:wasapi:%s", deviceType, endpoint.id)
-		if endpoint.isDefault {
-			id = fmt.Sprintf("%s:default", deviceType)
-		}
 		device := MediaDevice{
 			ID:         id,
 			Type:       deviceType,
@@ -166,7 +163,7 @@ func windowsMediaDevices(deviceType MediaDeviceType, endpoints []windowsAudioEnd
 			Capability: CapabilityEnumerated,
 		}
 		if endpoint.isDefault {
-			device.Name = "Default " + endpoint.name
+			device.Subtitle = "Default · " + device.Subtitle
 		}
 		if deviceType == DeviceMicrophone {
 			device.RNNoiseEligible = true

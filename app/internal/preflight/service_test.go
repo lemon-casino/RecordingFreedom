@@ -179,6 +179,40 @@ func TestEvaluateReadyForAvailableNativeBackend(t *testing.T) {
 	}
 }
 
+func TestEvaluateResolvesDefaultMicrophoneToConcreteEndpoint(t *testing.T) {
+	media := queuedMediaInventory()
+	media.Microphones = []devices.MediaDevice{{
+		ID:              "microphone:wasapi:{0.0.1.00000000}.{11111111-2222-3333-4444-555555555555}",
+		Type:            devices.DeviceMicrophone,
+		Name:            "Microphone Array (Realtek(R) Audio)",
+		NativeID:        "{0.0.1.00000000}.{11111111-2222-3333-4444-555555555555}",
+		IsDefault:       true,
+		Available:       true,
+		Capability:      devices.CapabilityEnumerated,
+		RNNoiseEligible: true,
+	}}
+
+	summary := NewService().Evaluate(recording.StartRequest{
+		SourceID:   "screen:primary",
+		SourceType: recording.SourceScreen,
+		Audio:      recording.AudioRequest{Microphone: true},
+	}, Inputs{
+		Backend:      "ffmpeg-desktop-capture",
+		Sources:      []devices.CaptureSource{availableSource("screen:primary", devices.SourceScreen)},
+		Media:        media,
+		Capabilities: availableCapabilities(),
+	})
+	if summary.Status != StatusReady {
+		t.Fatalf("preflight status = %q, want ready with concrete default microphone endpoint: %#v", summary.Status, summary.Checks)
+	}
+	if hasCheck(summary.Checks, "microphone-device", StatusBlocked) {
+		t.Fatalf("concrete default microphone endpoint should not be blocked: %#v", summary.Checks)
+	}
+	if summary.NormalizedRequest.Audio.MicrophoneID != "microphone:default" {
+		t.Fatalf("normalized microphone id = %q, want default request contract preserved", summary.NormalizedRequest.Audio.MicrophoneID)
+	}
+}
+
 func TestEvaluateAllowsCameraSidecarWhenPIPExportIsQueued(t *testing.T) {
 	media := queuedMediaInventory()
 	media.Cameras = []devices.MediaDevice{{
