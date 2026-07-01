@@ -10,10 +10,10 @@ import (
 )
 
 const (
-	screenIndicatorMinWidth  = 240
-	screenIndicatorMaxWidth  = 520
-	screenIndicatorMinHeight = 180
-	screenIndicatorMaxHeight = 380
+	screenIndicatorMinWidth  = 220
+	screenIndicatorMaxWidth  = 360
+	screenIndicatorMinHeight = 150
+	screenIndicatorMaxHeight = 240
 )
 
 type ScreenIndicatorRequest struct {
@@ -145,8 +145,8 @@ func screenIndicatorBounds(display application.Rect) application.Rect {
 		display.Height = 720
 	}
 
-	width := clampInt(display.Width*52/100, screenIndicatorMinWidth, screenIndicatorMaxWidth)
-	height := clampInt(display.Height*42/100, screenIndicatorMinHeight, screenIndicatorMaxHeight)
+	width := clampInt(display.Width*34/100, screenIndicatorMinWidth, screenIndicatorMaxWidth)
+	height := clampInt(display.Height*26/100, screenIndicatorMinHeight, screenIndicatorMaxHeight)
 	if maxWidth := display.Width - 64; maxWidth > 0 && width > maxWidth {
 		width = clampInt(maxWidth, 160, screenIndicatorMaxWidth)
 	}

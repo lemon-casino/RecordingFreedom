@@ -152,16 +152,12 @@ function App() {
   const isSettingsWindow = route === '/settings'
   const isRegionOverlayWindow = route === '/region-overlay'
   const isScreenIndicatorWindow = route === '/screen-indicator'
-  const isRegionFrameWindow = route === '/region-frame'
   const isRegionFrameEdgeWindow = route === '/region-frame-edge'
   if (isScreenIndicatorWindow) {
     return <ScreenIndicatorWindow />
   }
   if (isRegionFrameEdgeWindow) {
     return <RegionFrameEdgeWindow />
-  }
-  if (isRegionFrameWindow) {
-    return <RegionFrameWindow />
   }
   if (isRegionOverlayWindow) {
     return <RegionOverlayWindow />
@@ -1295,12 +1291,30 @@ function ScreenIndicatorWindow() {
 }
 
 function RegionFrameEdgeWindow() {
+  const [edge, setEdge] = useState<RegionFrameEdge>('top')
+  const frame = useRegionFrameState()
+
   useEffect(() => {
     document.body.classList.add('rf-region-frame-window')
     return () => document.body.classList.remove('rf-region-frame-window')
   }, [])
 
-  return <main className="region-frame-edge-strip" aria-hidden="true" />
+  useEffect(() => {
+    void WailsWindow.Name()
+      .then((name) => setEdge(regionFrameEdgeFromName(name)))
+      .catch(() => setEdge('top'))
+  }, [])
+
+  const mode = frame?.mode ?? 'recording'
+
+  return (
+    <main
+      className={`region-frame-edge-shell edge-${edge} ${mode}`}
+      aria-label={`Selected recording region edge ${edge}`}
+    >
+      <span />
+    </main>
+  )
 }
 
 type RegionFrameState = {
@@ -1308,10 +1322,28 @@ type RegionFrameState = {
   mode?: 'edit' | 'recording'
 }
 
-function RegionFrameWindow() {
+type RegionEditAction = 'move' | 'n' | 'e' | 's' | 'w' | 'ne' | 'nw' | 'se' | 'sw'
+type RegionFrameEdge = 'top' | 'right' | 'bottom' | 'left'
+
+const regionResizeActions: RegionEditAction[] = ['n', 'e', 's', 'w', 'ne', 'nw', 'se', 'sw']
+
+function useRegionFrameState() {
   const frameWindow = window as Window & {__RF_REGION_FRAME__?: RegionFrameState}
   const [frame, setFrame] = useState<RegionFrameState | undefined>(frameWindow.__RF_REGION_FRAME__)
-  const [draftBounds, setDraftBounds] = useState(frameWindow.__RF_REGION_FRAME__?.bounds)
+
+  useEffect(() => {
+    const onFrame = (event: Event) => {
+      const next = (event as CustomEvent<RegionFrameState>).detail
+      if (next) setFrame(next)
+    }
+    window.addEventListener('rf-region-frame', onFrame)
+    return () => window.removeEventListener('rf-region-frame', onFrame)
+  }, [])
+
+  return frame
+}
+
+function useRegionEditorDrag(bounds: RegionFrameState['bounds'] | undefined) {
   const editRef = useRef<{
     action: RegionEditAction
     startX: number
@@ -1320,42 +1352,8 @@ function RegionFrameWindow() {
     latest: RegionFrameState['bounds']
   } | null>(null)
 
-  useEffect(() => {
-    document.body.classList.add('rf-region-frame-window')
-    return () => document.body.classList.remove('rf-region-frame-window')
-  }, [])
-
-  useEffect(() => {
-    const onFrame = (event: Event) => {
-      const next = (event as CustomEvent<RegionFrameState>).detail
-      if (next) {
-        setFrame(next)
-        setDraftBounds(next.bounds)
-      }
-    }
-    window.addEventListener('rf-region-frame', onFrame)
-    return () => window.removeEventListener('rf-region-frame', onFrame)
-  }, [])
-
-  if (!frame || frame.mode === 'recording') {
-    return <main className="region-frame-empty" aria-hidden="true" />
-  }
-
-  const bounds = draftBounds ?? frame.bounds
-  const width = bounds.width
-  const height = bounds.height
-
-  const applyWindowBounds = async (next: RegionFrameState['bounds']) => {
-    try {
-      await WailsWindow.SetPosition(next.x, next.y)
-      await WailsWindow.SetSize(next.width, next.height)
-    } catch (error) {
-      console.info('Using browser region frame move fallback:', error)
-    }
-  }
-
   const beginEdit = (event: ReactPointerEvent<HTMLElement>, action: RegionEditAction) => {
-    if (event.button !== 0) return
+    if (!bounds || event.button !== 0) return
     event.preventDefault()
     event.stopPropagation()
     event.currentTarget.setPointerCapture(event.pointerId)
@@ -1374,8 +1372,7 @@ function RegionFrameWindow() {
     event.preventDefault()
     const next = resizeRegionBounds(edit.bounds, edit.action, event.screenX - edit.startX, event.screenY - edit.startY)
     edit.latest = next
-    setDraftBounds(next)
-    void applyWindowBounds(next)
+    void updateSelectedRegion(next)
   }
 
   const completeEdit = (event: ReactPointerEvent<HTMLElement>) => {
@@ -1388,44 +1385,15 @@ function RegionFrameWindow() {
     void updateSelectedRegion(edit.latest)
   }
 
-  return (
-    <main
-      className="region-frame-shell editable"
-      aria-label="Selected recording region"
-      onPointerMove={updateEdit}
-      onPointerUp={completeEdit}
-      onPointerCancel={completeEdit}
-    >
-      <div className="region-frame-border" />
-      <button className="region-frame-move" type="button" aria-label="Move selected region" onPointerDown={(event) => beginEdit(event, 'move')}>
-        <span />
-      </button>
-      {regionResizeActions.map((action) => (
-        <button
-          key={action}
-          className={`region-frame-resize ${action}`}
-          type="button"
-          aria-label={`Resize ${action}`}
-          onPointerDown={(event) => beginEdit(event, action)}
-        />
-      ))}
-      {width > 0 && height > 0 && <b className="region-frame-badge">{width} x {height}</b>}
-      <button
-        className="region-frame-cancel"
-        type="button"
-        aria-label="Cancel selected region"
-        onPointerDown={(event) => event.stopPropagation()}
-        onClick={() => void cancelSelectedRegion()}
-      >
-        <X size={16} />
-      </button>
-    </main>
-  )
+  return {beginEdit, updateEdit, completeEdit}
 }
 
-type RegionEditAction = 'move' | 'n' | 'e' | 's' | 'w' | 'ne' | 'nw' | 'se' | 'sw'
-
-const regionResizeActions: RegionEditAction[] = ['n', 'e', 's', 'w', 'ne', 'nw', 'se', 'sw']
+function regionFrameEdgeFromName(name: string): RegionFrameEdge {
+  if (name.endsWith('right')) return 'right'
+  if (name.endsWith('bottom')) return 'bottom'
+  if (name.endsWith('left')) return 'left'
+  return 'top'
+}
 
 function resizeRegionBounds(bounds: RegionFrameState['bounds'], action: RegionEditAction, dx: number, dy: number) {
   const next = {...bounds}
@@ -1458,6 +1426,8 @@ const minRegionEditorSize = 64
 function RegionOverlayWindow() {
   const overlayWindow = window as Window & {__RF_REGION_SESSION__?: RegionSelectionSession}
   const initialSession = overlayWindow.__RF_REGION_SESSION__
+  const editFrame = useRegionFrameState()
+  const editDrag = useRegionEditorDrag(editFrame?.mode === 'edit' ? editFrame.bounds : undefined)
   const [session, setSession] = useState<RegionSelectionSession | undefined>(initialSession)
   const [drag, setDrag] = useState<{startX: number; startY: number; currentX: number; currentY: number} | null>(null)
   const [cursor, setCursor] = useState({x: -1, y: -1})
@@ -1468,6 +1438,14 @@ function RegionOverlayWindow() {
   const minimumWidth = session?.minimumWidth ?? 64
   const minimumHeight = session?.minimumHeight ?? 64
   const selectedRect = drag ? normalizedClientRect(drag.startX, drag.startY, drag.currentX, drag.currentY) : null
+  const isEditingRegion = editFrame?.mode === 'edit'
+  const overlayOrigin = session?.bounds ?? {x: 0, y: 0, width: 0, height: 0}
+  const editableRect = isEditingRegion ? {
+    x: editFrame.bounds.x - overlayOrigin.x,
+    y: editFrame.bounds.y - overlayOrigin.y,
+    width: editFrame.bounds.width,
+    height: editFrame.bounds.height,
+  } : null
 
   useEffect(() => {
     document.body.classList.add('rf-region-overlay-window')
@@ -1497,12 +1475,12 @@ function RegionOverlayWindow() {
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key === 'Escape') {
         event.preventDefault()
-        void cancelRegionSelector()
+        void (isEditingRegion ? cancelSelectedRegion() : cancelRegionSelector())
       }
     }
     window.addEventListener('keydown', onKeyDown)
     return () => window.removeEventListener('keydown', onKeyDown)
-  }, [])
+  }, [isEditingRegion])
 
   const cancelSelection = async () => {
     await cancelRegionSelector()
@@ -1525,19 +1503,27 @@ function RegionOverlayWindow() {
       ref={shellRef}
       className="region-overlay-shell"
       aria-label={copy.aria.regionOverlay}
-      onPointerMove={(event) => {
+      onPointerMove={isEditingRegion ? editDrag.updateEdit : undefined}
+      onPointerCancel={isEditingRegion ? editDrag.completeEdit : undefined}
+      onPointerMoveCapture={(event) => {
+        if (isEditingRegion) return
         setCursor({x: event.clientX, y: event.clientY})
         if (drag) {
           setDrag({...drag, currentX: event.clientX, currentY: event.clientY})
         }
       }}
       onPointerDown={(event) => {
+        if (isEditingRegion) return
         if (event.button !== 0) return
         event.currentTarget.setPointerCapture(event.pointerId)
         setDrag({startX: event.clientX, startY: event.clientY, currentX: event.clientX, currentY: event.clientY})
         setInvalid(false)
       }}
       onPointerUp={(event) => {
+        if (isEditingRegion) {
+          editDrag.completeEdit(event)
+          return
+        }
         if (!drag) return
         if (event.currentTarget.hasPointerCapture(event.pointerId)) {
           event.currentTarget.releasePointerCapture(event.pointerId)
@@ -1547,17 +1533,18 @@ function RegionOverlayWindow() {
         void completeSelection(rect)
       }}
       onPointerLeave={(event) => {
+        if (isEditingRegion) return
         setCursor({x: event.clientX, y: event.clientY})
       }}
     >
       <div className="region-overlay-scrim" />
-      {cursor.x >= 0 && (
+      {!isEditingRegion && cursor.x >= 0 && (
         <>
           <div className="region-crosshair horizontal" style={{top: cursor.y}} />
           <div className="region-crosshair vertical" style={{left: cursor.x}} />
         </>
       )}
-      {selectedRect && (
+      {!isEditingRegion && selectedRect && (
         <div
           className={`region-selection-rect ${invalid ? 'invalid' : ''}`}
           style={{
@@ -1576,20 +1563,56 @@ function RegionOverlayWindow() {
           <span className="corner bottom-right" />
         </div>
       )}
+      {editableRect && (
+        <div
+          className="region-edit-rect"
+          style={{
+            left: editableRect.x,
+            top: editableRect.y,
+            width: editableRect.width,
+            height: editableRect.height,
+          }}
+        >
+          <button className="region-edit-move" type="button" aria-label="Move selected region" onPointerDown={(event) => editDrag.beginEdit(event, 'move')}>
+            <span />
+          </button>
+          {regionResizeActions.map((action) => (
+            <button
+              key={action}
+              className={`region-edit-resize ${action}`}
+              type="button"
+              aria-label={`Resize ${action}`}
+              onPointerDown={(event) => editDrag.beginEdit(event, action)}
+            />
+          ))}
+          <div className="region-edit-controls">
+            <b>{editableRect.width} x {editableRect.height}</b>
+            <button
+              type="button"
+              aria-label={copy.regionOverlay.cancel}
+              title={copy.regionOverlay.cancel}
+              onPointerDown={(event) => event.stopPropagation()}
+              onClick={() => void cancelSelectedRegion()}
+            >
+              <X size={17} />
+            </button>
+          </div>
+        </div>
+      )}
       <button
         className="region-cancel-button"
         type="button"
         aria-label={copy.regionOverlay.cancel}
         title={copy.regionOverlay.cancel}
         onPointerDown={(event) => event.stopPropagation()}
-        onClick={() => void cancelSelection()}
+        onClick={() => void (isEditingRegion ? cancelSelectedRegion() : cancelSelection())}
       >
         <X size={22} />
       </button>
-      <div className="region-overlay-badge" aria-hidden="true">
+      {!isEditingRegion && <div className="region-overlay-badge" aria-hidden="true">
         <MousePointer2 size={16} />
         <span>{copy.regionOverlay.esc}</span>
-      </div>
+      </div>}
     </main>
   )
 }

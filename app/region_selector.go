@@ -130,9 +130,6 @@ func (s *RecordingFreedomService) CompleteRegionSelection(req RegionSelectionReq
 	}
 	_ = s.showRegionEditor(absoluteDIP)
 	s.emitRegionSelection(result)
-	if s.regionOverlay != nil {
-		s.regionOverlay.Hide()
-	}
 	return result, nil
 }
 
@@ -173,6 +170,9 @@ func (s *RecordingFreedomService) CancelSelectedRegion() RegionSelectionResult {
 	result := RegionSelectionResult{Cancelled: true}
 	s.clearSelectedRegionDIP()
 	_ = s.HideRegionFrame()
+	if s.regionOverlay != nil {
+		s.regionOverlay.Hide()
+	}
 	s.emitRegionSelection(result)
 	return result
 }
@@ -201,58 +201,70 @@ func (s *RecordingFreedomService) HideRegionFrame() error {
 			frame.Hide()
 		}
 	}
-	if s.regionFrame == nil {
-		return nil
+	if s.regionOverlay != nil {
+		s.regionOverlay.Hide()
 	}
-	s.regionFrame.Hide()
 	return nil
 }
 
 func (s *RecordingFreedomService) showRegionFrame(bounds application.Rect) error {
-	if len(s.regionFrames) > 0 {
-		return s.showRegionFrameEdges(bounds)
-	}
-	if s.regionFrame == nil {
-		return nil
-	}
 	if bounds.Width <= 0 || bounds.Height <= 0 {
 		return nil
 	}
-	state := RegionFrameState{Bounds: regionRectFromAppRect(bounds), Mode: "recording"}
-	s.regionFrame.SetIgnoreMouseEvents(true)
-	s.regionFrame.SetAlwaysOnTop(true)
-	s.regionFrame.SetBounds(bounds)
-	s.regionFrame.Show()
-	s.regionFrame.SetBounds(bounds)
-	if payload, err := json.Marshal(state); err == nil {
-		s.regionFrame.ExecJS(fmt.Sprintf(
-			"window.__RF_REGION_FRAME__=%s;window.dispatchEvent(new CustomEvent('rf-region-frame',{detail:window.__RF_REGION_FRAME__}));",
-			string(payload),
-		))
+	if s.regionOverlay != nil {
+		s.regionOverlay.Hide()
 	}
+	state := RegionFrameState{Bounds: regionRectFromAppRect(bounds), Mode: "recording"}
+	if err := s.showRegionFrameEdges(bounds); err != nil {
+		return err
+	}
+	s.broadcastRegionFrameState(state)
 	return nil
 }
 
 func (s *RecordingFreedomService) showRegionEditor(bounds application.Rect) error {
-	if s.regionFrame == nil {
-		return nil
-	}
 	if bounds.Width <= 0 || bounds.Height <= 0 {
 		return nil
 	}
+	for _, frame := range s.regionFrames {
+		if frame != nil {
+			frame.Hide()
+		}
+	}
+	if s.regionOverlay != nil && s.app != nil {
+		overlayBounds, _ := regionOverlayBounds(s.app.Screen.GetAll())
+		s.regionOverlay.SetIgnoreMouseEvents(false)
+		s.regionOverlay.SetAlwaysOnTop(true)
+		s.regionOverlay.SetBounds(overlayBounds)
+		s.regionOverlay.Show()
+		s.regionOverlay.SetBounds(overlayBounds)
+	}
 	state := RegionFrameState{Bounds: regionRectFromAppRect(bounds), Mode: "edit"}
-	s.regionFrame.SetIgnoreMouseEvents(false)
-	s.regionFrame.SetAlwaysOnTop(true)
-	s.regionFrame.SetBounds(bounds)
-	s.regionFrame.Show()
-	s.regionFrame.SetBounds(bounds)
-	if payload, err := json.Marshal(state); err == nil {
-		s.regionFrame.ExecJS(fmt.Sprintf(
-			"window.__RF_REGION_FRAME__=%s;window.dispatchEvent(new CustomEvent('rf-region-frame',{detail:window.__RF_REGION_FRAME__}));",
-			string(payload),
-		))
+	s.broadcastRegionFrameState(state)
+	if s.capsuleWindow != nil {
+		s.capsuleWindow.SetAlwaysOnTop(true)
+		s.capsuleWindow.Show()
 	}
 	return nil
+}
+
+func (s *RecordingFreedomService) broadcastRegionFrameState(state RegionFrameState) {
+	payload, err := json.Marshal(state)
+	if err != nil {
+		return
+	}
+	script := fmt.Sprintf(
+		"window.__RF_REGION_FRAME__=%s;window.dispatchEvent(new CustomEvent('rf-region-frame',{detail:window.__RF_REGION_FRAME__}));",
+		string(payload),
+	)
+	if s.regionOverlay != nil {
+		s.regionOverlay.ExecJS(script)
+	}
+	for _, frame := range s.regionFrames {
+		if frame != nil {
+			frame.ExecJS(script)
+		}
+	}
 }
 
 func (s *RecordingFreedomService) regionResultFromAbsoluteDIP(absoluteDIP application.Rect) RegionSelectionResult {

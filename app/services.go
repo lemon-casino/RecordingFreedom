@@ -38,9 +38,9 @@ type RecordingFreedomService struct {
 	settings  *settings.Service
 
 	app               *application.App
+	capsuleWindow     *application.WebviewWindow
 	settingsWindow    *application.WebviewWindow
 	regionOverlay     *application.WebviewWindow
-	regionFrame       *application.WebviewWindow
 	regionFrames      []*application.WebviewWindow
 	screenIndicator   *application.WebviewWindow
 	trayLocale        func(settings.Locale)
@@ -69,16 +69,16 @@ func (s *RecordingFreedomService) setApp(app *application.App) {
 	s.app = app
 }
 
+func (s *RecordingFreedomService) setCapsuleWindow(window *application.WebviewWindow) {
+	s.capsuleWindow = window
+}
+
 func (s *RecordingFreedomService) setSettingsWindow(window *application.WebviewWindow) {
 	s.settingsWindow = window
 }
 
 func (s *RecordingFreedomService) setRegionOverlayWindow(window *application.WebviewWindow) {
 	s.regionOverlay = window
-}
-
-func (s *RecordingFreedomService) setRegionFrameWindow(window *application.WebviewWindow) {
-	s.regionFrame = window
 }
 
 func (s *RecordingFreedomService) setRegionFrameWindows(windows []*application.WebviewWindow) {
@@ -467,9 +467,6 @@ func (s *RecordingFreedomService) lockRegionFrameForRecording(req recording.Star
 	}
 	if rect.Width <= 0 || rect.Height <= 0 {
 		return
-	}
-	if s.regionFrame != nil {
-		s.regionFrame.Hide()
 	}
 	_ = s.showRegionFrame(rect)
 }

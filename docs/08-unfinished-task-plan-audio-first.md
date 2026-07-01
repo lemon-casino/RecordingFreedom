@@ -4,7 +4,7 @@
 
 本文档把初版 preview 之后尚未完成的工作拆成可执行任务。当前策略调整为：先收口语言设置、真实语音/音频录制与视频录制；摄像头 sidecar、画中画、导出和正式发布链路在这三项验收后再恢复。
 
-当前 preview 仍不能对外宣称完整真实录制已完成。已完成的是 UI Shell、设置、语言、图标、mock `.rfrec` 包、`data/video` 写盘结构、全平台 preview build、Windows WASAPI 音频采集、真实麦克风设备枚举与电平监听、RNNoise native wrapper、Windows FFmpeg desktop video writer 代码路径、Windows 停止阶段音视频 mux、Windows 20 分钟音视频长录 smoke、Windows portable zip FFmpeg 依赖准备路径、Windows GUI subsystem/FFmpeg 子进程命令窗口隐藏门禁、Windows 默认音频设备保留真实 WASAPI endpoint、录制态来源/音频/摄像头配置锁定、区域录制持久边框、macOS ScreenCaptureKit video/system-audio mux 代码路径、macOS CoreAudio 麦克风枚举和 PCM 采集代码路径，以及无 GUI doctor/smoke 验收入口。`v0.1.0-preview.11` 已作为 GitHub prerelease 发布，Release Gate、Windows x64、macOS arm64、Linux x64 和 Publish GitHub Release 均通过。还缺少的是 release artifact clean-machine 验收、目标桌面 RNNoise 实录听感/诊断、macOS/Linux 真机视频验收和 Linux PipeWire writer。摄像头 sidecar 和 PIP 当前暂停，不计入本轮视频/语音验收。
+当前 preview 仍不能对外宣称完整真实录制已完成。已完成的是 UI Shell、设置、语言、图标、mock `.rfrec` 包、`data/video` 写盘结构、全平台 preview build、Windows WASAPI 音频采集、真实麦克风设备枚举与电平监听、RNNoise native wrapper、Windows FFmpeg desktop video writer 代码路径、Windows 停止阶段音视频 mux、Windows 20 分钟音视频长录 smoke、Windows portable zip FFmpeg 依赖准备路径、Windows GUI subsystem/FFmpeg 子进程命令窗口隐藏门禁、Windows 默认音频设备保留真实 WASAPI endpoint、录制态来源/音频/摄像头配置锁定、区域录制持久边框、macOS ScreenCaptureKit video/system-audio mux 代码路径、macOS CoreAudio 麦克风枚举和 PCM 采集代码路径，以及无 GUI doctor/smoke 验收入口。`v0.1.0-preview.12` 已作为 GitHub prerelease 发布，Release Gate、Windows x64、macOS arm64、Linux x64 和 Publish GitHub Release 均通过；本轮 `v0.1.0-preview.13` 聚焦胶囊透明灰底、屏幕编号标识和区域编辑 overlay 的可验收 UI 修复。还缺少的是 release artifact clean-machine 验收、目标桌面 RNNoise 实录听感/诊断、macOS/Linux 真机视频验收和 Linux PipeWire writer。摄像头 sidecar 和 PIP 当前暂停，不计入本轮视频/语音验收。
 
 ## P0-AUDIO：真实音频与 RNNoise 降噪
 
@@ -222,8 +222,8 @@
 - 多屏幕识别：`DeviceService.ListSources()` 必须返回单个显示器坐标，并在多显示器时暴露 `all-screens:virtual-desktop` 源；Windows FFmpeg backend 可录虚拟桌面，macOS/Linux 多屏合成 writer 完成前仍不能进入 ready。
 - 单屏选择 UI：胶囊来源菜单按 `屏幕 1..N` / `Screen 1..N` 展示每块显示器，移入或聚焦时在对应物理屏幕显示编号标识；当前已完成 `ShowScreenIndicator()` / `HideScreenIndicator()` 与前端 hover/focus 接入。
 - 程序来源 UI：Application/Program 后端合同保留给后续演进，但当前胶囊来源菜单和能力矩阵不展示程序来源；preflight 也不能把它作为初版 ready 能力。
-- 区域录制 overlay：点击区域后出现跨显示器透明 overlay、十字光标、拖拽红框、尺寸浮标、松开确认、Esc 取消；确认后把虚拟桌面坐标写入 `source.geometry`。已完成基础交互和后端事件合同。
-- 区域录制边框：框选完成后显示独立、置顶、鼠标穿透的 `region-frame` 窗口标识选中范围；录制中保持显示，切换到非区域来源或音频模式时隐藏。
+- 区域录制 overlay：点击区域后出现跨显示器透明 overlay、十字光标、拖拽红框、尺寸浮标、松开确认、Esc 取消；确认后把虚拟桌面坐标写入 `source.geometry`。框选完成但尚未录制时，同一个透明 `region-overlay` 进入编辑态，只保留红色边框、中心移动十字、八个缩放热区和右上尺寸/取消控件，支持扩大、缩小、移动和取消框选。
+- 区域录制边框：开始录制后隐藏编辑 overlay，显示四条独立、置顶、鼠标穿透的红色边框窗口标识选中范围；录制中保持显示，切换到非区域来源或音频模式时隐藏。
 - 录制态配置锁定：进入 preparing/recording/paused/stopping 后，胶囊 UI 会禁用来源/区域/音频/摄像头入口并关闭已打开的对应面板；结束录制后重新启用。
 - 区域录制 crop writer：macOS 单显示器区域已读取 `video.CaptureConfig.SourceGeometry`，并通过 ScreenCaptureKit `sourceRect` 输出裁剪后的 `screen.mp4`；区域 geometry 在 manifest / diagnostics 中保持虚拟桌面逻辑坐标，ScreenCaptureKit 原生层负责转换到显示器本地坐标。Windows 已读取同一 geometry 并通过 FFmpeg `offset_x/offset_y/video_size` 裁剪虚拟桌面；Linux writer 仍需要读取同一 geometry 并做真实裁剪或 crop/scaling。
 - 锁定窗口录制：窗口列表选择的是固定 native target；最小化/关闭/权限丢失时必须停止或 failed diagnostics，不允许改录其他窗口。
@@ -279,7 +279,7 @@
 
 ## P1-RELEASE：正式发布链路
 
-状态：preview 发布链路已能产出可下载验收包。`v0.1.0-preview.11` 已作为 GitHub prerelease 发布，Release Gate、Windows x64、macOS arm64、Linux x64 和 Publish GitHub Release 均通过；产物包含 Windows portable zip、macOS arm64 raw preview binary、Linux x64 raw preview binary 和 SHA256SUMS。该版本把真实麦克风设备枚举/电平监听、真实 WASAPI endpoint 选择、macOS CoreAudio 麦克风代码路径、Windows GUI subsystem、FFmpeg 子进程命令窗口隐藏、录制态配置锁定和区域录制持久边框纳入验收包。正式签名安装包、公证、Linux 包格式和 clean-machine 验收仍未完成。
+状态：preview 发布链路已能产出可下载验收包。`v0.1.0-preview.12` 已作为 GitHub prerelease 发布，Release Gate、Windows x64、macOS arm64、Linux x64 和 Publish GitHub Release 均通过；产物包含 Windows portable zip、macOS arm64 raw preview binary、Linux x64 raw preview binary 和 SHA256SUMS。该版本把真实麦克风设备枚举/电平监听、真实 WASAPI endpoint 选择、macOS CoreAudio 麦克风代码路径、Windows GUI subsystem、FFmpeg 子进程命令窗口隐藏、录制态配置锁定和区域录制持久边框纳入验收包。本轮准备的 `v0.1.0-preview.13` 只作为 UI/交互验收包推进，重点验证胶囊透明背景、屏幕编号标识和区域编辑 overlay。正式签名安装包、公证、Linux 包格式和 clean-machine 验收仍未完成。
 
 任务：
 
@@ -291,7 +291,7 @@
 验收：
 
 - GitHub Actions 产出可安装包。当前 preview 只产出 Windows portable zip 和 macOS/Linux raw binary，不等同正式安装包。
-- SHA256SUMS 和 release notes 完整。`v0.1.0-preview.11` 已完成 preview 级别 SHA256SUMS 和 release notes。
+- SHA256SUMS 和 release notes 完整。`v0.1.0-preview.12` 已完成 preview 级别 SHA256SUMS 和 release notes；`v0.1.0-preview.13` 发布时继续沿用同一 release gate。
 - macOS Gatekeeper 不阻止已公证包。
 - Windows clean machine 可启动。
 
@@ -318,7 +318,7 @@
 2. A1 真实音频设备枚举。Windows 已完成；macOS CoreAudio 输入设备枚举代码路径已完成，下一步补 macOS 真机验证和 Linux。
 3. A3 麦克风采集。Windows 已完成并 smoke 验证；macOS CoreAudio 麦克风采集代码路径已完成，下一步补 macOS 真机 smoke、长录同步和 Linux。
 4. A4 RNNoise native DSP。wrapper 已迁移并恢复 CI/release gate 定向验证；能力矩阵已按 `rnnoise.Available()` 动态展示；preview/release artifact 已改为默认启用 `rnnoise_native` 并通过 `desktop-doctor -require-rnnoise`。下一步是在目标桌面补真实 `audio-smoke -rnnoise`、听感检查和长录诊断。
-5. A2 系统声音采集。Windows source 已实现并通过有播放源真实样本 smoke，录屏 runtime 已能启动 WASAPI sidecar 并在停止阶段 mux 到主 `screen.mp4`，Windows 20 分钟音视频长录已通过，Windows portable zip 已能准备 FFmpeg 依赖并在 `v0.1.0-preview.11` release workflow 中通过内容校验；下一步做 release artifact clean-machine 真实录制验收。
+5. A2 系统声音采集。Windows source 已实现并通过有播放源真实样本 smoke，录屏 runtime 已能启动 WASAPI sidecar 并在停止阶段 mux 到主 `screen.mp4`，Windows 20 分钟音视频长录已通过，Windows portable zip 已能准备 FFmpeg 依赖并在 `v0.1.0-preview.12` release workflow 中通过内容校验；下一步做 release artifact clean-machine 真实录制验收。
 6. A5 音频混音、mux 与写盘。Windows 屏幕录制停止阶段 mux 与 audio-only 停止阶段 `audio.m4a` 封装已完成；macOS CoreAudio 麦克风采集源已接入 native audio runtime，下一步补 macOS 真机 mux/sync 验收、Linux 音频源、live PCM pipe/内存水位策略，并做三平台长录同步。
 7. A6 预检、UI 和设置联动。
 8. A7 三平台手动验证矩阵。

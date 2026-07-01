@@ -8,12 +8,15 @@ import (
 )
 
 func TestScreenIndicatorBoundsCenterCardOnDisplay(t *testing.T) {
-	got := screenIndicatorBounds(application.Rect{X: 1920, Y: 0, Width: 2560, Height: 1440})
+	display := application.Rect{X: 1920, Y: 0, Width: 2560, Height: 1440}
+	got := screenIndicatorBounds(display)
 
 	if got.Width != screenIndicatorMaxWidth || got.Height != screenIndicatorMaxHeight {
 		t.Fatalf("indicator size = %dx%d, want capped %dx%d", got.Width, got.Height, screenIndicatorMaxWidth, screenIndicatorMaxHeight)
 	}
-	if got.X != 2940 || got.Y != 530 {
+	wantX := display.X + (display.Width-got.Width)/2
+	wantY := display.Y + (display.Height-got.Height)/2
+	if got.X != wantX || got.Y != wantY {
 		t.Fatalf("indicator origin = %d,%d, want centered on second display", got.X, got.Y)
 	}
 }

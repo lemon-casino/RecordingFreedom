@@ -50,6 +50,8 @@ body.rf-settings-window {
 
 body.rf-recorder-window {
   background: transparent;
+  --shadow-tight: 0 0 0 0 transparent;
+  --shadow-panel: 0 0 0 0 transparent;
 }
 
 body.rf-region-overlay-window {
@@ -65,7 +67,6 @@ body.rf-screen-indicator-window {
 body.rf-region-frame-window {
   background: transparent;
   user-select: none;
-  pointer-events: none;
 }
 
 button,
@@ -111,7 +112,10 @@ button:disabled {
   border: 1px solid var(--line);
   border-radius: var(--radius-pill);
   background: linear-gradient(180deg, rgba(25, 31, 38, 0.94), rgba(13, 17, 22, 0.92));
-  box-shadow: var(--shadow-tight), inset 0 1px 0 rgba(255, 255, 255, 0.08);
+  box-shadow:
+    var(--shadow-tight),
+    inset 0 1px 0 rgba(255, 255, 255, 0.08),
+    inset 0 -1px 0 rgba(0, 0, 0, 0.36);
   backdrop-filter: blur(22px) saturate(150%);
   transition: border-color 180ms ease, box-shadow 180ms ease;
   --wails-draggable: drag;
@@ -127,7 +131,10 @@ button:disabled {
 
 .capsule-active {
   border-color: rgba(240, 68, 56, 0.38);
-  box-shadow: var(--shadow-tight), 0 0 24px rgba(240, 68, 56, 0.1), inset 0 1px 0 rgba(255, 255, 255, 0.08);
+  box-shadow:
+    var(--shadow-tight),
+    inset 0 1px 0 rgba(255, 255, 255, 0.08),
+    inset 0 0 0 1px rgba(240, 68, 56, 0.12);
 }
 
 .grabber {
@@ -266,7 +273,7 @@ select:disabled {
 }
 
 .icon-button.strong {
-  box-shadow: 0 0 20px rgba(17, 183, 167, 0.16);
+  box-shadow: inset 0 0 0 1px rgba(17, 183, 167, 0.26);
 }
 
 .icon-button.soft {
@@ -368,6 +375,15 @@ select:disabled {
   backdrop-filter: blur(24px) saturate(150%);
   --wails-draggable: no-drag;
   overflow: visible;
+}
+
+body.rf-recorder-window .popover,
+body.rf-recorder-window .settings-panel,
+body.rf-recorder-window .close-confirm-panel,
+body.rf-recorder-window .select-menu-list {
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.06),
+    inset 0 -1px 0 rgba(0, 0, 0, 0.34);
 }
 
 .popover.panel-audio,
@@ -739,7 +755,7 @@ select {
   border: 1px solid rgba(199, 210, 221, 0.18);
   border-radius: 16px;
   background: rgba(17, 22, 28, 0.98);
-  box-shadow: 0 22px 50px rgba(0, 0, 0, 0.45);
+  box-shadow: var(--shadow-panel);
   backdrop-filter: blur(24px) saturate(150%);
 }
 
@@ -1159,194 +1175,80 @@ input {
   color: #ffdfdc;
 }
 
-.region-frame-shell {
-  position: fixed;
-  inset: 0;
-  overflow: hidden;
-  background: transparent;
-  --wails-draggable: no-drag;
-}
-
-.region-frame-edge-strip {
+.region-frame-empty,
+.region-frame-edge-shell {
   width: 100%;
   height: 100%;
-  background: #ff4747;
-  box-shadow:
-    0 0 0 1px rgba(255, 255, 255, 0.48),
-    0 0 18px rgba(255, 71, 71, 0.78),
-    0 0 34px rgba(255, 71, 71, 0.38);
-  pointer-events: none;
+  background: transparent;
   --wails-draggable: no-drag;
 }
 
 .region-frame-empty {
-  width: 100%;
-  height: 100%;
-  background: transparent;
   pointer-events: none;
-  --wails-draggable: no-drag;
 }
 
-.region-frame-shell.editable {
+.region-frame-edge-shell {
+  position: relative;
+  overflow: hidden;
+}
+
+.region-frame-edge-shell.recording {
+  pointer-events: none;
+}
+
+.region-frame-edge-shell.edit {
   pointer-events: auto;
 }
 
-.region-frame-border {
+.region-frame-edge-shell span {
   position: absolute;
-  inset: 0;
-  border: 2px solid #ff4747;
-  box-shadow:
-    0 0 0 1px rgba(255, 255, 255, 0.32),
-    0 0 18px rgba(255, 71, 71, 0.44);
-  pointer-events: none;
-}
-
-.region-frame-badge,
-.region-frame-cancel {
-  position: fixed;
-  z-index: 4;
-  top: 10px;
-}
-
-.region-frame-badge {
-  right: 52px;
-  display: inline-grid;
-  height: 26px;
-  place-items: center;
-  padding: 0 9px;
-  border: 1px solid rgba(255, 255, 255, 0.18);
-  border-radius: 8px;
-  background: rgba(19, 22, 26, 0.78);
-  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.35);
-  color: #f8fafc;
-  font-size: 11px;
-  font-weight: 900;
-  font-variant-numeric: tabular-nums;
-}
-
-.region-frame-cancel {
-  right: 10px;
-  display: inline-grid;
-  width: 30px;
-  height: 30px;
-  place-items: center;
-  border: 1px solid rgba(255, 255, 255, 0.18);
-  border-radius: var(--radius-pill);
-  background: rgba(19, 22, 26, 0.78);
-  color: #ffdfdc;
-}
-
-.region-frame-move {
-  position: absolute;
-  z-index: 3;
-  top: 50%;
-  left: 50%;
-  display: grid;
-  width: 46px;
-  height: 46px;
-  place-items: center;
-  border: 1px solid rgba(255, 71, 71, 0.54);
-  border-radius: var(--radius-pill);
-  background: rgba(19, 22, 26, 0.62);
-  color: #ffffff;
-  cursor: move;
-  transform: translate(-50%, -50%);
-}
-
-.region-frame-move span,
-.region-frame-move span::before {
   display: block;
-  border-radius: 2px;
-  background: #ff4747;
-  content: "";
+  border-radius: 999px;
+  background: #ff3b3b;
 }
 
-.region-frame-move span {
-  width: 24px;
-  height: 2px;
-}
-
-.region-frame-move span::before {
-  width: 2px;
-  height: 24px;
-  margin: -11px auto 0;
-}
-
-.region-frame-resize {
-  position: absolute;
-  z-index: 3;
-  border: 0;
-  background: transparent;
-}
-
-.region-frame-resize.n,
-.region-frame-resize.s {
-  left: 42px;
-  right: 42px;
-  height: 14px;
+.region-frame-edge-shell.edge-top,
+.region-frame-edge-shell.edge-bottom {
   cursor: ns-resize;
 }
 
-.region-frame-resize.n {
-  top: -4px;
-}
-
-.region-frame-resize.s {
-  bottom: -4px;
-}
-
-.region-frame-resize.e,
-.region-frame-resize.w {
-  top: 42px;
-  bottom: 42px;
-  width: 14px;
+.region-frame-edge-shell.edge-right,
+.region-frame-edge-shell.edge-left {
   cursor: ew-resize;
 }
 
-.region-frame-resize.e {
-  right: -4px;
+.region-frame-edge-shell.edge-top span,
+.region-frame-edge-shell.edge-bottom span {
+  left: 0;
+  right: 0;
+  height: 2px;
 }
 
-.region-frame-resize.w {
-  left: -4px;
+.region-frame-edge-shell.edge-top span {
+  top: 0;
 }
 
-.region-frame-resize.ne,
-.region-frame-resize.nw,
-.region-frame-resize.se,
-.region-frame-resize.sw {
-  width: 28px;
-  height: 28px;
+.region-frame-edge-shell.edge-bottom span {
+  bottom: 0;
 }
 
-.region-frame-resize.ne,
-.region-frame-resize.sw {
-  cursor: nesw-resize;
+.region-frame-edge-shell.edge-right span,
+.region-frame-edge-shell.edge-left span {
+  top: 0;
+  bottom: 0;
+  width: 2px;
 }
 
-.region-frame-resize.nw,
-.region-frame-resize.se {
-  cursor: nwse-resize;
+.region-frame-edge-shell.edge-right span {
+  right: 0;
 }
 
-.region-frame-resize.ne {
-  top: -7px;
-  right: -7px;
+.region-frame-edge-shell.edge-left span {
+  left: 0;
 }
 
-.region-frame-resize.nw {
-  top: -7px;
-  left: -7px;
-}
-
-.region-frame-resize.se {
-  right: -7px;
-  bottom: -7px;
-}
-
-.region-frame-resize.sw {
-  bottom: -7px;
-  left: -7px;
+.region-frame-edge-shell.recording span {
+  box-shadow: none;
 }
 
 .region-overlay-shell {
@@ -1434,6 +1336,167 @@ input {
   display: none;
 }
 
+.region-edit-rect {
+  position: fixed;
+  z-index: 4;
+  border: 2px solid #ff3b3b;
+  background: transparent;
+  pointer-events: none;
+}
+
+.region-edit-move,
+.region-edit-resize,
+.region-edit-controls,
+.region-edit-controls button {
+  pointer-events: auto;
+}
+
+.region-edit-move {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  display: grid;
+  width: 44px;
+  height: 44px;
+  place-items: center;
+  border: 1px solid rgba(255, 59, 59, 0.72);
+  border-radius: var(--radius-pill);
+  background: rgba(20, 24, 28, 0.48);
+  color: #ffffff;
+  cursor: move;
+  transform: translate(-50%, -50%);
+}
+
+.region-edit-move span,
+.region-edit-move span::before {
+  display: block;
+  border-radius: 2px;
+  background: #ff3b3b;
+  content: "";
+}
+
+.region-edit-move span {
+  width: 24px;
+  height: 2px;
+}
+
+.region-edit-move span::before {
+  width: 2px;
+  height: 24px;
+  margin: -11px auto 0;
+}
+
+.region-edit-resize {
+  position: absolute;
+  border: 0;
+  background: transparent;
+}
+
+.region-edit-resize.n,
+.region-edit-resize.s {
+  left: 38px;
+  right: 38px;
+  height: 14px;
+  cursor: ns-resize;
+}
+
+.region-edit-resize.n {
+  top: -7px;
+}
+
+.region-edit-resize.s {
+  bottom: -7px;
+}
+
+.region-edit-resize.e,
+.region-edit-resize.w {
+  top: 38px;
+  bottom: 38px;
+  width: 14px;
+  cursor: ew-resize;
+}
+
+.region-edit-resize.e {
+  right: -7px;
+}
+
+.region-edit-resize.w {
+  left: -7px;
+}
+
+.region-edit-resize.ne,
+.region-edit-resize.nw,
+.region-edit-resize.se,
+.region-edit-resize.sw {
+  width: 34px;
+  height: 34px;
+}
+
+.region-edit-resize.ne,
+.region-edit-resize.sw {
+  cursor: nesw-resize;
+}
+
+.region-edit-resize.nw,
+.region-edit-resize.se {
+  cursor: nwse-resize;
+}
+
+.region-edit-resize.ne {
+  top: -10px;
+  right: -10px;
+}
+
+.region-edit-resize.nw {
+  top: -10px;
+  left: -10px;
+}
+
+.region-edit-resize.se {
+  right: -10px;
+  bottom: -10px;
+}
+
+.region-edit-resize.sw {
+  bottom: -10px;
+  left: -10px;
+}
+
+.region-edit-controls {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.region-edit-controls b {
+  display: inline-grid;
+  height: 30px;
+  min-width: 106px;
+  place-items: center;
+  padding: 0 12px;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  border-radius: 10px;
+  background: rgba(18, 22, 26, 0.72);
+  color: #f8fafc;
+  font-size: 12px;
+  font-weight: 900;
+  font-variant-numeric: tabular-nums;
+}
+
+.region-edit-controls button {
+  display: inline-grid;
+  width: 34px;
+  height: 34px;
+  place-items: center;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  border-radius: var(--radius-pill);
+  background: rgba(18, 22, 26, 0.72);
+  color: #ffdfdc;
+}
+
 .region-cancel-button {
   position: fixed;
   z-index: 5;
@@ -1475,21 +1538,25 @@ input {
   height: 100%;
   align-items: center;
   justify-content: center;
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  border-radius: 28px;
-  background: #111111;
-  box-shadow: 0 24px 80px rgba(0, 0, 0, 0.55);
+  border: 0;
+  border-radius: 10px;
+  background: #0f1113;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.08);
   color: #ffffff;
   --wails-draggable: no-drag;
   overflow: hidden;
 }
 
 .screen-indicator-shell span {
+  display: grid;
+  width: 100%;
+  height: 100%;
+  place-items: center;
   color: #f8fbff;
-  font-size: clamp(96px, 44vh, 188px);
-  font-weight: 300;
-  line-height: 0.76;
-  transform: translateY(-0.03em);
+  font-size: clamp(72px, 30vh, 128px);
+  font-weight: 400;
+  line-height: 0.9;
+  font-variant-numeric: tabular-nums;
   text-shadow:
     1px 0 0 rgba(17, 183, 167, 0.8),
     -1px 0 0 rgba(245, 158, 11, 0.75);
@@ -1532,9 +1599,8 @@ label,
 }
 
 @media (max-width: 840px) {
-  html,
-  body,
-  #root {
+  body.rf-recorder-window,
+  body.rf-recorder-window #root {
     min-width: 360px;
     min-height: 640px;
   }
