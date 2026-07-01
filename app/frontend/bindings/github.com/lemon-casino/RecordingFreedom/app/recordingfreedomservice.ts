@@ -75,6 +75,10 @@ export function ListSources(): $CancellablePromise<devices$0.CaptureSource[] | n
     return $Call.ByID(3137910140);
 }
 
+export function OpenRecordingPackage(packageDir: string): $CancellablePromise<recpackage$0.RecoverySummary> {
+    return $Call.ByID(339423795, packageDir);
+}
+
 export function OpenVideoDirectory(): $CancellablePromise<appdata$0.Info> {
     return $Call.ByID(1462702352);
 }

@@ -417,6 +417,15 @@ export async function openVideoDirectory(): Promise<AppDataInfo> {
   }
 }
 
+export async function openRecordingPackage(packagePath: string): Promise<RecordingRecovery> {
+  try {
+    return fromBoundRecovery(await RecordingFreedomService.OpenRecordingPackage(packagePath))
+  } catch (error) {
+    console.info('Desktop recording package open unavailable:', error)
+    throw error
+  }
+}
+
 export async function scanRecordingPackages(): Promise<RecordingRecovery[]> {
   try {
     const recoveries = await RecordingFreedomService.ScanRecordingPackages()

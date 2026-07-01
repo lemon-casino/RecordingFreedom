@@ -3,6 +3,7 @@ package main
 import (
 	"errors"
 	"fmt"
+	"os"
 	"os/exec"
 	"path/filepath"
 	"runtime"
@@ -191,6 +192,80 @@ func (s *RecordingFreedomService) OpenVideoDirectory() (appdata.Info, error) {
 		return appdata.Info{}, err
 	}
 	return info, nil
+}
+
+func (s *RecordingFreedomService) OpenRecordingPackage(packageDir string) (recpackage.RecoverySummary, error) {
+	info, err := s.appData.Info()
+	if err != nil {
+		return recpackage.RecoverySummary{}, err
+	}
+	summary, err := managedRecordingPackageSummary(info.VideoDir, packageDir)
+	if err != nil {
+		return recpackage.RecoverySummary{}, err
+	}
+	if err := openPath(summary.PackageDir); err != nil {
+		return recpackage.RecoverySummary{}, err
+	}
+	return summary, nil
+}
+
+func managedRecordingPackageSummary(videoDir string, packageDir string) (recpackage.RecoverySummary, error) {
+	target, err := managedRecordingPackageDir(videoDir, packageDir)
+	if err != nil {
+		return recpackage.RecoverySummary{}, err
+	}
+	info, err := os.Stat(target)
+	if err != nil {
+		return recpackage.RecoverySummary{}, err
+	}
+	if !info.IsDir() {
+		return recpackage.RecoverySummary{}, fmt.Errorf("packageDir %q is not a directory", packageDir)
+	}
+	manifestPath := filepath.Join(target, recpackage.ManifestFile)
+	summary := recpackage.RecoverySummary{
+		PackageDir:   target,
+		ManifestPath: manifestPath,
+	}
+	manifest, err := recpackage.NewService().ReadManifest(manifestPath)
+	if err != nil {
+		summary.Status = recpackage.StatusFailed
+		summary.Reason = fmt.Sprintf("manifest is missing or unreadable: %v", err)
+		return summary, nil
+	}
+	summary.Status = manifest.Status
+	if summary.Status == "" {
+		summary.Status = recpackage.StatusFailed
+		summary.Reason = "manifest status is empty"
+	}
+	return summary, nil
+}
+
+func managedRecordingPackageDir(videoDir string, packageDir string) (string, error) {
+	if strings.TrimSpace(videoDir) == "" {
+		return "", errors.New("videoDir is required")
+	}
+	if strings.TrimSpace(packageDir) == "" {
+		return "", errors.New("packageDir is required")
+	}
+	videoRoot, err := filepath.Abs(videoDir)
+	if err != nil {
+		return "", err
+	}
+	target, err := filepath.Abs(packageDir)
+	if err != nil {
+		return "", err
+	}
+	rel, err := filepath.Rel(videoRoot, target)
+	if err != nil {
+		return "", err
+	}
+	if rel == "." || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) || filepath.IsAbs(rel) {
+		return "", fmt.Errorf("packageDir %q must be inside videoDir %q", packageDir, videoDir)
+	}
+	if !strings.HasSuffix(filepath.Base(target), recpackage.PackageDirSuffix) {
+		return "", fmt.Errorf("packageDir %q must end with %s", packageDir, recpackage.PackageDirSuffix)
+	}
+	return target, nil
 }
 
 func (s *RecordingFreedomService) GetSettings() (settings.Settings, error) {

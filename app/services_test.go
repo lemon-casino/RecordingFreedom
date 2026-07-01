@@ -1,8 +1,10 @@
 package main
 
 import (
+	"os"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/lemon-casino/RecordingFreedom/app/internal/appdata"
 	"github.com/lemon-casino/RecordingFreedom/app/internal/capture"
@@ -115,6 +117,137 @@ func TestOpenVideoDirectoryUsesManagedDataVideo(t *testing.T) {
 	}
 	if filepath.Base(opened) != "video" || filepath.Base(filepath.Dir(opened)) != "data" {
 		t.Fatalf("opened path = %q, want managed data/video directory", opened)
+	}
+}
+
+func TestOpenRecordingPackageUsesManagedPackageDir(t *testing.T) {
+	data := appdata.NewService(t.TempDir())
+	info, err := data.Info()
+	if err != nil {
+		t.Fatalf("Info() error = %v", err)
+	}
+	pkg, err := recpackage.NewService().CreateMock(info.VideoDir, recpackage.CreateMockRequest{
+		CreatedAt: time.Now(),
+		Status:    recpackage.StatusReady,
+		Source: recpackage.ManifestSource{
+			Type: "screen",
+			ID:   "screen:primary",
+		},
+	})
+	if err != nil {
+		t.Fatalf("CreateMock() error = %v", err)
+	}
+
+	service := &RecordingFreedomService{appData: data}
+	var opened string
+	originalOpenPath := openPath
+	openPath = func(path string) error {
+		opened = path
+		return nil
+	}
+	t.Cleanup(func() {
+		openPath = originalOpenPath
+	})
+
+	summary, err := service.OpenRecordingPackage(pkg.Dir)
+	if err != nil {
+		t.Fatalf("OpenRecordingPackage() error = %v", err)
+	}
+	if opened != pkg.Dir {
+		t.Fatalf("opened path = %q, want %q", opened, pkg.Dir)
+	}
+	if summary.PackageDir != pkg.Dir || summary.ManifestPath != pkg.ManifestPath || summary.Status != recpackage.StatusReady {
+		t.Fatalf("summary = %#v, want ready package", summary)
+	}
+}
+
+func TestOpenRecordingPackageAllowsMissingManifestForDiagnostics(t *testing.T) {
+	data := appdata.NewService(t.TempDir())
+	info, err := data.Info()
+	if err != nil {
+		t.Fatalf("Info() error = %v", err)
+	}
+	packageDir := filepath.Join(info.VideoDir, "recording-missing-manifest"+recpackage.PackageDirSuffix)
+	if err := os.MkdirAll(packageDir, 0o755); err != nil {
+		t.Fatalf("MkdirAll() error = %v", err)
+	}
+
+	service := &RecordingFreedomService{appData: data}
+	var opened string
+	originalOpenPath := openPath
+	openPath = func(path string) error {
+		opened = path
+		return nil
+	}
+	t.Cleanup(func() {
+		openPath = originalOpenPath
+	})
+
+	summary, err := service.OpenRecordingPackage(packageDir)
+	if err != nil {
+		t.Fatalf("OpenRecordingPackage() error = %v", err)
+	}
+	if opened != packageDir {
+		t.Fatalf("opened path = %q, want %q", opened, packageDir)
+	}
+	if summary.Status != recpackage.StatusFailed || summary.Reason == "" {
+		t.Fatalf("summary = %#v, want failed diagnostic summary", summary)
+	}
+}
+
+func TestOpenRecordingPackageRejectsPathsOutsideManagedDataVideo(t *testing.T) {
+	data := appdata.NewService(t.TempDir())
+	outside := filepath.Join(t.TempDir(), "recording-outside"+recpackage.PackageDirSuffix)
+	if err := os.MkdirAll(outside, 0o755); err != nil {
+		t.Fatalf("MkdirAll(outside) error = %v", err)
+	}
+
+	service := &RecordingFreedomService{appData: data}
+	opened := false
+	originalOpenPath := openPath
+	openPath = func(path string) error {
+		opened = true
+		return nil
+	}
+	t.Cleanup(func() {
+		openPath = originalOpenPath
+	})
+
+	if _, err := service.OpenRecordingPackage(outside); err == nil {
+		t.Fatal("OpenRecordingPackage() accepted package outside managed data/video")
+	}
+	if opened {
+		t.Fatal("OpenRecordingPackage() called openPath for rejected outside package")
+	}
+}
+
+func TestOpenRecordingPackageRejectsNonPackageDirectory(t *testing.T) {
+	data := appdata.NewService(t.TempDir())
+	info, err := data.Info()
+	if err != nil {
+		t.Fatalf("Info() error = %v", err)
+	}
+	nonPackageDir := filepath.Join(info.VideoDir, "not-a-recording")
+	if err := os.MkdirAll(nonPackageDir, 0o755); err != nil {
+		t.Fatalf("MkdirAll(nonPackageDir) error = %v", err)
+	}
+
+	service := &RecordingFreedomService{appData: data}
+	opened := false
+	originalOpenPath := openPath
+	openPath = func(path string) error {
+		opened = true
+		return nil
+	}
+	t.Cleanup(func() {
+		openPath = originalOpenPath
+	})
+
+	if _, err := service.OpenRecordingPackage(nonPackageDir); err == nil {
+		t.Fatal("OpenRecordingPackage() accepted a directory without the .rfrec suffix")
+	}
+	if opened {
+		t.Fatal("OpenRecordingPackage() called openPath for rejected non-package directory")
 	}
 }
 

@@ -47,7 +47,7 @@ import {
   fallbackCapabilities,
   fallbackStorageStatus,
 } from './services/mockBackend'
-import {cancelRegionSelector, cancelSelectedRegion, completeRegionSelection, hideRegionFrame, hideScreenIndicator, hideSettingsWindow, loadBootstrap, loadSettings, openVideoDirectory, pauseRecording, preflightAudioOnlyRecording, preflightRecording, quitApplication, recoverRecordingPackage, resumeRecording, saveSettings, setCapsuleWindowExpanded, setDataRoot, showRegionSelector, showScreenIndicator, startAudioOnlyRecording, startMicrophoneLevelMonitor, startRecording, stopMicrophoneLevelMonitor, stopRecording, subscribeAudioLevel, subscribeRecordingStatus, subscribeRegionSelection, subscribeSettingsChanged, updateSelectedRegion, type AudioLevelUpdate, type RecordingRecovery, type RecordingStatusUpdate, type RegionSelectionSession} from './services/recorderBackend'
+import {cancelRegionSelector, cancelSelectedRegion, completeRegionSelection, hideRegionFrame, hideScreenIndicator, hideSettingsWindow, loadBootstrap, loadSettings, openRecordingPackage, openVideoDirectory, pauseRecording, preflightAudioOnlyRecording, preflightRecording, quitApplication, recoverRecordingPackage, resumeRecording, saveSettings, setCapsuleWindowExpanded, setDataRoot, showRegionSelector, showScreenIndicator, startAudioOnlyRecording, startMicrophoneLevelMonitor, startRecording, stopMicrophoneLevelMonitor, stopRecording, subscribeAudioLevel, subscribeRecordingStatus, subscribeRegionSelection, subscribeSettingsChanged, updateSelectedRegion, type AudioLevelUpdate, type RecordingRecovery, type RecordingStatusUpdate, type RegionSelectionSession} from './services/recorderBackend'
 
 const sourceIcon = {
   screen: Monitor,
@@ -62,6 +62,7 @@ const pipPresetOptions: PIPPreset[] = ['bottom-right', 'bottom-left', 'free', 'o
 const recordingQualityOptions: RecordingQuality[] = ['standard', 'balanced', 'high']
 const fpsOptions = [24, 30, 60]
 const countdownOptions = [0, 3, 5, 10]
+const previewPackagePath = 'data/video/recording-preview.rfrec'
 type ActivePanel = 'source' | 'audio' | 'camera' | 'language'
 
 function normalizePipPreset(value: PIPPreset): PIPPreset {
@@ -85,6 +86,15 @@ function joinDisplayPath(root: string, leaf: string) {
   if (!root || root === 'browser-preview') return leaf
   const separator = root.includes('\\') ? '\\' : '/'
   return `${root.replace(/[\\/]+$/, '')}${separator}${leaf}`
+}
+
+function packageDisplayName(packagePath: string) {
+  const parts = packagePath.split(/[\\/]/).filter(Boolean)
+  return parts[parts.length - 1] || packagePath
+}
+
+function isRecordingPackagePath(packagePath: string) {
+  return /(^|[\\/])[^\\/]+\.rfrec$/.test(packagePath)
 }
 
 function formatBytes(bytes: number) {
@@ -188,7 +198,7 @@ function App() {
   const [selectedCamera, setSelectedCamera] = useState(cameraDevices[0].id)
   const [pipPreset, setPipPreset] = useState<PIPPreset>('bottom-right')
   const [locale, setLocale] = useState<LocaleCode>('zh-CN')
-  const [lastPackage, setLastPackage] = useState<string>('data/video/recording-preview.rfrec')
+  const [lastPackage, setLastPackage] = useState<string>(previewPackagePath)
   const [lastBackend, setLastBackend] = useState<string>('ui-preview')
   const [lastStatusMessage, setLastStatusMessage] = useState<StatusMessageState>({key: 'waiting'})
   const [lastPreflight, setLastPreflight] = useState<RecordingPreflight | null>(null)
@@ -307,6 +317,8 @@ function App() {
     const height = active ? Math.max(14, Math.min(100, micMeterLevel * 100 + index * 0.9)) : 8
     return {active, height: `${height}%`}
   }), [micMeterLevel])
+  const canOpenLastPackage = isRecordingPackagePath(lastPackage) && lastPackage !== previewPackagePath
+  const lastPackageName = canOpenLastPackage ? packageDisplayName(lastPackage) : copy.settings.noRecordingPackage
   const applyRecordingStatus = (update: RecordingStatusUpdate) => {
     setState(update.status as RecordingState)
     if (update.session?.packagePath) setLastPackage(update.session.packagePath)
@@ -716,6 +728,16 @@ function App() {
     }
   }
 
+  const openLastRecordingPackage = async () => {
+    if (!canOpenLastPackage) return
+    try {
+      const summary = await openRecordingPackage(lastPackage)
+      setLastPackage(summary.packagePath)
+    } catch (error) {
+      console.error('Failed to open recording package:', error)
+    }
+  }
+
   const togglePanel = (panel: ActivePanel) => {
     setSettingsOpen(false)
     setClosePromptOpen(false)
@@ -847,7 +869,14 @@ function App() {
           statusLabel={lastPreflight ? copy.capabilityStatusLabels[preflightStatusForBadge(lastPreflight.status)] : undefined}
           detail={lastPreflight ? preflightDetail(lastPreflight, copy) : copy.settings.preflightPendingDetail}
         />
-        <SettingLine title={copy.settings.recordingPackage} value="recording-*.rfrec" />
+        <SettingLine
+          title={copy.settings.recordingPackage}
+          value={lastPackageName}
+          detail={copy.settings.packageContentDetail}
+          actionLabel={copy.settings.openPackage}
+          actionDisabled={!canOpenLastPackage}
+          onAction={() => void openLastRecordingPackage()}
+        />
         <SettingSelect
           title={copy.settings.quality}
           value={recordingQuality}

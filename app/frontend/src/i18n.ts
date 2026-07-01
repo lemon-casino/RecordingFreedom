@@ -110,6 +110,9 @@ export type RecorderCopy = {
     preflight: string
     preflightPendingDetail: string
     recordingPackage: string
+    openPackage: string
+    noRecordingPackage: string
+    packageContentDetail: string
     quality: string
     qualityDetail: string
     fps: string
@@ -306,6 +309,9 @@ const zhCN: RecorderCopy = {
     preflight: '开始预检',
     preflightPendingDetail: '下一次开始录制会检查来源、媒体设备、后端能力、存储状态以及 mock/native 状态。',
     recordingPackage: '录制包',
+    openPackage: '打开包',
+    noRecordingPackage: '暂无真实录制包',
+    packageContentDetail: '打开最近录制包目录，用于查看 manifest、媒体文件和诊断文件。',
     quality: '画质',
     qualityDetail: '会写入 manifest，真实原生编码器落地后也会读取该配置。',
     fps: '帧率',
@@ -628,6 +634,9 @@ const en: RecorderCopy = {
     preflight: 'Preflight',
     preflightPendingDetail: 'The next start action will check source, media devices, backend capability, storage, and mock/native status.',
     recordingPackage: 'Recording package',
+    openPackage: 'Open package',
+    noRecordingPackage: 'No real package yet',
+    packageContentDetail: 'Open the latest recording package folder to inspect manifest, media, and diagnostics.',
     quality: 'Quality',
     qualityDetail: 'Saved to manifest and used by native encoders when real capture backends land.',
     fps: 'FPS',
