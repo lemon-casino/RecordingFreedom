@@ -122,7 +122,7 @@ Wails v3 当前仍应按 alpha 风险处理：
 - `captureCursor`：是否录制鼠标光标。
 - `countdownSeconds`：开始录制前倒计时，当前规范化上限为 10 秒。
 
-`SettingsService`、`RecordingService` 和 `PackageService` 共用同一套 profile 默认值与归一化逻辑。独立设置窗口可以修改这些值；开始录制请求会携带 `recording`，manifest 也会写入同一结构。当前这只是合同和 UI 控制，真实平台后端接入后再把这些参数映射到 ScreenCaptureKit、Windows.Graphics.Capture 或 PipeWire 编码配置。
+`SettingsService`、`RecordingService` 和 `PackageService` 共用同一套 profile 默认值与归一化逻辑。独立设置窗口可以修改这些值；开始录制请求会携带 `recording`，manifest 也会写入同一结构。当前这只是合同和 UI 控制，真实平台后端接入后再把这些参数映射到 ScreenCaptureKit、Windows FFmpeg desktop writer 或 PipeWire 编码配置。
 
 ## 录制后端扩展边界
 
@@ -141,21 +141,21 @@ Wails v3 当前仍应按 alpha 风险处理：
 - 写入 `finalizing`、`ready`、`failed` 等 manifest 状态。
 - 在 stop 阶段读取 `BackendStopResult.SyncDiagnostics`，通过 `PackageService.PatchSyncDiagnostics()` 写入音画同步诊断合同，而不是让平台层手写 manifest。
 - 在写入 `ready` 前调用 `PackageService.ValidateReady()`，确保非 mock 包至少有可读、非 0 字节的 screen media；摄像头开启时 webcam sidecar 也必须可读且非 0 字节；音频按 manifest 存储形态校验，`sidecar` 要求非空 WAV，`muxed` 要求主 `screen.mp4` 存在 MP4 `soun` 音轨。
-- 保持 `Session.backend`，让 UI 和诊断能区分 `mock-package`、`screencapturekit`、`windows-graphics-capture`、`pipewire-portal` 等实现。
+- 保持 `Session.backend`，让 UI 和诊断能区分 `mock-package`、`screencapturekit`、`ffmpeg-desktop-capture`、`windows-graphics-capture`、`pipewire-portal` 等实现。
 
-当前默认 backend 是 `mock-package`，只用于 UI shell 和包结构验证。后续真实后端必须实现同一个接口，不能绕过 `RecordingService` 或 `PackageService`，也不能把视频写到 `data/video` 之外。
+当前默认 backend 是平台 native/queued：macOS 默认 `screencapturekit`，Windows 默认 `ffmpeg-desktop-capture`，Linux 默认 `pipewire-portal`。`mock-package` 只允许显式请求，用于 preview smoke 和包结构验证；桌面默认录制不能静默退回 mock。真实后端必须实现同一个接口，不能绕过 `RecordingService` 或 `PackageService`，也不能把视频写到 `data/video` 之外。
 
 ## 原生写盘计划合同
 
-当前 `internal/recording` 已新增 `CreateNativeWritePlan()`，作为真实 ScreenCaptureKit/WGC/PipeWire 后端的统一入口。它会归一化 `StartRequest`，把 source、recording profile、system audio、microphone、RNNoise、camera 和 PIP preset 映射到 `recpackage.CreateNative()`，用于后端开始采样前初始化 `.rfrec` 包：
+当前 `internal/recording` 已新增 `CreateNativeWritePlan()`，作为真实 ScreenCaptureKit/FFmpeg/PipeWire 后端的统一入口。它会归一化 `StartRequest`，把 source、recording profile、system audio、microphone、RNNoise、camera 和 PIP preset 映射到 `recpackage.CreateNative()`，用于后端开始采样前初始化 `.rfrec` 包：
 
 - 在 app-managed `data/video` 下创建唯一 `recording-*.rfrec` 目录。
 - 写入 `status = recording` 的 typed `manifest.json`。
 - screen 默认相对路径固定为 `screen.mp4`。
-- 摄像头开启时 webcam sidecar 默认相对路径固定为 `webcam.mov`；摄像头关闭时不写 webcam 路径，PIP preset 为 `off`。
+- 摄像头开启时 webcam sidecar 默认相对路径为 `webcam.mov`，Windows FFmpeg DirectShow backend 使用 `webcam.mp4`；摄像头关闭时不写 webcam 路径，PIP preset 为 `off`。
 - 创建 `cache/` 与 `exports/` 子目录，供持续写盘临时状态和后续导出使用。
 - 返回绝对写入计划：screen、webcam、`audio-diagnostics.json`、`video-diagnostics.json`、cache 和 exports 路径。
-- 不创建假媒体文件，不写 0 字节 `screen.mp4` 或 `webcam.mov`；这些文件必须由真实 native writer 在采样后持续写入。
+- 不创建假媒体文件，不写 0 字节 `screen.mp4`、`webcam.mov` 或 `webcam.mp4`；这些文件必须由真实 native writer 在采样后持续写入。
 - 不写 `diagnostics.sync`；真实后端停止或恢复时必须用真实 sample timestamp 通过 `PatchSyncDiagnostics()` 写入。
 
 平台后端不应各自手写 manifest 映射；应调用 `recording.CreateNativeWritePlan()` 拿到 screen、webcam、diagnostics、cache 和 exports 的绝对写入路径，再由平台 writer 持续写入媒体。这个合同是 macOS ScreenCaptureKit 最小录制的前置包初始化层，不代表真实采集、编码或音画同步已经实现。
@@ -164,13 +164,13 @@ Wails v3 当前仍应按 alpha 风险处理：
 
 当前代码已新增 `internal/recording` backend selector：
 
-- 默认值、`auto`、`mock`、`mock-package` 都选择 `mock-package`，保证 UI shell 和 `.rfrec` 包结构可持续验证。
-- `RECORDINGFREEDOM_RECORDING_BACKEND=native` 会按平台选择 native backend ID：macOS `screencapturekit`、Windows `windows-graphics-capture`、Linux `pipewire-portal`。
-- 也可以显式请求 `screencapturekit`、`windows-graphics-capture` 或 `pipewire-portal`。macOS 和 Windows 已注册到 `NativeRuntimeBackend`；Linux 在真实 factory 注册前仍回退 queued native backend。
+- 默认值、`auto`、`native` 都会按平台选择 native backend ID：macOS `screencapturekit`、Windows `ffmpeg-desktop-capture`、Linux `pipewire-portal`。
+- `mock`、`mock-package` 会显式选择 mock backend，只用于 preview smoke、UI shell 和 `.rfrec` 包结构验证，不能作为桌面默认录制路径。
+- 也可以显式请求 `screencapturekit`、`ffmpeg-desktop-capture`、`windows-graphics-capture` 或 `pipewire-portal`。macOS 和 Windows 已注册到 `NativeRuntimeBackend`；`windows-graphics-capture` 当前是兼容 alias，Linux 在真实 factory 注册前仍回退 queued native backend。
 - queued native backend 不创建录制包、不写媒体文件，`Start()` 会返回明确错误。已注册但 writer 未完成的 backend 必须在启动失败时标记 failed package，且不能写假媒体或 ready manifest。
 - `Bootstrap()` 返回当前 `backend`，前端底部状态条和预检都使用同一个 backend ID。
 
-这个合同用于后续替换真实后端，而不是临时开关。真实 writer 或平台能力未实现前，native backend 会被 `PreflightRecording()` 阻止；只有 `mock-package` 可以在 UI shell 阶段继续生成明确标记为 mock 的 `.rfrec` 包。
+这个合同用于后续替换真实后端，而不是临时开关。真实 writer 或平台能力未实现前，native backend 会被 `PreflightRecording()` 阻止；只有显式 `mock-package` 可以在 preview smoke 阶段继续生成明确标记为 mock 的 `.rfrec` 包。
 
 ## 录制预检合同
 
@@ -299,7 +299,7 @@ Wails 暴露 `GetSettings()`、`SaveSettings()`、`SetDataRoot()`、`ShowSetting
 - 事件载荷包含 `status`、`sessionId`、`packageDir`、`manifest`、`backend` 和 `message`，供胶囊窗口、设置窗口、诊断面板共享。
 - 前端通过 `subscribeRecordingStatus()` 订阅 `recording.status`，并用同一个状态更新入口刷新录制状态、录制包路径、backend 和状态消息。
 
-前端只根据后端事件和后端 session 返回值更新 UI，不凭按钮点击直接宣称录制成功。真实 ScreenCaptureKit/WGC/PipeWire 后端接入后必须继续使用同一个事件合同。
+前端只根据后端事件和后端 session 返回值更新 UI，不凭按钮点击直接宣称录制成功。真实 ScreenCaptureKit/FFmpeg/PipeWire 后端接入后必须继续使用同一个事件合同。
 
 ## 第一阶段接口
 

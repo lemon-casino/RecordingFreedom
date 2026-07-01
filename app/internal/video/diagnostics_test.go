@@ -12,10 +12,18 @@ import (
 
 func TestNewDiagnosticsNormalizesCaptureConfig(t *testing.T) {
 	diagnostics := NewDiagnostics(CaptureConfig{
-		Backend:     " screencapturekit ",
-		SourceID:    " screen:display-1 ",
-		SourceType:  devices.SourceScreen,
-		SourceName:  " Primary Display ",
+		Backend:    " screencapturekit ",
+		SourceID:   " screen:display-1 ",
+		SourceType: devices.SourceScreen,
+		SourceName: " Primary Display ",
+		SourceGeometry: &SourceGeometry{
+			X:            -1440,
+			Y:            0,
+			Width:        2560,
+			Height:       1440,
+			DisplayIndex: 2,
+			NativeID:     " display:1 ",
+		},
 		OutputPath:  " screen.mp4 ",
 		SystemAudio: true,
 		Profile: recordingprofile.Profile{
@@ -31,6 +39,12 @@ func TestNewDiagnosticsNormalizesCaptureConfig(t *testing.T) {
 	}
 	if diagnostics.Source.ID != "screen:display-1" || diagnostics.Source.Name != "Primary Display" || diagnostics.Source.Type != devices.SourceScreen {
 		t.Fatalf("source = %#v", diagnostics.Source)
+	}
+	if diagnostics.Source.Geometry == nil ||
+		diagnostics.Source.Geometry.X != -1440 ||
+		diagnostics.Source.Geometry.Width != 2560 ||
+		diagnostics.Source.Geometry.NativeID != "display:1" {
+		t.Fatalf("source geometry = %#v, want normalized capture geometry", diagnostics.Source.Geometry)
 	}
 	if diagnostics.OutputPath != "screen.mp4" {
 		t.Fatalf("output path = %q, want screen.mp4", diagnostics.OutputPath)

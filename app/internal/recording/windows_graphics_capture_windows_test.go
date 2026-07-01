@@ -12,27 +12,43 @@ import (
 	"github.com/lemon-casino/RecordingFreedom/app/internal/recpackage"
 )
 
-func TestWindowsGraphicsCaptureBackendIsRegistered(t *testing.T) {
+func TestWindowsDesktopCaptureBackendIsDefaultOnWindows(t *testing.T) {
 	backend := SelectBackend(recpackage.NewService(), "windows", "native")
 	runtimeBackend, ok := backend.(*NativeRuntimeBackend)
 	if !ok {
 		t.Fatalf("SelectBackend(native windows) = %T, want *NativeRuntimeBackend", backend)
+	}
+	if runtimeBackend.ID() != BackendFFmpegDesktopCapture {
+		t.Fatalf("backend id = %q, want %q", runtimeBackend.ID(), BackendFFmpegDesktopCapture)
+	}
+}
+
+func TestWindowsGraphicsCaptureBackendAliasIsRegistered(t *testing.T) {
+	backend := SelectBackend(recpackage.NewService(), "windows", "wgc")
+	runtimeBackend, ok := backend.(*NativeRuntimeBackend)
+	if !ok {
+		t.Fatalf("SelectBackend(wgc windows) = %T, want *NativeRuntimeBackend", backend)
 	}
 	if runtimeBackend.ID() != BackendWindowsGraphicsCapture {
 		t.Fatalf("backend id = %q, want %q", runtimeBackend.ID(), BackendWindowsGraphicsCapture)
 	}
 }
 
-func TestWindowsGraphicsCaptureRuntimeFailsWithoutFakeMediaUntilWriterLands(t *testing.T) {
+func TestWindowsDesktopCaptureRuntimeFailsWithoutFakeMediaWhenFFmpegMissing(t *testing.T) {
 	root := t.TempDir()
+	t.Setenv("RECORDINGFREEDOM_FFMPEG_PATH", filepath.Join(root, "missing-ffmpeg.exe"))
 	service := NewServiceWithBackend(appdata.NewService(root), SelectBackend(recpackage.NewService(), "windows", "native"))
 
 	_, err := service.StartRecording(StartRequest{
 		SourceID:   "screen:--display1",
 		SourceType: SourceScreen,
+		SourceGeometry: &SourceGeometry{
+			Width:  1920,
+			Height: 1080,
+		},
 	})
-	if err == nil || !strings.Contains(err.Error(), "writer is not implemented") {
-		t.Fatalf("StartRecording() error = %v, want WGC writer not implemented", err)
+	if err == nil || !strings.Contains(err.Error(), "FFmpeg") {
+		t.Fatalf("StartRecording() error = %v, want FFmpeg dependency error", err)
 	}
 	if service.State() != StateFailed {
 		t.Fatalf("State() = %q, want %q", service.State(), StateFailed)
@@ -43,7 +59,7 @@ func TestWindowsGraphicsCaptureRuntimeFailsWithoutFakeMediaUntilWriterLands(t *t
 		t.Fatalf("Glob() error = %v", err)
 	}
 	if len(matches) != 1 {
-		t.Fatalf("packages = %#v, want one failed WGC package", matches)
+		t.Fatalf("packages = %#v, want one failed Windows capture package", matches)
 	}
 	manifest, err := recpackage.NewService().ReadManifest(filepath.Join(matches[0], recpackage.ManifestFile))
 	if err != nil {
@@ -53,10 +69,10 @@ func TestWindowsGraphicsCaptureRuntimeFailsWithoutFakeMediaUntilWriterLands(t *t
 		t.Fatalf("manifest status = %q, want %q", manifest.Status, recpackage.StatusFailed)
 	}
 	if exists(filepath.Join(matches[0], recpackage.ScreenVideoFile)) {
-		t.Fatal("WGC writer placeholder created fake screen.mp4")
+		t.Fatal("Windows capture dependency failure created fake screen.mp4")
 	}
 	if !exists(filepath.Join(matches[0], recpackage.VideoDiagnosticsFile)) {
-		t.Fatal("failed WGC package did not keep video-diagnostics.json")
+		t.Fatal("failed Windows capture package did not keep video-diagnostics.json")
 	}
 }
 

@@ -3,9 +3,15 @@
 package devices
 
 import (
+	"bytes"
+	"context"
 	"fmt"
+	"os"
+	"os/exec"
+	"path/filepath"
 	"strings"
 	"syscall"
+	"time"
 	"unsafe"
 
 	"golang.org/x/sys/windows"
@@ -137,9 +143,7 @@ func listPlatformMediaDevices() (MediaInventory, error) {
 	return MediaInventory{
 		SystemAudio: windowsMediaDevices(DeviceSystemAudio, render),
 		Microphones: windowsMediaDevices(DeviceMicrophone, capture),
-		Cameras: []MediaDevice{
-			defaultMediaDevice(DeviceCamera, mediaBackendMessage("windows", DeviceCamera)),
-		},
+		Cameras:     listWindowsCameraDevices(),
 		Enhancement: defaultAudioEnhancement("RNNoise native DSP is queued behind microphone capture plumbing."),
 	}, nil
 }
@@ -181,6 +185,75 @@ func windowsAudioSubtitle(deviceType MediaDeviceType) string {
 	default:
 		return defaultMediaDeviceSubtitle(deviceType)
 	}
+}
+
+func listWindowsCameraDevices() []MediaDevice {
+	ffmpegPath, err := resolveWindowsFFmpegPath()
+	if err != nil {
+		return []MediaDevice{defaultMediaDevice(DeviceCamera, "DirectShow camera enumeration requires FFmpeg; "+err.Error())}
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	cmd := exec.CommandContext(ctx, ffmpegPath, "-hide_banner", "-list_devices", "true", "-f", "dshow", "-i", "dummy")
+	var output bytes.Buffer
+	cmd.Stdout = &output
+	cmd.Stderr = &output
+	_ = cmd.Run()
+	devices := parseDirectShowCameraDevices(output.String())
+	if len(devices) == 0 {
+		reason := "DirectShow returned no camera devices"
+		if ctx.Err() != nil {
+			reason = "DirectShow camera enumeration timed out"
+		}
+		return []MediaDevice{defaultMediaDevice(DeviceCamera, reason)}
+	}
+	return devices
+}
+
+func resolveWindowsFFmpegPath() (string, error) {
+	const envFFmpegPath = "RECORDINGFREEDOM_FFMPEG_PATH"
+	if configured := strings.TrimSpace(os.Getenv(envFFmpegPath)); configured != "" {
+		return validateWindowsFFmpegPath(configured, envFFmpegPath)
+	}
+	candidates := make([]string, 0, 8)
+	if executable, err := os.Executable(); err == nil {
+		base := filepath.Dir(executable)
+		candidates = append(candidates,
+			filepath.Join(base, "ffmpeg.exe"),
+			filepath.Join(base, "tools", "ffmpeg.exe"),
+			filepath.Join(base, "bin", "ffmpeg.exe"),
+		)
+	}
+	if cwd, err := os.Getwd(); err == nil {
+		candidates = append(candidates,
+			filepath.Join(cwd, "ffmpeg.exe"),
+			filepath.Join(cwd, "tools", "ffmpeg.exe"),
+			filepath.Join(cwd, "bin", "ffmpeg.exe"),
+		)
+	}
+	for _, candidate := range candidates {
+		if path, err := validateWindowsFFmpegPath(candidate, "bundled ffmpeg"); err == nil {
+			return path, nil
+		}
+	}
+	if path, err := exec.LookPath("ffmpeg.exe"); err == nil {
+		return path, nil
+	}
+	if path, err := exec.LookPath("ffmpeg"); err == nil {
+		return path, nil
+	}
+	return "", fmt.Errorf("FFmpeg executable was not found; set %s or bundle ffmpeg beside the app under tools/", envFFmpegPath)
+}
+
+func validateWindowsFFmpegPath(path string, source string) (string, error) {
+	info, err := os.Stat(path)
+	if err != nil {
+		return "", fmt.Errorf("%s %q is not readable: %w", source, path, err)
+	}
+	if info.IsDir() {
+		return "", fmt.Errorf("%s %q is a directory, not an ffmpeg executable", source, path)
+	}
+	return path, nil
 }
 
 func coInitialize() error {

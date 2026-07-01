@@ -32,7 +32,7 @@
 - 未录制、准备中、录制中、暂停中、停止中、失败状态都有可视反馈。
 - 开始、暂停、继续、结束按钮状态正确。
 - 菜单不裁切、不重叠。
-- 语言、音频、摄像头和最近源选择重启后可恢复。
+- 语言、音频、摄像头和最近源选择重启后可恢复；语言在胶囊窗口和独立设置窗口切换后都要全局生效。
 - 支持横向和竖向胶囊。
 - Playwright 截图覆盖常见桌面尺寸。
 
@@ -55,7 +55,7 @@
 
 ## M3 macOS 录制
 
-状态：ScreenCaptureKit display/window/program `screen.mp4` 写盘代码已接入，ScreenCaptureKit system audio 已接入同容器 AAC mux 代码路径，均待 macOS 真机录制 smoke 验收；麦克风和完整音画同步仍是本里程碑后续任务。
+状态：ScreenCaptureKit display/window/region `screen.mp4` 写盘代码已接入，ScreenCaptureKit system audio 已接入同容器 AAC mux 代码路径，均待 macOS 真机录制 smoke 验收；Program/Application 当前为 queued 后续项，不作为初版验收完成项；麦克风和完整音画同步仍是本里程碑后续任务。
 
 目标：
 
@@ -77,15 +77,17 @@
 
 ## M4 Windows 录制
 
+状态：FFmpeg gdigrab writer、WASAPI 音频采集、停止阶段音视频 mux、Windows FFmpeg dependency bootstrap 和 portable zip 打包路径已接入。本机 smoke 已通过 screen、all-screens、region、locked-window、pause/resume segment merge、系统声音 mux、麦克风 mux、系统声音 + 麦克风混音 mux，以及 1 分钟、5 分钟和 20 分钟可解码长录；仍需 release artifact 解压后的 clean machine 验证。
+
 目标：
 
-- 接入 Windows.Graphics.Capture。
+- 接入 Windows FFmpeg gdigrab writer，并保留 Windows.Graphics.Capture / Media Foundation 原生替换路线。
 - 接入 WASAPI 系统声音和麦克风。
 - 写入统一 `.rfrec` 包。
 
 验收：
 
-- Windows x64 可以录屏幕和窗口。
+- Windows x64 可以录屏幕、区域和锁定窗口。
 - 系统声音、麦克风分别可录。
 - 暂停和停止不会丢失文件。
 - clean machine 验证不依赖开发环境。
@@ -122,7 +124,9 @@
 - 录音包在 UI 中显示为音频录制。
 - 关闭的音频设备不会污染 manifest。
 
-## M6 摄像头 sidecar 和画中画预备
+## M6 摄像头 sidecar 和画中画预备（暂停）
+
+状态：按当前验收策略暂停，等待视频录制和语音/音频录制验收后再恢复。本节保留为后续路线，不作为当前 preview 发布或验收门槛。
 
 目标：
 

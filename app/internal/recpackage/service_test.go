@@ -333,6 +333,33 @@ func TestCreateAudioOnlySupportsWAVFallbackPrimary(t *testing.T) {
 	}
 }
 
+func TestPatchAudioOnlyMuxedMovesEnabledStreamsToPrimaryAudio(t *testing.T) {
+	service := NewService()
+	plan, err := service.CreateAudioOnly(t.TempDir(), CreateAudioOnlyRequest{
+		Audio:                  ManifestAudio{System: true, Microphone: true},
+		AudioPath:              AudioOnlyFile,
+		SystemAudioPath:        SystemAudioFile,
+		SystemAudioStorage:     AudioStorageSidecar,
+		MicrophoneAudioPath:    MicrophoneAudioFile,
+		MicrophoneAudioStorage: AudioStorageSidecar,
+	})
+	if err != nil {
+		t.Fatalf("CreateAudioOnly() error = %v", err)
+	}
+
+	manifest, err := service.PatchAudioOnlyMuxed(plan.Package.ManifestPath, true, true)
+	if err != nil {
+		t.Fatalf("PatchAudioOnlyMuxed() error = %v", err)
+	}
+	if manifest.Media.AudioPath != AudioOnlyFile ||
+		manifest.Media.SystemAudioPath != AudioOnlyFile ||
+		manifest.Media.SystemAudioStorage != AudioStorageMuxed ||
+		manifest.Media.MicrophoneAudioPath != AudioOnlyFile ||
+		manifest.Media.MicrophoneAudioStorage != AudioStorageMuxed {
+		t.Fatalf("audio-only muxed media = %#v", manifest.Media)
+	}
+}
+
 func TestCreateNativeOmitsWebcamPlanWhenCameraDisabled(t *testing.T) {
 	service := NewService()
 	plan, err := service.CreateNative(t.TempDir(), CreateNativeRequest{

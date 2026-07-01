@@ -38,11 +38,11 @@ func TestAudioOnlyRuntimeStartsPausesResumesAndStopsAudio(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewAudioOnlyRuntime() error = %v", err)
 	}
-	if filepath.Base(runtime.Plan.AudioOnlyPath) != recpackage.AudioOnlyWAVFile {
-		t.Fatalf("audio-only path = %q, want audio.wav fallback", runtime.Plan.AudioOnlyPath)
+	if filepath.Base(runtime.Plan.AudioOnlyPath) != recpackage.AudioOnlyFile {
+		t.Fatalf("audio-only path = %q, want audio.m4a primary media", runtime.Plan.AudioOnlyPath)
 	}
-	if gotConfig.MicrophoneAudioPath != runtime.Plan.AudioOnlyPath || gotConfig.SystemAudioOutputPath != "" {
-		t.Fatalf("audio config paths = mic:%q system:%q", gotConfig.MicrophoneAudioPath, gotConfig.SystemAudioOutputPath)
+	if filepath.Base(gotConfig.MicrophoneAudioPath) != recpackage.AudioOnlyWAVFile || gotConfig.SystemAudioOutputPath != "" {
+		t.Fatalf("audio config paths = mic:%q system:%q, want mic sidecar audio.wav", gotConfig.MicrophoneAudioPath, gotConfig.SystemAudioOutputPath)
 	}
 
 	if err := runtime.Start(context.Background()); err != nil {

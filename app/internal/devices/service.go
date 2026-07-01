@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"runtime"
 	"strings"
+
+	"github.com/lemon-casino/RecordingFreedom/app/internal/audio/rnnoise"
 )
 
 type MediaDeviceProvider interface {
@@ -38,9 +40,9 @@ func (s *Service) ListSources() []CaptureSource {
 		if err != nil {
 			reason = err.Error()
 		}
-		return fallbackSources(reason)
+		return addVirtualCaptureSources(fallbackSources(reason))
 	}
-	return normalizeSources(sources)
+	return addVirtualCaptureSources(normalizeSources(sources))
 }
 
 func (s *Service) ListMediaDevices() MediaInventory {
@@ -75,6 +77,90 @@ func normalizeSources(sources []CaptureSource) []CaptureSource {
 		return fallbackSources("source normalization removed every platform source")
 	}
 	return normalized
+}
+
+func addVirtualCaptureSources(sources []CaptureSource) []CaptureSource {
+	displays := make([]CaptureSource, 0, len(sources))
+	for _, source := range sources {
+		if source.Type == SourceScreen {
+			displays = append(displays, source)
+		}
+	}
+
+	next := make([]CaptureSource, 0, len(sources)+2)
+	if len(displays) > 1 {
+		next = append(next, allScreensSource(displays))
+	}
+	next = append(next, sources...)
+	next = append(next, regionSelectorSource(displays))
+	return next
+}
+
+func allScreensSource(displays []CaptureSource) CaptureSource {
+	x, y, width, height := virtualBounds(displays)
+	source := CaptureSource{
+		ID:                "all-screens:virtual-desktop",
+		Type:              SourceAllScreens,
+		Name:              "All Screens",
+		Subtitle:          fmt.Sprintf("%d displays · %d x %d virtual desktop", len(displays), width, height),
+		X:                 x,
+		Y:                 y,
+		Width:             width,
+		Height:            height,
+		Capability:        CapabilityNativeQueued,
+		UnavailableReason: "multi-display composition is queued behind the native video writer",
+	}
+	if runtime.GOOS == "windows" {
+		source.Available = true
+		source.Capability = CapabilityEnumerated
+		source.UnavailableReason = ""
+	}
+	return source
+}
+
+func regionSelectorSource(displays []CaptureSource) CaptureSource {
+	x, y, width, height := virtualBounds(displays)
+	if width == 0 || height == 0 {
+		width = 1
+		height = 1
+	}
+	return CaptureSource{
+		ID:                "region:custom",
+		Type:              SourceRegion,
+		Name:              "Custom Region",
+		Subtitle:          "Drag-select a recording rectangle on the virtual desktop",
+		X:                 x,
+		Y:                 y,
+		Width:             width,
+		Height:            height,
+		Capability:        CapabilityNativeQueued,
+		UnavailableReason: "region selector overlay is available; native region crop writer is queued",
+	}
+}
+
+func virtualBounds(displays []CaptureSource) (int, int, int, int) {
+	if len(displays) == 0 {
+		return 0, 0, 0, 0
+	}
+	minX := displays[0].X
+	minY := displays[0].Y
+	maxX := displays[0].X + displays[0].Width
+	maxY := displays[0].Y + displays[0].Height
+	for _, display := range displays[1:] {
+		if display.X < minX {
+			minX = display.X
+		}
+		if display.Y < minY {
+			minY = display.Y
+		}
+		if display.X+display.Width > maxX {
+			maxX = display.X + display.Width
+		}
+		if display.Y+display.Height > maxY {
+			maxY = display.Y + display.Height
+		}
+	}
+	return minX, minY, maxX - minX, maxY - minY
 }
 
 func normalizeMediaInventory(inventory MediaInventory) MediaInventory {
@@ -183,7 +269,9 @@ func fallbackMediaInventory(platform string, reason string) MediaInventory {
 		inventory.Cameras[index].Capability = CapabilityNativeQueued
 		inventory.Cameras[index].UnavailableReason = reason
 	}
-	inventory.Enhancement.UnavailableReason = reason
+	if !inventory.Enhancement.Available {
+		inventory.Enhancement.UnavailableReason = reason
+	}
 	return inventory
 }
 
@@ -220,8 +308,16 @@ func defaultMediaDevice(deviceType MediaDeviceType, reason string) MediaDevice {
 }
 
 func defaultAudioEnhancement(reason string) AudioEnhancement {
+	if rnnoise.Available() {
+		return AudioEnhancement{
+			Engine:     "rnnoise",
+			AppliesTo:  "microphone-only",
+			Available:  true,
+			Capability: CapabilityEnumerated,
+		}
+	}
 	if strings.TrimSpace(reason) == "" {
-		reason = "RNNoise native wrapper is implemented for the audio pipeline, but it is not wired into the app recording backend yet."
+		reason = "RNNoise requires a cgo build with the rnnoise_native tag; the current build cannot create the native suppressor."
 	}
 	return AudioEnhancement{
 		Engine:            "rnnoise",
@@ -237,7 +333,7 @@ func platformBackendMessage(platform string) string {
 	case "darwin":
 		return "ScreenCaptureKit source enumeration is the next macOS backend milestone."
 	case "windows":
-		return "Windows source enumeration is implemented; the Windows.Graphics.Capture writer is the next Windows backend milestone."
+		return "Windows source enumeration is implemented; FFmpeg desktop capture is used for screen, all-screen, region, and locked-window video when available."
 	case "linux":
 		return "XDG Desktop Portal and PipeWire source enumeration is the next Linux backend milestone."
 	default:
@@ -270,7 +366,7 @@ func mediaBackendMessage(platform string, deviceType MediaDeviceType) string {
 		case "darwin":
 			return "AVFoundation camera enumeration is queued for the macOS sidecar backend."
 		case "windows":
-			return "Media Foundation camera enumeration is queued for the Windows sidecar backend."
+			return "DirectShow camera enumeration uses the bundled FFmpeg tool; Windows camera sidecar recording writes package-local webcam.mp4 when FFmpeg is available."
 		case "linux":
 			return "PipeWire camera enumeration is queued for the Linux sidecar backend."
 		}
@@ -282,6 +378,10 @@ func defaultSourceName(sourceType CaptureSourceType) string {
 	switch sourceType {
 	case SourceScreen:
 		return "Display"
+	case SourceAllScreens:
+		return "All Screens"
+	case SourceRegion:
+		return "Custom Region"
 	case SourceWindow:
 		return "Window"
 	case SourceApplication:

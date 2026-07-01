@@ -1,6 +1,11 @@
 package capture
 
-import "runtime"
+import (
+	"runtime"
+
+	"github.com/lemon-casino/RecordingFreedom/app/internal/audio/rnnoise"
+	"github.com/lemon-casino/RecordingFreedom/app/internal/video"
+)
 
 type Service struct{}
 
@@ -29,7 +34,11 @@ func screenRecordingCapability(platform string) Capability {
 	case "darwin":
 		return available("screen-recording", "Screen Recording", "ScreenCaptureKit", PermissionScreenRecording, "ScreenCaptureKit display capture is implemented; system-audio mux is wired in code and still needs real-device smoke validation.")
 	case "windows":
-		return queued("screen-recording", "Screen Recording", "Windows.Graphics.Capture", PermissionNotRequired, "WGC source enumeration and target parsing are in place; the MP4 writer is still queued.")
+		if path, ok, reason := video.FFmpegAvailability(); ok {
+			return available("screen-recording", "Screen Recording", "FFmpeg gdigrab", PermissionNotRequired, "FFmpeg gdigrab desktop writer is available at "+path+" and records screen/all-screen/region video to screen.mp4; enabled WASAPI audio is muxed into screen.mp4 at stop.")
+		} else {
+			return blocked("screen-recording", "Screen Recording", "FFmpeg gdigrab", PermissionNotRequired, reason)
+		}
 	case "linux":
 		return queued("screen-recording", "Screen Recording", "XDG Desktop Portal + PipeWire", PermissionUnknown, "Linux capture backend is experimental and queued.")
 	default:
@@ -42,7 +51,11 @@ func windowRecordingCapability(platform string) Capability {
 	case "darwin":
 		return available("window-recording", "Window Recording", "ScreenCaptureKit", PermissionScreenRecording, "ScreenCaptureKit single-window capture is implemented; system-audio mux is wired in code and still needs real-device smoke validation.")
 	case "windows":
-		return queued("window-recording", "Window Recording", "Windows.Graphics.Capture", PermissionNotRequired, "Win32 can enumerate windows and map HWND source ids; the WGC MP4 writer is still queued.")
+		if path, ok, reason := video.FFmpegAvailability(); ok {
+			return available("window-recording", "Window Recording", "FFmpeg gdigrab hwnd", PermissionNotRequired, "FFmpeg gdigrab HWND writer is available at "+path+" and records locked window video to screen.mp4; enabled WASAPI audio is muxed into screen.mp4 at stop.")
+		} else {
+			return blocked("window-recording", "Window Recording", "FFmpeg gdigrab hwnd", PermissionNotRequired, reason)
+		}
 	case "linux":
 		return queued("window-recording", "Window Recording", "XDG Desktop Portal + PipeWire", PermissionUnknown, "Portal-based window capture is queued.")
 	default:
@@ -53,9 +66,9 @@ func windowRecordingCapability(platform string) Capability {
 func applicationRecordingCapability(platform string) Capability {
 	switch platform {
 	case "darwin":
-		return available("application-recording", "Program Recording", "ScreenCaptureKit", PermissionScreenRecording, "ScreenCaptureKit program capture maps a PID group to its largest visible window; multi-window composition and microphone audio mapping remain queued.")
+		return queued("application-recording", "Program Recording", "ScreenCaptureKit", PermissionScreenRecording, "Program sources are intentionally hidden from the current capsule menu; select a locked window for the first video writer.")
 	case "windows":
-		return queued("application-recording", "Program Recording", "Windows.Graphics.Capture", PermissionNotRequired, "Program sources map to process ids for the WGC target contract; multi-window capture and the MP4 writer are still queued.")
+		return queued("application-recording", "Program Recording", "Windows desktop capture", PermissionNotRequired, "Program sources are intentionally hidden from the current capsule menu; select a locked window for the first Windows video writer.")
 	case "linux":
 		return queued("application-recording", "Program Recording", "XDG Desktop Portal + PipeWire", PermissionUnknown, "Program grouping depends on portal/PipeWire source metadata.")
 	default:
@@ -68,7 +81,7 @@ func systemAudioCapability(platform string) Capability {
 	case "darwin":
 		return available("system-audio", "System Audio", "ScreenCaptureKit", PermissionScreenRecording, "ScreenCaptureKit system audio mux into screen.mp4 is implemented; real-device smoke validation is still required.")
 	case "windows":
-		return available("system-audio", "System Audio", "WASAPI loopback", PermissionNotRequired, "WASAPI loopback capture source is implemented; active samples require system playback.")
+		return available("system-audio", "System Audio", "WASAPI loopback", PermissionNotRequired, "WASAPI loopback capture is implemented; screen recordings mux it into screen.mp4 at stop, and active samples require system playback.")
 	case "linux":
 		return queued("system-audio", "System Audio", "PipeWire/PulseAudio", PermissionUnknown, "PipeWire monitor source enumeration and capture are queued.")
 	default:
@@ -81,7 +94,7 @@ func microphoneCapability(platform string) Capability {
 	case "darwin":
 		return queued("microphone", "Microphone", "CoreAudio", PermissionMicrophone, "CoreAudio microphone capture is queued.")
 	case "windows":
-		return available("microphone", "Microphone", "WASAPI capture", PermissionNotRequired, "WASAPI microphone PCM capture is implemented and writes package audio sidecars.")
+		return available("microphone", "Microphone", "WASAPI capture", PermissionNotRequired, "WASAPI microphone PCM capture is implemented; screen recordings mux it into screen.mp4 at stop and retain diagnostics.")
 	case "linux":
 		return queued("microphone", "Microphone", "PipeWire/PulseAudio", PermissionUnknown, "PipeWire microphone capture is queued.")
 	default:
@@ -90,7 +103,10 @@ func microphoneCapability(platform string) Capability {
 }
 
 func microphoneEnhancementCapability() Capability {
-	return queued("microphone-enhancement", "Microphone RNNoise", "RNNoise native DSP", PermissionNotRequired, "RNNoise native wrapper is implemented for the audio pipeline, but it is not wired into the app recording backend yet.")
+	if rnnoise.Available() {
+		return available("microphone-enhancement", "Microphone RNNoise", "RNNoise native DSP", PermissionNotRequired, "RNNoise native DSP is available and wired into microphone capture; system audio is never denoised.")
+	}
+	return queued("microphone-enhancement", "Microphone RNNoise", "RNNoise native DSP", PermissionNotRequired, "RNNoise requires a cgo build with the rnnoise_native tag; the current build cannot create the native suppressor.")
 }
 
 func cameraSidecarCapability(platform string) Capability {
@@ -98,7 +114,11 @@ func cameraSidecarCapability(platform string) Capability {
 	case "darwin":
 		return queued("camera-sidecar", "Camera Sidecar", "AVFoundation", PermissionCamera, "AVFoundation camera sidecar capture is queued.")
 	case "windows":
-		return queued("camera-sidecar", "Camera Sidecar", "Media Foundation", PermissionNotRequired, "Media Foundation camera sidecar capture is queued.")
+		if path, ok, reason := video.FFmpegAvailability(); ok {
+			return available("camera-sidecar", "Camera Sidecar", "FFmpeg DirectShow", PermissionNotRequired, "FFmpeg DirectShow camera sidecar writer is available at "+path+" and records package-local webcam.mp4.")
+		} else {
+			return blocked("camera-sidecar", "Camera Sidecar", "FFmpeg DirectShow", PermissionNotRequired, reason)
+		}
 	case "linux":
 		return queued("camera-sidecar", "Camera Sidecar", "PipeWire", PermissionUnknown, "PipeWire camera sidecar capture is queued.")
 	default:
@@ -112,6 +132,10 @@ func available(id string, label string, backend string, permission Permission, r
 
 func queued(id string, label string, backend string, permission Permission, reason string) Capability {
 	return Capability{ID: id, Label: label, Status: StatusQueued, Backend: backend, Permission: permission, Reason: reason}
+}
+
+func blocked(id string, label string, backend string, permission Permission, reason string) Capability {
+	return Capability{ID: id, Label: label, Status: StatusBlocked, Backend: backend, Permission: permission, Reason: reason}
 }
 
 func unsupported(id string, label string, backend string, reason string) Capability {

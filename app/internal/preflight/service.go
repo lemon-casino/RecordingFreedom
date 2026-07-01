@@ -59,6 +59,37 @@ func (s *Service) Evaluate(req recording.StartRequest, inputs Inputs) Summary {
 	}
 }
 
+func (s *Service) EvaluateAudioOnly(req recording.AudioOnlyRequest, inputs Inputs) Summary {
+	backend := strings.TrimSpace(inputs.Backend)
+	if backend == "" {
+		backend = recording.BackendAudioOnlyNative
+	}
+	normalized, err := recording.NormalizeAudioOnlyRequest(req)
+	if err != nil {
+		return Summary{
+			Status:  StatusBlocked,
+			Backend: backend,
+			Message: "Audio recording request is invalid.",
+			Checks: []Check{
+				blocked("request", "Recording Request", err.Error()),
+			},
+		}
+	}
+
+	evaluator := evaluator{backend: backend, mockBackend: isMockBackend(backend)}
+	evaluator.checkAudioOnly(normalized, inputs.Media, inputs.Capabilities)
+	evaluator.checkStorage(inputs.Storage)
+	evaluator.checkPackageShell()
+
+	status := aggregate(evaluator.checks)
+	return Summary{
+		Status:  status,
+		Backend: backend,
+		Message: messageFor(status, evaluator.mockBackend),
+		Checks:  evaluator.checks,
+	}
+}
+
 type evaluator struct {
 	backend     string
 	mockBackend bool
@@ -72,11 +103,13 @@ func (e *evaluator) checkSource(req recording.StartRequest, sources []devices.Ca
 		return
 	}
 	if !source.Available {
-		reason := source.UnavailableReason
-		if reason == "" {
-			reason = fmt.Sprintf("source capability is %q", source.Capability)
+		if !selectedRegionSourceIsBoundToDisplay(req) {
+			reason := source.UnavailableReason
+			if reason == "" {
+				reason = fmt.Sprintf("source capability is %q", source.Capability)
+			}
+			e.add(e.statusForNative("source", "Capture Source", reason))
 		}
-		e.add(e.statusForNative("source", "Capture Source", reason))
 	}
 	e.add(e.checkCapability("source-backend", sourceCapabilityLabel(req.SourceType), sourceCaptureCapability(req.SourceType, capabilities)))
 }
@@ -105,6 +138,30 @@ func (e *evaluator) checkAudio(req recording.StartRequest, media devices.MediaIn
 	}
 }
 
+func (e *evaluator) checkAudioOnly(req recording.AudioOnlyRequest, media devices.MediaInventory, capabilities capture.Capabilities) {
+	if req.Audio.System {
+		e.checkDevice("system-audio-device", "System Audio Device", req.Audio.SystemDeviceID, media.SystemAudio)
+		e.add(e.checkCapability("system-audio", "System Audio", audioOnlySystemAudioCapability(capabilities)))
+	}
+	if req.Audio.Microphone {
+		mic, ok := e.checkDevice("microphone-device", "Microphone Device", req.Audio.MicrophoneID, media.Microphones)
+		e.add(e.checkCapability("microphone", "Microphone", audioOnlyMicrophoneCapability(capabilities)))
+		if req.Audio.NoiseSuppression {
+			if ok && !mic.RNNoiseEligible {
+				e.add(e.statusForNative("microphone-rnnoise-device", "Microphone RNNoise", fmt.Sprintf("microphone %q is not marked RNNoise eligible", mic.ID)))
+			}
+			if !media.Enhancement.Available {
+				reason := media.Enhancement.UnavailableReason
+				if reason == "" {
+					reason = fmt.Sprintf("audio enhancement capability is %q", media.Enhancement.Capability)
+				}
+				e.add(e.statusForNative("microphone-rnnoise", "Microphone RNNoise", reason))
+			}
+			e.add(e.checkCapability("microphone-enhancement", "Microphone Enhancement", capabilities.MicrophoneEnhancement))
+		}
+	}
+}
+
 func (e *evaluator) checkCamera(req recording.StartRequest, media devices.MediaInventory, capabilities capture.Capabilities) {
 	if !req.Camera.Enabled {
 		return
@@ -114,8 +171,16 @@ func (e *evaluator) checkCamera(req recording.StartRequest, media devices.MediaI
 	if ok && !camera.SidecarEligible {
 		e.add(e.statusForNative("camera-sidecar-device", "Camera Sidecar", fmt.Sprintf("camera %q is not marked sidecar eligible", camera.ID)))
 	}
+	if ok && strings.TrimSpace(camera.NativeID) == "" {
+		e.add(e.statusForNative("camera-native-id", "Camera Native ID", fmt.Sprintf("camera %q does not expose a native capture id", camera.ID)))
+	}
 	if req.Camera.PIPPreset != "off" {
-		e.add(e.checkCapability("pip-export", "PIP Export", capabilities.PIPExport))
+		check := e.checkCapability("pip-export", "PIP Export", capabilities.PIPExport)
+		if check.Status == StatusBlocked {
+			check.Status = StatusWarning
+			check.Reason = "Recording will capture a webcam sidecar now; PIP preview/export remains a later pipeline: " + check.Reason
+		}
+		e.add(check)
 	}
 }
 
@@ -214,7 +279,7 @@ func findMediaDevice(inventory []devices.MediaDevice, id string) (devices.MediaD
 
 func sourceCaptureCapability(sourceType devices.CaptureSourceType, capabilities capture.Capabilities) capture.Capability {
 	switch sourceType {
-	case devices.SourceScreen:
+	case devices.SourceScreen, devices.SourceAllScreens, devices.SourceRegion:
 		return capabilities.ScreenRecording
 	case devices.SourceWindow:
 		return capabilities.WindowRecording
@@ -229,6 +294,10 @@ func sourceCapabilityLabel(sourceType devices.CaptureSourceType) string {
 	switch sourceType {
 	case devices.SourceScreen:
 		return "Screen Recording"
+	case devices.SourceAllScreens:
+		return "All-Screens Recording"
+	case devices.SourceRegion:
+		return "Region Recording"
 	case devices.SourceWindow:
 		return "Window Recording"
 	case devices.SourceApplication:
@@ -236,6 +305,83 @@ func sourceCapabilityLabel(sourceType devices.CaptureSourceType) string {
 	default:
 		return "Source Recording"
 	}
+}
+
+func audioOnlySystemAudioCapability(capabilities capture.Capabilities) capture.Capability {
+	switch capabilities.Platform {
+	case "windows":
+		return capabilities.SystemAudio
+	case "darwin":
+		return capture.Capability{
+			ID:         "system-audio",
+			Label:      "System Audio",
+			Status:     capture.StatusQueued,
+			Backend:    "audio-only-native",
+			Permission: capture.PermissionScreenRecording,
+			Reason:     "audio-only system audio is not implemented on macOS yet; ScreenCaptureKit system audio currently muxes into screen.mp4 during video recording only",
+		}
+	case "linux":
+		return capture.Capability{
+			ID:         "system-audio",
+			Label:      "System Audio",
+			Status:     capture.StatusQueued,
+			Backend:    "audio-only-native",
+			Permission: capture.PermissionUnknown,
+			Reason:     "audio-only PipeWire/PulseAudio capture is queued",
+		}
+	default:
+		return capture.Capability{
+			ID:         "system-audio",
+			Label:      "System Audio",
+			Status:     capture.StatusUnsupported,
+			Backend:    "audio-only-native",
+			Permission: capture.PermissionNotRequired,
+			Reason:     fmt.Sprintf("audio-only system audio is not implemented for platform %q", capabilities.Platform),
+		}
+	}
+}
+
+func audioOnlyMicrophoneCapability(capabilities capture.Capabilities) capture.Capability {
+	switch capabilities.Platform {
+	case "windows":
+		return capabilities.Microphone
+	case "darwin":
+		return capture.Capability{
+			ID:         "microphone",
+			Label:      "Microphone",
+			Status:     capture.StatusQueued,
+			Backend:    "audio-only-native",
+			Permission: capture.PermissionMicrophone,
+			Reason:     "audio-only CoreAudio microphone capture is queued",
+		}
+	case "linux":
+		return capture.Capability{
+			ID:         "microphone",
+			Label:      "Microphone",
+			Status:     capture.StatusQueued,
+			Backend:    "audio-only-native",
+			Permission: capture.PermissionUnknown,
+			Reason:     "audio-only PipeWire/PulseAudio microphone capture is queued",
+		}
+	default:
+		return capture.Capability{
+			ID:         "microphone",
+			Label:      "Microphone",
+			Status:     capture.StatusUnsupported,
+			Backend:    "audio-only-native",
+			Permission: capture.PermissionNotRequired,
+			Reason:     fmt.Sprintf("audio-only microphone capture is not implemented for platform %q", capabilities.Platform),
+		}
+	}
+}
+
+func selectedRegionSourceIsBoundToDisplay(req recording.StartRequest) bool {
+	return req.SourceType == devices.SourceRegion &&
+		req.SourceGeometry != nil &&
+		req.SourceGeometry.Width > 0 &&
+		req.SourceGeometry.Height > 0 &&
+		strings.TrimSpace(req.SourceGeometry.NativeID) != "" &&
+		strings.TrimSpace(req.SourceGeometry.NativeID) != "region:virtual-desktop"
 }
 
 func isMockBackend(backend string) bool {

@@ -35,12 +35,24 @@ export function Bootstrap(): $CancellablePromise<$models.BootstrapState> {
     return $Call.ByID(3811015052);
 }
 
+export function CancelRegionSelection(): $CancellablePromise<$models.RegionSelectionResult> {
+    return $Call.ByID(3597544006);
+}
+
+export function CompleteRegionSelection(req: $models.RegionSelectionRequest): $CancellablePromise<$models.RegionSelectionResult> {
+    return $Call.ByID(1962254349, req);
+}
+
 export function GetCaptureCapabilities(): $CancellablePromise<capture$0.Capabilities> {
     return $Call.ByID(4009257246);
 }
 
 export function GetSettings(): $CancellablePromise<settings$0.Settings> {
     return $Call.ByID(1085525119);
+}
+
+export function HideScreenIndicator(): $CancellablePromise<void> {
+    return $Call.ByID(3727544311);
 }
 
 export function HideSettingsWindow(): $CancellablePromise<void> {
@@ -57,6 +69,10 @@ export function ListSources(): $CancellablePromise<devices$0.CaptureSource[] | n
 
 export function PauseRecording(): $CancellablePromise<recording$0.Session> {
     return $Call.ByID(2282766307);
+}
+
+export function PreflightAudioOnlyRecording(req: recording$0.AudioOnlyRequest): $CancellablePromise<preflight$0.Summary> {
+    return $Call.ByID(992673734, req);
 }
 
 export function PreflightRecording(req: recording$0.StartRequest): $CancellablePromise<preflight$0.Summary> {
@@ -81,6 +97,14 @@ export function ScanRecordingPackages(): $CancellablePromise<recpackage$0.Recove
 
 export function SetDataRoot(rootDir: string): $CancellablePromise<appdata$0.Info> {
     return $Call.ByID(2213117442, rootDir);
+}
+
+export function ShowRegionSelector(): $CancellablePromise<$models.RegionSelectionSession> {
+    return $Call.ByID(2760023242);
+}
+
+export function ShowScreenIndicator(req: $models.ScreenIndicatorRequest): $CancellablePromise<$models.ScreenIndicatorResult> {
+    return $Call.ByID(1545499612, req);
 }
 
 export function ShowSettingsWindow(): $CancellablePromise<void> {

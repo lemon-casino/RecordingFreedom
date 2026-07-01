@@ -3,6 +3,7 @@ package recording
 import (
 	"bytes"
 	"context"
+	"encoding/binary"
 	"encoding/json"
 	"os"
 	"path/filepath"
@@ -15,14 +16,21 @@ import (
 )
 
 func TestStartMockRecordingCreatesPackageInDataVideo(t *testing.T) {
-	t.Setenv(EnvRecordingBackend, "")
 	root := t.TempDir()
-	service := NewService(appdata.NewService(root))
+	service := newMockRecordingService(root)
 
 	session, err := service.StartMockRecording(StartRequest{
 		SourceID:   "screen:primary",
 		SourceType: SourceScreen,
 		SourceName: "Primary Display",
+		SourceGeometry: &SourceGeometry{
+			X:            -1920,
+			Y:            0,
+			Width:        1920,
+			Height:       1080,
+			DisplayIndex: 2,
+			NativeID:     "DISPLAY2",
+		},
 		Recording: recordingprofile.Profile{
 			Quality:          recordingprofile.QualityHigh,
 			FPS:              60,
@@ -76,6 +84,10 @@ func TestStartMockRecordingCreatesPackageInDataVideo(t *testing.T) {
 	if source["name"] != "Primary Display" {
 		t.Fatalf("source name = %v, want Primary Display", source["name"])
 	}
+	geometry := source["geometry"].(map[string]any)
+	if geometry["x"] != float64(-1920) || geometry["width"] != float64(1920) || geometry["nativeId"] != "DISPLAY2" {
+		t.Fatalf("source geometry = %#v, want selected display geometry", geometry)
+	}
 	recording := manifest["recording"].(map[string]any)
 	if recording["quality"] != recordingprofile.QualityHigh || recording["fps"] != float64(60) || recording["countdownSeconds"] != float64(3) {
 		t.Fatalf("recording profile = %#v", recording)
@@ -87,8 +99,7 @@ func TestStartMockRecordingCreatesPackageInDataVideo(t *testing.T) {
 }
 
 func TestPauseResumeStopPatchManifestStatus(t *testing.T) {
-	t.Setenv(EnvRecordingBackend, "")
-	service := NewService(appdata.NewService(t.TempDir()))
+	service := newMockRecordingService(t.TempDir())
 	if _, err := service.StartMockRecording(StartRequest{SourceID: "screen:primary", SourceType: SourceScreen}); err != nil {
 		t.Fatalf("StartMockRecording() error = %v", err)
 	}
@@ -159,6 +170,16 @@ func TestStartAudioOnlyRecordingCreatesReadyPackage(t *testing.T) {
 			audioSession.path = config.MicrophoneAudioPath
 			return audioSession, nil
 		},
+		PostStopProcessor: func(runtime *AudioOnlyRuntime) error {
+			writeMinimalMP4File(t, runtime.Plan.AudioOnlyPath, "soun")
+			manifest, err := runtime.packages.PatchAudioOnlyMuxed(runtime.Plan.Package.ManifestPath, false, true)
+			if err != nil {
+				return err
+			}
+			runtime.Plan.Package.Manifest = manifest
+			runtime.Plan.MicrophoneAudioPath = runtime.Plan.AudioOnlyPath
+			return nil
+		},
 	})
 
 	session, err := service.StartAudioOnlyRecording(AudioOnlyRequest{
@@ -197,11 +218,14 @@ func TestStartAudioOnlyRecordingCreatesReadyPackage(t *testing.T) {
 	if manifest.Status != recpackage.StatusReady || manifest.RecordingMode != recpackage.RecordingModeAudio {
 		t.Fatalf("manifest status/mode = %q/%q, want ready audio-only", manifest.Status, manifest.RecordingMode)
 	}
-	if manifest.Media.ScreenVideoPath != "" || manifest.Media.AudioPath != recpackage.AudioOnlyWAVFile || manifest.Media.MicrophoneAudioPath != recpackage.AudioOnlyWAVFile {
+	if manifest.Media.ScreenVideoPath != "" || manifest.Media.AudioPath != recpackage.AudioOnlyFile || manifest.Media.MicrophoneAudioPath != recpackage.AudioOnlyFile {
 		t.Fatalf("audio-only media = %#v", manifest.Media)
 	}
-	if manifest.Diagnostics.Sync == nil || manifest.Diagnostics.Sync.Microphone.Path != recpackage.AudioOnlyWAVFile {
-		t.Fatalf("sync diagnostics = %#v, want microphone audio.wav", manifest.Diagnostics.Sync)
+	if manifest.Media.MicrophoneAudioStorage != recpackage.AudioStorageMuxed {
+		t.Fatalf("microphone storage = %q, want muxed", manifest.Media.MicrophoneAudioStorage)
+	}
+	if manifest.Diagnostics.Sync == nil || manifest.Diagnostics.Sync.Microphone.Path != recpackage.AudioOnlyFile {
+		t.Fatalf("sync diagnostics = %#v, want microphone audio.m4a", manifest.Diagnostics.Sync)
 	}
 }
 
@@ -373,8 +397,7 @@ func TestStopMarksNativeBackendReadyAfterMediaProbe(t *testing.T) {
 }
 
 func TestScanPackagesReportsRecoverableActivePackage(t *testing.T) {
-	t.Setenv(EnvRecordingBackend, "")
-	service := NewService(appdata.NewService(t.TempDir()))
+	service := newMockRecordingService(t.TempDir())
 	session, err := service.StartMockRecording(StartRequest{SourceID: "screen:primary", SourceType: SourceScreen})
 	if err != nil {
 		t.Fatalf("StartMockRecording() error = %v", err)
@@ -394,6 +417,10 @@ func TestScanPackagesReportsRecoverableActivePackage(t *testing.T) {
 		}
 	}
 	t.Fatalf("ScanPackages() did not include active package %q: %#v", session.PackageDir, summaries)
+}
+
+func newMockRecordingService(root string) *Service {
+	return NewServiceWithBackend(appdata.NewService(root), NewMockBackend(recpackage.NewService()))
 }
 
 func TestRecoverPackageMarksDataVideoPackageReady(t *testing.T) {
@@ -450,11 +477,7 @@ func (b *trackingBackend) Start(_ context.Context, req BackendStartRequest) (Bac
 	pkg, err := b.packages.CreateMock(req.VideoDir, recpackage.CreateMockRequest{
 		CreatedAt: req.CreatedAt,
 		Status:    recpackage.StatusRecording,
-		Source: recpackage.ManifestSource{
-			Type: string(req.StartRequest.SourceType),
-			ID:   req.StartRequest.SourceID,
-			Name: req.StartRequest.SourceName,
-		},
+		Source:    manifestSourceFromStartRequest(req.StartRequest),
 		Recording: req.StartRequest.Recording,
 	})
 	if err != nil {
@@ -578,4 +601,25 @@ func nativeSyncDiagnostics(includeWebcam bool) *recpackage.ManifestSyncDiagnosti
 		}
 	}
 	return diagnostics
+}
+
+func writeMinimalMP4File(t *testing.T, path string, handlerType string) {
+	t.Helper()
+	payload := make([]byte, 0, 12)
+	payload = append(payload, 0, 0, 0, 0)
+	payload = append(payload, 0, 0, 0, 0)
+	payload = append(payload, []byte(handlerType)...)
+	data := mp4Box("ftyp", []byte("isom0000"))
+	data = append(data, mp4Box("moov", mp4Box("trak", mp4Box("mdia", mp4Box("hdlr", payload))))...)
+	if err := os.WriteFile(path, data, 0o644); err != nil {
+		t.Fatalf("WriteFile(minimal mp4) error = %v", err)
+	}
+}
+
+func mp4Box(kind string, payload []byte) []byte {
+	box := make([]byte, 8+len(payload))
+	binary.BigEndian.PutUint32(box[0:4], uint32(len(box)))
+	copy(box[4:8], []byte(kind))
+	copy(box[8:], payload)
+	return box
 }

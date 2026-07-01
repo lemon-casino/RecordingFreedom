@@ -2,6 +2,7 @@
 
 #import <AudioToolbox/AudioToolbox.h>
 #import <AVFoundation/AVFoundation.h>
+#import <CoreGraphics/CoreGraphics.h>
 #import <CoreMedia/CoreMedia.h>
 #import <CoreVideo/CoreVideo.h>
 #import <Foundation/Foundation.h>
@@ -64,6 +65,11 @@ static int64_t rf_sck_elapsed_ms(CMTime start, CMTime value) {
 @property(nonatomic, assign) int requestedFPS;
 @property(nonatomic, assign) BOOL captureCursor;
 @property(nonatomic, assign) BOOL captureSystemAudio;
+@property(nonatomic, assign) BOOL cropEnabled;
+@property(nonatomic, assign) int cropX;
+@property(nonatomic, assign) int cropY;
+@property(nonatomic, assign) int cropWidth;
+@property(nonatomic, assign) int cropHeight;
 @property(nonatomic, strong) SCStream *stream;
 @property(nonatomic, strong) AVAssetWriter *writer;
 @property(nonatomic, strong) AVAssetWriterInput *videoInput;
@@ -99,7 +105,12 @@ static int64_t rf_sck_elapsed_ms(CMTime start, CMTime value) {
 							  fps:(int)fps
 					captureCursor:(BOOL)captureCursor
 				captureSystemAudio:(BOOL)captureSystemAudio
-						  quality:(NSString *)quality {
+						  quality:(NSString *)quality
+					 cropEnabled:(BOOL)cropEnabled
+							cropX:(int)cropX
+							cropY:(int)cropY
+						cropWidth:(int)cropWidth
+					   cropHeight:(int)cropHeight {
 	self = [super init];
 	if (self == nil) {
 		return nil;
@@ -111,6 +122,11 @@ static int64_t rf_sck_elapsed_ms(CMTime start, CMTime value) {
 	_captureCursor = captureCursor;
 	_captureSystemAudio = captureSystemAudio;
 	_quality = quality.length > 0 ? [quality copy] : @"balanced";
+	_cropEnabled = cropEnabled;
+	_cropX = cropX;
+	_cropY = cropY;
+	_cropWidth = cropWidth;
+	_cropHeight = cropHeight;
 	_sampleQueue = dispatch_queue_create("casino.lemon.recordingfreedom.sck-video", DISPATCH_QUEUE_SERIAL);
 	_firstPTS = kCMTimeInvalid;
 	_lastPTS = kCMTimeInvalid;
@@ -168,6 +184,48 @@ static int64_t rf_sck_elapsed_ms(CMTime start, CMTime value) {
 		}
 		return NO;
 	}
+	if (self.cropEnabled) {
+		if (self.cropWidth <= 0 || self.cropHeight <= 0) {
+			if (errorMessage != NULL) {
+				*errorMessage = @"ScreenCaptureKit region crop has invalid dimensions";
+			}
+			return NO;
+		}
+	}
+
+	CGRect sourceRect = CGRectZero;
+	BOOL hasSourceRect = NO;
+	if (self.cropEnabled) {
+		sourceRect = CGRectMake(self.cropX, self.cropY, self.cropWidth, self.cropHeight);
+		if (self.targetKind == RF_SCK_TARGET_DISPLAY) {
+			CGRect displayBounds = CGDisplayBounds((CGDirectDisplayID)self.targetID);
+			if (!CGRectIsEmpty(displayBounds)) {
+				sourceRect.origin.x -= displayBounds.origin.x;
+				sourceRect.origin.y -= displayBounds.origin.y;
+				CGFloat maxX = sourceRect.origin.x + sourceRect.size.width;
+				CGFloat maxY = sourceRect.origin.y + sourceRect.size.height;
+				if (sourceRect.origin.x < 0 ||
+					sourceRect.origin.y < 0 ||
+					maxX > displayBounds.size.width + 1.0 ||
+					maxY > displayBounds.size.height + 1.0) {
+					if (errorMessage != NULL) {
+						*errorMessage = [NSString stringWithFormat:@"ScreenCaptureKit region crop %.0f,%.0f %.0fx%.0f is outside display %u bounds %.0fx%.0f",
+							sourceRect.origin.x,
+							sourceRect.origin.y,
+							sourceRect.size.width,
+							sourceRect.size.height,
+							self.targetID,
+							displayBounds.size.width,
+							displayBounds.size.height];
+					}
+					return NO;
+				}
+			}
+		}
+		hasSourceRect = YES;
+		self.width = self.cropWidth;
+		self.height = self.cropHeight;
+	}
 
 	NSError *writerError = nil;
 	if (![self configureWriterWithWidth:self.width height:self.height error:&writerError]) {
@@ -180,6 +238,9 @@ static int64_t rf_sck_elapsed_ms(CMTime start, CMTime value) {
 	SCStreamConfiguration *configuration = [[SCStreamConfiguration alloc] init];
 	configuration.width = self.width;
 	configuration.height = self.height;
+	if (hasSourceRect) {
+		configuration.sourceRect = sourceRect;
+	}
 	configuration.minimumFrameInterval = CMTimeMake(1, self.requestedFPS);
 	configuration.queueDepth = 6;
 	configuration.pixelFormat = kCVPixelFormatType_32BGRA;
@@ -664,6 +725,11 @@ RFSCKSession *rf_sck_session_create(
 	int capture_cursor,
 	int capture_system_audio,
 	const char *quality,
+	int crop_enabled,
+	int crop_x,
+	int crop_y,
+	int crop_width,
+	int crop_height,
 	char **error_message
 ) {
 	if (target_kind != RF_SCK_TARGET_DISPLAY && target_kind != RF_SCK_TARGET_WINDOW && target_kind != RF_SCK_TARGET_APPLICATION) {
@@ -686,7 +752,12 @@ RFSCKSession *rf_sck_session_create(
 																				 fps:fps
 																	   captureCursor:capture_cursor != 0
 																 captureSystemAudio:capture_system_audio != 0
-																			 quality:qualityValue];
+																			 quality:qualityValue
+																		cropEnabled:crop_enabled != 0
+																			  cropX:crop_x
+																			  cropY:crop_y
+																		  cropWidth:crop_width
+																		 cropHeight:crop_height];
 	if (impl == nil) {
 		rf_sck_set_error(error_message, @"Could not allocate ScreenCaptureKit session");
 		return NULL;

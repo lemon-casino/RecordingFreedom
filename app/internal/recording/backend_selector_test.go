@@ -10,8 +10,15 @@ import (
 	"github.com/lemon-casino/RecordingFreedom/app/internal/video"
 )
 
-func TestSelectBackendDefaultsToMockPackage(t *testing.T) {
+func TestSelectBackendDefaultsToPlatformNativeBackend(t *testing.T) {
 	backend := SelectBackend(recpackage.NewService(), "darwin", "")
+	if backend.ID() != BackendScreenCaptureKit {
+		t.Fatalf("backend = %q, want %q", backend.ID(), BackendScreenCaptureKit)
+	}
+}
+
+func TestSelectBackendCanExplicitlyUseMockPackage(t *testing.T) {
+	backend := SelectBackend(recpackage.NewService(), "darwin", "mock-package")
 	if backend.ID() != BackendMockPackage {
 		t.Fatalf("backend = %q, want %q", backend.ID(), BackendMockPackage)
 	}
@@ -23,7 +30,7 @@ func TestSelectBackendNativeUsesPlatformBackendID(t *testing.T) {
 		want     string
 	}{
 		{platform: "darwin", want: BackendScreenCaptureKit},
-		{platform: "windows", want: BackendWindowsGraphicsCapture},
+		{platform: "windows", want: BackendFFmpegDesktopCapture},
 		{platform: "linux", want: BackendPipeWirePortal},
 		{platform: "plan9", want: BackendNativeUnsupported},
 	}

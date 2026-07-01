@@ -4,6 +4,8 @@ type CaptureSourceType string
 
 const (
 	SourceScreen      CaptureSourceType = "screen"
+	SourceAllScreens  CaptureSourceType = "all-screens"
+	SourceRegion      CaptureSourceType = "region"
 	SourceWindow      CaptureSourceType = "window"
 	SourceApplication CaptureSourceType = "application"
 )
@@ -21,6 +23,8 @@ type CaptureSource struct {
 	Type              CaptureSourceType `json:"type"`
 	Name              string            `json:"name"`
 	Subtitle          string            `json:"subtitle"`
+	X                 int               `json:"x,omitempty"`
+	Y                 int               `json:"y,omitempty"`
 	Width             int               `json:"width,omitempty"`
 	Height            int               `json:"height,omitempty"`
 	NativeID          string            `json:"nativeId,omitempty"`

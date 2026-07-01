@@ -42,6 +42,11 @@ RFSCKSession *rf_sck_session_create(
 	int capture_cursor,
 	int capture_system_audio,
 	const char *quality,
+	int crop_enabled,
+	int crop_x,
+	int crop_y,
+	int crop_width,
+	int crop_height,
 	char **error_message
 );
 

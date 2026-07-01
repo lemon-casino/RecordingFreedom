@@ -16,10 +16,28 @@ type CaptureConfig struct {
 	SourceID        string
 	SourceType      SourceType
 	SourceName      string
+	SourceGeometry  *SourceGeometry
 	OutputPath      string
 	DiagnosticsPath string
 	Profile         recordingprofile.Profile
 	SystemAudio     bool
+}
+
+type CameraCaptureConfig struct {
+	Backend        string
+	DeviceID       string
+	DeviceNativeID string
+	OutputPath     string
+	Profile        recordingprofile.Profile
+}
+
+type SourceGeometry struct {
+	X            int    `json:"x"`
+	Y            int    `json:"y"`
+	Width        int    `json:"width"`
+	Height       int    `json:"height"`
+	DisplayIndex int    `json:"displayIndex,omitempty"`
+	NativeID     string `json:"nativeId,omitempty"`
 }
 
 type Session interface {
@@ -28,6 +46,14 @@ type Session interface {
 	Resume() error
 	Stop() error
 	Diagnostics() Diagnostics
+}
+
+type CameraSession interface {
+	Start(context.Context) error
+	Pause() error
+	Resume() error
+	Stop() error
+	Diagnostics() TrackDiagnostics
 }
 
 type Diagnostics struct {
@@ -43,9 +69,10 @@ type Diagnostics struct {
 }
 
 type SourceDiagnostic struct {
-	ID   string     `json:"id"`
-	Type SourceType `json:"type"`
-	Name string     `json:"name,omitempty"`
+	ID       string          `json:"id"`
+	Type     SourceType      `json:"type"`
+	Name     string          `json:"name,omitempty"`
+	Geometry *SourceGeometry `json:"geometry,omitempty"`
 }
 
 type RecordingProfile struct {
@@ -81,8 +108,21 @@ func NormalizeCaptureConfig(config CaptureConfig) CaptureConfig {
 	}
 	config.SourceID = strings.TrimSpace(config.SourceID)
 	config.SourceName = strings.TrimSpace(config.SourceName)
+	config.SourceGeometry = normalizeSourceGeometry(config.SourceGeometry)
 	config.OutputPath = strings.TrimSpace(config.OutputPath)
 	config.DiagnosticsPath = strings.TrimSpace(config.DiagnosticsPath)
+	config.Profile = recordingprofile.Normalize(config.Profile)
+	return config
+}
+
+func NormalizeCameraCaptureConfig(config CameraCaptureConfig) CameraCaptureConfig {
+	config.Backend = strings.TrimSpace(config.Backend)
+	if config.Backend == "" {
+		config.Backend = "native-camera"
+	}
+	config.DeviceID = strings.TrimSpace(config.DeviceID)
+	config.DeviceNativeID = strings.TrimSpace(config.DeviceNativeID)
+	config.OutputPath = strings.TrimSpace(config.OutputPath)
 	config.Profile = recordingprofile.Normalize(config.Profile)
 	return config
 }
@@ -94,9 +134,10 @@ func NewDiagnostics(config CaptureConfig) Diagnostics {
 		CreatedAt:     time.Now(),
 		Backend:       config.Backend,
 		Source: SourceDiagnostic{
-			ID:   config.SourceID,
-			Type: config.SourceType,
-			Name: config.SourceName,
+			ID:       config.SourceID,
+			Type:     config.SourceType,
+			Name:     config.SourceName,
+			Geometry: cloneSourceGeometry(config.SourceGeometry),
 		},
 		Recording: RecordingProfile{
 			Quality:          config.Profile.Quality,
@@ -113,4 +154,21 @@ func NewDiagnostics(config CaptureConfig) Diagnostics {
 			Enabled: config.SystemAudio,
 		},
 	}
+}
+
+func normalizeSourceGeometry(geometry *SourceGeometry) *SourceGeometry {
+	if geometry == nil {
+		return nil
+	}
+	next := *geometry
+	next.NativeID = strings.TrimSpace(next.NativeID)
+	return &next
+}
+
+func cloneSourceGeometry(geometry *SourceGeometry) *SourceGeometry {
+	if geometry == nil {
+		return nil
+	}
+	next := *geometry
+	return &next
 }

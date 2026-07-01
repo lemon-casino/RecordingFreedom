@@ -20,8 +20,14 @@ func TestLoadMissingSettingsReturnsDefaults(t *testing.T) {
 	if got.Locale != LocaleZhCN {
 		t.Fatalf("default locale = %q, want %q", got.Locale, LocaleZhCN)
 	}
-	if !got.Audio.NoiseSuppression {
-		t.Fatal("default settings should enable microphone noise suppression")
+	if got.Audio.System {
+		t.Fatal("default settings should keep system audio disabled until the user enables it")
+	}
+	if got.Audio.Microphone {
+		t.Fatal("default settings should keep microphone disabled until the user enables it")
+	}
+	if got.Audio.NoiseSuppression {
+		t.Fatal("default settings should keep microphone noise suppression disabled until the user enables it")
 	}
 	if got.Recording != recordingprofile.Default() {
 		t.Fatalf("default recording profile = %#v, want %#v", got.Recording, recordingprofile.Default())

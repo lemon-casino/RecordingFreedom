@@ -89,11 +89,11 @@ func Default() Settings {
 		},
 		Recording: recordingprofile.Default(),
 		Audio: AudioSettings{
-			System:             true,
+			System:             false,
 			SystemDeviceID:     "system-audio:default",
-			Microphone:         true,
+			Microphone:         false,
 			MicrophoneDeviceID: "microphone:default",
-			NoiseSuppression:   true,
+			NoiseSuppression:   false,
 			MicrophoneGain:     1,
 		},
 		Camera: CameraSettings{

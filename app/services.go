@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"path/filepath"
 	"strings"
+	"sync"
 
 	"github.com/lemon-casino/RecordingFreedom/app/internal/appdata"
 	"github.com/lemon-casino/RecordingFreedom/app/internal/capture"
@@ -36,8 +37,12 @@ type RecordingFreedomService struct {
 	recorder  *recording.Service
 	settings  *settings.Service
 
-	app            *application.App
-	settingsWindow *application.WebviewWindow
+	app             *application.App
+	settingsWindow  *application.WebviewWindow
+	regionOverlay   *application.WebviewWindow
+	screenIndicator *application.WebviewWindow
+	regionMu        sync.Mutex
+	regionSession   *RegionSelectionSession
 }
 
 func NewRecordingFreedomService() *RecordingFreedomService {
@@ -58,6 +63,14 @@ func (s *RecordingFreedomService) setApp(app *application.App) {
 
 func (s *RecordingFreedomService) setSettingsWindow(window *application.WebviewWindow) {
 	s.settingsWindow = window
+}
+
+func (s *RecordingFreedomService) setRegionOverlayWindow(window *application.WebviewWindow) {
+	s.regionOverlay = window
+}
+
+func (s *RecordingFreedomService) setScreenIndicatorWindow(window *application.WebviewWindow) {
+	s.screenIndicator = window
 }
 
 func (s *RecordingFreedomService) ShowSettingsWindow() error {
@@ -118,10 +131,26 @@ func (s *RecordingFreedomService) GetCaptureCapabilities() capture.Capabilities 
 }
 
 func (s *RecordingFreedomService) PreflightRecording(req recording.StartRequest) preflight.Summary {
+	media := s.devices.ListMediaDevices()
+	req = enrichRecordingCameraRequest(req, media)
+	return s.evaluateRecordingPreflight(req, media)
+}
+
+func (s *RecordingFreedomService) evaluateRecordingPreflight(req recording.StartRequest, media devices.MediaInventory) preflight.Summary {
 	storage, _ := s.appData.StorageStatus()
 	return s.preflight.Evaluate(req, preflight.Inputs{
 		Backend:      s.recorder.BackendID(),
 		Sources:      s.devices.ListSources(),
+		Media:        media,
+		Capabilities: s.capture.Capabilities(),
+		Storage:      storage,
+	})
+}
+
+func (s *RecordingFreedomService) PreflightAudioOnlyRecording(req recording.AudioOnlyRequest) preflight.Summary {
+	storage, _ := s.appData.StorageStatus()
+	return s.preflight.EvaluateAudioOnly(req, preflight.Inputs{
+		Backend:      recording.BackendAudioOnlyNative,
 		Media:        s.devices.ListMediaDevices(),
 		Capabilities: s.capture.Capabilities(),
 		Storage:      storage,
@@ -158,7 +187,12 @@ func (s *RecordingFreedomService) SaveSettings(next settings.Settings) (settings
 		return settings.Settings{}, err
 	}
 	next.Storage.DataRootDir = info.RootDir
-	return s.settings.Save(next)
+	saved, err := s.settings.Save(next)
+	if err != nil {
+		return settings.Settings{}, err
+	}
+	s.emitSettingsChanged(saved)
+	return saved, nil
 }
 
 func (s *RecordingFreedomService) SetDataRoot(rootDir string) (appdata.Info, error) {
@@ -174,9 +208,11 @@ func (s *RecordingFreedomService) SetDataRoot(rootDir string) (appdata.Info, err
 		return appdata.Info{}, err
 	}
 	currentSettings.Storage.DataRootDir = info.RootDir
-	if _, err := s.settings.Save(currentSettings); err != nil {
+	saved, err := s.settings.Save(currentSettings)
+	if err != nil {
 		return appdata.Info{}, err
 	}
+	s.emitSettingsChanged(saved)
 	return info, nil
 }
 
@@ -213,6 +249,20 @@ func recorderIsActive(state recording.State) bool {
 }
 
 func (s *RecordingFreedomService) StartRecording(req recording.StartRequest) (recording.Session, error) {
+	media := devices.MediaInventory{}
+	if s.devices != nil {
+		media = s.devices.ListMediaDevices()
+		req = enrichRecordingCameraRequest(req, media)
+	}
+	if summary, blocked := s.blockingRecordingPreflight(req, media); blocked {
+		err := fmt.Errorf("preflight blocked: %s", firstBlockedPreflightReason(summary))
+		s.emitRecordingStatus(recording.StatusEvent{
+			Status:  recording.StateFailed,
+			Backend: s.recorder.BackendID(),
+			Message: err.Error(),
+		})
+		return recording.Session{}, err
+	}
 	s.emitRecordingStatus(recording.StatusEvent{
 		Status:  recording.StatePreparing,
 		Backend: s.recorder.BackendID(),
@@ -235,7 +285,76 @@ func (s *RecordingFreedomService) StartMockRecording(req recording.StartRequest)
 	return s.StartRecording(req)
 }
 
+func (s *RecordingFreedomService) blockingRecordingPreflight(req recording.StartRequest, media devices.MediaInventory) (preflight.Summary, bool) {
+	if s.preflight == nil || s.devices == nil || s.capture == nil || s.appData == nil {
+		return preflight.Summary{}, false
+	}
+	if media.Cameras == nil && media.SystemAudio == nil && media.Microphones == nil {
+		media = s.devices.ListMediaDevices()
+	}
+	summary := s.evaluateRecordingPreflight(req, media)
+	return summary, summary.Status == preflight.StatusBlocked
+}
+
+func enrichRecordingCameraRequest(req recording.StartRequest, media devices.MediaInventory) recording.StartRequest {
+	normalized, err := recording.NormalizeStartRequest(req)
+	if err != nil || !normalized.Camera.Enabled {
+		return req
+	}
+	deviceID := strings.TrimSpace(normalized.Camera.DeviceID)
+	selected := devices.MediaDevice{}
+	for _, camera := range media.Cameras {
+		if camera.ID == deviceID {
+			selected = camera
+			break
+		}
+	}
+	if selected.ID == "" && deviceID == "camera:default" {
+		for _, camera := range media.Cameras {
+			if camera.Available && camera.SidecarEligible {
+				selected = camera
+				break
+			}
+		}
+	}
+	if selected.ID == "" {
+		return req
+	}
+	req.Camera.DeviceID = selected.ID
+	req.Camera.DeviceNativeID = selected.NativeID
+	return req
+}
+
+func (s *RecordingFreedomService) blockingAudioOnlyPreflight(req recording.AudioOnlyRequest) (preflight.Summary, bool) {
+	if s.preflight == nil || s.devices == nil || s.capture == nil || s.appData == nil {
+		return preflight.Summary{}, false
+	}
+	summary := s.PreflightAudioOnlyRecording(req)
+	return summary, summary.Status == preflight.StatusBlocked
+}
+
+func firstBlockedPreflightReason(summary preflight.Summary) string {
+	for _, check := range summary.Checks {
+		if check.Status == preflight.StatusBlocked && check.Reason != "" {
+			return check.Reason
+		}
+	}
+	if summary.Message != "" {
+		return summary.Message
+	}
+	return "recording preflight failed"
+}
+
 func (s *RecordingFreedomService) StartAudioOnlyRecording(req recording.AudioOnlyRequest) (recording.Session, error) {
+	if summary, blocked := s.blockingAudioOnlyPreflight(req); blocked {
+		err := fmt.Errorf("preflight blocked: %s", firstBlockedPreflightReason(summary))
+		s.emitRecordingStatus(recording.StatusEvent{
+			Status:  recording.StateFailed,
+			Backend: recording.BackendAudioOnlyNative,
+			Message: err.Error(),
+		})
+		return recording.Session{}, err
+	}
 	s.emitRecordingStatus(recording.StatusEvent{
 		Status:  recording.StatePreparing,
 		Backend: recording.BackendAudioOnlyNative,
@@ -259,7 +378,7 @@ func (s *RecordingFreedomService) PauseRecording() (recording.Session, error) {
 	if err != nil {
 		s.emitRecordingStatus(recording.StatusEvent{
 			Status:  recording.StateFailed,
-			Backend: s.recorder.BackendID(),
+			Backend: s.recorder.ActiveBackendID(),
 			Message: err.Error(),
 		})
 		return recording.Session{}, err
@@ -273,7 +392,7 @@ func (s *RecordingFreedomService) ResumeRecording() (recording.Session, error) {
 	if err != nil {
 		s.emitRecordingStatus(recording.StatusEvent{
 			Status:  recording.StateFailed,
-			Backend: s.recorder.BackendID(),
+			Backend: s.recorder.ActiveBackendID(),
 			Message: err.Error(),
 		})
 		return recording.Session{}, err
@@ -285,14 +404,14 @@ func (s *RecordingFreedomService) ResumeRecording() (recording.Session, error) {
 func (s *RecordingFreedomService) StopRecording() (recording.Session, error) {
 	s.emitRecordingStatus(recording.StatusEvent{
 		Status:  recording.StateStopping,
-		Backend: s.recorder.BackendID(),
+		Backend: s.recorder.ActiveBackendID(),
 		Message: "Finalizing recording package",
 	})
 	session, err := s.recorder.Stop()
 	if err != nil {
 		s.emitRecordingStatus(recording.StatusEvent{
 			Status:  recording.StateFailed,
-			Backend: s.recorder.BackendID(),
+			Backend: s.recorder.ActiveBackendID(),
 			Message: err.Error(),
 		})
 		return session, err
@@ -317,4 +436,11 @@ func (s *RecordingFreedomService) emitRecordingStatus(event recording.StatusEven
 		return
 	}
 	s.app.Event.Emit("recording.status", event)
+}
+
+func (s *RecordingFreedomService) emitSettingsChanged(next settings.Settings) {
+	if s.app == nil {
+		return
+	}
+	s.app.Event.Emit("settings.changed", next)
 }

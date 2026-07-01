@@ -28,6 +28,7 @@ export interface AudioRequest {
 export interface CameraRequest {
     "enabled": boolean;
     "deviceId"?: string;
+    "deviceNativeId"?: string;
     "pipPreset": string;
 }
 
@@ -44,10 +45,20 @@ export interface Session {
     "completedAt"?: time$0.Time;
 }
 
+export interface SourceGeometry {
+    "x": number;
+    "y": number;
+    "width": number;
+    "height": number;
+    "displayIndex"?: number;
+    "nativeId"?: string;
+}
+
 export interface StartRequest {
     "sourceId": string;
     "sourceType": CaptureSourceType;
     "sourceName"?: string;
+    "sourceGeometry"?: SourceGeometry | null;
     "recording": recordingprofile$0.Profile;
     "audio": AudioRequest;
     "camera": CameraRequest;

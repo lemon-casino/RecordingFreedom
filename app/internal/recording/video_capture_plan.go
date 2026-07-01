@@ -15,9 +15,24 @@ func CreateVideoCaptureConfig(backendID string, req StartRequest, plan recpackag
 		SourceID:        normalized.SourceID,
 		SourceType:      normalized.SourceType,
 		SourceName:      normalized.SourceName,
+		SourceGeometry:  videoSourceGeometry(normalized.SourceGeometry),
 		OutputPath:      plan.ScreenVideoPath,
 		DiagnosticsPath: plan.VideoDiagnosticsPath,
 		Profile:         normalized.Recording,
 		SystemAudio:     normalized.Audio.System && plan.Package.Manifest.Media.SystemAudioStorage == recpackage.AudioStorageMuxed,
 	}), nil
+}
+
+func videoSourceGeometry(geometry *SourceGeometry) *video.SourceGeometry {
+	if geometry == nil {
+		return nil
+	}
+	return &video.SourceGeometry{
+		X:            geometry.X,
+		Y:            geometry.Y,
+		Width:        geometry.Width,
+		Height:       geometry.Height,
+		DisplayIndex: geometry.DisplayIndex,
+		NativeID:     geometry.NativeID,
+	}
 }

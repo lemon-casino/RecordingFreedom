@@ -53,6 +53,11 @@ app/frontend/vite-preview.log
 app/build/linux/appimage/build/
 app/build/windows/nsis/MicrosoftEdgeWebview2Setup.exe
 
+# Downloaded native desktop tools
+app/tools/*
+!app/tools/
+!app/tools/.gitkeep
+
 # Mobile generated files contain machine-local paths
 app/build/ios/xcode/overlay.json
 app/build/ios/xcode/gen/

@@ -7,5 +7,11 @@ export {
 };
 
 export type {
-    BootstrapState
+    BootstrapState,
+    RegionRect,
+    RegionSelectionRequest,
+    RegionSelectionResult,
+    RegionSelectionSession,
+    ScreenIndicatorRequest,
+    ScreenIndicatorResult
 } from "./models.js";

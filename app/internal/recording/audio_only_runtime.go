@@ -14,7 +14,10 @@ import (
 type AudioOnlyRuntimeOptions struct {
 	AudioSessionFactory    NativeAudioSessionFactory
 	NoiseSuppressorFactory NativeNoiseSuppressorFactory
+	PostStopProcessor      AudioOnlyPostStopProcessor
 }
+
+type AudioOnlyPostStopProcessor func(*AudioOnlyRuntime) error
 
 type AudioOnlyRuntime struct {
 	packages *recpackage.Service

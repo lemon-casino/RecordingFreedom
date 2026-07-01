@@ -79,6 +79,14 @@ func (b *AudioOnlyRuntimeBackend) Stop(_ context.Context, req BackendControlRequ
 		_ = runtime.MarkPackageFailed()
 		return BackendStopResult{}, err
 	}
+	postStop := b.options.PostStopProcessor
+	if postStop == nil {
+		postStop = defaultAudioOnlyPostStopProcessor
+	}
+	if err := postStop(runtime); err != nil {
+		_ = runtime.MarkPackageFailed()
+		return BackendStopResult{}, err
+	}
 
 	b.mu.Lock()
 	delete(b.runtimes, req.Session.ID)

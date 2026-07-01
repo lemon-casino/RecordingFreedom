@@ -1,4 +1,5 @@
-export type CaptureSourceType = 'screen' | 'window' | 'application'
+export type CaptureSourceType = 'screen' | 'all-screens' | 'region' | 'window' | 'application'
+export type RecordingMode = 'video' | 'audio'
 export type RecordingState = 'idle' | 'preparing' | 'recording' | 'paused' | 'stopping' | 'ready' | 'failed'
 export type LocaleCode = 'zh-CN' | 'en'
 export type CaptureCapabilityStatus = 'available' | 'queued' | 'blocked' | 'unsupported'
@@ -36,9 +37,16 @@ export type CaptureSource = {
   label: string
   name: string
   meta: string
+  x?: number
+  y?: number
   available?: boolean
   capability?: string
   unavailableReason?: string
+  width?: number
+  height?: number
+  displayIndex?: number
+  nativeId?: string
+  processId?: number
 }
 
 export type MediaDeviceType = 'system-audio' | 'microphone' | 'camera'
@@ -48,6 +56,7 @@ export type MediaDevice = {
   type: MediaDeviceType
   name: string
   meta: string
+  nativeId?: string
   isDefault?: boolean
   available?: boolean
   capability?: string
@@ -132,7 +141,17 @@ export type MockRecordingRequest = {
   noiseSuppression: boolean
   camera: boolean
   cameraDeviceId?: string
+  cameraDeviceNativeId?: string
   pipPreset: PIPPreset
+}
+
+export type AudioOnlyRecordingRequest = {
+  recording: RecordingProfile
+  systemAudio: boolean
+  systemAudioDeviceId?: string
+  microphone: boolean
+  microphoneDeviceId?: string
+  noiseSuppression: boolean
 }
 
 export type RecordingPreflightCheck = {
@@ -151,13 +170,47 @@ export type RecordingPreflight = {
 
 export const sources: CaptureSource[] = [
   {
+    id: 'all-screens:virtual-desktop',
+    type: 'all-screens',
+    label: 'All Screens',
+    name: 'All Screens',
+    meta: 'Queued · multi-display composition',
+    x: 0,
+    y: 0,
+    width: 3024,
+    height: 1964,
+    available: false,
+    capability: 'native-backend-queued',
+    unavailableReason: 'Multi-display composition is queued behind the native video writer.',
+  },
+  {
     id: 'screen:primary',
     type: 'screen',
     label: 'Screen',
     name: 'Built-in Retina',
     meta: '3024 x 1964 · source pixels',
+    x: 0,
+    y: 0,
+    width: 3024,
+    height: 1964,
+    displayIndex: 1,
+    nativeId: 'display:primary',
     available: true,
     capability: 'enumerated',
+  },
+  {
+    id: 'region:custom',
+    type: 'region',
+    label: 'Region',
+    name: 'Custom Region',
+    meta: 'Queued · native crop writer',
+    x: 0,
+    y: 0,
+    width: 3024,
+    height: 1964,
+    available: false,
+    capability: 'native-backend-queued',
+    unavailableReason: 'Region selector overlay is available; native region crop writer is queued.',
   },
   {
     id: 'window:browser',
@@ -227,6 +280,7 @@ export const mediaInventory: MediaInventory = {
       type: 'camera',
       name: 'Default Camera',
       meta: 'Camera sidecar endpoint',
+      nativeId: 'browser-default-camera',
       isDefault: true,
       available: true,
       capability: 'enumerated',
@@ -237,6 +291,7 @@ export const mediaInventory: MediaInventory = {
       type: 'camera',
       name: 'FaceTime HD Camera',
       meta: 'Built-in camera endpoint',
+      nativeId: 'browser-facetime-hd',
       available: true,
       capability: 'enumerated',
       sidecarEligible: true,
@@ -246,6 +301,7 @@ export const mediaInventory: MediaInventory = {
       type: 'camera',
       name: 'USB Capture Camera',
       meta: 'External capture endpoint',
+      nativeId: 'browser-usb-capture',
       available: true,
       capability: 'enumerated',
       sidecarEligible: true,
@@ -385,11 +441,11 @@ export const defaultSettings: AppSettings = {
     countdownSeconds: 0,
   },
   audio: {
-    system: true,
+    system: false,
     systemDeviceId: 'system-audio:default',
-    microphone: true,
+    microphone: false,
     microphoneDeviceId: 'microphone:default',
-    noiseSuppression: true,
+    noiseSuppression: false,
     microphoneGain: 1,
   },
   camera: {
@@ -421,6 +477,7 @@ export function createMockRecordingPackage(request: MockRecordingRequest) {
         type: request.source.type,
         id: request.source.id,
         name: request.source.name,
+        geometry: sourceGeometry(request.source),
       },
       recording: request.recording,
       audio: {
@@ -434,6 +491,49 @@ export function createMockRecordingPackage(request: MockRecordingRequest) {
         enabled: request.camera,
         deviceId: request.cameraDeviceId,
         pipPreset: request.camera ? request.pipPreset : 'off',
+      },
+      diagnostics: {
+        mock: true,
+      },
+    },
+  }
+}
+
+function sourceGeometry(source: CaptureSource) {
+  if (!source.width || !source.height) return undefined
+  return {
+    x: source.x ?? 0,
+    y: source.y ?? 0,
+    width: source.width,
+    height: source.height,
+    displayIndex: source.displayIndex,
+    nativeId: source.nativeId,
+  }
+}
+
+export function createMockAudioOnlyRecordingPackage(request: AudioOnlyRecordingRequest) {
+  const stamp = new Date()
+    .toISOString()
+    .replace(/:/g, '-')
+    .replace('T', '-')
+    .replace(/\..+$/, '')
+
+  return {
+    id: `recording-${stamp}`,
+    packagePath: `data/video/recording-${stamp}.rfrec`,
+    manifest: {
+      schemaVersion: 1,
+      app: 'RecordingFreedom',
+      status: 'recording',
+      recordingMode: 'audio-only',
+      media: {audioPath: 'audio.mock.wav'},
+      recording: request.recording,
+      audio: {
+        system: request.systemAudio,
+        systemDeviceId: request.systemAudio ? request.systemAudioDeviceId : undefined,
+        microphone: request.microphone,
+        microphoneDeviceId: request.microphone ? request.microphoneDeviceId : undefined,
+        microphoneNoiseSuppression: request.microphone && request.noiseSuppression ? 'rnnoise' : 'off',
       },
       diagnostics: {
         mock: true,

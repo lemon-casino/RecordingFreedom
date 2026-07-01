@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/lemon-casino/RecordingFreedom/app/internal/appdata"
+	"github.com/lemon-casino/RecordingFreedom/app/internal/audio"
 	"github.com/lemon-casino/RecordingFreedom/app/internal/capture"
 	"github.com/lemon-casino/RecordingFreedom/app/internal/devices"
 	"github.com/lemon-casino/RecordingFreedom/app/internal/preflight"
@@ -36,6 +37,15 @@ type smokeReport struct {
 	ManifestStatus           string `json:"manifestStatus"`
 	ScreenVideoPath          string `json:"screenVideoPath"`
 	ScreenVideoBytes         int64  `json:"screenVideoBytes"`
+	SystemAudioPath          string `json:"systemAudioPath,omitempty"`
+	SystemAudioStorage       string `json:"systemAudioStorage,omitempty"`
+	SystemAudioBytes         int64  `json:"systemAudioBytes,omitempty"`
+	SystemAudioSamples       int64  `json:"systemAudioSamples,omitempty"`
+	MicrophoneAudioPath      string `json:"microphoneAudioPath,omitempty"`
+	MicrophoneAudioStorage   string `json:"microphoneAudioStorage,omitempty"`
+	MicrophoneAudioBytes     int64  `json:"microphoneAudioBytes,omitempty"`
+	MicrophoneSamples        int64  `json:"microphoneSamples,omitempty"`
+	AudioDiagnosticsPath     string `json:"audioDiagnosticsPath,omitempty"`
 	VideoDiagnosticsPath     string `json:"videoDiagnosticsPath"`
 	VideoDiagnosticFrames    int64  `json:"videoDiagnosticFrames"`
 	VideoDiagnosticDuration  int64  `json:"videoDiagnosticDurationMs"`
@@ -59,6 +69,12 @@ type options struct {
 	quality       string
 	fps           int
 	captureCursor bool
+	regionX       int
+	regionY       int
+	regionWidth   int
+	regionHeight  int
+	regionNative  string
+	keep          bool
 }
 
 func main() {
@@ -67,18 +83,24 @@ func main() {
 		opts           options
 	)
 	flag.StringVar(&opts.dataRoot, "data-dir", "", "data root; defaults to the app-managed RecordingFreedom root")
-	flag.StringVar(&opts.backend, "backend", "native", "recording backend: native, screencapturekit, windows-graphics-capture, pipewire-portal, or mock-package")
+	flag.StringVar(&opts.backend, "backend", "native", "recording backend: native, screencapturekit, ffmpeg-desktop-capture, windows-graphics-capture, pipewire-portal, or mock-package")
 	flag.StringVar(&opts.sourceID, "source-id", "", "capture source id; defaults to the first available source of -source-type")
-	flag.StringVar(&sourceTypeFlag, "source-type", string(devices.SourceScreen), "capture source type: screen, window, or application")
+	flag.StringVar(&sourceTypeFlag, "source-type", string(devices.SourceScreen), "capture source type: screen, all-screens, region, window, or application")
 	flag.DurationVar(&opts.duration, "duration", 5*time.Second, "recording duration")
 	flag.DurationVar(&opts.pauseAfter, "pause-after", 0, "optional pause time after start; 0 disables pause/resume smoke")
 	flag.DurationVar(&opts.pauseDuration, "pause-duration", time.Second, "pause duration when -pause-after is set")
 	flag.BoolVar(&opts.systemAudio, "system", false, "capture system audio into the primary media when the backend supports muxing")
 	flag.BoolVar(&opts.microphone, "microphone", false, "capture microphone; disabled by default until mux support lands")
-	flag.BoolVar(&opts.camera, "camera", false, "capture camera sidecar; disabled by default until sidecar support lands")
+	flag.BoolVar(&opts.camera, "camera", false, "capture camera sidecar when the platform reports an available native camera writer")
 	flag.StringVar(&opts.quality, "quality", recordingprofile.QualityBalanced, "recording quality: standard, balanced, or high")
 	flag.IntVar(&opts.fps, "fps", recordingprofile.DefaultFPS, "recording fps: 24, 30, or 60")
 	flag.BoolVar(&opts.captureCursor, "cursor", recordingprofile.DefaultCaptureCursor, "capture cursor")
+	flag.IntVar(&opts.regionX, "region-x", 0, "region source x coordinate; used with -source-type=region")
+	flag.IntVar(&opts.regionY, "region-y", 0, "region source y coordinate; used with -source-type=region")
+	flag.IntVar(&opts.regionWidth, "region-width", 0, "region source width; used with -source-type=region")
+	flag.IntVar(&opts.regionHeight, "region-height", 0, "region source height; used with -source-type=region")
+	flag.StringVar(&opts.regionNative, "region-native-id", "", "native display id for region source, for example cgdisplay:<id>")
+	flag.BoolVar(&opts.keep, "keep", false, "accepted for consistency with other smoke commands; video-smoke keeps app-managed or explicit data roots")
 	flag.Parse()
 
 	sourceType, err := parseSourceType(sourceTypeFlag)
@@ -138,7 +160,10 @@ func run(opts options) (smokeReport, error) {
 	recorder := recording.NewServiceWithBackend(data, backend)
 	capabilities := capture.NewService().Capabilities()
 	media := deviceService.ListMediaDevices()
-	req := startRequest(source, opts)
+	req, err := startRequest(source, sources, media, opts)
+	if err != nil {
+		return smokeReport{}, err
+	}
 
 	preflightSummary := preflight.NewService().Evaluate(req, preflight.Inputs{
 		Backend:      recorder.BackendID(),
@@ -180,7 +205,7 @@ func run(opts options) (smokeReport, error) {
 	if err != nil {
 		return smokeReport{}, fmt.Errorf("read manifest: %w", err)
 	}
-	verification, err := verifyPackage(session, manifest, opts.systemAudio)
+	verification, err := verifyPackage(session, manifest)
 	if err != nil {
 		return smokeReport{}, err
 	}
@@ -200,6 +225,15 @@ func run(opts options) (smokeReport, error) {
 		ManifestStatus:           manifest.Status,
 		ScreenVideoPath:          verification.screenVideoPath,
 		ScreenVideoBytes:         verification.screenVideoBytes,
+		SystemAudioPath:          verification.systemAudioPath,
+		SystemAudioStorage:       manifest.Media.SystemAudioStorage,
+		SystemAudioBytes:         verification.systemAudioBytes,
+		SystemAudioSamples:       verification.systemAudioSamples,
+		MicrophoneAudioPath:      verification.microphoneAudioPath,
+		MicrophoneAudioStorage:   manifest.Media.MicrophoneAudioStorage,
+		MicrophoneAudioBytes:     verification.microphoneAudioBytes,
+		MicrophoneSamples:        verification.microphoneSamples,
+		AudioDiagnosticsPath:     verification.audioDiagnosticsPath,
 		VideoDiagnosticsPath:     verification.videoDiagnosticsPath,
 		VideoDiagnosticFrames:    verification.videoFrames,
 		VideoDiagnosticDuration:  verification.videoDurationMs,
@@ -210,8 +244,8 @@ func run(opts options) (smokeReport, error) {
 	}, nil
 }
 
-func startRequest(source devices.CaptureSource, opts options) recording.StartRequest {
-	return recording.StartRequest{
+func startRequest(source devices.CaptureSource, sources []devices.CaptureSource, media devices.MediaInventory, opts options) (recording.StartRequest, error) {
+	req := recording.StartRequest{
 		SourceID:   source.ID,
 		SourceType: source.Type,
 		SourceName: source.Name,
@@ -229,17 +263,86 @@ func startRequest(source devices.CaptureSource, opts options) recording.StartReq
 			PIPPreset: "bottom-right",
 		},
 	}
+	if opts.camera {
+		camera, ok := firstSmokeCamera(media.Cameras)
+		if !ok {
+			return recording.StartRequest{}, fmt.Errorf("camera sidecar requested but no available sidecar camera was returned by DeviceService")
+		}
+		req.Camera.DeviceID = camera.ID
+		req.Camera.DeviceNativeID = camera.NativeID
+	}
+	if source.Type == devices.SourceRegion {
+		geometry, err := regionGeometryForSmoke(sources, opts)
+		if err != nil {
+			return recording.StartRequest{}, err
+		}
+		req.SourceGeometry = &geometry
+	} else if source.Width > 0 && source.Height > 0 {
+		req.SourceGeometry = &recording.SourceGeometry{
+			X:            source.X,
+			Y:            source.Y,
+			Width:        source.Width,
+			Height:       source.Height,
+			DisplayIndex: source.DisplayIndex,
+			NativeID:     source.NativeID,
+		}
+	}
+	return req, nil
+}
+
+func firstSmokeCamera(cameras []devices.MediaDevice) (devices.MediaDevice, bool) {
+	for _, camera := range cameras {
+		if camera.Available && camera.SidecarEligible && strings.TrimSpace(camera.NativeID) != "" {
+			return camera, true
+		}
+	}
+	return devices.MediaDevice{}, false
+}
+
+func regionGeometryForSmoke(sources []devices.CaptureSource, opts options) (recording.SourceGeometry, error) {
+	if opts.regionWidth > 0 && opts.regionHeight > 0 {
+		return recording.SourceGeometry{
+			X:        opts.regionX,
+			Y:        opts.regionY,
+			Width:    opts.regionWidth,
+			Height:   opts.regionHeight,
+			NativeID: strings.TrimSpace(opts.regionNative),
+		}, nil
+	}
+	for _, source := range sources {
+		if source.Type != devices.SourceScreen || !source.Available || source.Width <= 0 || source.Height <= 0 {
+			continue
+		}
+		width := minInt(640, source.Width)
+		height := minInt(360, source.Height)
+		return recording.SourceGeometry{
+			X:            source.X + minInt(64, maxInt(0, source.Width-width)),
+			Y:            source.Y + minInt(64, maxInt(0, source.Height-height)),
+			Width:        width,
+			Height:       height,
+			DisplayIndex: source.DisplayIndex,
+			NativeID:     source.NativeID,
+		}, nil
+	}
+	return recording.SourceGeometry{}, errors.New("region smoke requires -region-width/-region-height or an available screen source")
 }
 
 type packageVerification struct {
 	screenVideoPath      string
 	screenVideoBytes     int64
+	systemAudioPath      string
+	systemAudioBytes     int64
+	systemAudioSamples   int64
+	microphoneAudioPath  string
+	microphoneAudioBytes int64
+	microphoneSamples    int64
+	audioDiagnosticsPath string
 	videoDiagnosticsPath string
 	videoFrames          int64
 	videoDurationMs      int64
 }
 
-func verifyPackage(session recording.Session, manifest recpackage.Manifest, wantSystemAudio bool) (packageVerification, error) {
+func verifyPackage(session recording.Session, manifest recpackage.Manifest) (packageVerification, error) {
 	if session.Status != recording.StateReady {
 		return packageVerification{}, fmt.Errorf("session status = %q, want %q", session.Status, recording.StateReady)
 	}
@@ -267,20 +370,6 @@ func verifyPackage(session recording.Session, manifest recpackage.Manifest, want
 	if manifest.Media.ScreenVideoPath != recpackage.ScreenVideoFile {
 		return packageVerification{}, fmt.Errorf("screenVideoPath = %q, want %q", manifest.Media.ScreenVideoPath, recpackage.ScreenVideoFile)
 	}
-	if wantSystemAudio {
-		if !manifest.Audio.System {
-			return packageVerification{}, errors.New("manifest audio.system is false, want enabled system audio")
-		}
-		if manifest.Media.SystemAudioStorage != recpackage.AudioStorageMuxed || manifest.Media.SystemAudioPath != recpackage.ScreenVideoFile {
-			return packageVerification{}, fmt.Errorf("system audio media = %#v, want muxed screen.mp4", manifest.Media)
-		}
-		if !manifest.Diagnostics.Sync.SystemAudio.Enabled {
-			return packageVerification{}, errors.New("manifest diagnostics.sync.systemAudio is not enabled")
-		}
-		if manifest.Diagnostics.Sync.SystemAudio.Path != recpackage.ScreenVideoFile {
-			return packageVerification{}, fmt.Errorf("diagnostics.sync.systemAudio.path = %q, want %q", manifest.Diagnostics.Sync.SystemAudio.Path, recpackage.ScreenVideoFile)
-		}
-	}
 
 	screenPath := filepath.Join(session.PackageDir, filepath.Clean(manifest.Media.ScreenVideoPath))
 	screenInfo, err := os.Stat(screenPath)
@@ -302,22 +391,45 @@ func verifyPackage(session recording.Session, manifest recpackage.Manifest, want
 	if diagnostics.Screen.FramesWritten <= 0 {
 		return packageVerification{}, fmt.Errorf("video diagnostics framesWritten = %d, want > 0", diagnostics.Screen.FramesWritten)
 	}
-	if wantSystemAudio {
-		if !diagnostics.SystemAudio.Enabled {
-			return packageVerification{}, errors.New("video diagnostics system audio track is not enabled")
-		}
-		if diagnostics.SystemAudio.SamplesWritten <= 0 {
-			return packageVerification{}, fmt.Errorf("video diagnostics system audio samplesWritten = %d, want > 0", diagnostics.SystemAudio.SamplesWritten)
-		}
-	}
 
-	return packageVerification{
+	verification := packageVerification{
 		screenVideoPath:      screenPath,
 		screenVideoBytes:     screenInfo.Size(),
 		videoDiagnosticsPath: diagnosticsPath,
 		videoFrames:          diagnostics.Screen.FramesWritten,
 		videoDurationMs:      diagnostics.Screen.DurationMs,
-	}, nil
+	}
+
+	audioDiagnostics, hasAudioDiagnostics, err := verifyAudioTracks(session.PackageDir, manifest)
+	if err != nil {
+		return packageVerification{}, err
+	}
+	if hasAudioDiagnostics {
+		verification.audioDiagnosticsPath = filepath.Join(session.PackageDir, recpackage.AudioDiagnosticsFile)
+	}
+	if manifest.Audio.System {
+		mediaPath, bytes, err := verifyManifestAudioTrack(session.PackageDir, "systemAudio", manifest.Media.SystemAudioPath, manifest.Media.SystemAudioStorage, manifest.Media.ScreenVideoPath, manifest.Diagnostics.Sync.SystemAudio)
+		if err != nil {
+			return packageVerification{}, err
+		}
+		verification.systemAudioPath = mediaPath
+		verification.systemAudioBytes = bytes
+		if hasAudioDiagnostics {
+			verification.systemAudioSamples = audioDiagnostics.SystemAudio.SamplesWritten
+		}
+	}
+	if manifest.Audio.Microphone {
+		mediaPath, bytes, err := verifyManifestAudioTrack(session.PackageDir, "microphoneAudio", manifest.Media.MicrophoneAudioPath, manifest.Media.MicrophoneAudioStorage, manifest.Media.ScreenVideoPath, manifest.Diagnostics.Sync.Microphone)
+		if err != nil {
+			return packageVerification{}, err
+		}
+		verification.microphoneAudioPath = mediaPath
+		verification.microphoneAudioBytes = bytes
+		if hasAudioDiagnostics {
+			verification.microphoneSamples = audioDiagnostics.Microphone.SamplesWritten
+		}
+	}
+	return verification, nil
 }
 
 func readVideoDiagnostics(path string) (video.Diagnostics, error) {
@@ -328,6 +440,71 @@ func readVideoDiagnostics(path string) (video.Diagnostics, error) {
 	var diagnostics video.Diagnostics
 	if err := json.Unmarshal(data, &diagnostics); err != nil {
 		return video.Diagnostics{}, fmt.Errorf("decode video diagnostics: %w", err)
+	}
+	return diagnostics, nil
+}
+
+func verifyAudioTracks(packageDir string, manifest recpackage.Manifest) (audio.Diagnostics, bool, error) {
+	path := filepath.Join(packageDir, recpackage.AudioDiagnosticsFile)
+	diagnostics, err := readAudioDiagnostics(path)
+	if err != nil {
+		if errors.Is(err, os.ErrNotExist) &&
+			manifest.Media.SystemAudioStorage != recpackage.AudioStorageSidecar &&
+			manifest.Media.MicrophoneAudioStorage != recpackage.AudioStorageSidecar {
+			return audio.Diagnostics{}, false, nil
+		}
+		return audio.Diagnostics{}, false, err
+	}
+	if manifest.Audio.System && diagnostics.SystemAudio.SamplesWritten <= 0 {
+		return audio.Diagnostics{}, false, fmt.Errorf("audio diagnostics systemAudio.samplesWritten = %d, want > 0", diagnostics.SystemAudio.SamplesWritten)
+	}
+	if manifest.Audio.Microphone && diagnostics.Microphone.SamplesWritten <= 0 {
+		return audio.Diagnostics{}, false, fmt.Errorf("audio diagnostics microphone.samplesWritten = %d, want > 0", diagnostics.Microphone.SamplesWritten)
+	}
+	return diagnostics, true, nil
+}
+
+func verifyManifestAudioTrack(packageDir string, label string, mediaPath string, storage string, primaryPath string, syncTrack recpackage.ManifestTrackDiagnostics) (string, int64, error) {
+	if !syncTrack.Enabled {
+		return "", 0, fmt.Errorf("manifest diagnostics.sync.%s is not enabled", label)
+	}
+	if syncTrack.Path != mediaPath {
+		return "", 0, fmt.Errorf("diagnostics.sync.%s.path = %q, want %q", label, syncTrack.Path, mediaPath)
+	}
+	switch storage {
+	case recpackage.AudioStorageSidecar:
+		path := filepath.Join(packageDir, filepath.Clean(mediaPath))
+		info, err := os.Stat(path)
+		if err != nil {
+			return "", 0, fmt.Errorf("stat %s sidecar: %w", label, err)
+		}
+		if info.IsDir() || info.Size() <= 45 {
+			return "", 0, fmt.Errorf("%s sidecar %q is empty or not readable media", label, path)
+		}
+		return path, info.Size(), nil
+	case recpackage.AudioStorageMuxed:
+		if filepath.Clean(mediaPath) != filepath.Clean(primaryPath) {
+			return "", 0, fmt.Errorf("%s muxed path %q must match screenVideoPath %q", label, mediaPath, primaryPath)
+		}
+		path := filepath.Join(packageDir, filepath.Clean(primaryPath))
+		info, err := os.Stat(path)
+		if err != nil {
+			return "", 0, fmt.Errorf("stat %s muxed media: %w", label, err)
+		}
+		return path, info.Size(), nil
+	default:
+		return "", 0, fmt.Errorf("%s storage %q is not supported", label, storage)
+	}
+}
+
+func readAudioDiagnostics(path string) (audio.Diagnostics, error) {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return audio.Diagnostics{}, fmt.Errorf("read audio diagnostics: %w", err)
+	}
+	var diagnostics audio.Diagnostics
+	if err := json.Unmarshal(data, &diagnostics); err != nil {
+		return audio.Diagnostics{}, fmt.Errorf("decode audio diagnostics: %w", err)
 	}
 	return diagnostics, nil
 }
@@ -366,6 +543,10 @@ func parseSourceType(value string) (devices.CaptureSourceType, error) {
 	switch devices.CaptureSourceType(strings.TrimSpace(value)) {
 	case devices.SourceScreen:
 		return devices.SourceScreen, nil
+	case devices.SourceAllScreens:
+		return devices.SourceAllScreens, nil
+	case devices.SourceRegion:
+		return devices.SourceRegion, nil
 	case devices.SourceWindow:
 		return devices.SourceWindow, nil
 	case devices.SourceApplication:
@@ -373,6 +554,20 @@ func parseSourceType(value string) (devices.CaptureSourceType, error) {
 	default:
 		return "", fmt.Errorf("unsupported source type %q", value)
 	}
+}
+
+func minInt(a int, b int) int {
+	if a < b {
+		return a
+	}
+	return b
+}
+
+func maxInt(a int, b int) int {
+	if a > b {
+		return a
+	}
+	return b
 }
 
 func describeChecks(checks []preflight.Check) string {

@@ -11,6 +11,8 @@ type CaptureSourceType = devices.CaptureSourceType
 
 const (
 	SourceScreen      = devices.SourceScreen
+	SourceAllScreens  = devices.SourceAllScreens
+	SourceRegion      = devices.SourceRegion
 	SourceWindow      = devices.SourceWindow
 	SourceApplication = devices.SourceApplication
 )
@@ -37,18 +39,29 @@ type AudioRequest struct {
 }
 
 type CameraRequest struct {
-	Enabled   bool   `json:"enabled"`
-	DeviceID  string `json:"deviceId,omitempty"`
-	PIPPreset string `json:"pipPreset"`
+	Enabled        bool   `json:"enabled"`
+	DeviceID       string `json:"deviceId,omitempty"`
+	DeviceNativeID string `json:"deviceNativeId,omitempty"`
+	PIPPreset      string `json:"pipPreset"`
+}
+
+type SourceGeometry struct {
+	X            int    `json:"x"`
+	Y            int    `json:"y"`
+	Width        int    `json:"width"`
+	Height       int    `json:"height"`
+	DisplayIndex int    `json:"displayIndex,omitempty"`
+	NativeID     string `json:"nativeId,omitempty"`
 }
 
 type StartRequest struct {
-	SourceID   string                   `json:"sourceId"`
-	SourceType CaptureSourceType        `json:"sourceType"`
-	SourceName string                   `json:"sourceName,omitempty"`
-	Recording  recordingprofile.Profile `json:"recording"`
-	Audio      AudioRequest             `json:"audio"`
-	Camera     CameraRequest            `json:"camera"`
+	SourceID       string                   `json:"sourceId"`
+	SourceType     CaptureSourceType        `json:"sourceType"`
+	SourceName     string                   `json:"sourceName,omitempty"`
+	SourceGeometry *SourceGeometry          `json:"sourceGeometry,omitempty"`
+	Recording      recordingprofile.Profile `json:"recording"`
+	Audio          AudioRequest             `json:"audio"`
+	Camera         CameraRequest            `json:"camera"`
 }
 
 type AudioOnlyRequest struct {

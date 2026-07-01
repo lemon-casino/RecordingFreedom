@@ -4,6 +4,7 @@ import type {
   CaptureSourceType,
   LocaleCode,
   PIPPreset,
+  RecordingMode,
   RecordingPreflightStatus,
   RecordingQuality,
   RecordingState,
@@ -26,6 +27,7 @@ export type StatusMessageKey =
 
 export type RecoveryMessageKey = 'recovering' | 'recovered' | 'refreshed' | 'failed'
 export type StorageMessageKey = 'applying' | 'changed' | 'failed'
+export type SourceSelectionMessageKey = 'regionSelecting' | 'regionSelected' | 'regionCancelled' | 'regionTooSmall' | 'sourceQueued'
 
 export type RecorderCopy = {
   localeNames: Record<LocaleCode, string>
@@ -44,8 +46,10 @@ export type RecorderCopy = {
     resumeRecording: string
     selectLanguage: string
     openSettings: string
+    recordingMode: string
     menu: (panel: string) => string
     microphoneLevel: string
+    regionOverlay: string
   }
   common: {
     close: string
@@ -61,10 +65,32 @@ export type RecorderCopy = {
     recovery: string
     packageCount: (count: number) => string
   }
+  recordingModes: Record<RecordingMode, string>
   sourceTypes: Record<CaptureSourceType, string>
+  sourceAudioOnly: {
+    name: string
+    systemAndMic: string
+    systemOnly: string
+    micOnly: string
+    noAudio: string
+  }
   sourceNames: Record<string, string>
   sourceMeta: Record<string, string>
   sourceUnavailable: string
+  sourceGroups: {
+    screen: string
+    region: string
+    window: string
+  }
+  sourceActions: {
+    screenLabel: (index: number) => string
+    chooseRegion: string
+    chooseLockedWindow: string
+    backToSources: string
+    lockedWindowHint: string
+    noWindows: string
+    regionUnavailable: string
+  }
   mediaDeviceNames: Record<string, string>
   settings: {
     title: string
@@ -133,6 +159,13 @@ export type RecorderCopy = {
   storageMessages: Record<StorageMessageKey, string> & {
     changedTo: (path: string) => string
   }
+  sourceSelectionMessages: Record<SourceSelectionMessageKey, string> & {
+    regionSelectedSize: (width: number, height: number) => string
+  }
+  regionOverlay: {
+    cancel: string
+    esc: string
+  }
   strip: {
     micEnhancementOn: string
     micEnhancementOff: string
@@ -161,8 +194,10 @@ const zhCN: RecorderCopy = {
     resumeRecording: '继续录制',
     selectLanguage: '选择语言',
     openSettings: '打开设置',
+    recordingMode: '录制模式',
     menu: (panel) => `${panel} 菜单`,
     microphoneLevel: '麦克风音量',
+    regionOverlay: '区域录制选择器',
   },
   common: {
     close: '关闭',
@@ -178,13 +213,28 @@ const zhCN: RecorderCopy = {
     recovery: '恢复',
     packageCount: (count) => `${count} 个录制包`,
   },
+  recordingModes: {
+    video: '视频',
+    audio: '音频',
+  },
   sourceTypes: {
-    screen: '屏幕',
-    window: '窗口',
+    screen: '单个屏幕',
+    'all-screens': '全部屏幕',
+    region: '区域',
+    window: '锁定窗口',
     application: '程序',
+  },
+  sourceAudioOnly: {
+    name: '单独录音',
+    systemAndMic: '系统声音 + 麦克风',
+    systemOnly: '系统声音',
+    micOnly: '麦克风',
+    noAudio: '未选择音频',
   },
   sourceNames: {
     'screen:primary': '内置屏幕',
+    'all-screens:virtual-desktop': '全部屏幕',
+    'region:custom': '自定义区域',
     'window:browser': '浏览器预览',
     'application:editor': '代码编辑器',
     'screen:native-backend-queued': '原生屏幕源',
@@ -193,10 +243,26 @@ const zhCN: RecorderCopy = {
   },
   sourceMeta: {
     'screen:primary': '3024 x 1964 · 源像素',
+    'all-screens:virtual-desktop': '多屏幕合成排期中',
+    'region:custom': '区域裁剪写盘排期中',
     'window:browser': '单个应用窗口',
     'application:editor': '应用程序组',
   },
   sourceUnavailable: '原生采集后端排期中',
+  sourceGroups: {
+    screen: '屏幕',
+    region: '区域',
+    window: '锁定窗口',
+  },
+  sourceActions: {
+    screenLabel: (index) => `屏幕 ${index}`,
+    chooseRegion: '框选',
+    chooseLockedWindow: '选择窗口',
+    backToSources: '返回来源',
+    lockedWindowHint: '锁定一个可见窗口',
+    noWindows: '未检测到可锁定窗口',
+    regionUnavailable: '区域选择器暂不可用',
+  },
   mediaDeviceNames: {
     'system-audio:default': '默认系统声音',
     'microphone:default': '默认麦克风',
@@ -313,8 +379,8 @@ const zhCN: RecorderCopy = {
     'application-recording': '程序录制会在原生采集前按应用窗口分组。',
     'system-audio': '系统声音采集依赖平台能力，目前按平台后端逐步落地。',
     microphone: '麦克风采集会在原生设备枚举和音频链路完成后启用。',
-    'microphone-enhancement': 'RNNoise 只处理麦克风 PCM，系统声音不会参与降噪。',
-    'camera-sidecar': '摄像头会作为独立旁路流录制，后续导出时再合成画中画。',
+    'microphone-enhancement': 'RNNoise 只处理麦克风 PCM；仅在带 rnnoise_native 的原生构建中可用。',
+    'camera-sidecar': '摄像头会作为独立旁路流录制；Windows 可通过 FFmpeg DirectShow 写入 webcam.mp4，其他平台继续按原生后端推进。',
     'pip-export': '画中画导出会使用屏幕视频和摄像头旁路流进行合成。',
     'package-recovery': '桌面运行时会扫描 data/video 下的 .rfrec 包并标记可恢复项。',
   },
@@ -342,6 +408,7 @@ const zhCN: RecorderCopy = {
     'camera-device': '摄像头设备',
     'camera-sidecar': '摄像头旁路',
     'camera-sidecar-device': '摄像头旁路',
+    'camera-native-id': '摄像头原生标识',
     'pip-export': '画中画导出',
     storage: '录制存储',
     'mock-backend': '录制后端',
@@ -349,18 +416,19 @@ const zhCN: RecorderCopy = {
   },
   preflightCheckDetails: {
     request: '当前录制参数无效，请检查来源、音频或摄像头设置。',
-    source: '所选来源当前不可用，请重新选择屏幕、窗口或程序。',
+    source: '所选来源当前不可用，请重新选择屏幕、区域或窗口。',
     'source-backend': '来源采集后端尚未完全可用。',
     'system-audio-device': '所选系统声音设备不可用。',
     'system-audio': '系统声音采集仍在平台后端排期中。',
     'microphone-device': '所选麦克风设备不可用。',
     microphone: '麦克风采集仍在平台后端排期中。',
     'microphone-rnnoise-device': '所选麦克风当前不满足 RNNoise 处理条件。',
-    'microphone-rnnoise': 'RNNoise 原生处理链路仍在排期中。',
-    'microphone-enhancement': '麦克风增强链路仍在排期中。',
+    'microphone-rnnoise': '当前构建未启用 RNNoise 原生降噪。',
+    'microphone-enhancement': '当前构建未启用 RNNoise 原生降噪。',
     'camera-device': '所选摄像头设备不可用。',
-    'camera-sidecar': '摄像头旁路采集仍在平台后端排期中。',
+    'camera-sidecar': '摄像头旁路采集需要当前平台提供真实 writer；Windows DirectShow 可用时会写入 webcam.mp4。',
     'camera-sidecar-device': '所选摄像头当前不满足旁路录制条件。',
+    'camera-native-id': '所选摄像头缺少原生采集标识，无法交给平台 writer。',
     'pip-export': '画中画合成导出仍在排期中。',
     storage: '录制目录需要可写，并建议保留足够可用空间。',
     'mock-backend': '当前是可验证的界面录制包后端，不采集真实媒体。',
@@ -392,6 +460,18 @@ const zhCN: RecorderCopy = {
     failed: '数据根目录修改失败',
     changedTo: (path) => `新的录制包将写入 ${path}`,
   },
+  sourceSelectionMessages: {
+    regionSelecting: '正在选择区域',
+    regionSelected: '区域已选择',
+    regionCancelled: '区域选择已取消',
+    regionTooSmall: '选择区域过小',
+    sourceQueued: '该来源等待真实采集后端',
+    regionSelectedSize: (width, height) => `区域：${width} x ${height}`,
+  },
+  regionOverlay: {
+    cancel: '取消区域选择',
+    esc: 'Esc 取消',
+  },
   strip: {
     micEnhancementOn: '麦克风增强：RNNoise',
     micEnhancementOff: '麦克风增强：关闭',
@@ -420,8 +500,10 @@ const en: RecorderCopy = {
     resumeRecording: 'Resume recording',
     selectLanguage: 'Select language',
     openSettings: 'Open settings',
+    recordingMode: 'Recording mode',
     menu: (panel) => `${panel} menu`,
     microphoneLevel: 'Microphone level',
+    regionOverlay: 'Region recording selector',
   },
   common: {
     close: 'Close',
@@ -437,13 +519,28 @@ const en: RecorderCopy = {
     recovery: 'Recovery',
     packageCount: (count) => `${count} package(s)`,
   },
+  recordingModes: {
+    video: 'Video',
+    audio: 'Audio',
+  },
   sourceTypes: {
-    screen: 'Screen',
-    window: 'Window',
+    screen: 'Single screen',
+    'all-screens': 'All screens',
+    region: 'Region',
+    window: 'Locked window',
     application: 'Program',
+  },
+  sourceAudioOnly: {
+    name: 'Audio only',
+    systemAndMic: 'System audio + microphone',
+    systemOnly: 'System audio',
+    micOnly: 'Microphone',
+    noAudio: 'No audio selected',
   },
   sourceNames: {
     'screen:primary': 'Built-in Retina',
+    'all-screens:virtual-desktop': 'All screens',
+    'region:custom': 'Custom region',
     'window:browser': 'Browser Preview',
     'application:editor': 'Code Editor',
     'screen:native-backend-queued': 'Native Screen Source',
@@ -452,10 +549,26 @@ const en: RecorderCopy = {
   },
   sourceMeta: {
     'screen:primary': '3024 x 1964 · source pixels',
+    'all-screens:virtual-desktop': 'Multi-display composition queued',
+    'region:custom': 'Native region crop writer queued',
     'window:browser': 'Single app window',
     'application:editor': 'Application group',
   },
   sourceUnavailable: 'Native capture backend is queued',
+  sourceGroups: {
+    screen: 'Screen',
+    region: 'Region',
+    window: 'Locked window',
+  },
+  sourceActions: {
+    screenLabel: (index) => `Screen ${index}`,
+    chooseRegion: 'Select',
+    chooseLockedWindow: 'Choose window',
+    backToSources: 'Back to sources',
+    lockedWindowHint: 'Lock a visible window',
+    noWindows: 'No lockable windows detected',
+    regionUnavailable: 'Region selector is unavailable',
+  },
   mediaDeviceNames: {
     'system-audio:default': 'Default System Audio',
     'microphone:default': 'Default Microphone',
@@ -572,8 +685,8 @@ const en: RecorderCopy = {
     'application-recording': 'Program capture groups application windows before native recording starts.',
     'system-audio': 'System audio capture is platform-specific and lands through each native backend.',
     microphone: 'Microphone capture is enabled after native device enumeration and audio plumbing land.',
-    'microphone-enhancement': 'RNNoise processes microphone PCM only; system audio is never denoised.',
-    'camera-sidecar': 'Camera sidecar capture is separate from the screen video stream.',
+    'microphone-enhancement': 'RNNoise processes microphone PCM only and is available only in native builds with rnnoise_native.',
+    'camera-sidecar': 'Camera sidecar capture is separate from the screen video stream; Windows writes webcam.mp4 through FFmpeg DirectShow when available.',
     'pip-export': 'PIP composition will use the screen video plus camera sidecar during export.',
     'package-recovery': 'Desktop runtime scans .rfrec packages under app-managed data/video.',
   },
@@ -601,6 +714,7 @@ const en: RecorderCopy = {
     'camera-device': 'Camera Device',
     'camera-sidecar': 'Camera Sidecar',
     'camera-sidecar-device': 'Camera Sidecar',
+    'camera-native-id': 'Camera Native ID',
     'pip-export': 'PIP Export',
     storage: 'Recording Storage',
     'mock-backend': 'Recording Backend',
@@ -608,18 +722,19 @@ const en: RecorderCopy = {
   },
   preflightCheckDetails: {
     request: 'The recording request is invalid; check source, audio, or camera settings.',
-    source: 'The selected source is not available; choose another screen, window, or program.',
+    source: 'The selected source is not available; choose another screen, region, or window.',
     'source-backend': 'The source capture backend is not fully available yet.',
     'system-audio-device': 'The selected system audio device is not available.',
     'system-audio': 'System audio capture is still queued for the platform backend.',
     'microphone-device': 'The selected microphone device is not available.',
     microphone: 'Microphone capture is still queued for the platform backend.',
     'microphone-rnnoise-device': 'The selected microphone is not marked RNNoise eligible.',
-    'microphone-rnnoise': 'RNNoise native DSP is still queued.',
-    'microphone-enhancement': 'Microphone enhancement is still queued.',
+    'microphone-rnnoise': 'This build does not enable native RNNoise suppression.',
+    'microphone-enhancement': 'This build does not enable native RNNoise suppression.',
     'camera-device': 'The selected camera device is not available.',
-    'camera-sidecar': 'Camera sidecar capture is still queued for the platform backend.',
+    'camera-sidecar': 'Camera sidecar capture requires a real platform writer; Windows DirectShow writes webcam.mp4 when FFmpeg is available.',
     'camera-sidecar-device': 'The selected camera is not sidecar eligible.',
+    'camera-native-id': 'The selected camera does not expose the native capture id required by the platform writer.',
     'pip-export': 'PIP composition export is still queued.',
     storage: 'The recording directory must be writable and should have enough free space.',
     'mock-backend': 'The current backend writes a verifiable UI package but does not capture real media.',
@@ -650,6 +765,18 @@ const en: RecorderCopy = {
     changed: 'Data root changed',
     failed: 'Data root change failed',
     changedTo: (path) => `Recording packages will use ${path}`,
+  },
+  sourceSelectionMessages: {
+    regionSelecting: 'Selecting region',
+    regionSelected: 'Region selected',
+    regionCancelled: 'Region selection cancelled',
+    regionTooSmall: 'Selected region is too small',
+    sourceQueued: 'This source is waiting for the native capture backend',
+    regionSelectedSize: (width, height) => `Region: ${width} x ${height}`,
+  },
+  regionOverlay: {
+    cancel: 'Cancel region selection',
+    esc: 'Esc cancel',
   },
   strip: {
     micEnhancementOn: 'Mic enhancement: RNNoise',

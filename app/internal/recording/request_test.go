@@ -14,7 +14,7 @@ func TestNormalizeStartRequestDefaultsSelectedDevices(t *testing.T) {
 			Microphone:       true,
 			NoiseSuppression: true,
 		},
-		Camera: CameraRequest{Enabled: true},
+		Camera: CameraRequest{Enabled: true, DeviceNativeID: " Integrated Camera "},
 	})
 	if err != nil {
 		t.Fatalf("NormalizeStartRequest() error = %v", err)
@@ -36,6 +36,9 @@ func TestNormalizeStartRequestDefaultsSelectedDevices(t *testing.T) {
 	}
 	if got.Camera.DeviceID != defaultCameraID {
 		t.Fatalf("camera id = %q, want %q", got.Camera.DeviceID, defaultCameraID)
+	}
+	if got.Camera.DeviceNativeID != "Integrated Camera" {
+		t.Fatalf("camera native id = %q, want trimmed native id", got.Camera.DeviceNativeID)
 	}
 	if got.Camera.PIPPreset != "bottom-right" {
 		t.Fatalf("pip preset = %q, want bottom-right", got.Camera.PIPPreset)
@@ -61,6 +64,28 @@ func TestNormalizeStartRequestKeepsRecordingProfile(t *testing.T) {
 	}
 }
 
+func TestNormalizeStartRequestAcceptsVideoSourceModes(t *testing.T) {
+	for _, sourceType := range []CaptureSourceType{SourceScreen, SourceAllScreens, SourceRegion, SourceWindow, SourceApplication} {
+		got, err := NormalizeStartRequest(StartRequest{
+			SourceID:   string(sourceType) + ":test",
+			SourceType: sourceType,
+			SourceGeometry: &SourceGeometry{
+				X:        -1920,
+				Y:        0,
+				Width:    1280,
+				Height:   720,
+				NativeID: " display:test ",
+			},
+		})
+		if err != nil {
+			t.Fatalf("NormalizeStartRequest(%q) error = %v", sourceType, err)
+		}
+		if got.SourceGeometry == nil || got.SourceGeometry.NativeID != "display:test" {
+			t.Fatalf("source geometry for %q = %#v, want trimmed native id", sourceType, got.SourceGeometry)
+		}
+	}
+}
+
 func TestNormalizeStartRequestClearsDisabledStreams(t *testing.T) {
 	got, err := NormalizeStartRequest(StartRequest{
 		SourceID:   "screen:primary",
@@ -73,7 +98,7 @@ func TestNormalizeStartRequestClearsDisabledStreams(t *testing.T) {
 			NoiseSuppression: true,
 			MicrophoneGain:   2,
 		},
-		Camera: CameraRequest{Enabled: false, DeviceID: "camera:default", PIPPreset: "bottom-left"},
+		Camera: CameraRequest{Enabled: false, DeviceID: "camera:default", DeviceNativeID: "Integrated Camera", PIPPreset: "bottom-left"},
 	})
 	if err != nil {
 		t.Fatalf("NormalizeStartRequest() error = %v", err)
@@ -84,7 +109,7 @@ func TestNormalizeStartRequestClearsDisabledStreams(t *testing.T) {
 	if got.Audio.MicrophoneID != "" || got.Audio.NoiseSuppression || got.Audio.MicrophoneGain != 0 {
 		t.Fatalf("disabled microphone was not cleared: %#v", got.Audio)
 	}
-	if got.Camera.DeviceID != "" || got.Camera.PIPPreset != "off" {
+	if got.Camera.DeviceID != "" || got.Camera.DeviceNativeID != "" || got.Camera.PIPPreset != "off" {
 		t.Fatalf("disabled camera was not cleared: %#v", got.Camera)
 	}
 }

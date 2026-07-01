@@ -35,7 +35,7 @@ func CreateAudioOnlyWritePlan(packages *recpackage.Service, backendID string, vi
 			MicrophoneGain:             normalized.Audio.MicrophoneGain,
 		},
 	}
-	applyAudioOnlyWAVFallback(&createRequest, normalized.Audio)
+	applyAudioOnlySidecarPlan(&createRequest, normalized.Audio)
 	plan, err := packages.CreateAudioOnly(videoDir, createRequest)
 	if err != nil {
 		return recpackage.RecordingWritePlan{}, AudioOnlyRequest{}, err
@@ -77,19 +77,18 @@ func CreateAudioOnlyCaptureConfig(backendID string, req AudioOnlyRequest, plan r
 	return config, nil
 }
 
-func applyAudioOnlyWAVFallback(request *recpackage.CreateAudioOnlyRequest, audioRequest AudioRequest) {
+func applyAudioOnlySidecarPlan(request *recpackage.CreateAudioOnlyRequest, audioRequest AudioRequest) {
 	if request == nil {
 		return
 	}
+	request.AudioPath = recpackage.AudioOnlyFile
 	if audioRequest.Microphone && audioRequest.System {
-		request.AudioPath = recpackage.MicrophoneAudioFile
 		request.MicrophoneAudioPath = recpackage.MicrophoneAudioFile
 		request.MicrophoneAudioStorage = recpackage.AudioStorageSidecar
 		request.SystemAudioPath = recpackage.SystemAudioFile
 		request.SystemAudioStorage = recpackage.AudioStorageSidecar
 		return
 	}
-	request.AudioPath = recpackage.AudioOnlyWAVFile
 	if audioRequest.Microphone {
 		request.MicrophoneAudioPath = recpackage.AudioOnlyWAVFile
 		request.MicrophoneAudioStorage = recpackage.AudioStorageSidecar

@@ -14,6 +14,8 @@ export interface CaptureSource {
     "type": CaptureSourceType;
     "name": string;
     "subtitle": string;
+    "x"?: number;
+    "y"?: number;
     "width"?: number;
     "height"?: number;
     "nativeId"?: string;
@@ -31,6 +33,8 @@ export enum CaptureSourceType {
     $zero = "",
 
     SourceScreen = "screen",
+    SourceAllScreens = "all-screens",
+    SourceRegion = "region",
     SourceWindow = "window",
     SourceApplication = "application",
 };

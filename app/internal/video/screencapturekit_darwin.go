@@ -25,6 +25,7 @@ type screenCaptureKitSession struct {
 	config      CaptureConfig
 	targetKind  C.int
 	targetID    uint32
+	crop        screenCaptureKitCrop
 	handle      *C.RFSCKSession
 	diagnostics Diagnostics
 
@@ -47,8 +48,17 @@ func NewPlatformSession(config CaptureConfig) (Session, error) {
 		config:      config,
 		targetKind:  targetKind,
 		targetID:    targetID,
+		crop:        screenCaptureKitCropForConfig(config),
 		diagnostics: diagnostics,
 	}, nil
+}
+
+type screenCaptureKitCrop struct {
+	Enabled bool
+	X       int
+	Y       int
+	Width   int
+	Height  int
 }
 
 func screenCaptureKitTarget(config CaptureConfig) (C.int, uint32, error) {
@@ -71,8 +81,34 @@ func screenCaptureKitTarget(config CaptureConfig) (C.int, uint32, error) {
 			return 0, 0, fmt.Errorf("ScreenCaptureKit application source id %q is invalid", config.SourceID)
 		}
 		return C.RF_SCK_TARGET_APPLICATION, processID, nil
+	case devices.SourceRegion:
+		if config.SourceGeometry == nil {
+			return 0, 0, fmt.Errorf("ScreenCaptureKit region source %q is missing source geometry", config.SourceID)
+		}
+		displayID, ok := DarwinDisplayNativeID(config.SourceGeometry.NativeID)
+		if !ok {
+			displayID, ok = DarwinDisplayID(config.SourceGeometry.NativeID)
+		}
+		if !ok {
+			return 0, 0, fmt.Errorf("ScreenCaptureKit region source %q is missing a display native id", config.SourceID)
+		}
+		return C.RF_SCK_TARGET_DISPLAY, displayID, nil
 	default:
 		return 0, 0, fmt.Errorf("ScreenCaptureKit recording does not support source type %q yet", config.SourceType)
+	}
+}
+
+func screenCaptureKitCropForConfig(config CaptureConfig) screenCaptureKitCrop {
+	if config.SourceType != devices.SourceRegion || config.SourceGeometry == nil {
+		return screenCaptureKitCrop{}
+	}
+	geometry := config.SourceGeometry
+	return screenCaptureKitCrop{
+		Enabled: geometry.Width > 0 && geometry.Height > 0,
+		X:       geometry.X,
+		Y:       geometry.Y,
+		Width:   geometry.Width,
+		Height:  geometry.Height,
 	}
 }
 
@@ -104,6 +140,11 @@ func (s *screenCaptureKitSession) Start(ctx context.Context) error {
 		boolToCInt(s.config.Profile.CaptureCursor),
 		boolToCInt(s.config.SystemAudio),
 		quality,
+		boolToCInt(s.crop.Enabled),
+		C.int(s.crop.X),
+		C.int(s.crop.Y),
+		C.int(s.crop.Width),
+		C.int(s.crop.Height),
 		&errMessage,
 	)
 	if handle == nil {

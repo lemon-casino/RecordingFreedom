@@ -301,6 +301,112 @@ func TestNativeBackendRuntimeUsesVideoDiagnosticsForMuxedSystemAudio(t *testing.
 	}
 }
 
+func TestNativeBackendRuntimeStartsPausesResumesAndStopsCameraSidecar(t *testing.T) {
+	packages := recpackage.NewService()
+	cameraSession := &fakeNativeCameraSession{
+		diagnostics: video.TrackDiagnostics{
+			Enabled:       true,
+			Path:          recpackage.WindowsWebcamVideoFile,
+			FrameRate:     30,
+			FramesWritten: 90,
+			StartOffsetMs: 120,
+			EndOffsetMs:   3120,
+			DurationMs:    3000,
+			Message:       "camera sidecar finalized",
+		},
+	}
+	var gotCameraConfig video.CameraCaptureConfig
+
+	runtime, err := NewNativeBackendRuntime(packages, BackendFFmpegDesktopCapture, BackendStartRequest{
+		VideoDir:  t.TempDir(),
+		CreatedAt: time.Now(),
+		StartRequest: StartRequest{
+			SourceID:   "screen:primary",
+			SourceType: SourceScreen,
+			Camera: CameraRequest{
+				Enabled:        true,
+				DeviceID:       "camera:dshow:integrated-camera",
+				DeviceNativeID: "Integrated Camera",
+				PIPPreset:      "bottom-right",
+			},
+		},
+	}, NativeBackendRuntimeOptions{
+		VideoSessionFactory: func(video.CaptureConfig) (NativeVideoSession, error) {
+			return &fakeNativeVideoSession{}, nil
+		},
+		CameraSessionFactory: func(config video.CameraCaptureConfig) (NativeCameraSession, error) {
+			gotCameraConfig = config
+			return cameraSession, nil
+		},
+	})
+	if err != nil {
+		t.Fatalf("NewNativeBackendRuntime() error = %v", err)
+	}
+	if gotCameraConfig.DeviceNativeID != "Integrated Camera" {
+		t.Fatalf("camera native id = %q, want DirectShow device name", gotCameraConfig.DeviceNativeID)
+	}
+	if gotCameraConfig.OutputPath != filepath.Join(runtime.Plan.Package.Dir, recpackage.WindowsWebcamVideoFile) {
+		t.Fatalf("camera output path = %q, want package webcam.mp4", gotCameraConfig.OutputPath)
+	}
+
+	if err := runtime.Start(context.Background()); err != nil {
+		t.Fatalf("Start() error = %v", err)
+	}
+	if err := runtime.Pause(); err != nil {
+		t.Fatalf("Pause() error = %v", err)
+	}
+	if err := runtime.Resume(); err != nil {
+		t.Fatalf("Resume() error = %v", err)
+	}
+	if err := runtime.Stop(); err != nil {
+		t.Fatalf("Stop() error = %v", err)
+	}
+	if cameraSession.started != 1 || cameraSession.paused != 1 || cameraSession.resumed != 1 || cameraSession.stopped != 1 {
+		t.Fatalf("camera controls = start:%d pause:%d resume:%d stop:%d, want 1 each", cameraSession.started, cameraSession.paused, cameraSession.resumed, cameraSession.stopped)
+	}
+	sync := runtime.SyncDiagnostics()
+	if sync.Webcam.Path != recpackage.WindowsWebcamVideoFile || sync.Webcam.StartOffsetMs != 120 || sync.Webcam.DurationMs != 3000 {
+		t.Fatalf("webcam sync = %#v, want webcam.mp4 with offset and duration", sync.Webcam)
+	}
+	if err := packages.PatchSyncDiagnostics(runtime.Plan.Package.ManifestPath, *sync); err != nil {
+		t.Fatalf("PatchSyncDiagnostics() error = %v", err)
+	}
+	manifest, err := packages.ReadManifest(runtime.Plan.Package.ManifestPath)
+	if err != nil {
+		t.Fatalf("ReadManifest() error = %v", err)
+	}
+	if manifest.Media.WebcamVideoPath != recpackage.WindowsWebcamVideoFile || manifest.Media.WebcamStartOffsetMs != 120 {
+		t.Fatalf("manifest webcam media = %#v, want webcam.mp4 offset 120", manifest.Media)
+	}
+}
+
+func TestNativeBackendRuntimeRequiresCameraNativeID(t *testing.T) {
+	_, err := NewNativeBackendRuntime(recpackage.NewService(), BackendFFmpegDesktopCapture, BackendStartRequest{
+		VideoDir:  t.TempDir(),
+		CreatedAt: time.Now(),
+		StartRequest: StartRequest{
+			SourceID:   "screen:primary",
+			SourceType: SourceScreen,
+			Camera: CameraRequest{
+				Enabled:   true,
+				DeviceID:  "camera:dshow:integrated-camera",
+				PIPPreset: "bottom-right",
+			},
+		},
+	}, NativeBackendRuntimeOptions{
+		VideoSessionFactory: func(video.CaptureConfig) (NativeVideoSession, error) {
+			return &fakeNativeVideoSession{}, nil
+		},
+		CameraSessionFactory: func(video.CameraCaptureConfig) (NativeCameraSession, error) {
+			t.Fatal("camera factory was called without a native device id")
+			return nil, nil
+		},
+	})
+	if err == nil || !strings.Contains(err.Error(), "deviceNativeId") {
+		t.Fatalf("NewNativeBackendRuntime() error = %v, want deviceNativeId requirement", err)
+	}
+}
+
 func TestNativeBackendRuntimeMarksPackageFailedWhenVideoSessionFails(t *testing.T) {
 	packages := recpackage.NewService()
 	videoDir := t.TempDir()
@@ -500,6 +606,39 @@ func (s *fakeNativeVideoSession) Stop() error {
 }
 
 func (s *fakeNativeVideoSession) Diagnostics() video.Diagnostics {
+	return s.diagnostics
+}
+
+type fakeNativeCameraSession struct {
+	startErr    error
+	started     int
+	paused      int
+	resumed     int
+	stopped     int
+	diagnostics video.TrackDiagnostics
+}
+
+func (s *fakeNativeCameraSession) Start(context.Context) error {
+	s.started++
+	return s.startErr
+}
+
+func (s *fakeNativeCameraSession) Pause() error {
+	s.paused++
+	return nil
+}
+
+func (s *fakeNativeCameraSession) Resume() error {
+	s.resumed++
+	return nil
+}
+
+func (s *fakeNativeCameraSession) Stop() error {
+	s.stopped++
+	return nil
+}
+
+func (s *fakeNativeCameraSession) Diagnostics() video.TrackDiagnostics {
 	return s.diagnostics
 }
 

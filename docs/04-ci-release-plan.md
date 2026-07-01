@@ -26,9 +26,9 @@ https://github.com/lemon-casino/RecordingFreedom.git
 
 当前已落地 jobs：
 
-- `validate`：安装 Go、Node、Linux Wails 依赖和 Wails v3 CLI，生成 bindings，校验 `frontend/bindings` 无未提交差异，运行前端 build、`go test ./...`、RNNoise native DSP + recording runtime 定向测试和 `go run ./cmd/preview-smoke`。
+- `validate`：安装 Go、Node、Linux Wails 依赖和 Wails v3 CLI，生成 bindings，校验 `frontend/bindings` 无未提交差异，运行前端 build、`go test ./...`、RNNoise native DSP + recording runtime 定向测试、`go run ./cmd/preview-smoke`、`go run ./cmd/release-config-check`，并用 `CGO_ENABLED=1 go run -tags "gtk3 rnnoise_native" ./cmd/desktop-doctor -require-rnnoise` 阻断不能创建 RNNoise native suppressor 的构建。
 - `macos-native-contract`：在 `macos-15` 且 `CGO_ENABLED=1` 下验证 CoreGraphics source enumeration 与 `CaptureService` capability 合同。
-- `wails-build`：在 `windows-latest`、`macos-15`、`ubuntu-latest` 上运行默认 `wails3 build`，并上传三平台 preview artifact。RNNoise 原生 DSP 由单独 contract 验证，直到完整 app recording backend 接入前不强制编入 preview artifact。
+- `wails-build`：在 `windows-latest`、`macos-15`、`ubuntu-latest` 上运行带 `rnnoise_native` 的 Wails 构建；Linux 同时带 `gtk3` 标签。Windows runner 会显式准备 MinGW GCC 供 cgo 编译 RNNoise。构建后每个平台都运行 `desktop-doctor -require-rnnoise`；Windows 还会运行 `-require-video` 和 portable zip 验证。
 
 ## 当前 Release 工作流
 
@@ -36,7 +36,7 @@ https://github.com/lemon-casino/RecordingFreedom.git
 
 发布前门禁：
 
-- `Release Gate`：生成 bindings 并校验无差异，运行前端 build、`go test ./...`、RNNoise native DSP + recording runtime 定向测试和 `go run ./cmd/preview-smoke`。
+- `Release Gate`：生成 bindings 并校验无差异，运行前端 build、`go test ./...`、RNNoise native DSP + recording runtime 定向测试、`go run ./cmd/preview-smoke`，并运行带 `rnnoise_native` 的 `desktop-doctor -require-rnnoise`。从当前 preview 开始，发布 artifact 默认启用 RNNoise native DSP，不能再发布“按钮存在但二进制没有真降噪”的验收包。
 - 三平台 build 只有在 `Release Gate` 通过后才会启动。
 
 平台 runner：
@@ -48,7 +48,7 @@ https://github.com/lemon-casino/RecordingFreedom.git
 当前 preview artifact 命名：
 
 ```text
-RecordingFreedom-windows-x64-vX.Y.Z.exe
+RecordingFreedom-windows-x64-vX.Y.Z-portable.zip
 RecordingFreedom-macos-arm64-vX.Y.Z
 RecordingFreedom-linux-x64-vX.Y.Z
 SHA256SUMS-windows-x64.txt
@@ -65,8 +65,8 @@ SHA256SUMS-linux-x64.txt
 ```bash
 git remote add origin https://github.com/lemon-casino/RecordingFreedom.git
 git push -u origin main
-git tag v0.1.0-preview.5
-git push origin v0.1.0-preview.5
+git tag v0.1.0-preview.7
+git push origin v0.1.0-preview.7
 ```
 
 GitHub Actions 会自动运行 `release.yml`，通过后生成 GitHub prerelease 和三平台 preview artifacts。这个版本可用于检查：
@@ -77,8 +77,10 @@ GitHub Actions 会自动运行 `release.yml`，通过后生成 GitHub prerelease
 - mock `.rfrec` 录制包是否仍写入应用内部 `data/video`。
 - 无 GUI preview smoke 是否能完成设置持久化、storage health、预检、mock 开始/暂停/继续/结束、manifest ready 校验和恢复扫描。
 - Windows、macOS、Linux 三个平台是否能完成 Wails 构建。
+- 发布二进制是否通过 `desktop-doctor -require-rnnoise`，确认 RNNoise native DSP 已真实编入 artifact。
+- Windows portable zip 是否通过 `scripts/verify-windows-portable.ps1`：包含 `recordingfreedom.exe`、`tools/ffmpeg.exe`、`tools/ffprobe.exe` 和 `tools/THIRD_PARTY_FFMPEG.txt`，并能在 Windows runner 上执行 FFmpeg/FFprobe。
 
-当前 preview release 必须在 release notes 中明确：macOS ScreenCaptureKit display/window/program capture 已接入代码路径但仍需真机 smoke 验收；Windows WGC、Linux PipeWire、完整 app recording backend 音频接入、摄像头 sidecar 和 PIP 导出仍属于后续里程碑，不能把 mock package、未验收的 ScreenCaptureKit 路径或 `audio-smoke` 说成完整真实录制。
+当前 preview release 必须在 release notes 中明确：macOS ScreenCaptureKit display/window/region capture 已接入代码路径但仍需真机 smoke 验收，Program/Application 当前是 queued 后续项；Windows portable zip 会携带 FFmpeg desktop writer 依赖，但仍需要下载 artifact 后在 clean machine 跑 screen/region/window `video-smoke` 和音频 mux 组合；Windows WASAPI 音频已能在停止阶段 mux 到主 `screen.mp4`，且本机 1 分钟、5 分钟和 20 分钟 smoke 已通过。跨平台长录同步、Linux PipeWire、目标桌面 RNNoise 实录听感仍属于后续验收；摄像头 sidecar 和 PIP 当前暂停，等视频录制和语音/音频录制验收后再恢复。不能把 mock package、未验收的 ScreenCaptureKit/FFmpeg artifact 路径或 `audio-smoke` 说成完整正式录制。
 
 `preview`、`alpha`、`beta`、`rc` 标签会被 workflow 自动标记为 GitHub prerelease；正式稳定版本再移除这些后缀。
 
@@ -105,7 +107,8 @@ GitHub Actions 会自动运行 `release.yml`，通过后生成 GitHub prerelease
 
 正式公开发布前必须满足：
 
-- WGC helper 存在并能启动。
+- Windows FFmpeg desktop writer 能检测 ffmpeg，缺失时 preflight blocked，存在时能启动 video-smoke。
+- FFmpeg 二进制来源、SHA256 校验、许可证文本和再分发义务在 release notes 或第三方 notices 中明确；当前 preview 通过 `scripts/ensure-windows-ffmpeg.ps1` 下载 release essentials zip 并生成 `tools/THIRD_PARTY_FFMPEG.txt`。
 - WASAPI system audio 和 microphone capture smoke test 通过。
 - Media Foundation webcam smoke test 通过。
 - MSVC runtime 静态链接，或随包附带并验证 DLL。
@@ -129,15 +132,19 @@ Linux 初期为 experimental：
 - 同目录生成 `SHA256SUMS-*.txt`。
 - Wails build 在平台 runner 上完成。
 - Release Gate 已运行 `go run ./cmd/preview-smoke`，验证当前可验收能力确实能创建 ready mock `.rfrec` 包到 `data/video`。
+- Release Gate 和三平台 build job 已运行带 `rnnoise_native` 的 `CGO_ENABLED=1 go run -tags rnnoise_native ./cmd/desktop-doctor -require-rnnoise`，把 app data、`data/video`、backend、能力矩阵、RNNoise 和 Windows FFmpeg 依赖状态写入日志。Windows build job 会先运行 `scripts/ensure-windows-ffmpeg.ps1`，再用 `CGO_ENABLED=1 go run -tags rnnoise_native ./cmd/desktop-doctor -require-video -require-rnnoise` 阻断缺 FFmpeg 或缺 RNNoise 的 artifact。
 - Release Gate 已运行 RNNoise native DSP + recording runtime 定向测试，验证 native wrapper 能处理 48kHz/480-sample frame，且 `recording.NativeBackendRuntime` 在 `rnnoise_native` 标签下可以编译测试。
+- Release Gate 已运行 `cmd/release-config-check`，防止 CI/release workflow 意外移除 RNNoise、Windows FFmpeg、Windows portable zip 验证或 release notes 中的能力边界。
 - release notes 明确该 artifact 是 UI shell / mock package 验收版本。
 
 正式发布前还必须补齐：
 
 - Wails runtime 资源和平台安装包结构检查。
 - native helper 或平台采集模块存在性检查。
-- RNNoise native DSP 在目标 release toolchain 中的 cgo 编译与 frame 处理验证。
+- RNNoise native DSP 已进入目标 preview/release toolchain 的 cgo 构建和 doctor 门禁；正式发布前仍需补目标桌面的 `audio-smoke -rnnoise` 实录听感与诊断验证。
 - FFmpeg 或系统编码依赖策略检查。
+- Windows portable zip 解压后 `recordingfreedom.exe` 能从同级 `tools/ffmpeg.exe` 解析依赖。
+- Release workflow 在上传 artifact 前运行 `scripts/verify-windows-portable.ps1`，缺少 exe、FFmpeg、FFprobe 或第三方说明会直接失败。
 - 正式安装包环境中的 GUI/进程级 smoke test。
 - signed/notarized/package 后的 mock `.rfrec/manifest.json` 创建 smoke test。
 
@@ -155,7 +162,7 @@ data/video/*/manifest.json
 
 - `v0.1.0`：UI Shell + mock recording package + CI。
 - `v0.2.0`：macOS ScreenCaptureKit 基础录制。
-- `v0.3.0`：Windows WGC 基础录制。
+- `v0.3.0`：Windows FFmpeg desktop 基础录制与后续原生 WGC/Media Foundation 替换评估。
 - `v0.4.0`：麦克风 RNNoise 降噪和系统声音/麦克风混音稳定。
 - `v0.5.0`：摄像头 sidecar + PIP 预览。
 - `v1.0.0`：macOS/Windows 正式发布门禁全部满足，Linux 仍可标 experimental。

@@ -9,7 +9,7 @@ import (
 	"github.com/lemon-casino/RecordingFreedom/app/internal/recpackage"
 )
 
-func TestCreateAudioOnlyWritePlanUsesWAVFallback(t *testing.T) {
+func TestCreateAudioOnlyWritePlanUsesM4APrimaryWithWAVSidecar(t *testing.T) {
 	packages := recpackage.NewService()
 	createdAt := time.Date(2026, 7, 1, 10, 0, 0, 321000000, time.UTC)
 	plan, normalized, err := CreateAudioOnlyWritePlan(packages, BackendAudioOnlyNative, t.TempDir(), createdAt, AudioOnlyRequest{
@@ -27,11 +27,11 @@ func TestCreateAudioOnlyWritePlanUsesWAVFallback(t *testing.T) {
 	if plan.ScreenVideoPath != "" || plan.VideoDiagnosticsPath != "" {
 		t.Fatalf("audio-only video paths = screen:%q diagnostics:%q, want empty", plan.ScreenVideoPath, plan.VideoDiagnosticsPath)
 	}
-	if plan.AudioOnlyPath != filepath.Join(plan.Package.Dir, recpackage.AudioOnlyWAVFile) {
-		t.Fatalf("audio-only path = %q, want package audio.wav", plan.AudioOnlyPath)
+	if plan.AudioOnlyPath != filepath.Join(plan.Package.Dir, recpackage.AudioOnlyFile) {
+		t.Fatalf("audio-only path = %q, want package audio.m4a", plan.AudioOnlyPath)
 	}
-	if plan.MicrophoneAudioPath != plan.AudioOnlyPath || plan.SystemAudioPath != "" {
-		t.Fatalf("stream paths = mic:%q system:%q, want mic audio.wav only", plan.MicrophoneAudioPath, plan.SystemAudioPath)
+	if plan.MicrophoneAudioPath != filepath.Join(plan.Package.Dir, recpackage.AudioOnlyWAVFile) || plan.SystemAudioPath != "" {
+		t.Fatalf("stream paths = mic:%q system:%q, want mic sidecar audio.wav only", plan.MicrophoneAudioPath, plan.SystemAudioPath)
 	}
 
 	manifest, err := packages.ReadManifest(plan.Package.ManifestPath)
@@ -41,10 +41,10 @@ func TestCreateAudioOnlyWritePlanUsesWAVFallback(t *testing.T) {
 	if manifest.RecordingMode != recpackage.RecordingModeAudio || manifest.Media.ScreenVideoPath != "" {
 		t.Fatalf("manifest mode/media = %q/%#v, want audio-only without screen", manifest.RecordingMode, manifest.Media)
 	}
-	if manifest.Media.AudioPath != recpackage.AudioOnlyWAVFile ||
+	if manifest.Media.AudioPath != recpackage.AudioOnlyFile ||
 		manifest.Media.MicrophoneAudioPath != recpackage.AudioOnlyWAVFile ||
 		manifest.Media.MicrophoneAudioStorage != recpackage.AudioStorageSidecar {
-		t.Fatalf("manifest media = %#v, want audio.wav sidecar fallback", manifest.Media)
+		t.Fatalf("manifest media = %#v, want audio.m4a primary with audio.wav sidecar", manifest.Media)
 	}
 }
 

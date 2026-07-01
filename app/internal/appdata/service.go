@@ -246,11 +246,21 @@ func defaultRootForPointer(pointerBaseDir string) string {
 }
 
 func probeWritable(root string) error {
-	probe := filepath.Join(root, ".recordingfreedom-write-test")
-	if err := os.WriteFile(probe, []byte("ok\n"), 0o644); err != nil {
+	probe, err := os.CreateTemp(root, ".recordingfreedom-write-test-*")
+	if err != nil {
 		return fmt.Errorf("data root %q is not writable: %w", root, err)
 	}
-	if err := os.Remove(probe); err != nil && !errors.Is(err, os.ErrNotExist) {
+	probePath := probe.Name()
+	if _, err := probe.Write([]byte("ok\n")); err != nil {
+		_ = probe.Close()
+		_ = os.Remove(probePath)
+		return fmt.Errorf("data root %q is not writable: %w", root, err)
+	}
+	if err := probe.Close(); err != nil {
+		_ = os.Remove(probePath)
+		return fmt.Errorf("data root %q is not writable: %w", root, err)
+	}
+	if err := os.Remove(probePath); err != nil && !errors.Is(err, os.ErrNotExist) {
 		return err
 	}
 	return nil

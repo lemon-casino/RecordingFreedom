@@ -25,11 +25,7 @@ func (b *MockBackend) Start(_ context.Context, req BackendStartRequest) (Backend
 	pkg, err := b.packages.CreateMock(req.VideoDir, recpackage.CreateMockRequest{
 		CreatedAt: req.CreatedAt,
 		Status:    recpackage.StatusRecording,
-		Source: recpackage.ManifestSource{
-			Type: string(req.StartRequest.SourceType),
-			ID:   req.StartRequest.SourceID,
-			Name: req.StartRequest.SourceName,
-		},
+		Source:    manifestSourceFromStartRequest(req.StartRequest),
 		Recording: req.StartRequest.Recording,
 		Audio: recpackage.ManifestAudio{
 			System:                     req.StartRequest.Audio.System,

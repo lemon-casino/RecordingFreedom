@@ -15,12 +15,12 @@ The legacy LikelySnap/Electron project is only a reference source. RecordingFree
 - Project analysis and implementation plan are in [docs](docs/README.md).
 - The Wails v3 app is in [app](app/README.md).
 - The first capsule recorder UI shell and system tray entry are implemented.
-- The Go backend has app data, persistent settings, capture source/media device contracts, typed `.rfrec` package services, and mock recording package creation.
-- The recording backend selector defaults to `mock-package`; native backend IDs are wired as queued contracts until real capture lands.
-- Mock recording packages are created under the managed `data/video` structure.
+- The Go backend has app data, persistent settings, capture source/media device contracts, typed `.rfrec` package services, native backend selection, and explicit mock package creation for preview smoke only.
+- The recording backend selector defaults to platform native/queued backends; `mock-package` must be requested explicitly and never represents real capture.
+- Preview mock recording packages are created under the managed `data/video` structure.
 - GitHub Actions are scaffolded in [.github/workflows](.github/workflows).
 
-The current build is a UI and architecture milestone. Native capture backends are still staged work.
+The current build is a UI and recording-pipeline milestone. macOS ScreenCaptureKit screen/window/single-display region code paths are wired. Windows now has a real FFmpeg desktop writer for screen/all-screen/region/locked-window video when an `ffmpeg` executable is available; enabled WASAPI system audio and microphone tracks are muxed into the final `screen.mp4` at stop. Without FFmpeg, preflight blocks before recording starts. Linux PipeWire remains queued.
 
 ## Requirements
 
@@ -92,8 +92,10 @@ From `app`:
 
 ```bash
 go test ./...
+go run ./cmd/desktop-doctor
 go run ./cmd/preview-smoke
 go run ./cmd/audio-smoke -duration=3s -keep
+go run ./cmd/video-smoke -duration=3s -keep
 wails3 build
 ```
 
@@ -101,23 +103,53 @@ wails3 build
 
 `go run ./cmd/audio-smoke -duration=3s -keep` records real platform audio into a temporary `data/video/audio-smoke-*.rfrec/` folder. On Windows today, microphone capture writes `microphone.wav` and `audio-diagnostics.json`; RNNoise requires a cgo-enabled build and a C compiler.
 
+On Windows, `go run ./cmd/video-smoke -duration=3s -keep` requires FFmpeg. Put `ffmpeg.exe` on `PATH`, place it beside the app under `tools/`, or set:
+
+```bash
+RECORDINGFREEDOM_FFMPEG_PATH=C:\path\to\ffmpeg.exe
+```
+
+The same Windows FFmpeg layout used by CI/release can be prepared locally:
+
+```powershell
+.\scripts\ensure-windows-ffmpeg.ps1
+```
+
+That script downloads the release essentials archive, verifies its SHA256 sidecar, and writes `app/tools/ffmpeg.exe`. The app resolves the same `tools/ffmpeg.exe` path when shipped beside `recordingfreedom.exe`.
+
+Verify a staged Windows portable zip before uploading it:
+
+```powershell
+.\scripts\verify-windows-portable.ps1 -ZipPath .\release-out\RecordingFreedom-windows-x64-v0.1.0-preview.7-portable.zip
+```
+
+Use the desktop doctor to inspect the same dependency gate before trying a real recording:
+
+```bash
+go run ./cmd/desktop-doctor
+go run ./cmd/desktop-doctor -require-video
+CGO_ENABLED=1 go run -tags rnnoise_native ./cmd/desktop-doctor -require-rnnoise
+```
+
+The first command reports app data, `data/video`, backend, capabilities, RNNoise, and FFmpeg status as JSON without failing preview builds. `-require-video` exits non-zero when the current platform cannot start real screen/window video recording. `-require-rnnoise` exits non-zero unless the current binary was built with native RNNoise support.
+
 To test and smoke the RNNoise path on a machine with a C toolchain:
 
 ```bash
-go test -tags rnnoise_native ./internal/audio/rnnoise/native
-go run -tags rnnoise_native ./cmd/audio-smoke -duration=3s -rnnoise -keep
+CGO_ENABLED=1 go test -tags rnnoise_native ./internal/audio/rnnoise/native
+CGO_ENABLED=1 go run -tags rnnoise_native ./cmd/audio-smoke -duration=3s -rnnoise -keep
 ```
 
 ## Preview Release
 
-After `RecordingFreedom/` becomes the new repository root, pushing a `v*` tag publishes a GitHub Release with Windows, macOS, and Linux preview binaries plus SHA256 files:
+After `RecordingFreedom/` becomes the new repository root, pushing a `v*` tag publishes a GitHub Release with Windows, macOS, and Linux preview artifacts plus SHA256 files:
 
 ```bash
-git tag v0.1.0-preview.5
-git push origin v0.1.0-preview.5
+git tag v0.1.0-preview.7
+git push origin v0.1.0-preview.7
 ```
 
-Preview tags are published as GitHub prereleases. This preview release is for UI shell, settings, mock package, developer audio smoke, RNNoise native build verification, and full-platform build verification. It is not a signed installer release, and it does not claim full native screen/audio/camera recording yet. See [docs/04-ci-release-plan.md](docs/04-ci-release-plan.md).
+Preview tags are published as GitHub prereleases. The Windows preview artifact is a portable zip containing `recordingfreedom.exe` and `tools/ffmpeg.exe`; macOS/Linux remain raw preview binaries. Release artifacts are built with the `rnnoise_native` cgo tag and gated by `desktop-doctor -require-rnnoise`, so a preview that cannot create the native RNNoise suppressor must fail before publishing. This preview release is for UI shell, settings, mock package, developer audio smoke, Windows FFmpeg video + WASAPI audio mux verification, RNNoise native artifact gating, FFmpeg dependency gating, and full-platform build verification. It is not a signed installer release, and it does not claim full native screen/audio/camera recording yet. See [docs/04-ci-release-plan.md](docs/04-ci-release-plan.md).
 
 ## Data Directory
 
@@ -141,7 +173,7 @@ Backend selection can be exercised in development:
 RECORDINGFREEDOM_RECORDING_BACKEND=native
 ```
 
-This selects the platform native backend ID (`screencapturekit`, `windows-graphics-capture`, or `pipewire-portal`) but currently remains queued and blocked by preflight. It is a stable replacement point for the upcoming real capture backends, not a real recording implementation yet.
+This selects the platform native backend ID (`screencapturekit`, `ffmpeg-desktop-capture`, or `pipewire-portal`). macOS ScreenCaptureKit has real screen/window/single-display-region writer code paths that still require real-device smoke validation. Windows uses FFmpeg gdigrab for real screen/all-screen/region/locked-window MP4 writing, and enabled WASAPI system audio/microphone tracks are muxed into `screen.mp4` at stop. Camera sidecar/PIP work is paused until video recording and voice/audio recording are accepted. Linux remains queued until the PipeWire writer lands.
 
 User settings are persisted in:
 
@@ -152,8 +184,8 @@ User settings are persisted in:
 ## Roadmap
 
 1. Validate CI on the new GitHub repository.
-2. Replace queued media-device placeholders with native macOS/Windows/Linux audio and camera enumeration.
-3. Implement macOS ScreenCaptureKit recording.
-4. Finish Windows WGC recording and connect the implemented WASAPI audio session to the real backend.
-5. Connect the verified RNNoise native DSP into the full app recording backend and expose it through preflight/UI after real audio capture is active there.
-6. Add camera sidecar recording and later PIP preview/export.
+2. Replace queued media-device placeholders with native macOS/Linux audio and camera enumeration; Windows WASAPI/DirectShow enumeration is already wired.
+3. Real-device smoke macOS ScreenCaptureKit recording.
+4. Download the Windows portable preview artifact and verify screen/region/locked-window plus system/microphone mux `video-smoke` on a real desktop.
+5. Smoke `audio-smoke -rnnoise` on target desktops built with the same `rnnoise_native` release toolchain, then keep the release `desktop-doctor -require-rnnoise` gate green on every desktop runner.
+6. After video recording and voice/audio recording are accepted, resume camera sidecar and PIP preview/export work.

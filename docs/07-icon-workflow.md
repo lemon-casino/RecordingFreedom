@@ -140,9 +140,9 @@ app/frontend/public/wails.png
 app/bin/
 app/frontend/dist/
 app/frontend/node_modules/
-app/build/android/
-app/build/ios/
 ```
+
+仓库不保留 `app/build/android/` 或 `app/build/ios/`。如果后续 Wails 工具重新生成这些目录，应在提交前删除；RecordingFreedom 首版只发布 Windows、macOS、Linux 桌面端。
 
 提交前确认：
 

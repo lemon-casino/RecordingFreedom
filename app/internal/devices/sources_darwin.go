@@ -244,6 +244,8 @@ func listDarwinDisplaySources() []CaptureSource {
 			Type:         SourceScreen,
 			Name:         name,
 			Subtitle:     fmt.Sprintf("%d x %d source pixels · CGDirectDisplayID %d", int(display.width), int(display.height), displayID),
+			X:            int(display.x),
+			Y:            int(display.y),
 			Width:        int(display.width),
 			Height:       int(display.height),
 			NativeID:     fmt.Sprintf("cgdisplay:%d", displayID),

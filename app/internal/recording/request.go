@@ -26,6 +26,12 @@ func NormalizeStartRequest(req StartRequest) (StartRequest, error) {
 	if !validSourceType(req.SourceType) {
 		return StartRequest{}, fmt.Errorf("unsupported sourceType %q", req.SourceType)
 	}
+	if req.SourceGeometry != nil {
+		req.SourceGeometry.NativeID = strings.TrimSpace(req.SourceGeometry.NativeID)
+		if req.SourceGeometry.Width < 0 || req.SourceGeometry.Height < 0 {
+			return StartRequest{}, errors.New("sourceGeometry width and height must be non-negative")
+		}
+	}
 	req.Recording = recordingprofile.Normalize(req.Recording)
 
 	audioRequest, err := normalizeAudioRequest(req.Audio)
@@ -35,6 +41,7 @@ func NormalizeStartRequest(req StartRequest) (StartRequest, error) {
 	req.Audio = audioRequest
 
 	req.Camera.DeviceID = strings.TrimSpace(req.Camera.DeviceID)
+	req.Camera.DeviceNativeID = strings.TrimSpace(req.Camera.DeviceNativeID)
 	if req.Camera.Enabled {
 		if req.Camera.DeviceID == "" {
 			req.Camera.DeviceID = defaultCameraID
@@ -42,6 +49,7 @@ func NormalizeStartRequest(req StartRequest) (StartRequest, error) {
 		req.Camera.PIPPreset = string(pip.Normalize(req.Camera.PIPPreset))
 	} else {
 		req.Camera.DeviceID = ""
+		req.Camera.DeviceNativeID = ""
 		req.Camera.PIPPreset = string(pip.PresetOff)
 	}
 	return req, nil
@@ -90,7 +98,7 @@ func normalizeAudioRequest(req AudioRequest) (AudioRequest, error) {
 
 func validSourceType(sourceType CaptureSourceType) bool {
 	switch sourceType {
-	case SourceScreen, SourceWindow, SourceApplication:
+	case SourceScreen, SourceAllScreens, SourceRegion, SourceWindow, SourceApplication:
 		return true
 	default:
 		return false

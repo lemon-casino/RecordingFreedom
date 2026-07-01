@@ -7,7 +7,7 @@
 - Electron 主进程负责生命周期、托盘、窗口、权限、文件系统和 IPC。
 - React 渲染层负责 HUD、源选择、设置、编辑器、导出面板和大量录制编排。
 - macOS 原生录制通过 ScreenCaptureKit helper 完成屏幕和音频写入。
-- Windows 原生录制通过 WGC / WASAPI / Media Foundation helper 完成。
+- Windows 首版视频录制通过 FFmpeg gdigrab writer 完成，音频通过 WASAPI；WGC / Media Foundation 保留为后续原生替换方向。
 - Linux 或 fallback 路径依赖 Electron/Chromium 捕获和 MediaRecorder。
 - 长录制方向已经转向持续写盘、录制包、相对 manifest、cursor preview、native webcam sidecar 和 FFmpeg 流式导出。
 
@@ -53,7 +53,6 @@ RecordingFreedom 的第一目标不是复制旧编辑器，而是先做稳定、
 
 - UI 壳使用 Wails v3，不再使用 Electron。
 - 业务后端使用 Go 服务，前端只做状态呈现和命令调用。
-- 平台录制优先使用系统原生 API：macOS ScreenCaptureKit，Windows Windows.Graphics.Capture，Linux XDG ScreenCast Portal + PipeWire。
+- 平台录制优先使用稳定可维护方案：macOS ScreenCaptureKit，Windows FFmpeg gdigrab 首版落地并保留 WGC/Media Foundation 替换方向，Linux XDG ScreenCast Portal + PipeWire。
 - 音频处理放在 Go/native 层，前端不承担实时降噪、混音和 mux 决策。
 - 所有录制产物必须先写入 `data/video/` 下的录制包，再由导出功能产生发布文件。
-

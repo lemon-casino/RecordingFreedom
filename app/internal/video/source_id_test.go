@@ -28,6 +28,30 @@ func TestDarwinDisplayID(t *testing.T) {
 	}
 }
 
+func TestDarwinDisplayNativeID(t *testing.T) {
+	tests := []struct {
+		name     string
+		nativeID string
+		wantID   uint32
+		wantOK   bool
+	}{
+		{name: "display", nativeID: "cgdisplay:69733632", wantID: 69733632, wantOK: true},
+		{name: "trimmed", nativeID: " cgdisplay:42 ", wantID: 42, wantOK: true},
+		{name: "source id", nativeID: "screen:display-42"},
+		{name: "empty", nativeID: "cgdisplay:"},
+		{name: "zero", nativeID: "cgdisplay:0"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			gotID, gotOK := DarwinDisplayNativeID(tt.nativeID)
+			if gotOK != tt.wantOK || gotID != tt.wantID {
+				t.Fatalf("DarwinDisplayNativeID(%q) = (%d, %v), want (%d, %v)", tt.nativeID, gotID, gotOK, tt.wantID, tt.wantOK)
+			}
+		})
+	}
+}
+
 func TestDarwinWindowID(t *testing.T) {
 	tests := []struct {
 		name     string

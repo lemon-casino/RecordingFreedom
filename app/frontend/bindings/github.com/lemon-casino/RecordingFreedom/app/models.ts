@@ -31,3 +31,45 @@ export interface BootstrapState {
     "settings": settings$0.Settings;
     "capabilities": capture$0.Capabilities;
 }
+
+export interface RegionRect {
+    "x": number;
+    "y": number;
+    "width": number;
+    "height": number;
+}
+
+export interface RegionSelectionRequest {
+    "x": number;
+    "y": number;
+    "width": number;
+    "height": number;
+}
+
+export interface RegionSelectionResult {
+    "sessionId"?: string;
+    "source"?: devices$0.CaptureSource;
+    "geometry"?: RegionRect;
+    "cancelled": boolean;
+    "error"?: string;
+}
+
+export interface RegionSelectionSession {
+    "id": string;
+    "bounds": RegionRect;
+    "minimumWidth": number;
+    "minimumHeight": number;
+    "displayCount": number;
+}
+
+export interface ScreenIndicatorRequest {
+    "sourceId": string;
+}
+
+export interface ScreenIndicatorResult {
+    "sourceId": string;
+    "displayIndex": number;
+    "label": string;
+    "sourceBounds": RegionRect;
+    "windowBounds": RegionRect;
+}

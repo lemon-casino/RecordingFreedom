@@ -3,9 +3,13 @@ import {
   Camera,
   Check,
   ChevronDown,
+  ChevronLeft,
   CircleDot,
+  Crosshair,
   Gauge,
   Languages,
+  Maximize2,
+  MousePointer2,
   Monitor,
   Pause,
   Play,
@@ -15,9 +19,10 @@ import {
   Video,
   Volume2,
   Wand2,
+  X,
 } from 'lucide-react'
-import {useEffect, useMemo, useState} from 'react'
-import {copyByLocale, type RecorderCopy, type RecoveryMessageKey, type StatusMessageKey, type StorageMessageKey} from './i18n'
+import {useEffect, useMemo, useRef, useState, type ReactNode} from 'react'
+import {copyByLocale, type RecorderCopy, type RecoveryMessageKey, type SourceSelectionMessageKey, type StatusMessageKey, type StorageMessageKey} from './i18n'
 import {
   cameraDevices,
   fallbackAppData,
@@ -34,17 +39,21 @@ import {
   type CaptureSource,
   type LocaleCode,
   type MediaDevice,
+  type MediaInventory,
   type PIPPreset,
+  type RecordingMode,
   type RecordingPreflight,
   type RecordingQuality,
   type RecordingState,
   fallbackCapabilities,
   fallbackStorageStatus,
 } from './services/mockBackend'
-import {hideSettingsWindow, loadBootstrap, pauseRecording, preflightRecording, recoverRecordingPackage, resumeRecording, saveSettings, setCapsuleWindowExpanded, setDataRoot, showSettingsWindow, startRecording, stopRecording, subscribeRecordingStatus, type RecordingRecovery, type RecordingStatusUpdate} from './services/recorderBackend'
+import {cancelRegionSelector, completeRegionSelection, hideScreenIndicator, hideSettingsWindow, loadBootstrap, loadSettings, pauseRecording, preflightAudioOnlyRecording, preflightRecording, recoverRecordingPackage, resumeRecording, saveSettings, setCapsuleWindowExpanded, setDataRoot, showRegionSelector, showScreenIndicator, showSettingsWindow, startAudioOnlyRecording, startRecording, stopRecording, subscribeRecordingStatus, subscribeRegionSelection, subscribeSettingsChanged, type RecordingRecovery, type RecordingStatusUpdate, type RegionSelectionSession} from './services/recorderBackend'
 
 const sourceIcon = {
   screen: Monitor,
+  'all-screens': Maximize2,
+  region: Crosshair,
   window: AppWindow,
   application: Radio,
 }
@@ -91,6 +100,14 @@ function formatBytes(bytes: number) {
   return `${value >= 10 || unitIndex === 0 ? value.toFixed(0) : value.toFixed(1)} ${units[unitIndex]}`
 }
 
+function normalizedClientRect(startX: number, startY: number, currentX: number, currentY: number) {
+  const x = Math.round(Math.min(startX, currentX))
+  const y = Math.round(Math.min(startY, currentY))
+  const width = Math.round(Math.abs(currentX - startX))
+  const height = Math.round(Math.abs(currentY - startY))
+  return {x, y, width, height}
+}
+
 type StatusMessageState = {
   key: StatusMessageKey
   fallback?: string
@@ -106,23 +123,41 @@ type StorageMessageState = {
   path?: string
 }
 
+type SourceSelectionMessageState = {
+  key: SourceSelectionMessageKey
+  width?: number
+  height?: number
+  fallback?: string
+}
+
 function App() {
   const isSettingsWindow = window.location.pathname === '/settings'
+  const isRegionOverlayWindow = window.location.pathname === '/region-overlay'
+  const isScreenIndicatorWindow = window.location.pathname === '/screen-indicator'
+  if (isScreenIndicatorWindow) {
+    return <ScreenIndicatorWindow />
+  }
+  if (isRegionOverlayWindow) {
+    return <RegionOverlayWindow />
+  }
+
   const [selectedSource, setSelectedSource] = useState<CaptureSource>(sources[0])
   const [availableSources, setAvailableSources] = useState<CaptureSource[]>(sources)
   const [activePanel, setActivePanel] = useState<'source' | 'audio' | 'camera' | 'language' | null>(null)
+  const [sourcePickerView, setSourcePickerView] = useState<'overview' | 'windows'>('overview')
   const [settingsOpen, setSettingsOpen] = useState(false)
+  const [recordingMode, setRecordingMode] = useState<RecordingMode>('video')
   const [state, setState] = useState<RecordingState>('idle')
   const [elapsed, setElapsed] = useState(0)
   const [recordingQuality, setRecordingQuality] = useState<RecordingQuality>('balanced')
   const [recordingFPS, setRecordingFPS] = useState(30)
   const [captureCursor, setCaptureCursor] = useState(true)
   const [countdownSeconds, setCountdownSeconds] = useState(0)
-  const [systemAudio, setSystemAudio] = useState(true)
+  const [systemAudio, setSystemAudio] = useState(false)
   const [availableSystemAudio, setAvailableSystemAudio] = useState<MediaDevice[]>(systemAudioDevices)
   const [selectedSystemAudio, setSelectedSystemAudio] = useState(systemAudioDevices[0].id)
-  const [microphone, setMicrophone] = useState(true)
-  const [noiseSuppression, setNoiseSuppression] = useState(true)
+  const [microphone, setMicrophone] = useState(false)
+  const [noiseSuppression, setNoiseSuppression] = useState(false)
   const [availableMicrophones, setAvailableMicrophones] = useState<MediaDevice[]>(microphoneDevices)
   const [selectedMic, setSelectedMic] = useState(microphoneDevices[0].id)
   const [camera, setCamera] = useState(false)
@@ -144,14 +179,18 @@ function App() {
   const [storageRootDraft, setStorageRootDraft] = useState(fallbackAppData.rootDir)
   const [storageBusy, setStorageBusy] = useState(false)
   const [storageMessage, setStorageMessage] = useState<StorageMessageState | null>(null)
+  const [sourceSelectionMessage, setSourceSelectionMessage] = useState<SourceSelectionMessageState | null>(null)
   const rnnoiseActive = microphone && noiseSuppression
 
   const copy = copyByLocale[locale]
   const lastStatusText = lastStatusMessage.fallback ?? copy.statusMessages[lastStatusMessage.key]
   const recoveryText = recoveryMessage ? formatRecoveryMessage(recoveryMessage, copy) : ''
   const storageText = storageMessage ? formatStorageMessage(storageMessage, copy) : ''
+  const sourceSelectionText = sourceSelectionMessage ? formatSourceSelectionMessage(sourceSelectionMessage, copy) : ''
   const isRecording = state === 'recording' || state === 'paused' || state === 'preparing' || state === 'stopping'
-  const SourceIcon = sourceIcon[selectedSource.type]
+  const SourceIcon = recordingMode === 'audio' ? Volume2 : sourceIcon[selectedSource.type]
+  const sourceTitle = recordingMode === 'audio' ? copy.recordingModes.audio : sourceTypeLabel(selectedSource, copy)
+  const sourceSubtitle = recordingMode === 'audio' ? audioOnlySourceMeta(systemAudio, microphone, copy) : sourceName(selectedSource, copy)
   const currentSettings = useMemo<AppSettings>(() => ({
     schemaVersion: 1,
     locale,
@@ -189,7 +228,6 @@ function App() {
     capabilities.sourceEnumeration,
     capabilities.screenRecording,
     capabilities.windowRecording,
-    capabilities.applicationRecording,
     capabilities.systemAudio,
     capabilities.microphone,
     capabilities.microphoneEnhancement,
@@ -199,12 +237,58 @@ function App() {
   ], [capabilities])
   const recoverableRecoveries = useMemo(() => recoveries.filter((recovery) => recovery.recoverable), [recoveries])
   const recoverablePackages = recoverableRecoveries.length
+  const allScreensSource = useMemo(() => availableSources.find((source) => source.type === 'all-screens'), [availableSources])
+  const screenSources = useMemo(() => availableSources.filter((source) => source.type === 'screen'), [availableSources])
+  const regionSource = useMemo(() => availableSources.find((source) => source.type === 'region'), [availableSources])
+  const windowSources = useMemo(() => availableSources.filter((source) => source.type === 'window'), [availableSources])
+  const selectedWindowSource = selectedSource.type === 'window' ? selectedSource : windowSources.find((source) => source.id === selectedSource.id)
+  const selectedCameraDevice = useMemo(
+    () => availableCameras.find((device) => device.id === selectedCamera),
+    [availableCameras, selectedCamera],
+  )
   const applyRecordingStatus = (update: RecordingStatusUpdate) => {
     setState(update.status as RecordingState)
     if (update.session?.packagePath) setLastPackage(update.session.packagePath)
     const backend = update.session?.backend || update.backend
     if (backend) setLastBackend(backend)
     if (update.message) setLastStatusMessage(statusMessageFromBackend(update.message))
+  }
+  const applySettingsState = (nextSettings: AppSettings, nextMedia?: MediaInventory, nextSources?: CaptureSource[]) => {
+    setLocale(normalizeLocale(nextSettings.locale))
+    setRecordingQuality(normalizeRecordingQuality(nextSettings.recording.quality))
+    setRecordingFPS(fpsOptions.includes(nextSettings.recording.fps) ? nextSettings.recording.fps : 30)
+    setCaptureCursor(nextSettings.recording.captureCursor)
+    setCountdownSeconds(countdownOptions.includes(nextSettings.recording.countdownSeconds) ? nextSettings.recording.countdownSeconds : 0)
+    setSystemAudio(nextSettings.audio.system)
+    setMicrophone(nextSettings.audio.microphone)
+    setNoiseSuppression(nextSettings.audio.noiseSuppression)
+    setCamera(nextSettings.camera.enabled)
+    setPipPreset(normalizePipPreset(nextSettings.camera.pipPreset))
+
+    const systemAudioList = nextMedia?.systemAudio
+    const microphoneList = nextMedia?.microphones
+    const cameraList = nextMedia?.cameras
+    if (systemAudioList?.length) setAvailableSystemAudio(systemAudioList)
+    if (microphoneList?.length) setAvailableMicrophones(microphoneList)
+    if (cameraList?.length) setAvailableCameras(cameraList)
+    if (nextSettings.audio.systemDeviceId && (!systemAudioList || systemAudioList.some((device) => device.id === nextSettings.audio.systemDeviceId))) {
+      setSelectedSystemAudio(nextSettings.audio.systemDeviceId)
+    } else if (systemAudioList?.[0]) {
+      setSelectedSystemAudio(systemAudioList[0].id)
+    }
+    if (nextSettings.audio.microphoneDeviceId && (!microphoneList || microphoneList.some((device) => device.id === nextSettings.audio.microphoneDeviceId))) {
+      setSelectedMic(nextSettings.audio.microphoneDeviceId)
+    } else if (microphoneList?.[0]) {
+      setSelectedMic(microphoneList[0].id)
+    }
+    if (nextSettings.camera.deviceId && (!cameraList || cameraList.some((device) => device.id === nextSettings.camera.deviceId))) {
+      setSelectedCamera(nextSettings.camera.deviceId)
+    } else if (cameraList?.[0]) {
+      setSelectedCamera(cameraList[0].id)
+    }
+    if (nextSources) {
+      setSelectedSource(selectVisibleInitialSource(nextSources, nextSettings.source.lastSourceId, nextSettings.source.lastSourceType))
+    }
   }
 
   useEffect(() => {
@@ -225,6 +309,12 @@ function App() {
   }, [activePanel, isSettingsWindow])
 
   useEffect(() => {
+    if (recordingMode === 'audio' && activePanel === 'camera') {
+      setActivePanel(null)
+    }
+  }, [activePanel, recordingMode])
+
+  useEffect(() => {
     let cancelled = false
     loadBootstrap()
       .then((bootstrap) => {
@@ -239,43 +329,7 @@ function App() {
         setRecoveries(bootstrap.recoveries)
         setState(bootstrap.state as RecordingState)
         setLastBackend(bootstrap.backend || 'ui-preview')
-        setLocale(normalizeLocale(nextSettings.locale))
-        setRecordingQuality(normalizeRecordingQuality(nextSettings.recording.quality))
-        setRecordingFPS(fpsOptions.includes(nextSettings.recording.fps) ? nextSettings.recording.fps : 30)
-        setCaptureCursor(nextSettings.recording.captureCursor)
-        setCountdownSeconds(countdownOptions.includes(nextSettings.recording.countdownSeconds) ? nextSettings.recording.countdownSeconds : 0)
-        setSystemAudio(nextSettings.audio.system)
-        if (bootstrap.media.systemAudio.length > 0) {
-          setAvailableSystemAudio(bootstrap.media.systemAudio)
-          setSelectedSystemAudio(nextSettings.audio.systemDeviceId && bootstrap.media.systemAudio.some((device) => device.id === nextSettings.audio.systemDeviceId)
-            ? nextSettings.audio.systemDeviceId
-            : bootstrap.media.systemAudio[0].id)
-        } else if (nextSettings.audio.systemDeviceId) {
-          setSelectedSystemAudio(nextSettings.audio.systemDeviceId)
-        }
-        setMicrophone(nextSettings.audio.microphone)
-        setNoiseSuppression(nextSettings.audio.noiseSuppression)
-        if (bootstrap.media.microphones.length > 0) {
-          setAvailableMicrophones(bootstrap.media.microphones)
-          setSelectedMic(nextSettings.audio.microphoneDeviceId && bootstrap.media.microphones.some((device) => device.id === nextSettings.audio.microphoneDeviceId)
-            ? nextSettings.audio.microphoneDeviceId
-            : bootstrap.media.microphones[0].id)
-        } else if (nextSettings.audio.microphoneDeviceId) {
-          setSelectedMic(nextSettings.audio.microphoneDeviceId)
-        }
-        setCamera(nextSettings.camera.enabled)
-        setPipPreset(normalizePipPreset(nextSettings.camera.pipPreset))
-        if (bootstrap.media.cameras.length > 0) {
-          setAvailableCameras(bootstrap.media.cameras)
-          setSelectedCamera(nextSettings.camera.deviceId && bootstrap.media.cameras.some((device) => device.id === nextSettings.camera.deviceId)
-            ? nextSettings.camera.deviceId
-            : bootstrap.media.cameras[0].id)
-        } else if (nextSettings.camera.deviceId) {
-          setSelectedCamera(nextSettings.camera.deviceId)
-        }
-        setSelectedSource(nextSettings.source.lastSourceId
-          ? nextSources.find((source) => source.id === nextSettings.source.lastSourceId) ?? nextSources[0]
-          : nextSources.find((source) => source.type === nextSettings.source.lastSourceType) ?? nextSources[0])
+        applySettingsState(nextSettings, bootstrap.media, nextSources)
         setSettingsLoaded(true)
       })
       .catch((error) => {
@@ -305,6 +359,36 @@ function App() {
 
   useEffect(() => subscribeRecordingStatus(applyRecordingStatus), [])
 
+  useEffect(() => subscribeSettingsChanged((settings) => {
+    applySettingsState(settings)
+  }), [])
+
+  useEffect(() => subscribeRegionSelection((result) => {
+    if (result.cancelled) {
+      setSourceSelectionMessage(result.error ? {key: 'regionTooSmall', fallback: result.error} : {key: 'regionCancelled'})
+      return
+    }
+    const pickedSource = result.source
+    if (!pickedSource) return
+    setAvailableSources((current) => {
+      const next = current.filter((source) => !(source.id === pickedSource.id && source.type === pickedSource.type))
+      return [pickedSource, ...next]
+    })
+    setSelectedSource(pickedSource)
+    setSourceSelectionMessage({
+      key: 'regionSelected',
+      width: result.geometry?.width ?? pickedSource.width,
+      height: result.geometry?.height ?? pickedSource.height,
+    })
+  }), [])
+
+  useEffect(() => {
+    if (activePanel !== 'source') {
+      setSourcePickerView('overview')
+      void hideScreenIndicator()
+    }
+  }, [activePanel])
+
   const statusLabel = useMemo(() => {
     return copy.statusChips[state] ?? copy.statusChips.idle
   }, [copy, state])
@@ -314,14 +398,41 @@ function App() {
     setElapsed(0)
     setState('preparing')
     try {
+      const recording = {
+        quality: recordingQuality,
+        fps: recordingFPS,
+        captureCursor,
+        countdownSeconds,
+      }
+      if (recordingMode === 'audio') {
+        const request = {
+          recording,
+          systemAudio,
+          systemAudioDeviceId: selectedSystemAudio,
+          microphone,
+          microphoneDeviceId: selectedMic,
+          noiseSuppression,
+        }
+        const preflight = await preflightAudioOnlyRecording(request)
+        setLastPreflight(preflight)
+        if (preflight.status === 'blocked') {
+          setState('failed')
+          setLastStatusMessage({key: 'preflightBlocked'})
+          return
+        }
+        const session = await startAudioOnlyRecording(request)
+        applyRecordingStatus({
+          status: session.status ?? 'recording',
+          message: 'Audio-only recording started',
+          backend: session.backend,
+          session,
+        })
+        return
+      }
+
       const request = {
         source: selectedSource,
-        recording: {
-          quality: recordingQuality,
-          fps: recordingFPS,
-          captureCursor,
-          countdownSeconds,
-        },
+        recording,
         systemAudio,
         systemAudioDeviceId: selectedSystemAudio,
         microphone,
@@ -329,6 +440,7 @@ function App() {
         noiseSuppression,
         camera,
         cameraDeviceId: selectedCamera,
+        cameraDeviceNativeId: selectedCameraDevice?.nativeId,
         pipPreset,
       }
       const preflight = await preflightRecording(request)
@@ -464,6 +576,36 @@ function App() {
     await showSettingsWindow()
   }
 
+  const chooseSource = (source: CaptureSource) => {
+    void hideScreenIndicator()
+    setSelectedSource(source)
+    setSourceSelectionMessage(source.available === false ? {key: 'sourceQueued'} : null)
+    setActivePanel(null)
+    setSourcePickerView('overview')
+  }
+
+  const chooseRegion = async (source: CaptureSource) => {
+    await hideScreenIndicator()
+    setActivePanel(null)
+    setSourcePickerView('overview')
+    setSourceSelectionMessage({key: 'regionSelecting'})
+    try {
+      await showRegionSelector()
+    } catch (error) {
+      console.error('Failed to show region selector:', error)
+      setSourceSelectionMessage({key: 'sourceQueued'})
+    }
+  }
+
+  const showScreenMarker = (source: CaptureSource) => {
+    if (source.type !== 'screen') return
+    void showScreenIndicator(source.id)
+  }
+
+  const hideScreenMarker = () => {
+    void hideScreenIndicator()
+  }
+
   const closeSettings = () => {
     if (isSettingsWindow) {
       void hideSettingsWindow()
@@ -501,7 +643,12 @@ function App() {
         />
         <SettingLine title={copy.settings.appData} value={appData.rootDir} />
         <SettingLine title={copy.settings.settingsFile} value={joinDisplayPath(appData.rootDir, 'settings.json')} />
-        <SettingLine title={copy.settings.language} value={copy.localeNames[locale]} />
+        <SettingSelect
+          title={copy.settings.language}
+          value={locale}
+          options={localeOptions.map((code) => ({value: code, label: copy.localeNames[code]}))}
+          onChange={(value) => setLocale(normalizeLocale(value))}
+        />
         <SettingLine
           title={copy.settings.recordingBackend}
           value={lastBackend}
@@ -589,8 +736,8 @@ function App() {
           >
             <SourceIcon size={18} />
             <span className="source-text">
-              <strong>{sourceTypeLabel(selectedSource, copy)}</strong>
-              <small>{sourceName(selectedSource, copy)}</small>
+              <strong>{sourceTitle}</strong>
+              <small>{sourceSubtitle}</small>
             </span>
             <ChevronDown size={14} />
           </button>
@@ -607,10 +754,11 @@ function App() {
               <Volume2 size={18} />
             </button>
             <button
-              className={`icon-button ${camera ? 'is-on' : ''}`}
+              className={`icon-button ${recordingMode === 'video' && camera ? 'is-on' : ''}`}
               type="button"
               aria-label={copy.aria.openCameraSettings}
               title={copy.panels.cameraSidecar}
+              disabled={recordingMode === 'audio'}
               onClick={() => setActivePanel(activePanel === 'camera' ? null : 'camera')}
             >
               <Camera size={18} />
@@ -668,29 +816,121 @@ function App() {
         {activePanel && (
           <div className="popover" role="dialog" aria-label={copy.aria.menu(activePanel)}>
             {activePanel === 'source' && (
-              <div className="menu-grid">
-                {availableSources.map((source) => {
-                  const Icon = sourceIcon[source.type]
-                  const selected = selectedSource.id === source.id
-                  return (
-                    <button
-                      key={source.id}
-                      className={`menu-row ${selected ? 'selected' : ''}`}
-                      type="button"
-                      onClick={() => {
-                        setSelectedSource(source)
-                        setActivePanel(null)
-                      }}
-                    >
-                      <Icon size={18} />
-                      <span>
-                        <strong>{sourceName(source, copy)}</strong>
-                        <small>{sourceMeta(source, copy)}</small>
-                      </span>
-                      {selected && <Check size={16} />}
-                    </button>
+              <div className="menu-grid source-menu">
+                <div className="mode-toggle" role="group" aria-label={copy.aria.recordingMode}>
+                  {(['video', 'audio'] as RecordingMode[]).map((mode) => {
+                    const ModeIcon = mode === 'video' ? Video : Volume2
+                    const selected = recordingMode === mode
+                    return (
+                      <button
+                        key={mode}
+                        type="button"
+                        className={selected ? 'selected' : ''}
+                        aria-pressed={selected}
+                        disabled={isRecording}
+                        onClick={() => setRecordingMode(mode)}
+                      >
+                        <ModeIcon size={16} />
+                        <span>{copy.recordingModes[mode]}</span>
+                      </button>
+                    )
+                  })}
+                </div>
+
+                {recordingMode === 'video' ? (
+                  sourcePickerView === 'windows' ? (
+                    <div className="source-window-picker">
+                      <div className="source-panel-header">
+                        <button type="button" className="source-back-button" onClick={() => setSourcePickerView('overview')} aria-label={copy.sourceActions.backToSources}>
+                          <ChevronLeft size={16} />
+                        </button>
+                        <span>
+                          <strong>{copy.sourceGroups.window}</strong>
+                          <small>{copy.sourceActions.lockedWindowHint}</small>
+                        </span>
+                      </div>
+                      <div className="source-list-scroll">
+                        {windowSources.length > 0 ? windowSources.map((source) => (
+                          <SourceMenuRow
+                            key={source.id}
+                            source={source}
+                            copy={copy}
+                            selected={selectedSource.id === source.id}
+                            onSelect={() => chooseSource(source)}
+                          />
+                        )) : (
+                          <div className="source-empty">
+                            <AppWindow size={18} />
+                            <span>{copy.sourceActions.noWindows}</span>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="source-list-scroll">
+                      <SourceGroup title={copy.sourceGroups.screen}>
+                        {allScreensSource && allScreensSource.available !== false && (
+                          <SourceMenuRow
+                            source={allScreensSource}
+                            copy={copy}
+                            selected={selectedSource.id === allScreensSource.id}
+                            onSelect={() => chooseSource(allScreensSource)}
+                          />
+                        )}
+                        {screenSources.map((source) => (
+                          <SourceMenuRow
+                            key={source.id}
+                            source={source}
+                            copy={copy}
+                            selected={selectedSource.id === source.id}
+                            onSelect={() => chooseSource(source)}
+                            onPreviewStart={() => showScreenMarker(source)}
+                            onPreviewEnd={hideScreenMarker}
+                          />
+                        ))}
+                      </SourceGroup>
+
+                      <SourceGroup title={copy.sourceGroups.region}>
+                        {regionSource ? (
+                          <SourceMenuRow
+                            source={regionSource}
+                            copy={copy}
+                            selected={selectedSource.id === regionSource.id}
+                            actionLabel={copy.sourceActions.chooseRegion}
+                            onSelect={() => void chooseRegion(regionSource)}
+                          />
+                        ) : (
+                          <div className="source-empty">
+                            <Crosshair size={18} />
+                            <span>{copy.sourceActions.regionUnavailable}</span>
+                          </div>
+                        )}
+                      </SourceGroup>
+
+                      <SourceGroup title={copy.sourceGroups.window}>
+                        <button className={`menu-row ${selectedWindowSource ? 'selected' : ''}`} type="button" onClick={() => setSourcePickerView('windows')}>
+                          <AppWindow size={18} />
+                          <span>
+                            <strong>{copy.sourceActions.chooseLockedWindow}</strong>
+                            <small>{selectedWindowSource ? sourceName(selectedWindowSource, copy) : copy.sourceActions.lockedWindowHint}</small>
+                          </span>
+                          <ChevronDown size={16} />
+                        </button>
+                      </SourceGroup>
+
+                      {sourceSelectionText && <div className="source-selection-note">{sourceSelectionText}</div>}
+                    </div>
                   )
-                })}
+                ) : (
+                  <div className="menu-row selected audio-mode-summary" aria-live="polite">
+                    <Volume2 size={18} />
+                    <span>
+                      <strong>{copy.sourceAudioOnly.name}</strong>
+                      <small>{audioOnlySourceMeta(systemAudio, microphone, copy)}</small>
+                    </span>
+                    <Check size={16} />
+                  </div>
+                )}
               </div>
             )}
 
@@ -758,6 +998,7 @@ function App() {
           <span>{lastPackage}</span>
           <span>{copy.common.backend}: {lastBackend}</span>
           <span>{copy.common.status}: {lastStatusText}</span>
+          {sourceSelectionText && <span>{sourceSelectionText}</span>}
           <Wand2 size={16} />
           <span>{rnnoiseActive ? copy.strip.micEnhancementOn : copy.strip.micEnhancementOff}</span>
           <span>{copy.common.preflight}: {lastPreflight ? copy.preflightLabels[lastPreflight.status] : copy.common.notRun}</span>
@@ -766,6 +1007,170 @@ function App() {
       </section>
 
       {settingsOpen && settingsPanel}
+    </main>
+  )
+}
+
+function ScreenIndicatorWindow() {
+  const indicatorWindow = window as Window & {__RF_SCREEN_INDICATOR__?: {label?: string}}
+  const [label, setLabel] = useState(indicatorWindow.__RF_SCREEN_INDICATOR__?.label ?? '')
+
+  useEffect(() => {
+    document.body.classList.add('rf-screen-indicator-window')
+    return () => document.body.classList.remove('rf-screen-indicator-window')
+  }, [])
+
+  useEffect(() => {
+    const onIndicator = (event: Event) => {
+      const next = (event as CustomEvent<{label?: string}>).detail
+      setLabel(next?.label ?? '')
+    }
+    window.addEventListener('rf-screen-indicator', onIndicator)
+    return () => window.removeEventListener('rf-screen-indicator', onIndicator)
+  }, [])
+
+  return (
+    <main className="screen-indicator-shell" aria-hidden="true">
+      <span>{label || '1'}</span>
+    </main>
+  )
+}
+
+function RegionOverlayWindow() {
+  const overlayWindow = window as Window & {__RF_REGION_SESSION__?: RegionSelectionSession}
+  const initialSession = overlayWindow.__RF_REGION_SESSION__
+  const [session, setSession] = useState<RegionSelectionSession | undefined>(initialSession)
+  const [drag, setDrag] = useState<{startX: number; startY: number; currentX: number; currentY: number} | null>(null)
+  const [cursor, setCursor] = useState({x: -1, y: -1})
+  const [invalid, setInvalid] = useState(false)
+  const shellRef = useRef<HTMLElement | null>(null)
+  const [overlayLocale, setOverlayLocale] = useState<LocaleCode>(navigator.language.toLowerCase().startsWith('zh') ? 'zh-CN' : 'en')
+  const copy = copyByLocale[overlayLocale]
+  const minimumWidth = session?.minimumWidth ?? 64
+  const minimumHeight = session?.minimumHeight ?? 64
+  const selectedRect = drag ? normalizedClientRect(drag.startX, drag.startY, drag.currentX, drag.currentY) : null
+
+  useEffect(() => {
+    document.body.classList.add('rf-region-overlay-window')
+    return () => document.body.classList.remove('rf-region-overlay-window')
+  }, [])
+
+  useEffect(() => {
+    void loadSettings()
+      .then((settings) => setOverlayLocale(normalizeLocale(settings.locale)))
+      .catch((error) => console.info('Using region overlay language fallback:', error))
+  }, [])
+
+  useEffect(() => subscribeSettingsChanged((settings) => {
+    setOverlayLocale(normalizeLocale(settings.locale))
+  }), [])
+
+  useEffect(() => {
+    const onSession = (event: Event) => {
+      const next = (event as CustomEvent<RegionSelectionSession>).detail
+      if (next) setSession(next)
+    }
+    window.addEventListener('rf-region-session', onSession)
+    return () => window.removeEventListener('rf-region-session', onSession)
+  }, [])
+
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        event.preventDefault()
+        void cancelRegionSelector()
+      }
+    }
+    window.addEventListener('keydown', onKeyDown)
+    return () => window.removeEventListener('keydown', onKeyDown)
+  }, [])
+
+  const cancelSelection = async () => {
+    await cancelRegionSelector()
+    if (!window.navigator.userAgent.includes('Wails')) {
+      window.close()
+    }
+  }
+
+  const completeSelection = async (rect: RegionSelectionSession['bounds']) => {
+    if (rect.width < minimumWidth || rect.height < minimumHeight) {
+      setInvalid(true)
+      window.setTimeout(() => setInvalid(false), 360)
+      return
+    }
+    await completeRegionSelection(rect)
+  }
+
+  return (
+    <main
+      ref={shellRef}
+      className="region-overlay-shell"
+      aria-label={copy.aria.regionOverlay}
+      onPointerMove={(event) => {
+        setCursor({x: event.clientX, y: event.clientY})
+        if (drag) {
+          setDrag({...drag, currentX: event.clientX, currentY: event.clientY})
+        }
+      }}
+      onPointerDown={(event) => {
+        if (event.button !== 0) return
+        event.currentTarget.setPointerCapture(event.pointerId)
+        setDrag({startX: event.clientX, startY: event.clientY, currentX: event.clientX, currentY: event.clientY})
+        setInvalid(false)
+      }}
+      onPointerUp={(event) => {
+        if (!drag) return
+        if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+          event.currentTarget.releasePointerCapture(event.pointerId)
+        }
+        const rect = normalizedClientRect(drag.startX, drag.startY, event.clientX, event.clientY)
+        setDrag(null)
+        void completeSelection(rect)
+      }}
+      onPointerLeave={(event) => {
+        setCursor({x: event.clientX, y: event.clientY})
+      }}
+    >
+      <div className="region-overlay-scrim" />
+      {cursor.x >= 0 && (
+        <>
+          <div className="region-crosshair horizontal" style={{top: cursor.y}} />
+          <div className="region-crosshair vertical" style={{left: cursor.x}} />
+        </>
+      )}
+      {selectedRect && (
+        <div
+          className={`region-selection-rect ${invalid ? 'invalid' : ''}`}
+          style={{
+            left: selectedRect.x,
+            top: selectedRect.y,
+            width: selectedRect.width,
+            height: selectedRect.height,
+          }}
+        >
+          <b className="region-size-badge">
+            {selectedRect.width} x {selectedRect.height}
+          </b>
+          <span className="corner top-left" />
+          <span className="corner top-right" />
+          <span className="corner bottom-left" />
+          <span className="corner bottom-right" />
+        </div>
+      )}
+      <button
+        className="region-cancel-button"
+        type="button"
+        aria-label={copy.regionOverlay.cancel}
+        title={copy.regionOverlay.cancel}
+        onPointerDown={(event) => event.stopPropagation()}
+        onClick={() => void cancelSelection()}
+      >
+        <X size={22} />
+      </button>
+      <div className="region-overlay-badge" aria-hidden="true">
+        <MousePointer2 size={16} />
+        <span>{copy.regionOverlay.esc}</span>
+      </div>
     </main>
   )
 }
@@ -780,11 +1185,63 @@ function SwitchRow({label, checked, disabled = false, onChange}: {label: string;
   )
 }
 
+function SourceGroup({title, children}: {title: string; children: ReactNode}) {
+  return (
+    <section className="source-group" aria-label={title}>
+      <div className="source-group-label">{title}</div>
+      {children}
+    </section>
+  )
+}
+
+function SourceMenuRow({
+  source,
+  copy,
+  selected,
+  actionLabel,
+  onSelect,
+  onPreviewStart,
+  onPreviewEnd,
+}: {
+  source: CaptureSource
+  copy: RecorderCopy
+  selected: boolean
+  actionLabel?: string
+  onSelect: () => void
+  onPreviewStart?: () => void
+  onPreviewEnd?: () => void
+}) {
+  const Icon = sourceIcon[source.type]
+  return (
+    <button
+      className={`menu-row ${selected ? 'selected' : ''} ${source.available === false ? 'queued' : ''}`}
+      type="button"
+      onClick={onSelect}
+      onPointerEnter={onPreviewStart}
+      onPointerLeave={onPreviewEnd}
+      onFocus={onPreviewStart}
+      onBlur={onPreviewEnd}
+    >
+      <Icon size={18} />
+      <span>
+        <strong>{sourceName(source, copy)}</strong>
+        <small>{sourceMeta(source, copy)}</small>
+      </span>
+      {actionLabel && <b className="row-action-label">{actionLabel}</b>}
+      {selected && <Check size={16} />}
+    </button>
+  )
+}
+
 function statusMessageFromBackend(message: string): StatusMessageState {
   switch (message) {
     case 'Preparing recording package':
       return {key: 'preparing'}
+    case 'Preparing audio-only recording package':
+      return {key: 'preparing'}
     case 'Recording started':
+      return {key: 'started'}
+    case 'Audio-only recording started':
       return {key: 'started'}
     case 'Recording paused':
       return {key: 'paused'}
@@ -809,21 +1266,60 @@ function formatStorageMessage(message: StorageMessageState, copy: RecorderCopy) 
   return copy.storageMessages[message.key]
 }
 
+function formatSourceSelectionMessage(message: SourceSelectionMessageState, copy: RecorderCopy) {
+  if (message.fallback) return message.fallback
+  if (message.key === 'regionSelected' && message.width && message.height) {
+    return copy.sourceSelectionMessages.regionSelectedSize(message.width, message.height)
+  }
+  return copy.sourceSelectionMessages[message.key]
+}
+
 function sourceTypeLabel(source: CaptureSource, copy: RecorderCopy) {
   return copy.sourceTypes[source.type]
 }
 
 function sourceName(source: CaptureSource, copy: RecorderCopy) {
+  if (source.type === 'screen') {
+    return copy.sourceActions.screenLabel(screenIndex(source))
+  }
   return copy.sourceNames[source.id] ?? source.name
 }
 
 function sourceMeta(source: CaptureSource, copy: RecorderCopy) {
-  if (source.available === false) return copy.sourceUnavailable
+  if (source.available === false) {
+    const reason = source.unavailableReason || copy.sourceUnavailable
+    return source.meta ? `${source.meta} · ${reason}` : reason
+  }
   return copy.sourceMeta[source.id] ?? source.meta
+}
+
+function audioOnlySourceMeta(systemAudio: boolean, microphone: boolean, copy: RecorderCopy) {
+  if (systemAudio && microphone) return copy.sourceAudioOnly.systemAndMic
+  if (systemAudio) return copy.sourceAudioOnly.systemOnly
+  if (microphone) return copy.sourceAudioOnly.micOnly
+  return copy.sourceAudioOnly.noAudio
 }
 
 function mediaDeviceName(device: MediaDevice, copy: RecorderCopy) {
   return copy.mediaDeviceNames[device.id] ?? device.name
+}
+
+function screenIndex(source: CaptureSource) {
+  return source.displayIndex && source.displayIndex > 0 ? source.displayIndex : 1
+}
+
+function selectVisibleInitialSource(nextSources: CaptureSource[], lastSourceId: string | undefined, lastSourceType: CaptureSource['type']) {
+  const visibleSources = nextSources.filter((source) => source.type !== 'application')
+  const fallback = visibleSources.find((source) => source.type === 'screen') ?? visibleSources[0] ?? nextSources[0] ?? sources[0]
+  if (lastSourceId) {
+    const byID = visibleSources.find((source) => source.id === lastSourceId)
+    if (byID) return byID
+  }
+  if (lastSourceType !== 'application') {
+    const byType = visibleSources.find((source) => source.type === lastSourceType)
+    if (byType) return byType
+  }
+  return fallback
 }
 
 function capabilityTitle(capability: CaptureCapability, copy: RecorderCopy) {

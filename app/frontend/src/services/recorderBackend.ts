@@ -1,6 +1,13 @@
 import {Events, Window as WailsWindow} from '@wailsio/runtime'
 import {RecordingFreedomService} from '../../bindings/github.com/lemon-casino/RecordingFreedom/app'
-import {type BootstrapState as BoundBootstrapState} from '../../bindings/github.com/lemon-casino/RecordingFreedom/app/models'
+import {
+  type BootstrapState as BoundBootstrapState,
+  type RegionSelectionRequest as BoundRegionSelectionRequest,
+  type RegionSelectionResult as BoundRegionSelectionResult,
+  type RegionSelectionSession as BoundRegionSelectionSession,
+  type ScreenIndicatorRequest as BoundScreenIndicatorRequest,
+  type ScreenIndicatorResult as BoundScreenIndicatorResult,
+} from '../../bindings/github.com/lemon-casino/RecordingFreedom/app/models'
 import {
   type Capabilities as BoundCaptureCapabilities,
   type Capability as BoundCaptureCapability,
@@ -12,6 +19,7 @@ import {
   type MediaInventory as BoundMediaInventory,
 } from '../../bindings/github.com/lemon-casino/RecordingFreedom/app/internal/devices/models'
 import {
+  type AudioOnlyRequest,
   type Session as BoundSession,
   type StartRequest,
   type StatusEvent as BoundStatusEvent,
@@ -21,6 +29,7 @@ import {type RecoverySummary as BoundRecoverySummary} from '../../bindings/githu
 import {type Settings as BoundSettings} from '../../bindings/github.com/lemon-casino/RecordingFreedom/app/internal/settings/models'
 import {
   createMockRecordingPackage,
+  createMockAudioOnlyRecordingPackage,
   defaultSettings,
   fallbackAppData,
   fallbackCapabilities,
@@ -29,6 +38,7 @@ import {
   normalizeLocale,
   sources as fallbackSources,
   type AppSettings,
+  type AudioOnlyRecordingRequest,
   type AppDataInfo,
   type AppStorageStatus,
   type CaptureCapabilities,
@@ -45,6 +55,7 @@ export type RecordingSession = {
   packagePath: string
   manifestPath?: string
   backend?: string
+  recordingMode?: string
   status?: string
 }
 
@@ -78,7 +89,31 @@ export type RecorderBootstrap = {
 const browserSettingsKey = 'recordingfreedom.settings.v1'
 const capsuleWindowWidth = 860
 const capsuleWindowCollapsedHeight = 166
-const capsuleWindowExpandedHeight = 420
+const capsuleWindowExpandedHeight = 520
+
+export type RegionSelectionSession = {
+  id: string
+  bounds: {x: number; y: number; width: number; height: number}
+  minimumWidth: number
+  minimumHeight: number
+  displayCount: number
+}
+
+export type RegionSelectionResult = {
+  sessionId?: string
+  source?: CaptureSource
+  geometry?: {x: number; y: number; width: number; height: number}
+  cancelled: boolean
+  error?: string
+}
+
+export type ScreenIndicatorResult = {
+  sourceId: string
+  displayIndex: number
+  label: string
+  sourceBounds: {x: number; y: number; width: number; height: number}
+  windowBounds: {x: number; y: number; width: number; height: number}
+}
 
 export async function setCapsuleWindowExpanded(expanded: boolean): Promise<void> {
   try {
@@ -118,6 +153,28 @@ export function subscribeRecordingStatus(handler: (event: RecordingStatusUpdate)
   }
 }
 
+export function subscribeRegionSelection(handler: (event: RegionSelectionResult) => void): () => void {
+  try {
+    return Events.On('capture.region.selected', (event) => {
+      handler(fromBoundRegionSelectionResult(event.data as BoundRegionSelectionResult))
+    })
+  } catch (error) {
+    console.info('Using browser region selection event fallback:', error)
+    return () => {}
+  }
+}
+
+export function subscribeSettingsChanged(handler: (settings: AppSettings) => void): () => void {
+  try {
+    return Events.On('settings.changed', (event) => {
+      handler(fromBoundSettings(event.data as BoundSettings))
+    })
+  } catch (error) {
+    console.info('Using browser settings event fallback:', error)
+    return () => {}
+  }
+}
+
 export async function showSettingsWindow(): Promise<void> {
   try {
     await RecordingFreedomService.ShowSettingsWindow()
@@ -125,6 +182,71 @@ export async function showSettingsWindow(): Promise<void> {
     console.info('Using browser settings window fallback:', error)
     const popup = window.open('/settings', 'recordingfreedom-settings', 'width=920,height=720')
     popup?.focus()
+  }
+}
+
+export async function showRegionSelector(): Promise<RegionSelectionSession> {
+  try {
+    return fromBoundRegionSelectionSession(await RecordingFreedomService.ShowRegionSelector())
+  } catch (error) {
+    console.info('Using browser region selector fallback:', error)
+    return {
+      id: `browser-region-${Date.now()}`,
+      bounds: {x: 0, y: 0, width: window.innerWidth, height: window.innerHeight},
+      minimumWidth: 64,
+      minimumHeight: 64,
+      displayCount: 1,
+    }
+  }
+}
+
+export async function completeRegionSelection(request: RegionSelectionSession['bounds']): Promise<RegionSelectionResult> {
+  try {
+    return fromBoundRegionSelectionResult(await RecordingFreedomService.CompleteRegionSelection(toBoundRegionSelectionRequest(request)))
+  } catch (error) {
+    console.info('Using browser region selection completion fallback:', error)
+    const source: CaptureSource = {
+      id: 'region:custom',
+      type: 'region',
+      label: 'Region',
+      name: 'Custom Region',
+      meta: `${request.width} x ${request.height} selected region`,
+      x: request.x,
+      y: request.y,
+      width: request.width,
+      height: request.height,
+      nativeId: 'region:browser-preview',
+      available: false,
+      capability: 'native-backend-queued',
+      unavailableReason: 'Desktop region overlay is only available in the Wails runtime.',
+    }
+    return {source, geometry: request, cancelled: false}
+  }
+}
+
+export async function cancelRegionSelector(): Promise<RegionSelectionResult> {
+  try {
+    return fromBoundRegionSelectionResult(await RecordingFreedomService.CancelRegionSelection())
+  } catch (error) {
+    console.info('Using browser region selection cancel fallback:', error)
+    return {cancelled: true}
+  }
+}
+
+export async function showScreenIndicator(sourceId: string): Promise<ScreenIndicatorResult | null> {
+  try {
+    return fromBoundScreenIndicatorResult(await RecordingFreedomService.ShowScreenIndicator(toBoundScreenIndicatorRequest(sourceId)))
+  } catch (error) {
+    console.info('Using browser screen indicator fallback:', error)
+    return null
+  }
+}
+
+export async function hideScreenIndicator(): Promise<void> {
+  try {
+    await RecordingFreedomService.HideScreenIndicator()
+  } catch (error) {
+    console.info('Using browser screen indicator hide fallback:', error)
   }
 }
 
@@ -248,6 +370,27 @@ export async function preflightRecording(request: MockRecordingRequest): Promise
   }
 }
 
+export async function preflightAudioOnlyRecording(request: AudioOnlyRecordingRequest): Promise<RecordingPreflight> {
+  try {
+    return fromBoundPreflight(await RecordingFreedomService.PreflightAudioOnlyRecording(toAudioOnlyRequest(request)))
+  } catch (error) {
+    console.info('Using browser mock audio-only preflight:', error)
+    return {
+      status: request.systemAudio || request.microphone ? 'ready' : 'blocked',
+      backend: 'browser-mock',
+      message: 'Browser UI shell is ready to create a mock audio-only package.',
+      checks: [
+        {
+          id: 'browser-mock',
+          label: 'Browser Preview',
+          status: request.systemAudio || request.microphone ? 'ready' : 'blocked',
+          reason: 'Preview mode validates UI flow only; desktop runtime performs native preflight.',
+        },
+      ],
+    }
+  }
+}
+
 export async function startRecording(request: MockRecordingRequest): Promise<RecordingSession> {
   try {
     const session = await RecordingFreedomService.StartRecording(toStartRequest(request))
@@ -256,6 +399,17 @@ export async function startRecording(request: MockRecordingRequest): Promise<Rec
     console.info('Using browser mock recording package:', error)
     const session = createMockRecordingPackage(request)
     return {id: session.id, packagePath: session.packagePath, backend: 'browser-mock'}
+  }
+}
+
+export async function startAudioOnlyRecording(request: AudioOnlyRecordingRequest): Promise<RecordingSession> {
+  try {
+    const session = await RecordingFreedomService.StartAudioOnlyRecording(toAudioOnlyRequest(request))
+    return fromBoundSession(session)
+  } catch (error) {
+    console.info('Using browser mock audio-only recording package:', error)
+    const session = createMockAudioOnlyRecordingPackage(request)
+    return {id: session.id, packagePath: session.packagePath, backend: 'browser-mock', recordingMode: 'audio-only'}
   }
 }
 
@@ -341,9 +495,65 @@ function fromBoundSource(source: BoundCaptureSource): CaptureSource {
     label: sourceLabel(type),
     name: source.name,
     meta: sourceMeta(source),
+    x: source.x,
+    y: source.y,
+    width: source.width,
+    height: source.height,
+    displayIndex: source.displayIndex,
+    nativeId: source.nativeId,
+    processId: source.processId,
     available: source.available,
     capability: source.capability,
     unavailableReason: source.unavailableReason,
+  }
+}
+
+function fromBoundRegionSelectionSession(session: BoundRegionSelectionSession): RegionSelectionSession {
+  return {
+    id: session.id,
+    bounds: {
+      x: session.bounds.x,
+      y: session.bounds.y,
+      width: session.bounds.width,
+      height: session.bounds.height,
+    },
+    minimumWidth: session.minimumWidth,
+    minimumHeight: session.minimumHeight,
+    displayCount: session.displayCount,
+  }
+}
+
+function fromBoundRegionSelectionResult(result: BoundRegionSelectionResult): RegionSelectionResult {
+  return {
+    sessionId: result.sessionId,
+    source: result.source?.id ? fromBoundSource(result.source as BoundCaptureSource) : undefined,
+    geometry: result.geometry ? {
+      x: result.geometry.x,
+      y: result.geometry.y,
+      width: result.geometry.width,
+      height: result.geometry.height,
+    } : undefined,
+    cancelled: result.cancelled,
+    error: result.error,
+  }
+}
+
+function fromBoundScreenIndicatorResult(result: BoundScreenIndicatorResult): ScreenIndicatorResult {
+  return {
+    sourceId: result.sourceId,
+    displayIndex: result.displayIndex,
+    label: result.label,
+    sourceBounds: fromBoundRegionRect(result.sourceBounds),
+    windowBounds: fromBoundRegionRect(result.windowBounds),
+  }
+}
+
+function fromBoundRegionRect(rect: {x: number; y: number; width: number; height: number}) {
+  return {
+    x: rect.x,
+    y: rect.y,
+    width: rect.width,
+    height: rect.height,
   }
 }
 
@@ -367,6 +577,8 @@ function sourceDimensions(source: BoundCaptureSource) {
 
 function sourceLabel(type: CaptureSource['type']) {
   if (type === 'screen') return 'Screen'
+  if (type === 'all-screens') return 'All Screens'
+  if (type === 'region') return 'Region'
   if (type === 'window') return 'Window'
   return 'Program'
 }
@@ -392,6 +604,7 @@ function fromBoundMediaDevice(device: BoundMediaDevice): MediaDevice {
     type: device.type as MediaDevice['type'],
     name: device.name,
     meta: mediaDeviceMeta(device),
+    nativeId: device.nativeId,
     isDefault: device.isDefault,
     available: device.available,
     capability: device.capability,
@@ -539,6 +752,7 @@ function toStartRequest(request: MockRecordingRequest): StartRequest {
     sourceId: request.source.id,
     sourceType: toBoundSourceType(request.source.type),
     sourceName: request.source.name,
+    sourceGeometry: toSourceGeometry(request.source),
     recording: request.recording,
     audio: {
       system: request.systemAudio,
@@ -551,8 +765,50 @@ function toStartRequest(request: MockRecordingRequest): StartRequest {
     camera: {
       enabled: request.camera,
       deviceId: request.cameraDeviceId,
+      deviceNativeId: request.cameraDeviceNativeId,
       pipPreset: request.camera ? request.pipPreset : 'off',
     },
+  }
+}
+
+function toSourceGeometry(source: CaptureSource): StartRequest['sourceGeometry'] {
+  if (!source.width || !source.height) return undefined
+  return {
+    x: source.x ?? 0,
+    y: source.y ?? 0,
+    width: source.width,
+    height: source.height,
+    displayIndex: source.displayIndex ?? 0,
+    nativeId: source.nativeId,
+  }
+}
+
+function toAudioOnlyRequest(request: AudioOnlyRecordingRequest): AudioOnlyRequest {
+  return {
+    recording: request.recording,
+    audio: {
+      system: request.systemAudio,
+      systemDeviceId: request.systemAudioDeviceId,
+      microphone: request.microphone,
+      microphoneDeviceId: request.microphoneDeviceId,
+      noiseSuppression: request.noiseSuppression,
+      microphoneGain: 1,
+    },
+  }
+}
+
+function toBoundRegionSelectionRequest(request: RegionSelectionSession['bounds']): BoundRegionSelectionRequest {
+  return {
+    x: Math.round(request.x),
+    y: Math.round(request.y),
+    width: Math.round(request.width),
+    height: Math.round(request.height),
+  }
+}
+
+function toBoundScreenIndicatorRequest(sourceId: string): BoundScreenIndicatorRequest {
+  return {
+    sourceId,
   }
 }
 
@@ -572,6 +828,8 @@ function normalizeCountdown(value: number): number {
 
 function toBoundSourceType(type: CaptureSource['type']) {
   if (type === 'screen') return BoundCaptureSourceType.SourceScreen
+  if (type === 'all-screens') return BoundCaptureSourceType.SourceAllScreens
+  if (type === 'region') return BoundCaptureSourceType.SourceRegion
   if (type === 'window') return BoundCaptureSourceType.SourceWindow
   return BoundCaptureSourceType.SourceApplication
 }
@@ -582,6 +840,7 @@ function fromBoundSession(session: BoundSession): RecordingSession {
     packagePath: session.packageDir,
     manifestPath: session.manifest,
     backend: session.backend,
+    recordingMode: session.recordingMode,
     status: session.status,
   }
 }
@@ -592,6 +851,7 @@ function fromBoundStatusEvent(event: BoundStatusEvent): RecordingStatusUpdate {
     packagePath: event.packageDir,
     manifestPath: event.manifest,
     backend: event.backend,
+    recordingMode: undefined,
     status: event.status,
   } : undefined
   return {

@@ -307,6 +307,17 @@ func (s *wasapiCaptureSource) captureLoop(captureClient *wasapiAudioCaptureClien
 			s.setErr(err)
 			return
 		}
+		sleepDuration := 5 * time.Millisecond
+		if packetFrames == 0 && s.kind == StreamSystemAudio && !s.paused.Load() {
+			silenceFrames := syntheticSilenceFrames(format.sampleRate)
+			if err := s.emitSilence(format, resampler, lastDevicePositionEnd, silenceFrames, onFrame); err != nil {
+				s.setErr(err)
+				return
+			}
+			lastDevicePositionEnd += silenceFrames
+			hasLastDevicePosition = true
+			sleepDuration = time.Duration(silenceFrames) * time.Second / time.Duration(format.sampleRate)
+		}
 		for packetFrames > 0 {
 			select {
 			case <-s.stopCh:
@@ -347,8 +358,19 @@ func (s *wasapiCaptureSource) captureLoop(captureClient *wasapiAudioCaptureClien
 				return
 			}
 		}
-		time.Sleep(5 * time.Millisecond)
+		time.Sleep(sleepDuration)
 	}
+}
+
+func syntheticSilenceFrames(sampleRate int) uint64 {
+	if sampleRate <= 0 {
+		return 480
+	}
+	frames := sampleRate / 20
+	if frames <= 0 {
+		return 1
+	}
+	return uint64(frames)
 }
 
 func (s *wasapiCaptureSource) emitSilence(format wasapiInputFormat, resampler *MonoResampler, devicePosition uint64, frames uint64, onFrame func(TimedPCMBuffer) error) error {

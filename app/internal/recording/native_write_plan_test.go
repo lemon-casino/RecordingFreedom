@@ -118,6 +118,36 @@ func TestCreateNativeWritePlanOmitsDisabledStreams(t *testing.T) {
 	}
 }
 
+func TestCreateNativeWritePlanUsesWindowsWebcamMP4(t *testing.T) {
+	packages := recpackage.NewService()
+	plan, err := CreateNativeWritePlan(packages, BackendFFmpegDesktopCapture, BackendStartRequest{
+		VideoDir: t.TempDir(),
+		StartRequest: StartRequest{
+			SourceID:   "screen:primary",
+			SourceType: SourceScreen,
+			Camera: CameraRequest{
+				Enabled:        true,
+				DeviceID:       "camera:dshow:integrated-camera",
+				DeviceNativeID: "Integrated Camera",
+				PIPPreset:      "bottom-right",
+			},
+		},
+	})
+	if err != nil {
+		t.Fatalf("CreateNativeWritePlan() error = %v", err)
+	}
+	if plan.WebcamVideoPath != filepath.Join(plan.Package.Dir, recpackage.WindowsWebcamVideoFile) {
+		t.Fatalf("windows webcam path = %q, want package webcam.mp4", plan.WebcamVideoPath)
+	}
+	manifest, err := packages.ReadManifest(plan.Package.ManifestPath)
+	if err != nil {
+		t.Fatalf("ReadManifest() error = %v", err)
+	}
+	if manifest.Media.WebcamVideoPath != recpackage.WindowsWebcamVideoFile {
+		t.Fatalf("manifest webcam path = %q, want webcam.mp4", manifest.Media.WebcamVideoPath)
+	}
+}
+
 func TestCreateNativeWritePlanRequiresPackageService(t *testing.T) {
 	_, err := CreateNativeWritePlan(nil, BackendScreenCaptureKit, BackendStartRequest{
 		VideoDir:     t.TempDir(),

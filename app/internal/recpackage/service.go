@@ -114,7 +114,10 @@ func (s *Service) CreateNative(videoDir string, req CreateNativeRequest) (Record
 		media.MicrophoneAudioStorage = AudioStorageSidecar
 	}
 	if manifestCamera.Enabled {
-		media.WebcamVideoPath = WebcamVideoFile
+		media.WebcamVideoPath = strings.TrimSpace(req.WebcamVideoPath)
+		if media.WebcamVideoPath == "" {
+			media.WebcamVideoPath = WebcamVideoFile
+		}
 	}
 	manifest := Manifest{
 		SchemaVersion: 1,
@@ -281,7 +284,69 @@ func (s *Service) PatchSyncDiagnostics(manifestPath string, sync ManifestSyncDia
 		return err
 	}
 	manifest.Diagnostics.Sync = &sync
+	if sync.Webcam.Enabled {
+		manifest.Media.WebcamStartOffsetMs = int(sync.Webcam.StartOffsetMs)
+	}
 	return s.WriteManifest(manifestPath, manifest)
+}
+
+func (s *Service) PatchScreenAudioMuxed(manifestPath string, system bool, microphone bool) (Manifest, error) {
+	manifest, err := s.ReadManifest(manifestPath)
+	if err != nil {
+		return Manifest{}, err
+	}
+	if manifest.RecordingMode != RecordingModeScreen {
+		return Manifest{}, errors.New("screen audio mux patch requires a screen recording package")
+	}
+	if system {
+		if !manifest.Audio.System {
+			return Manifest{}, errors.New("cannot mark disabled system audio as muxed")
+		}
+		manifest.Media.SystemAudioPath = manifest.Media.ScreenVideoPath
+		manifest.Media.SystemAudioStorage = AudioStorageMuxed
+	}
+	if microphone {
+		if !manifest.Audio.Microphone {
+			return Manifest{}, errors.New("cannot mark disabled microphone audio as muxed")
+		}
+		manifest.Media.MicrophoneAudioPath = manifest.Media.ScreenVideoPath
+		manifest.Media.MicrophoneAudioStorage = AudioStorageMuxed
+	}
+	if err := s.WriteManifest(manifestPath, manifest); err != nil {
+		return Manifest{}, err
+	}
+	return s.ReadManifest(manifestPath)
+}
+
+func (s *Service) PatchAudioOnlyMuxed(manifestPath string, system bool, microphone bool) (Manifest, error) {
+	manifest, err := s.ReadManifest(manifestPath)
+	if err != nil {
+		return Manifest{}, err
+	}
+	if manifest.RecordingMode != RecordingModeAudio {
+		return Manifest{}, errors.New("audio-only mux patch requires an audio-only package")
+	}
+	if strings.TrimSpace(manifest.Media.AudioPath) == "" {
+		manifest.Media.AudioPath = AudioOnlyFile
+	}
+	if system {
+		if !manifest.Audio.System {
+			return Manifest{}, errors.New("cannot mark disabled system audio as muxed")
+		}
+		manifest.Media.SystemAudioPath = manifest.Media.AudioPath
+		manifest.Media.SystemAudioStorage = AudioStorageMuxed
+	}
+	if microphone {
+		if !manifest.Audio.Microphone {
+			return Manifest{}, errors.New("cannot mark disabled microphone audio as muxed")
+		}
+		manifest.Media.MicrophoneAudioPath = manifest.Media.AudioPath
+		manifest.Media.MicrophoneAudioStorage = AudioStorageMuxed
+	}
+	if err := s.WriteManifest(manifestPath, manifest); err != nil {
+		return Manifest{}, err
+	}
+	return s.ReadManifest(manifestPath)
 }
 
 func (s *Service) ValidateReady(manifestPath string) error {

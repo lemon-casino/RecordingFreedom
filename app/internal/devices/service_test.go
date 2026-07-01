@@ -2,8 +2,11 @@ package devices
 
 import (
 	"errors"
+	"runtime"
 	"strings"
 	"testing"
+
+	"github.com/lemon-casino/RecordingFreedom/app/internal/audio/rnnoise"
 )
 
 func TestListSourcesReturnsUsableContract(t *testing.T) {
@@ -24,9 +27,9 @@ func TestListSourcesReturnsUsableContract(t *testing.T) {
 			t.Fatalf("source has empty capability: %#v", source)
 		}
 		switch source.Type {
-		case SourceScreen:
+		case SourceScreen, SourceAllScreens:
 			seenScreen = true
-		case SourceWindow, SourceApplication:
+		case SourceRegion, SourceWindow, SourceApplication:
 		default:
 			t.Fatalf("source has unsupported type %q: %#v", source.Type, source)
 		}
@@ -57,6 +60,43 @@ func TestNormalizeSourcesFillsStableDefaults(t *testing.T) {
 	}
 	if sources[1].Available {
 		t.Fatalf("unavailable source should not be marked available: %#v", sources[1])
+	}
+}
+
+func TestListSourcesAddsQueuedRegionSelectorContract(t *testing.T) {
+	sources := addVirtualCaptureSources(normalizeSources([]CaptureSource{
+		{Type: SourceScreen, ID: "screen:left", Name: "Left", X: -1920, Y: 0, Width: 1920, Height: 1080},
+		{Type: SourceScreen, ID: "screen:right", Name: "Right", X: 0, Y: 0, Width: 2560, Height: 1440},
+	}))
+
+	var allScreens *CaptureSource
+	var region *CaptureSource
+	for index := range sources {
+		switch sources[index].Type {
+		case SourceAllScreens:
+			allScreens = &sources[index]
+		case SourceRegion:
+			region = &sources[index]
+		}
+	}
+	if allScreens == nil {
+		t.Fatalf("all-screens virtual source missing: %#v", sources)
+	}
+	if allScreens.X != -1920 || allScreens.Y != 0 || allScreens.Width != 4480 || allScreens.Height != 1440 {
+		t.Fatalf("all-screens bounds = (%d,%d %dx%d), want virtual desktop bounds", allScreens.X, allScreens.Y, allScreens.Width, allScreens.Height)
+	}
+	if runtime.GOOS == "windows" {
+		if !allScreens.Available || allScreens.Capability != CapabilityEnumerated {
+			t.Fatalf("all-screens source = %#v, want available Windows virtual desktop source", allScreens)
+		}
+	} else if allScreens.Available || allScreens.Capability != CapabilityNativeQueued {
+		t.Fatalf("all-screens source = %#v, want queued until multi-display writer lands", allScreens)
+	}
+	if region == nil {
+		t.Fatalf("region selector source missing: %#v", sources)
+	}
+	if region.Available || region.Capability != CapabilityNativeQueued || region.UnavailableReason == "" {
+		t.Fatalf("region selector = %#v, want queued with reason", region)
 	}
 }
 
@@ -148,7 +188,11 @@ func TestListMediaDevicesFallsBackWhenProviderFails(t *testing.T) {
 	if !strings.Contains(inventory.Microphones[0].UnavailableReason, "CoreAudio permission unavailable") {
 		t.Fatalf("fallback microphone reason = %q, want provider error", inventory.Microphones[0].UnavailableReason)
 	}
-	if inventory.Enhancement.Available || inventory.Enhancement.Capability != CapabilityNativeQueued {
+	if rnnoise.Available() {
+		if !inventory.Enhancement.Available || inventory.Enhancement.Capability != CapabilityEnumerated {
+			t.Fatalf("fallback enhancement = %#v, want available native rnnoise", inventory.Enhancement)
+		}
+	} else if inventory.Enhancement.Available || inventory.Enhancement.Capability != CapabilityNativeQueued {
 		t.Fatalf("fallback enhancement = %#v, want queued unavailable", inventory.Enhancement)
 	}
 }

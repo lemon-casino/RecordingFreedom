@@ -11,6 +11,7 @@ export type {
     CameraRequest,
     CaptureSourceType,
     Session,
+    SourceGeometry,
     StartRequest,
     StatusEvent
 } from "./models.js";

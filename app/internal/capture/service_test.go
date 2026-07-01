@@ -42,10 +42,10 @@ func TestDarwinWindowRecordingCapabilityAvailable(t *testing.T) {
 	}
 }
 
-func TestDarwinProgramRecordingCapabilityAvailable(t *testing.T) {
+func TestDarwinProgramRecordingCapabilityQueued(t *testing.T) {
 	capability := applicationRecordingCapability("darwin")
-	if capability.Status != StatusAvailable {
-		t.Fatalf("darwin program recording status = %q, want %q", capability.Status, StatusAvailable)
+	if capability.Status != StatusQueued {
+		t.Fatalf("darwin program recording status = %q, want %q", capability.Status, StatusQueued)
 	}
 	if capability.Backend != "ScreenCaptureKit" {
 		t.Fatalf("darwin program recording backend = %q, want ScreenCaptureKit", capability.Backend)

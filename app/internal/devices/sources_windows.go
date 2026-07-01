@@ -21,6 +21,7 @@ var (
 	procGetWindowTextLengthW     = user32.NewProc("GetWindowTextLengthW")
 	procGetWindowTextW           = user32.NewProc("GetWindowTextW")
 	procGetWindowThreadProcessID = user32.NewProc("GetWindowThreadProcessId")
+	procGetWindowRect            = user32.NewProc("GetWindowRect")
 	procIsWindowVisible          = user32.NewProc("IsWindowVisible")
 	procIsIconic                 = user32.NewProc("IsIconic")
 	procGetShellWindow           = user32.NewProc("GetShellWindow")
@@ -90,6 +91,8 @@ func listDisplaySources() []CaptureSource {
 			Type:         SourceScreen,
 			Name:         name,
 			Subtitle:     subtitle,
+			X:            int(info.Monitor.Left),
+			Y:            int(info.Monitor.Top),
 			Width:        width,
 			Height:       height,
 			NativeID:     deviceName,
@@ -129,12 +132,22 @@ func listWindowSources() []CaptureSource {
 		if process != "" {
 			subtitle = process
 		}
+		rect := windowRect(hwnd)
+		width := int(rect.Right - rect.Left)
+		height := int(rect.Bottom - rect.Top)
+		if width > 0 && height > 0 {
+			subtitle = fmt.Sprintf("%s · %d x %d", subtitle, width, height)
+		}
 
 		sources = append(sources, CaptureSource{
 			ID:         fmt.Sprintf("window:%x", hwnd),
 			Type:       SourceWindow,
 			Name:       title,
 			Subtitle:   subtitle,
+			X:          int(rect.Left),
+			Y:          int(rect.Top),
+			Width:      width,
+			Height:     height,
 			NativeID:   fmt.Sprintf("hwnd:%x", hwnd),
 			ProcessID:  int(pid),
 			Available:  true,
@@ -226,6 +239,15 @@ func windowTitle(hwnd uintptr) string {
 		return ""
 	}
 	return strings.TrimSpace(winapi.UTF16ToString(buffer[:copied]))
+}
+
+func windowRect(hwnd uintptr) winRect {
+	var rect winRect
+	ok, _, _ := procGetWindowRect.Call(hwnd, uintptr(unsafe.Pointer(&rect)))
+	if ok == 0 {
+		return winRect{}
+	}
+	return rect
 }
 
 func processName(pid uint32) string {

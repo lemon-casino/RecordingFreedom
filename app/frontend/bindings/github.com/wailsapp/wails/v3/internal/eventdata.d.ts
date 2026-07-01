@@ -7,12 +7,20 @@ import type { Events } from "@wailsio/runtime";
 
 // eslint-disable-next-line @typescript-eslint/ban-ts-comment
 // @ts-ignore: Unused imports
+import type * as main$0 from "../../../../lemon-casino/RecordingFreedom/app/models.js";
+// eslint-disable-next-line @typescript-eslint/ban-ts-comment
+// @ts-ignore: Unused imports
 import type * as recording$0 from "../../../../lemon-casino/RecordingFreedom/app/internal/recording/models.js";
+// eslint-disable-next-line @typescript-eslint/ban-ts-comment
+// @ts-ignore: Unused imports
+import type * as settings$0 from "../../../../lemon-casino/RecordingFreedom/app/internal/settings/models.js";
 
 declare module "@wailsio/runtime" {
     namespace Events {
         interface CustomEvents {
+            "capture.region.selected": main$0.RegionSelectionResult;
             "recording.status": recording$0.StatusEvent;
+            "settings.changed": settings$0.Settings;
         }
     }
 }

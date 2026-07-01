@@ -13,6 +13,7 @@ env:
   NODE_VERSION: "24"
   WAILS_VERSION: "v3.0.0-alpha2.109"
   APP_DIR: app
+  RNNOISE_TAG: rnnoise_native
 
 jobs:
   validate:
@@ -77,6 +78,16 @@ jobs:
         working-directory: ${{ env.APP_DIR }}
         run: go run -tags gtk3 ./cmd/preview-smoke
 
+      - name: Verify release workflow gates
+        working-directory: ${{ env.APP_DIR }}
+        run: go run ./cmd/release-config-check
+
+      - name: Run desktop dependency doctor
+        working-directory: ${{ env.APP_DIR }}
+        env:
+          CGO_ENABLED: "1"
+        run: go run -tags "gtk3 ${RNNOISE_TAG}" ./cmd/desktop-doctor -require-rnnoise
+
   build:
     name: Build ${{ matrix.name }}
     runs-on: ${{ matrix.os }}
@@ -115,6 +126,16 @@ jobs:
             libgtk-3-dev \
             libwebkit2gtk-4.1-dev
 
+      - name: Enable Windows cgo toolchain
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          if (!(Test-Path "C:\msys64\usr\bin\bash.exe")) {
+            throw "MSYS2 is required for the Windows RNNoise cgo build but was not found at C:\msys64"
+          }
+          & "C:\msys64\usr\bin\bash.exe" -lc "pacman -S --noconfirm --needed mingw-w64-x86_64-gcc"
+          "C:\msys64\mingw64\bin" | Out-File -FilePath $env:GITHUB_PATH -Append
+
       - name: Install Wails v3 CLI
         working-directory: ${{ env.APP_DIR }}
         shell: bash
@@ -130,14 +151,31 @@ jobs:
         working-directory: ${{ env.APP_DIR }}/frontend
         run: npm ci
 
+      - name: Prepare Windows FFmpeg tool
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: ./scripts/ensure-windows-ffmpeg.ps1
+
       - name: Build app
         working-directory: ${{ env.APP_DIR }}
         shell: bash
         run: |
           if [ "${{ runner.os }}" = "Linux" ]; then
-            wails3 build -tags gtk3
+            CGO_ENABLED=1 wails3 build -tags "gtk3 ${RNNOISE_TAG}"
           else
-            wails3 build
+            CGO_ENABLED=1 wails3 build -tags "${RNNOISE_TAG}"
+          fi
+
+      - name: Run desktop dependency doctor
+        working-directory: ${{ env.APP_DIR }}
+        shell: bash
+        run: |
+          if [ "${{ runner.os }}" = "Windows" ]; then
+            CGO_ENABLED=1 go run -tags "${RNNOISE_TAG}" ./cmd/desktop-doctor -require-video -require-rnnoise
+          elif [ "${{ runner.os }}" = "Linux" ]; then
+            CGO_ENABLED=1 go run -tags "gtk3 ${RNNOISE_TAG}" ./cmd/desktop-doctor -require-rnnoise
+          else
+            CGO_ENABLED=1 go run -tags "${RNNOISE_TAG}" ./cmd/desktop-doctor -require-rnnoise
           fi
 
       - name: Stage release artifact
@@ -146,7 +184,16 @@ jobs:
           set -euo pipefail
           mkdir -p release-out
           if [ "${{ runner.os }}" = "Windows" ]; then
-            cp "${APP_DIR}/bin/recordingfreedom.exe" "release-out/RecordingFreedom-${{ matrix.name }}-${{ github.ref_name }}.exe"
+            portable_dir="release-out/RecordingFreedom-${{ matrix.name }}-${{ github.ref_name }}"
+            mkdir -p "${portable_dir}/tools"
+            cp "${APP_DIR}/bin/recordingfreedom.exe" "${portable_dir}/recordingfreedom.exe"
+            cp "${APP_DIR}/tools/ffmpeg.exe" "${portable_dir}/tools/ffmpeg.exe"
+            if [ -f "${APP_DIR}/tools/ffprobe.exe" ]; then
+              cp "${APP_DIR}/tools/ffprobe.exe" "${portable_dir}/tools/ffprobe.exe"
+            fi
+            cp "${APP_DIR}/tools/THIRD_PARTY_FFMPEG.txt" "${portable_dir}/tools/THIRD_PARTY_FFMPEG.txt"
+            powershell -NoProfile -Command "Compress-Archive -Path '${portable_dir}/*' -DestinationPath 'release-out/RecordingFreedom-${{ matrix.name }}-${{ github.ref_name }}-portable.zip' -Force"
+            rm -rf "${portable_dir}"
           else
             cp "${APP_DIR}/bin/recordingfreedom" "release-out/RecordingFreedom-${{ matrix.name }}-${{ github.ref_name }}"
             chmod +x "release-out/RecordingFreedom-${{ matrix.name }}-${{ github.ref_name }}"
@@ -167,6 +214,11 @@ jobs:
               shasum -a 256 RecordingFreedom-* > "SHA256SUMS-${{ matrix.name }}.txt"
             fi
           )
+
+      - name: Verify Windows portable artifact
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: ./scripts/verify-windows-portable.ps1 -ZipPath "release-out/RecordingFreedom-${{ matrix.name }}-${{ github.ref_name }}-portable.zip"
 
       - name: Upload release artifact
         uses: actions/upload-artifact@v5
@@ -209,17 +261,17 @@ jobs:
           - Capsule recorder UI shell and tray/settings windows.
           - Simplified Chinese / English global language switching.
           - Settings persistence, app-managed data/video storage, storage health, preflight, recovery scan, and capability matrix.
-          - Mock .rfrec package flow for UI/package validation.
+          - Explicit mock .rfrec package flow for UI/package validation.
           - No-GUI preview smoke for settings, storage, preflight, mock start/pause/resume/stop, ready manifest, RNNoise/camera/PIP manifest contract, and recovery scan.
-          - Developer audio smoke for Windows WASAPI microphone and system-loopback sidecar capture; not yet connected to the full screen recording backend.
-          - RNNoise native DSP and the recording native-audio runtime are covered by the release gate as focused native contracts.
+          - Developer audio smoke for Windows WASAPI microphone and system-loopback capture.
+          - Windows FFmpeg desktop video writer contract for screen/all-screen/region/locked-window capture; enabled WASAPI system audio and microphone tracks are muxed into the final screen.mp4 at stop, and the Windows preview artifact is staged as a portable zip with tools/ffmpeg.exe.
+          - RNNoise native DSP is compiled into release artifacts with the rnnoise_native cgo build tag; desktop-doctor -require-rnnoise is a release build gate.
           - Windows, macOS, and Linux Wails build artifacts.
 
           Not included yet:
-          - End-to-end verified native recording. macOS ScreenCaptureKit display/window/program capture is wired in code but still needs real-device smoke validation; Windows.Graphics.Capture and PipeWire are not complete.
-          - Full recording-backend integration for real audio tracks.
-          - RNNoise exposed as an end-to-end app recording noise suppression capability.
-          - Camera sidecar capture and PIP export.
+          - End-to-end verified native recording on every desktop platform. macOS ScreenCaptureKit display/window/single-display region capture is wired in code but still needs real-device smoke validation; Windows portable artifacts still need clean-machine video-smoke validation after artifact download; PipeWire media writer is not complete.
+          - Cross-platform long-recording audio sync validation. Windows local smoke has passed 1 minute, 5 minute, and 20 minute recording with stop-time mux into screen.mp4; macOS system audio is wired through ScreenCaptureKit mux and still needs real-device smoke; Linux audio capture is queued.
+          - Camera sidecar capture and PIP export are paused until video recording and voice/audio recording are accepted.
           - Signed installers, notarization, or Linux packages.
           NOTES
 

@@ -15,6 +15,7 @@ const (
 
 	BackendMockPackage            = "mock-package"
 	BackendScreenCaptureKit       = "screencapturekit"
+	BackendFFmpegDesktopCapture   = "ffmpeg-desktop-capture"
 	BackendWindowsGraphicsCapture = "windows-graphics-capture"
 	BackendPipeWirePortal         = "pipewire-portal"
 	BackendAudioOnlyNative        = "audio-only-native"
@@ -77,12 +78,14 @@ func (r BackendRegistry) WithNativeBackend(id string, factory BackendFactory) Ba
 
 func (r BackendRegistry) Select(packages *recpackage.Service, platform string, requested string) Backend {
 	switch normalizeBackendRequest(requested) {
-	case "", "auto", "mock", BackendMockPackage:
-		return NewMockBackend(packages)
-	case "native":
+	case "", "auto", "native":
 		return r.nativeOrQueued(packages, nativeBackendID(platform))
+	case "mock", BackendMockPackage:
+		return NewMockBackend(packages)
 	case BackendScreenCaptureKit, "sck":
 		return r.nativeOrQueued(packages, BackendScreenCaptureKit)
+	case BackendFFmpegDesktopCapture, "ffmpeg", "ffmpeg-desktop":
+		return r.nativeOrQueued(packages, BackendFFmpegDesktopCapture)
 	case BackendWindowsGraphicsCapture, "wgc":
 		return r.nativeOrQueued(packages, BackendWindowsGraphicsCapture)
 	case BackendPipeWirePortal, "pipewire":
@@ -119,7 +122,7 @@ func nativeBackendID(platform string) string {
 	case "darwin":
 		return BackendScreenCaptureKit
 	case "windows":
-		return BackendWindowsGraphicsCapture
+		return BackendFFmpegDesktopCapture
 	case "linux":
 		return BackendPipeWirePortal
 	default:

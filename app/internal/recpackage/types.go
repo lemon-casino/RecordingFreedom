@@ -7,35 +7,36 @@ import (
 )
 
 const (
-	AppName              = "RecordingFreedom"
-	ManifestFile         = "manifest.json"
-	AudioDiagnosticsFile = "audio-diagnostics.json"
-	VideoDiagnosticsFile = "video-diagnostics.json"
-	ScreenVideoFile      = "screen.mp4"
-	AudioOnlyFile        = "audio.m4a"
-	AudioOnlyWAVFile     = "audio.wav"
-	SystemAudioFile      = "system-audio.wav"
-	MicrophoneAudioFile  = "microphone.wav"
-	WebcamVideoFile      = "webcam.mov"
-	MockScreenFile       = "screen.mock.txt"
-	CacheDir             = "cache"
-	ExportsDir           = "exports"
-	PackageDirSuffix     = ".rfrec"
-	StatusRecording      = "recording"
-	StatusPaused         = "paused"
-	StatusFinalizing     = "finalizing"
-	StatusReady          = "ready"
-	StatusRecoverable    = "recoverable"
-	StatusFailed         = "failed"
-	NoiseSuppressionOn   = "rnnoise"
-	NoiseSuppressionOff  = "off"
-	TimelineBaseMock     = "mock"
-	TimelineBaseMedia    = "media-timestamp"
-	TimelineBasePlatform = "platform-start-timestamp"
-	AudioStorageSidecar  = "sidecar"
-	AudioStorageMuxed    = "muxed"
-	RecordingModeScreen  = "screen"
-	RecordingModeAudio   = "audio-only"
+	AppName                = "RecordingFreedom"
+	ManifestFile           = "manifest.json"
+	AudioDiagnosticsFile   = "audio-diagnostics.json"
+	VideoDiagnosticsFile   = "video-diagnostics.json"
+	ScreenVideoFile        = "screen.mp4"
+	AudioOnlyFile          = "audio.m4a"
+	AudioOnlyWAVFile       = "audio.wav"
+	SystemAudioFile        = "system-audio.wav"
+	MicrophoneAudioFile    = "microphone.wav"
+	WebcamVideoFile        = "webcam.mov"
+	WindowsWebcamVideoFile = "webcam.mp4"
+	MockScreenFile         = "screen.mock.txt"
+	CacheDir               = "cache"
+	ExportsDir             = "exports"
+	PackageDirSuffix       = ".rfrec"
+	StatusRecording        = "recording"
+	StatusPaused           = "paused"
+	StatusFinalizing       = "finalizing"
+	StatusReady            = "ready"
+	StatusRecoverable      = "recoverable"
+	StatusFailed           = "failed"
+	NoiseSuppressionOn     = "rnnoise"
+	NoiseSuppressionOff    = "off"
+	TimelineBaseMock       = "mock"
+	TimelineBaseMedia      = "media-timestamp"
+	TimelineBasePlatform   = "platform-start-timestamp"
+	AudioStorageSidecar    = "sidecar"
+	AudioStorageMuxed      = "muxed"
+	RecordingModeScreen    = "screen"
+	RecordingModeAudio     = "audio-only"
 )
 
 type Package struct {
@@ -85,9 +86,19 @@ type ManifestMedia struct {
 }
 
 type ManifestSource struct {
-	Type string `json:"type"`
-	ID   string `json:"id"`
-	Name string `json:"name,omitempty"`
+	Type     string                  `json:"type"`
+	ID       string                  `json:"id"`
+	Name     string                  `json:"name,omitempty"`
+	Geometry *ManifestSourceGeometry `json:"geometry,omitempty"`
+}
+
+type ManifestSourceGeometry struct {
+	X            int    `json:"x"`
+	Y            int    `json:"y"`
+	Width        int    `json:"width"`
+	Height       int    `json:"height"`
+	DisplayIndex int    `json:"displayIndex,omitempty"`
+	NativeID     string `json:"nativeId,omitempty"`
 }
 
 type ManifestAudio struct {
@@ -158,13 +169,14 @@ type CreateMockRequest struct {
 }
 
 type CreateNativeRequest struct {
-	CreatedAt time.Time
-	Status    string
-	Backend   string
-	Source    ManifestSource
-	Recording recordingprofile.Profile
-	Audio     ManifestAudio
-	Camera    ManifestCamera
+	CreatedAt       time.Time
+	Status          string
+	Backend         string
+	Source          ManifestSource
+	Recording       recordingprofile.Profile
+	Audio           ManifestAudio
+	Camera          ManifestCamera
+	WebcamVideoPath string
 }
 
 type CreateAudioOnlyRequest struct {

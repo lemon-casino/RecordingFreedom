@@ -3,6 +3,7 @@ package appdata
 import (
 	"os"
 	"path/filepath"
+	"sync"
 	"testing"
 )
 
@@ -65,6 +66,37 @@ func TestStorageStatusProbesManagedVideoDir(t *testing.T) {
 	}
 	if status.FreeSpaceKnown && status.AvailableBytes == 0 {
 		t.Fatalf("free space is known but zero: %#v", status)
+	}
+}
+
+func TestStorageStatusConcurrentProbesDoNotCollide(t *testing.T) {
+	root := t.TempDir()
+	service := NewService(root)
+
+	const workers = 16
+	var wg sync.WaitGroup
+	errs := make(chan error, workers)
+	for range workers {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			status, err := service.StorageStatus()
+			if err != nil {
+				errs <- err
+				return
+			}
+			if !status.Writable || status.Status == StorageStatusBlocked {
+				errs <- os.ErrPermission
+			}
+		}()
+	}
+	wg.Wait()
+	close(errs)
+
+	for err := range errs {
+		if err != nil {
+			t.Fatalf("concurrent StorageStatus() probe failed: %v", err)
+		}
 	}
 }
 

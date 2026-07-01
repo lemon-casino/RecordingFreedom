@@ -6,6 +6,7 @@ import (
 	"log"
 
 	"github.com/lemon-casino/RecordingFreedom/app/internal/recording"
+	"github.com/lemon-casino/RecordingFreedom/app/internal/settings"
 	"github.com/wailsapp/wails/v3/pkg/application"
 )
 
@@ -22,6 +23,8 @@ var appIcon []byte
 
 func init() {
 	application.RegisterEvent[recording.StatusEvent]("recording.status")
+	application.RegisterEvent[RegionSelectionResult]("capture.region.selected")
+	application.RegisterEvent[settings.Settings]("settings.changed")
 }
 
 func main() {
@@ -46,7 +49,11 @@ func main() {
 
 	capsuleWindow := createCapsuleWindow(app)
 	settingsWindow := createSettingsWindow(app)
+	regionOverlayWindow := createRegionOverlayWindow(app)
+	screenIndicatorWindow := createScreenIndicatorWindow(app)
 	recordingFreedom.setSettingsWindow(settingsWindow)
+	recordingFreedom.setRegionOverlayWindow(regionOverlayWindow)
+	recordingFreedom.setScreenIndicatorWindow(screenIndicatorWindow)
 	configureSystemTray(app, capsuleWindow, settingsWindow)
 
 	if err := app.Run(); err != nil {

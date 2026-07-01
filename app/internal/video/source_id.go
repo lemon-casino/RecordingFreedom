@@ -6,11 +6,16 @@ import (
 )
 
 const darwinDisplaySourcePrefix = "screen:display-"
+const darwinDisplayNativeIDPrefix = "cgdisplay:"
 const darwinWindowSourcePrefix = "window:"
 const darwinApplicationSourcePrefix = "application:"
 
 func DarwinDisplayID(sourceID string) (uint32, bool) {
 	return parseDarwinUint32SourceID(sourceID, darwinDisplaySourcePrefix)
+}
+
+func DarwinDisplayNativeID(nativeID string) (uint32, bool) {
+	return parseDarwinUint32SourceID(nativeID, darwinDisplayNativeIDPrefix)
 }
 
 func DarwinWindowID(sourceID string) (uint32, bool) {

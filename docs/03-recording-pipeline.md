@@ -128,6 +128,8 @@ manifest 里所有媒体路径必须是包内相对路径。
 
 当前 `recording.NormalizeStartRequest()` 和 `recpackage` 的归一化会保证：关闭的系统声音、麦克风、摄像头不会把旧 device id 写入 manifest；RNNoise 只在麦克风开启时可能写为 `rnnoise`；摄像头关闭时 PIP preset 固定为 `off`。
 
+默认设置保持系统声音、麦克风和 RNNoise 关闭，只保留默认设备 ID 作为用户后续开启时的选择记忆。这样 preview 首次启动不会把用户尚未开启的音频/降噪链路显示成正在生效；从当前发布门禁开始，artifact 本身必须带 `rnnoise_native` 构建并通过 `desktop-doctor -require-rnnoise`。
+
 `recpackage.WriteManifest()` 会在摄像头关闭时同时清空 `webcamVideoPath`、`webcamStartOffsetMs` 和 webcam sync track，防止关闭摄像头后保留旧 sidecar 或旧 offset。
 
 当前 `internal/recordingprofile` 会保证 manifest 中 `recording.quality`、`recording.fps`、`recording.captureCursor`、`recording.countdownSeconds` 使用同一套默认值和归一化规则。真实编码后端必须消费这些值，不能在平台层另起一套不兼容的质量/FPS 规则。
@@ -147,19 +149,19 @@ manifest 里所有媒体路径必须是包内相对路径。
 
 当前默认实现：
 
-- `mock-package`：生成 `.rfrec` 包和 `screen.mock.txt`，manifest 标记 `diagnostics.mock = true`、`audio.mockPipeline = true`。它只用于 UI shell 和包结构验证，不代表真实录制能力。
-- backend registry：`SelectBackend()` 先解析 `auto`、`mock-package`、`native`、`sck`、`wgc` 和 `pipewire`，再从 registry 查找已注册的真实平台 factory；未注册时回退到 queued native backend，避免 UI 或服务层误报可录制。
-- queued native backend：通过 `RECORDINGFREEDOM_RECORDING_BACKEND=native` 或显式 backend ID 选择，按平台暴露 `screencapturekit`、`windows-graphics-capture` 或 `pipewire-portal` ID；未注册真实实现时只用于预检阻断和后续替换点，不创建包、不写媒体。
+- `mock-package`：生成 `.rfrec` 包和 `screen.mock.txt`，manifest 标记 `diagnostics.mock = true`、`audio.mockPipeline = true`。它只用于显式 preview smoke、UI shell 和包结构验证，不代表真实录制能力，也不是桌面默认录制路径。
+- backend registry：`SelectBackend()` 先解析 `auto`、`native`、`mock-package`、`sck`、`wgc` 和 `pipewire`，再从 registry 查找已注册的真实平台 factory；默认值、`auto` 和 `native` 都按当前平台选择 native backend，`mock`/`mock-package` 才显式选择 mock。
+- queued native backend：通过默认值、`auto`、`native` 或显式 backend ID 选择，按平台暴露 `screencapturekit`、`ffmpeg-desktop-capture`、`windows-graphics-capture` 或 `pipewire-portal` ID；未注册真实实现时只用于预检阻断和后续替换点，不创建包、不写媒体。
 
-真实平台实现接入时应调用 `recording.RegisterNativeBackend("<backend-id>", factory)` 注册 factory。factory 返回的 backend 仍必须遵守同一个 `Backend` 接口、`CreateNativeWritePlan()`、`BackendStopResult.SyncDiagnostics` 和 ready 前媒体门禁；不能绕过 `RecordingService` 直接写 `ready`。推荐平台实现直接返回 `recording.NewNativeRuntimeBackend()`，只提供 ScreenCaptureKit/WGC/PipeWire 的 video/audio session factory。
+真实平台实现接入时应调用 `recording.RegisterNativeBackend("<backend-id>", factory)` 注册 factory。factory 返回的 backend 仍必须遵守同一个 `Backend` 接口、`CreateNativeWritePlan()`、`BackendStopResult.SyncDiagnostics` 和 ready 前媒体门禁；不能绕过 `RecordingService` 直接写 `ready`。推荐平台实现直接返回 `recording.NewNativeRuntimeBackend()`，只提供 ScreenCaptureKit/FFmpeg/PipeWire 的 video/audio session factory。
 
 真实 native backend 开始采样前必须调用 `recording.CreateNativeWritePlan()` 初始化包和写盘计划；该 helper 内部统一归一化 `StartRequest` 并调用 `recpackage.CreateNative()`：
 
 - manifest 先写 `recording`，`screenVideoPath` 固定为 `screen.mp4`。
 - 正式方向是优先把屏幕视频、系统声音和麦克风写进同一个主媒体 `screen.mp4`，让用户拿到的默认录制文件天然音画合一。
 - `system-audio.wav` / `microphone.wav` 保留为过渡、诊断、恢复或平台 fallback sidecar；`systemAudioStorage` / `microphoneAudioStorage` 记录 `sidecar` 或 `muxed`，当平台 writer 已经把对应音轨 mux 进 `screen.mp4` 后，manifest 和 ready 门禁不会强迫重复写两份音频。
-- 单独录音使用 `recpackage.CreateAudioOnly()` 初始化 `recordingMode: "audio-only"` 包，默认主媒体为 `audio.m4a`；系统声音和麦克风声明为 `muxed` 时会指向同一个 `audioPath`，ready 门禁会探测 `audio.m4a` 的 `soun` 音轨，而不是要求 `screen.mp4`。在 AAC/M4A writer 和混音器落地前，`audio-smoke` 会使用明确的 WAV fallback：单流写 `audio.wav`，双流保留 `system-audio.wav` / `microphone.wav` 分轨 sidecar，并在 manifest 中如实标记 `sidecar`。
-- 摄像头开启时 `webcamVideoPath` 固定为 `webcam.mov`；摄像头关闭时不写 webcam 路径。
+- 单独录音使用 `recpackage.CreateAudioOnly()` 初始化 `recordingMode: "audio-only"` 包，默认主媒体为 `audio.m4a`；停止阶段会通过 FFmpeg 把包内 WAV sidecar 封装为 AAC/M4A 主音频。系统声音和麦克风声明为 `muxed` 时会指向同一个 `audioPath`，ready 门禁会探测 `audio.m4a` 的 `soun` 音轨，而不是要求 `screen.mp4`。单流采集期间先写 `audio.wav` sidecar，双流采集期间保留 `system-audio.wav` / `microphone.wav` 分轨 sidecar，最终 manifest 指向 `audio.m4a`，sidecar 继续作为恢复和诊断证据留在包内。
+- 摄像头开启时 `webcamVideoPath` 按后端写入：macOS/通用默认 `webcam.mov`，Windows FFmpeg DirectShow sidecar 使用 `webcam.mp4`；摄像头关闭时不写 webcam 路径。
 - `cache/` 和 `exports/` 目录会提前创建。
 - 返回的绝对路径只允许指向当前 `.rfrec` 包内的 screen、webcam、audio diagnostics、video diagnostics 和 cache/export 目录。
 - `CreateNativeWritePlan()` 不创建媒体文件，也不写 mock marker；真实后端必须在采样后让 `screen.mp4` 持续增长。
@@ -178,7 +180,8 @@ manifest 里所有媒体路径必须是包内相对路径。
 后续真实实现命名建议：
 
 - `screencapturekit`：macOS ScreenCaptureKit。
-- `windows-graphics-capture`：Windows.Graphics.Capture。
+- `ffmpeg-desktop-capture`：Windows FFmpeg gdigrab desktop/window writer。
+- `windows-graphics-capture`：Windows.Graphics.Capture 兼容 alias，保留给后续原生 WGC/Media Foundation writer。
 - `pipewire-portal`：XDG Desktop Portal + PipeWire。
 
 macOS：
@@ -189,18 +192,18 @@ macOS：
 - 麦克风使用 AVFoundation 或 ScreenCaptureKit 可用能力采集，并进入统一音频管线。
 - 摄像头使用 AVFoundation 录 sidecar。
 - 编码优先 H.264/AAC，使用系统硬件编码能力。
-- 当前已接入 ScreenCaptureKit display/window/program video session：`screen:display-<CGDirectDisplayID>` 会映射为 `SCDisplay`，`window:<CGWindowID>` 会映射为 `SCWindow`，`application:<pid>` 会映射为该 PID 当前最大可见 `SCWindow`，三者均通过 `SCStream` 接收 screen sample buffer，并用 `AVAssetWriter` 持续写入包内 `screen.mp4`；系统声音开启时，ScreenCaptureKit audio sample 会写入同一个 `screen.mp4` 的 AAC 音轨，manifest 使用 `systemAudioStorage: "muxed"`。`Stop()` 会写入 `video-diagnostics.json` 并返回 manifest sync diagnostics。麦克风 mux 仍按后续任务推进。
-- 当前已新增 `cmd/video-smoke` 无 UI 验收入口，默认走 `native` backend、自动选择可用屏幕源；也可用 `-source-type=window` 验证窗口录制，或用 `-source-type=application` 验证程序源。系统声音真机验收使用 `-system`。命令会验证真实 `.rfrec` 包、`screen.mp4`、`video-diagnostics.json` 和 manifest sync diagnostics。
+- 当前已接入 ScreenCaptureKit display/window/region video session：`screen:display-<CGDirectDisplayID>` 会映射为 `SCDisplay`，`window:<CGWindowID>` 会映射为 `SCWindow`，单显示器 `region:custom` 会绑定显示器 `NativeID` 并使用 ScreenCaptureKit `sourceRect` crop。它们均通过 `SCStream` 接收 screen sample buffer，并用 `AVAssetWriter` 持续写入包内 `screen.mp4`；系统声音开启时，ScreenCaptureKit audio sample 会写入同一个 `screen.mp4` 的 AAC 音轨，manifest 使用 `systemAudioStorage: "muxed"`。`application:<pid>` 解析代码保留给后续演进，但当前 capability 为 queued，不在初版验收范围内。`Stop()` 会写入 `video-diagnostics.json` 并返回 manifest sync diagnostics。麦克风 mux 仍按后续任务推进。
+- 当前已新增 `cmd/video-smoke` 无 UI 验收入口，默认走 `native` backend、自动选择可用屏幕源；也可用 `-source-type=window` 验证窗口录制，或用 `-source-type=region` 验证 macOS 单显示器区域录制。系统声音真机验收使用 `-system`。命令会验证真实 `.rfrec` 包、`screen.mp4`、`video-diagnostics.json` 和 manifest sync diagnostics。
 
 Windows：
 
-- 屏幕、窗口、程序窗口录制使用 Windows.Graphics.Capture。
+- 默认视频录制使用 `ffmpeg-desktop-capture`，通过 FFmpeg `gdigrab` 录制 screen/all-screen/region/locked-window，并写入包内 `screen.mp4`。`windows-graphics-capture` 作为兼容 alias 保留，后续可替换为原生 WGC/Media Foundation writer。
 - 系统声音使用 WASAPI loopback。
 - 麦克风使用 WASAPI capture。
 - 当前已通过 MMDevice API 枚举 Windows WASAPI render/capture endpoint，并保留 `system-audio:default` / `microphone:default` 作为稳定默认设备 ID；真实 endpoint id 写入 `NativeID`。
-- 当前已新增纯 Go WASAPI capture source：麦克风流会 downmix/resample 为 `48kHz / mono` 后写入 `microphone.wav`；系统声音 loopback source 已在有活动系统播放时写入真实 `system-audio.wav` 样本。长录同步、ready 包集成和完整 app recording backend 接入仍是后续工作。
-- 当前已新增 Windows WGC target 合同并注册到 `NativeRuntimeBackend`：`screen:<display-token>`、`window:<HWND hex>` 和 `application:<pid>` 可被 `internal/video` 解析成平台 capture target。真实 WGC MP4 writer 仍未实现，因此 capability 继续保持 `queued`，preflight 会阻止 UI 和 smoke 误报可录制；绕过 preflight 直接启动也只会得到 failed package，不会写假媒体或 ready manifest。
-- 摄像头使用 Media Foundation，必要时兼容 DirectShow。
+- 当前已新增纯 Go WASAPI capture source：麦克风流会 downmix/resample 为 `48kHz / mono`，系统声音 loopback source 已在有活动系统播放时写入真实样本。Windows 录屏 runtime 会在 FFmpeg 视频旁启动 WASAPI sidecar 写盘，停止阶段再 mux 到主 `screen.mp4`，manifest 将成功 mux 的系统声音和麦克风标记为 `muxed`；长录同步、live PCM pipe、Linux PipeWire 和三平台真机 smoke 仍是后续工作。
+- 当前 Windows `internal/video` 已接入 FFmpeg 分段 writer：`screen:<display-token>` 和 `all-screens:virtual-desktop` 录 desktop，`region:custom` 使用 `offset_x/offset_y/video_size` 裁剪虚拟桌面，`window:<HWND hex>` 使用 `hwnd=` 锁定窗口。pause 会关闭当前 segment，resume 新开 segment，stop 使用 FFmpeg concat 合并为 `screen.mp4`。缺少 `ffmpeg` 时 capability 为 blocked，并写 failed diagnostics，不写假媒体或 ready manifest。
+- 摄像头 sidecar 当前使用 FFmpeg DirectShow writer：`DeviceService` 解析稳定 `camera:dshow:*` ID 和 DirectShow 原生设备名，`RecordingFreedomService` 在预检和启动前补齐 `deviceNativeId`，runtime 与屏幕/音频一起 pause/resume/stop，最终写入包内 `webcam.mp4`。PIP preset 只作为后续预览/导出布局，不阻断 sidecar 录制。
 - 编码优先 Media Foundation H.264/AAC，后续导出可接 FFmpeg。
 
 Linux：
@@ -213,13 +216,36 @@ Linux：
 
 `DeviceService.ListSources()` 返回统一源模型：
 
-- Screen source：display id、名称、分辨率、scale factor。
-- Window source：window id、应用名、标题、缩略图、进程 id。
+- All screens source：`all-screens:virtual-desktop`，表示多显示器虚拟桌面；manifest 必须记录虚拟桌面 `x/y/width/height`。当前用户菜单只在该源被平台标记为真实可录时展示。
+- Screen source：单个显示器 `display id`、名称、分辨率、虚拟桌面坐标、scale factor。
+- Region source：`region:custom` 或后续 `region:<id>`，表示用户框选的自定义区域；manifest 必须记录区域 `x/y/width/height`，坐标基于虚拟桌面。
+- Locked window source：window id、应用名、标题、缩略图、进程 id；录制时锁定这个原生窗口 target，而不是跟随当前前台窗口。
 - Application source：应用 id、应用名、进程组、可录窗口列表。
 
 程序录制默认选择该程序的主窗口；如果平台支持更强的 app capture，再在后端升级，不改变前端接口。
 
-当前 macOS build-tag 已有 CoreGraphics source enumeration，并已把 `screen:display-<CGDirectDisplayID>`、`window:<CGWindowID>` 和 `application:<pid>` 映射到 ScreenCaptureKit capture target。`application:<pid>` 首版选择该 PID 当前最大可见窗口；后续可升级为多窗口组合或平台 app capture target。当前 Windows build-tag 已有 Win32 source enumeration，并已把 `screen:<display-token>`、`window:<HWND hex>` 和 `application:<pid>` 解析为 WGC target 合同；Windows backend 已注册到统一 runtime，但真实 writer 接入前 capability 仍保持 queued。
+当前 `DeviceService` 已把单个显示器的虚拟桌面坐标带到前端，并暴露 `all-screens:virtual-desktop` 与 `region:custom` 源。区域十字框选 overlay 已落地：前端可拖拽红框选择范围，后端会把选择结果写入 `source.geometry`。同一份 geometry 已进入 `video.CaptureConfig` 和 `video-diagnostics.json` 的 source 节点。macOS 单显示器区域已经接入 ScreenCaptureKit `sourceRect` crop writer：区域必须落在一块显示器内，并携带该显示器 `NativeID`；Objective-C 原生层会在创建 `SCStreamConfiguration` 前用 `CGDisplayBounds` 把虚拟桌面逻辑坐标转换成该显示器本地 `sourceRect`。Windows 区域 crop 已接入 FFmpeg `gdigrab` 的 `offset_x/offset_y/video_size`，框选结果会转换为物理像素矩形后交给 writer。跨显示器区域的 macOS 多屏合成、Linux 区域 crop 和 macOS/Linux `all-screens` 多屏幕合成在真实 writer 完成前仍必须保持 queued/blocked，不能假装可录制。
+
+`RecordingFreedomService.StartRecording()` 和 `RecordingFreedomService.StartAudioOnlyRecording()` 必须执行与 UI 相同的 preflight 门禁；当来源不存在、来源处于 queued、平台 writer capability queued/blocked、存储不可写或音频/摄像头能力 blocked 时，服务入口必须直接返回错误，不允许进入 recorder backend，也不允许创建 `.rfrec` 包。前端按钮的 preflight 只是用户体验层，不能作为唯一防线。
+
+胶囊来源菜单当前只展示真实可启动的全部屏幕入口、单个屏幕、区域和锁定窗口；Application/Program source 合同仍保留给后端和 smoke，但当前不作为用户可选菜单项或能力矩阵项展示。单个屏幕必须按显示器编号展示为 `屏幕 1`、`屏幕 2` / `Screen 1`、`Screen 2`。鼠标移入或键盘聚焦某个单屏来源时，应用会打开独立的 `screen-indicator` 透明置顶窗口，在对应物理屏幕中央显示黑底大号编号；离开菜单项、关闭菜单或选择来源后必须隐藏该标识窗口。标识窗口定位优先按原生源携带的物理屏幕 bounds 匹配 Wails screen，匹配失败再使用 display index 兜底，避免多屏枚举顺序差异导致标识显示到错误屏幕。
+
+区域录制交互验收：
+
+- 点击区域录制后，打开覆盖所有显示器的透明选择 overlay。
+- 光标变为十字，按下鼠标开始选择，移动时显示红色边框和尺寸浮标。
+- 松开鼠标后将当前矩形写入 `source.geometry` 并回到胶囊；小于最小尺寸的矩形应被拒绝。
+- overlay 必须支持 `Esc` 取消，不得创建录制包。
+- 多显示器坐标以虚拟桌面为基准，允许区域跨屏；后端如果暂不支持跨屏区域，必须在 preflight 阻止并提示原因。
+- 当前实现已经完成 overlay 窗口、十字光标、拖拽选框、最小尺寸拒绝、`Esc` 取消和 `capture.region.selected` 事件；框选成功前不会把占位 `region:custom` 切成当前录制源。macOS 单显示器区域会绑定到对应 `cgdisplay:<id>` 并交给 ScreenCaptureKit crop writer；Windows 区域会使用物理像素矩形交给 FFmpeg `gdigrab` crop writer。下一步是补 Linux PipeWire region crop，以及 macOS/Linux 跨显示器区域的多屏合成 writer。
+
+锁定窗口录制验收：
+
+- UI 选择的是具体窗口 target，不是“当前活动窗口”。
+- Windows 使用 `HWND`，macOS 使用 `CGWindowID/SCWindow`，Linux 后续使用 Portal/PipeWire 可恢复的窗口 token。
+- 被锁定窗口最小化、关闭或权限丢失时，录制必须停止或进入 failed diagnostics，不能 silently 改录其他窗口。
+
+当前 macOS build-tag 已有 CoreGraphics source enumeration，并已把 `screen:display-<CGDirectDisplayID>` 和 `window:<CGWindowID>` 映射到 ScreenCaptureKit capture target。`application:<pid>` 解析代码保留给后续演进，但当前 capability 标记为 queued，菜单不展示，初版验收不把程序录制算作完成项。当前 Windows build-tag 已有 Win32 source enumeration，并已把 `screen:<display-token>`、`all-screens:virtual-desktop`、`region:custom` 和 `window:<HWND hex>` 解析到 FFmpeg desktop writer；程序来源合同保留但当前菜单不展示，建议用户选择具体锁定窗口。
 
 ## 音频管线
 
@@ -253,13 +279,13 @@ Linux：
 - `Diagnostics` / `WriteDiagnostics()` 已定义 `audio-diagnostics.json` 合同，记录 target format、system audio、microphone、enhancement 和 mixer 统计。
 - `WAVSink` 已定义首版 audio sidecar 写盘策略：系统声音写 `system-audio.wav`，麦克风写 `microphone.wav`，两者仍位于 `.rfrec` 包内。它是当前 smoke 和 fallback 路径，不是最终强制架构。
 - ready 门禁会拒绝只有 44-byte WAV header 的音频 sidecar；启用 sidecar 的音频流必须写入至少一个样本，避免无 packet 的系统声音被误标为真实音频。manifest 声明 `muxed` 时，ready 门禁会解析 `screen.mp4` 的 MP4 box 并要求存在 `soun` 音轨，而不是要求重复 sidecar。
-- `CaptureSession` 已把 `CaptureSource -> Pipeline -> WAVSink -> audio-diagnostics.json` 串成可复用运行时，后续 ScreenCaptureKit/WGC/PipeWire backend 只需要启动同一个 session。
+- `CaptureSession` 已把 `CaptureSource -> Pipeline -> WAVSink -> audio-diagnostics.json` 串成可复用运行时，后续 ScreenCaptureKit/FFmpeg/PipeWire backend 只需要启动同一个 session。
 - `recording.CreateAudioCaptureConfig()` 已把 `StartRequest + RecordingWritePlan` 转成统一 `audio.CaptureConfig`，真实后端不需要重复拼接设备、RNNoise、gain、audio sidecar 和 diagnostics 路径。
 - `recording.NativeBackendRuntime` 已把 native `.rfrec` 写盘计划与音频 session 生命周期接起来：真实平台后端创建包后可以统一启动、暂停、恢复和停止音频；暂停会走音频 `Pause()` 并 reset RNNoise；RNNoise 请求在 native suppressor 不可用时会失败并把包标记为 `failed`，不会静默降级成未降噪录制。
 - `NativeBackendRuntime.SyncDiagnostics()` 已把 video/audio runtime diagnostics 转成 manifest `diagnostics.sync` 合同，真实平台后端停止时应直接返回它，让 `RecordingService.Stop()` 统一 patch 和校验。
 - `recording.NativeRuntimeBackend` 已把 `NativeBackendRuntime` 包装成真正的 `recording.Backend`：Start 创建包并启动 video/audio runtime，Pause/Resume 转发到 runtime，Stop flush runtime 并返回 `SyncDiagnostics()`。后续 macOS/Windows/Linux 平台文件只需要注册该 backend factory。
 
-RNNoise native DSP 已迁移为 `internal/audio/rnnoise` cgo 包，并把 C 源码隔离到 `internal/audio/rnnoise/native` 子包：带 `rnnoise_native` 标签的 cgo 构建会链接旧项目 RNNoise + `LikelyVoiceEnhancement`，非 cgo 或未带标签构建返回明确 unavailable，不会假装降噪已生效。RNNoise native DSP 已作为 CI/release gate 的定向测试；preview artifact 仍保持默认构建，直到 RNNoise 接入完整 app recording backend 后再作为用户可用能力发布。本机 Windows 若缺少 `gcc`，只能验证默认 fallback。当前 UI capability 仍保持 queued。
+RNNoise native DSP 已迁移为 `internal/audio/rnnoise` cgo 包，并把 C 源码隔离到 `internal/audio/rnnoise/native` 子包：带 `rnnoise_native` 标签的 cgo 构建会链接旧项目 RNNoise + `LikelyVoiceEnhancement`，非 cgo 或未带标签构建返回明确 unavailable，不会假装降噪已生效。`CaptureService` 和 `DeviceService` 会读取 `rnnoise.Available()`：带标签构建显示 available 并允许预检通过，未带标签的本地开发构建显示 queued/blocked reason。当前 CI/release 的 validate 和三平台 build job 都要求 `rnnoise_native`，并运行 `desktop-doctor -require-rnnoise`；如果目标 runner 不能完成 cgo 编译或 suppressor 创建，preview artifact 不能发布。
 
 ## 单独音频录制
 
@@ -269,7 +295,7 @@ audio-only 录制模式用于只录系统声音、麦克风或麦克风 + RNNois
 - 默认输出使用可流式写入、可恢复的音频容器 `audio.m4a`；平台受限时可使用 `audio.wav` fallback，但必须仍由 manifest 明确记录，不能生成假 screen media。
 - audio-only 可复用同一 `audio.Pipeline`、RNNoise suppressor、pause reset、diagnostics 和 bounded buffer 策略。
 - UI 上作为录制源的一种模式呈现，不和 screen/window/program 源混在一个假 source 里。
-- 当前代码已落地 `recpackage.CreateAudioOnly()`、`audioPath`、主音频媒体 ready 门禁、WAV fallback 门禁和单元测试；`cmd/audio-smoke` 已改为生成带 manifest 的 audio-only `.rfrec` 包，停止后写入 `diagnostics.sync` 并通过 `ValidateReady()` 才标记 `ready`。`RecordingService.StartAudioOnlyRecording()` 和 Wails `StartAudioOnlyRecording()` 后端入口已接入同一状态机，支持开始、暂停、继续、停止和 ready 校验。真实 `audio.m4a` writer、混音/mux、UI 模式入口和三平台 smoke 仍按后续任务推进。
+- 当前代码已落地 `recpackage.CreateAudioOnly()`、`audioPath`、主音频媒体 ready 门禁、WAV sidecar 门禁和单元测试；`cmd/audio-smoke` 会生成带 manifest 的 audio-only `.rfrec` 包，停止后把 sidecar 封装为 `audio.m4a`，写入 `diagnostics.sync`，并通过 `ValidateReady()` 后才标记 `ready`。`RecordingService.StartAudioOnlyRecording()`、Wails `StartAudioOnlyRecording()`、`PreflightAudioOnlyRecording()` 和胶囊来源面板里的视频/音频模式入口已接入同一状态机，支持开始、暂停、继续、停止和 ready 校验。macOS ScreenCaptureKit 的系统声音 mux 只属于视频录制路径，audio-only 预检不会借用它来误报单独录音可用；macOS/Linux audio-only 源仍按后续任务推进。
 
 ## 内存与写盘策略
 
@@ -325,6 +351,8 @@ audio-only 录制模式用于只录系统声音、麦克风或麦克风 + RNNois
 当前已落地第一层恢复扫描、保守恢复和 ready 前媒体门禁：`recording`、`paused`、`finalizing` 状态会标记为 recoverable；manifest 缺失但存在非 0 字节 `screen.*` 文件的包也会标记为 recoverable；停止录制时非 mock 包不能在缺失或 0 字节 screen/webcam 媒体的情况下进入 `ready`。后续真实后端接入后再补容器级媒体 probe、诊断重建和失败原因分级。
 
 ## 后续画中画摄像头
+
+当前阶段摄像头 sidecar 和 PIP 暂停，不参与视频录制与语音/音频录制验收。下面合同只作为后续恢复开发时的长期方向保留。
 
 v1 录制阶段只保证 sidecar 和 offset。后续 PIP 功能分两步：
 

@@ -75,7 +75,7 @@ func run(dataRoot string, keep bool) (smokeReport, error) {
 
 	data := appdata.NewService(dataRoot)
 	settingsService := settings.NewService(data)
-	recorder := recording.NewService(data)
+	recorder := recording.NewServiceWithBackend(data, recording.SelectBackend(recpackage.NewService(), "", recording.BackendMockPackage))
 	deviceService := devices.NewService()
 	captureService := capture.NewService()
 	preflightService := preflight.NewService()

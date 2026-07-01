@@ -23,11 +23,7 @@ func CreateNativeWritePlan(packages *recpackage.Service, backendID string, req B
 		CreatedAt: req.CreatedAt,
 		Status:    recpackage.StatusRecording,
 		Backend:   backendID,
-		Source: recpackage.ManifestSource{
-			Type: string(normalized.SourceType),
-			ID:   normalized.SourceID,
-			Name: normalized.SourceName,
-		},
+		Source:    manifestSourceFromStartRequest(normalized),
 		Recording: normalized.Recording,
 		Audio: recpackage.ManifestAudio{
 			System:                     normalized.Audio.System,
@@ -42,5 +38,37 @@ func CreateNativeWritePlan(packages *recpackage.Service, backendID string, req B
 			DeviceID:  normalized.Camera.DeviceID,
 			PIPPreset: normalized.Camera.PIPPreset,
 		},
+		WebcamVideoPath: webcamVideoFileForBackend(backendID, normalized.Camera.Enabled),
 	})
+}
+
+func webcamVideoFileForBackend(backendID string, enabled bool) string {
+	if !enabled {
+		return ""
+	}
+	switch strings.TrimSpace(strings.ToLower(backendID)) {
+	case BackendFFmpegDesktopCapture, BackendWindowsGraphicsCapture:
+		return recpackage.WindowsWebcamVideoFile
+	default:
+		return recpackage.WebcamVideoFile
+	}
+}
+
+func manifestSourceFromStartRequest(req StartRequest) recpackage.ManifestSource {
+	source := recpackage.ManifestSource{
+		Type: string(req.SourceType),
+		ID:   req.SourceID,
+		Name: req.SourceName,
+	}
+	if req.SourceGeometry != nil {
+		source.Geometry = &recpackage.ManifestSourceGeometry{
+			X:            req.SourceGeometry.X,
+			Y:            req.SourceGeometry.Y,
+			Width:        req.SourceGeometry.Width,
+			Height:       req.SourceGeometry.Height,
+			DisplayIndex: req.SourceGeometry.DisplayIndex,
+			NativeID:     req.SourceGeometry.NativeID,
+		}
+	}
+	return source
 }

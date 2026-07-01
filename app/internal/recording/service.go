@@ -58,6 +58,15 @@ func (s *Service) BackendID() string {
 	return s.backend.ID()
 }
 
+func (s *Service) ActiveBackendID() string {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.session != nil && s.session.Backend != "" {
+		return s.session.Backend
+	}
+	return s.backend.ID()
+}
+
 func (s *Service) ScanPackages() ([]recpackage.RecoverySummary, error) {
 	videoDir, err := s.appData.VideoDir()
 	if err != nil {
