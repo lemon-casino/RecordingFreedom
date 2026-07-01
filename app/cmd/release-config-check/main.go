@@ -111,6 +111,8 @@ var releaseConfigChecks = []configCheck{
 		Name: "Windows portable zip verifies x64 GUI PE metadata",
 		Needles: []string{
 			"Assert-PEMetadata",
+			"Assert-PowerShellScript",
+			"Assert-FileContains",
 			"ExpectedSubsystem 2",
 			"0x8664",
 			"recordingfreedom.exe",

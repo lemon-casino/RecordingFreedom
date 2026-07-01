@@ -132,6 +132,34 @@ function Assert-PEMetadata {
     Write-Host "PE verified: $Path machine=0x$($metadata.Machine.ToString('X4')) subsystem=$($metadata.Subsystem)"
 }
 
+function Assert-PowerShellScript {
+    param([Parameter(Mandatory = $true)][string]$Path)
+
+    $tokens = $null
+    $errors = $null
+    [System.Management.Automation.Language.Parser]::ParseFile($Path, [ref]$tokens, [ref]$errors) | Out-Null
+    if ($errors.Count -gt 0) {
+        $message = ($errors | ForEach-Object { $_.Message }) -join " | "
+        throw "$Path has PowerShell parse errors: $message"
+    }
+    Write-Host "PowerShell script parsed: $Path"
+}
+
+function Assert-FileContains {
+    param(
+        [Parameter(Mandatory = $true)][string]$Path,
+        [Parameter(Mandatory = $true)][string[]]$Needles
+    )
+
+    $content = Get-Content -LiteralPath $Path -Raw
+    foreach ($needle in $Needles) {
+        if (-not $content.Contains($needle)) {
+            throw "$Path is missing required smoke runner text: $needle"
+        }
+    }
+    Write-Host "Smoke runner content verified: $Path"
+}
+
 $zip = Resolve-FullPath $ZipPath
 if (-not (Test-Path -LiteralPath $zip)) {
     throw "Windows portable zip does not exist: $zip"
@@ -206,6 +234,18 @@ if (-not $SkipExecutableCheck) {
         if (-not (Test-Path -LiteralPath $portableSmokePath)) {
             throw "Extracted portable zip is missing tools/run-windows-portable-smoke.ps1"
         }
+        Assert-PowerShellScript -Path $portableSmokePath
+        Assert-FileContains -Path $portableSmokePath -Needles @(
+            "desktop-doctor.exe",
+            "video-smoke.exe",
+            "audio-smoke.exe",
+            "RECORDINGFREEDOM_FFMPEG_PATH",
+            "-source-type=region",
+            "-source-type=window",
+            "-microphone",
+            "-system",
+            "-rnnoise"
+        )
 
         if (Is-WindowsHost) {
             $version = Invoke-VersionCommand -Path $ffmpegPath

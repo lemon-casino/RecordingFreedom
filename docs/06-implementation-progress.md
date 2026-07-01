@@ -347,7 +347,7 @@ CGO_ENABLED=1 go test -tags rnnoise_native ./internal/audio/rnnoise/native ./int
 
 发布产物验收：
 
-- `scripts/verify-windows-portable.ps1` 已增强为解压检查 portable zip：验证 `recordingfreedom.exe` 是 x64 GUI PE，`tools/ffmpeg.exe`、`tools/ffprobe.exe`、`tools/desktop-doctor.exe`、`tools/video-smoke.exe` 和 `tools/audio-smoke.exe` 是 x64 PE，并在 Windows host 上执行 FFmpeg/FFprobe `-version`。
+- `scripts/verify-windows-portable.ps1` 已增强为解压检查 portable zip：验证 `recordingfreedom.exe` 是 x64 GUI PE，`tools/ffmpeg.exe`、`tools/ffprobe.exe`、`tools/desktop-doctor.exe`、`tools/video-smoke.exe` 和 `tools/audio-smoke.exe` 是 x64 PE，并在 Windows host 上执行 FFmpeg/FFprobe `-version`。校验还会解析 `tools/run-windows-portable-smoke.ps1` 并检查 runner 内含 doctor、video-smoke、audio-smoke、FFmpeg 环境变量、区域/窗口/系统声音/麦克风/RNNoise 入口。
 - Windows portable zip 的 release workflow 已新增 clean-machine 验收工具打包：`tools/desktop-doctor.exe`、`tools/video-smoke.exe`、`tools/audio-smoke.exe` 和 `tools/run-windows-portable-smoke.ps1`。该 runner 解压后即可运行，不依赖 Go/Node/Wails 源码环境，默认把 smoke 包写入 portable 根目录下的 `data-smoke/data/video`。
 - 新增 `scripts/verify-windows-preview-release.ps1`：可按 tag 或最近 release 下载 GitHub Windows x64 portable zip 和 `SHA256SUMS-windows-x64*.txt`，校验 SHA256 后复用 `verify-windows-portable.ps1`。该脚本用于 release asset 完整性复验，不替代 clean-machine 真实 screen/region/window 录制 smoke。
 - `v0.1.0-preview.15` Windows portable zip 已用真实 GitHub Release 下载复验通过：SHA256 `99E1EB5C425B925F0F0269EE364C95A4F0CB7278EEE73C8E6D5A31196A8CD7DD` 匹配，`recordingfreedom.exe` 为 x64 GUI PE，`tools/ffmpeg.exe` / `tools/ffprobe.exe` 为 x64 PE 且 `-version` 可执行，`tools/desktop-doctor.exe`、`tools/video-smoke.exe` 和 `tools/audio-smoke.exe` 均为 x64 console PE，`tools/run-windows-portable-smoke.ps1` 已打入 zip。

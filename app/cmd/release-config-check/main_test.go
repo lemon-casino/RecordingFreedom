@@ -98,6 +98,8 @@ func workflowFixture(name string) string {
 	}
 	if strings.Contains(name, "verify-windows-portable.ps1") {
 		builder.WriteString("Assert-PEMetadata\n")
+		builder.WriteString("Assert-PowerShellScript\n")
+		builder.WriteString("Assert-FileContains\n")
 		builder.WriteString("ExpectedSubsystem 2\n")
 		builder.WriteString("0x8664\n")
 		builder.WriteString("recordingfreedom.exe\n")
