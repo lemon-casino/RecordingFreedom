@@ -222,6 +222,18 @@ function App() {
   const sourceSelectionText = sourceSelectionMessage ? formatSourceSelectionMessage(sourceSelectionMessage, copy) : ''
   const isRecording = state === 'recording' || state === 'paused' || state === 'preparing' || state === 'stopping'
   const recordingConfigLocked = isRecording
+  const capsuleExpanded = activePanel !== null || settingsOpen || closePromptOpen
+  const capsuleExpandedHeight = settingsOpen
+    ? 590
+    : closePromptOpen
+      ? 330
+      : activePanel === 'audio'
+        ? 520
+        : activePanel === 'camera'
+          ? 470
+          : activePanel === 'language'
+            ? 300
+            : 520
   const SourceIcon = recordingMode === 'audio' ? Volume2 : sourceIcon[selectedSource.type]
   const sourceTitle = recordingMode === 'audio' ? copy.recordingModes.audio : sourceTypeLabel(selectedSource, copy)
   const sourceSubtitle = recordingMode === 'audio' ? audioOnlySourceMeta(systemAudio, microphone, copy) : sourceName(selectedSource, copy)
@@ -386,8 +398,8 @@ function App() {
 
   useEffect(() => {
     if (isSettingsWindow) return
-    void setCapsuleWindowExpanded(activePanel !== null || settingsOpen || closePromptOpen)
-  }, [activePanel, closePromptOpen, isSettingsWindow, settingsOpen])
+    void setCapsuleWindowExpanded(capsuleExpanded, capsuleExpandedHeight)
+  }, [capsuleExpanded, capsuleExpandedHeight, isSettingsWindow])
 
   useEffect(() => {
     if (recordingMode === 'audio' && activePanel === 'camera') {
@@ -882,7 +894,7 @@ function App() {
   }
 
   return (
-    <main className={`rf-shell ${activePanel || settingsOpen || closePromptOpen ? 'is-expanded' : 'is-collapsed'}`} aria-label={copy.aria.recorderShell}>
+    <main className={`rf-shell ${capsuleExpanded ? 'is-expanded' : 'is-collapsed'}`} aria-label={copy.aria.recorderShell}>
       <section className="recorder-stage" aria-label={copy.aria.recorderControls}>
         <div className={`capsule ${isRecording ? 'capsule-active' : ''}`}>
           <button
@@ -993,7 +1005,7 @@ function App() {
         </div>
 
         {activePanel && (
-          <div className="popover" role="dialog" aria-label={copy.aria.menu(activePanel)}>
+          <div className={`popover panel-${activePanel}`} role="dialog" aria-label={copy.aria.menu(activePanel)}>
             {activePanel === 'source' && (
               <div className="menu-grid source-menu">
                 <div className="mode-toggle" role="group" aria-label={copy.aria.recordingMode}>

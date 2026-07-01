@@ -124,10 +124,10 @@ export type ScreenIndicatorResult = {
   windowBounds: {x: number; y: number; width: number; height: number}
 }
 
-export async function setCapsuleWindowExpanded(expanded: boolean): Promise<void> {
+export async function setCapsuleWindowExpanded(expanded: boolean, expandedHeight = capsuleWindowExpandedHeight): Promise<void> {
   try {
     const position = await WailsWindow.Position()
-    await WailsWindow.SetSize(capsuleWindowWidth, expanded ? capsuleWindowExpandedHeight : capsuleWindowCollapsedHeight)
+    await WailsWindow.SetSize(capsuleWindowWidth, expanded ? expandedHeight : capsuleWindowCollapsedHeight)
     await WailsWindow.SetPosition(position.x, position.y)
   } catch (error) {
     console.info('Using browser capsule window size fallback:', error)

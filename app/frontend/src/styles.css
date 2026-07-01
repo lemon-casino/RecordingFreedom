@@ -17,6 +17,8 @@
   --red-soft: rgba(240, 68, 56, 0.18);
   --amber: #f59e0b;
   --radius-pill: 999px;
+  --shadow-tight: 0 14px 34px rgba(0, 0, 0, 0.26);
+  --shadow-panel: 0 18px 42px rgba(0, 0, 0, 0.34);
 }
 
 * {
@@ -109,7 +111,7 @@ button:disabled {
   border: 1px solid var(--line);
   border-radius: var(--radius-pill);
   background: linear-gradient(180deg, rgba(25, 31, 38, 0.94), rgba(13, 17, 22, 0.92));
-  box-shadow: 0 30px 80px rgba(0, 0, 0, 0.42), inset 0 1px 0 rgba(255, 255, 255, 0.08);
+  box-shadow: var(--shadow-tight), inset 0 1px 0 rgba(255, 255, 255, 0.08);
   backdrop-filter: blur(22px) saturate(150%);
   transition: border-color 180ms ease, box-shadow 180ms ease;
   --wails-draggable: drag;
@@ -119,9 +121,13 @@ button:disabled {
   display: none;
 }
 
+.rf-shell.is-expanded .storage-strip {
+  display: none;
+}
+
 .capsule-active {
   border-color: rgba(240, 68, 56, 0.38);
-  box-shadow: 0 30px 80px rgba(0, 0, 0, 0.42), 0 0 36px rgba(240, 68, 56, 0.12), inset 0 1px 0 rgba(255, 255, 255, 0.08);
+  box-shadow: var(--shadow-tight), 0 0 24px rgba(240, 68, 56, 0.1), inset 0 1px 0 rgba(255, 255, 255, 0.08);
 }
 
 .grabber {
@@ -358,16 +364,33 @@ select:disabled {
   border: 1px solid var(--line);
   border-radius: 22px;
   background: var(--panel-strong);
-  box-shadow: 0 24px 70px rgba(0, 0, 0, 0.45);
+  box-shadow: var(--shadow-panel);
   backdrop-filter: blur(24px) saturate(150%);
   --wails-draggable: no-drag;
   overflow: visible;
+}
+
+.popover.panel-audio,
+.popover.panel-camera {
+  left: 86px;
+  width: 430px;
+}
+
+.popover.panel-source {
+  width: 380px;
 }
 
 .menu-grid,
 .menu-stack {
   display: grid;
   gap: 6px;
+  min-width: 0;
+  width: 100%;
+}
+
+.menu-grid > *,
+.menu-stack > * {
+  min-width: 0;
 }
 
 .source-menu {
@@ -577,9 +600,20 @@ select:disabled {
   display: flex;
   align-items: center;
   justify-content: space-between;
+  gap: 12px;
+  width: 100%;
+  min-width: 0;
   min-height: 44px;
   padding: 6px 8px 6px 12px;
   color: var(--text);
+}
+
+.switch-row span {
+  min-width: 0;
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .switch-row.is-disabled {
@@ -595,6 +629,7 @@ select:disabled {
 }
 
 .switch-row i {
+  flex: 0 0 44px;
   width: 44px;
   height: 26px;
   border: 1px solid var(--line);
@@ -630,6 +665,7 @@ select:disabled {
 
 .field-label {
   display: block;
+  min-width: 0;
   padding: 8px 10px 0;
   color: var(--muted);
   font-size: 11px;
@@ -650,6 +686,7 @@ select {
 .select-menu {
   position: relative;
   width: 100%;
+  min-width: 0;
   --wails-draggable: no-drag;
 }
 
@@ -659,6 +696,7 @@ select {
   justify-content: space-between;
   gap: 12px;
   width: 100%;
+  min-width: 0;
   min-height: 42px;
   padding: 0 12px 0 14px;
   border: 1px solid var(--line);
@@ -695,6 +733,7 @@ select {
   right: 0;
   display: grid;
   max-height: 220px;
+  min-width: 0;
   overflow: auto;
   padding: 6px;
   border: 1px solid rgba(199, 210, 221, 0.18);
@@ -745,6 +784,7 @@ input {
   display: flex;
   align-items: end;
   gap: 4px;
+  min-width: 0;
   height: 42px;
   padding: 9px 10px;
   border: 1px solid var(--line);
@@ -776,11 +816,20 @@ input {
   display: flex;
   align-items: center;
   justify-content: space-between;
+  gap: 10px;
+  min-width: 0;
   min-height: 20px;
   padding: 0 10px;
   color: var(--muted);
   font-size: 11px;
   font-weight: 700;
+}
+
+.meter-status span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .meter-status b {
@@ -837,9 +886,30 @@ input {
   border: 1px solid var(--line);
   border-radius: 24px;
   background: var(--panel-strong);
-  box-shadow: 0 24px 80px rgba(0, 0, 0, 0.5);
+  box-shadow: var(--shadow-panel);
   overflow: auto;
   --wails-draggable: no-drag;
+}
+
+.settings-panel::-webkit-scrollbar,
+.source-list-scroll::-webkit-scrollbar,
+.select-menu-list::-webkit-scrollbar {
+  width: 8px;
+}
+
+.settings-panel::-webkit-scrollbar-track,
+.source-list-scroll::-webkit-scrollbar-track,
+.select-menu-list::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.settings-panel::-webkit-scrollbar-thumb,
+.source-list-scroll::-webkit-scrollbar-thumb,
+.select-menu-list::-webkit-scrollbar-thumb {
+  border: 2px solid transparent;
+  border-radius: 999px;
+  background: rgba(146, 162, 181, 0.34);
+  background-clip: padding-box;
 }
 
 .settings-sheet {
@@ -1022,7 +1092,7 @@ input {
   border: 1px solid rgba(240, 68, 56, 0.24);
   border-radius: 22px;
   background: var(--panel-strong);
-  box-shadow: 0 24px 70px rgba(0, 0, 0, 0.45);
+  box-shadow: var(--shadow-panel);
   backdrop-filter: blur(24px) saturate(150%);
   --wails-draggable: no-drag;
 }
