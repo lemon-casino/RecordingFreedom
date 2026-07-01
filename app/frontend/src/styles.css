@@ -615,13 +615,43 @@ input {
   padding: 9px 10px;
   border: 1px solid var(--line);
   border-radius: 16px;
+  background: rgba(255, 255, 255, 0.035);
 }
 
 .meter span {
   flex: 1;
   min-width: 4px;
   border-radius: 5px;
-  background: linear-gradient(180deg, var(--teal), rgba(17, 183, 167, 0.2));
+  background: rgba(255, 255, 255, 0.12);
+  transition: height 80ms linear, background 120ms ease, opacity 120ms ease;
+}
+
+.meter.live {
+  border-color: rgba(17, 183, 167, 0.28);
+}
+
+.meter.error {
+  border-color: rgba(244, 63, 94, 0.32);
+}
+
+.meter span.active {
+  background: linear-gradient(180deg, var(--teal), rgba(17, 183, 167, 0.22));
+}
+
+.meter-status {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  min-height: 20px;
+  padding: 0 10px;
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.meter-status b {
+  color: #d7fffb;
+  font-size: 11px;
 }
 
 .camera-preview {

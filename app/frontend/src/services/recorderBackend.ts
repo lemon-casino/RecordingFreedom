@@ -74,6 +74,15 @@ export type RecordingRecovery = {
   reason?: string
 }
 
+export type AudioLevelUpdate = {
+  deviceId: string
+  level: number
+  rms: number
+  peak: number
+  active: boolean
+  error?: string
+}
+
 export type RecorderBootstrap = {
   appData: AppDataInfo
   storage: AppStorageStatus
@@ -175,12 +184,40 @@ export function subscribeSettingsChanged(handler: (settings: AppSettings) => voi
   }
 }
 
+export function subscribeAudioLevel(handler: (event: AudioLevelUpdate) => void): () => void {
+  try {
+    return Events.On('audio.level', (event) => {
+      handler(fromBoundAudioLevel(event.data))
+    })
+  } catch (error) {
+    console.info('Desktop microphone level events unavailable:', error)
+    return () => {}
+  }
+}
+
+export async function startMicrophoneLevelMonitor(deviceId?: string): Promise<void> {
+  try {
+    await RecordingFreedomService.StartMicrophoneLevelMonitor(deviceId || 'microphone:default')
+  } catch (error) {
+    console.info('Desktop microphone level monitor unavailable:', error)
+    throw error
+  }
+}
+
+export async function stopMicrophoneLevelMonitor(): Promise<void> {
+  try {
+    await RecordingFreedomService.StopMicrophoneLevelMonitor()
+  } catch (error) {
+    console.info('Desktop microphone level monitor stop fallback:', error)
+  }
+}
+
 export async function showSettingsWindow(): Promise<void> {
   try {
     await RecordingFreedomService.ShowSettingsWindow()
   } catch (error) {
     console.info('Using browser settings window fallback:', error)
-    const popup = window.open('/settings', 'recordingfreedom-settings', 'width=920,height=720')
+    const popup = window.open('/#/settings', 'recordingfreedom-settings', 'width=920,height=720')
     popup?.focus()
   }
 }
@@ -860,6 +897,25 @@ function fromBoundStatusEvent(event: BoundStatusEvent): RecordingStatusUpdate {
     backend: event.backend,
     session,
   }
+}
+
+function fromBoundAudioLevel(event: unknown): AudioLevelUpdate {
+  const data = (event ?? {}) as Partial<AudioLevelUpdate>
+  return {
+    deviceId: typeof data.deviceId === 'string' ? data.deviceId : '',
+    level: normalizedUnit(data.level),
+    rms: normalizedUnit(data.rms),
+    peak: normalizedUnit(data.peak),
+    active: data.active === true,
+    error: typeof data.error === 'string' ? data.error : undefined,
+  }
+}
+
+function normalizedUnit(value: unknown): number {
+  const numeric = typeof value === 'number' && Number.isFinite(value) ? value : 0
+  if (numeric < 0) return 0
+  if (numeric > 1) return 1
+  return numeric
 }
 
 function fromBoundRecovery(recovery: BoundRecoverySummary): RecordingRecovery {

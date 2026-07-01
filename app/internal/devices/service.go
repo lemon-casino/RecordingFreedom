@@ -355,9 +355,9 @@ func mediaBackendMessage(platform string, deviceType MediaDeviceType) string {
 	case DeviceMicrophone:
 		switch platform {
 		case "darwin":
-			return "CoreAudio microphone enumeration is queued for the macOS backend."
+			return "CoreAudio microphone input device enumeration is implemented."
 		case "windows":
-			return "WASAPI microphone endpoint enumeration is queued for the Windows backend."
+			return "WASAPI microphone endpoint enumeration is implemented."
 		case "linux":
 			return "PipeWire microphone source enumeration is queued for the Linux backend."
 		}

@@ -1,6 +1,9 @@
 package main
 
 import (
+	"sync"
+
+	"github.com/lemon-casino/RecordingFreedom/app/internal/settings"
 	"github.com/wailsapp/wails/v3/pkg/application"
 	"github.com/wailsapp/wails/v3/pkg/events"
 )
@@ -20,7 +23,6 @@ func createCapsuleWindow(app *application.App) *application.WebviewWindow {
 		AlwaysOnTop:     true,
 		DisableResize:   true,
 		HideOnEscape:    true,
-		HideOnFocusLost: true,
 		BackgroundType:  application.BackgroundTypeTransparent,
 		Mac: application.MacWindow{
 			InvisibleTitleBarHeight: 50,
@@ -65,7 +67,7 @@ func createSettingsWindow(app *application.App) *application.WebviewWindow {
 			Icon: appIcon,
 		},
 		BackgroundColour: application.NewRGB(11, 15, 19),
-		URL:              "/settings",
+		URL:              "/#/settings",
 	})
 
 	window.RegisterHook(events.Common.WindowClosing, func(e *application.WindowEvent) {
@@ -108,7 +110,7 @@ func createRegionOverlayWindow(app *application.App) *application.WebviewWindow 
 			Icon:                appIcon,
 			WindowIsTranslucent: true,
 		},
-		URL: "/region-overlay",
+		URL: "/#/region-overlay",
 	})
 
 	window.RegisterHook(events.Common.WindowClosing, func(e *application.WindowEvent) {
@@ -151,7 +153,7 @@ func createScreenIndicatorWindow(app *application.App) *application.WebviewWindo
 			Icon:                appIcon,
 			WindowIsTranslucent: true,
 		},
-		URL: "/screen-indicator",
+		URL: "/#/screen-indicator",
 	})
 
 	window.RegisterHook(events.Common.WindowClosing, func(e *application.WindowEvent) {
@@ -162,28 +164,61 @@ func createScreenIndicatorWindow(app *application.App) *application.WebviewWindo
 	return window
 }
 
-func configureSystemTray(app *application.App, recorderWindow *application.WebviewWindow, settingsWindow *application.WebviewWindow) {
+type trayMenuCopy struct {
+	ShowRecorder string
+	ShowSettings string
+	HideRecorder string
+	Quit          string
+}
+
+func trayCopy(locale settings.Locale) trayMenuCopy {
+	switch locale {
+	case settings.LocaleEN:
+		return trayMenuCopy{
+			ShowRecorder: "Show Recorder",
+			ShowSettings: "Show Settings",
+			HideRecorder: "Hide Recorder",
+			Quit:          "Quit RecordingFreedom",
+		}
+	default:
+		return trayMenuCopy{
+			ShowRecorder: "显示录制窗口",
+			ShowSettings: "显示设置",
+			HideRecorder: "隐藏录制窗口",
+			Quit:          "退出 RecordingFreedom",
+		}
+	}
+}
+
+func configureSystemTray(app *application.App, recorderWindow *application.WebviewWindow, settingsWindow *application.WebviewWindow, initialLocale settings.Locale) func(settings.Locale) {
 	tray := app.SystemTray.New()
 	tray.SetTooltip("RecordingFreedom")
 	tray.SetIcon(appIcon)
 	tray.SetDarkModeIcon(appIcon)
 
-	menu := app.NewMenu()
-	menu.Add("Show Recorder").OnClick(func(ctx *application.Context) {
-		tray.ShowWindow()
-	})
-	menu.Add("Show Settings").OnClick(func(ctx *application.Context) {
-		settingsWindow.Show()
-		settingsWindow.Focus()
-	})
-	menu.Add("Hide Recorder").OnClick(func(ctx *application.Context) {
-		tray.HideWindow()
-	})
-	menu.AddSeparator()
-	menu.Add("Quit RecordingFreedom").OnClick(func(ctx *application.Context) {
-		app.Quit()
-	})
-	tray.SetMenu(menu)
+	var menuMu sync.Mutex
+	applyMenu := func(locale settings.Locale) {
+		copy := trayCopy(locale)
+		menu := app.NewMenu()
+		menu.Add(copy.ShowRecorder).OnClick(func(ctx *application.Context) {
+			tray.ShowWindow()
+		})
+		menu.Add(copy.ShowSettings).OnClick(func(ctx *application.Context) {
+			settingsWindow.Show()
+			settingsWindow.Focus()
+		})
+		menu.Add(copy.HideRecorder).OnClick(func(ctx *application.Context) {
+			tray.HideWindow()
+		})
+		menu.AddSeparator()
+		menu.Add(copy.Quit).OnClick(func(ctx *application.Context) {
+			app.Quit()
+		})
+		menuMu.Lock()
+		defer menuMu.Unlock()
+		tray.SetMenu(menu)
+	}
+	applyMenu(initialLocale)
 
 	tray.AttachWindow(recorderWindow).WindowOffset(10)
 	tray.OnClick(func() {
@@ -192,4 +227,6 @@ func configureSystemTray(app *application.App, recorderWindow *application.Webvi
 	tray.OnRightClick(func() {
 		tray.OpenMenu()
 	})
+
+	return applyMenu
 }

@@ -285,6 +285,7 @@ func (s *ffmpegDesktopSession) startSegmentLocked(ctx context.Context) error {
 	args = append(args, s.encodingArgs(segmentPath)...)
 
 	cmd := exec.CommandContext(ctx, s.ffmpeg, args...)
+	configureBackgroundCommand(cmd)
 	stdin, err := cmd.StdinPipe()
 	if err != nil {
 		return fmt.Errorf("open FFmpeg stdin: %w", err)
@@ -423,6 +424,7 @@ func (s *ffmpegDesktopSession) finalizeLocked() error {
 	ctx, cancel := context.WithTimeout(context.Background(), ffmpegFinalizeTimeout)
 	defer cancel()
 	cmd := exec.CommandContext(ctx, s.ffmpeg, args...)
+	configureBackgroundCommand(cmd)
 	stderr := &bytes.Buffer{}
 	cmd.Stdout = io.Discard
 	cmd.Stderr = stderr

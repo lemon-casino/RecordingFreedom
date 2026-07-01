@@ -80,6 +80,8 @@ GitHub Actions 会自动运行 `release.yml`，通过后生成 GitHub prerelease
 - 发布二进制是否通过 `desktop-doctor -require-rnnoise`，确认 RNNoise native DSP 已真实编入 artifact。
 - Windows portable zip 是否通过 `scripts/verify-windows-portable.ps1`：包含 `recordingfreedom.exe`、`tools/ffmpeg.exe`、`tools/ffprobe.exe` 和 `tools/THIRD_PARTY_FFMPEG.txt`，并能在 Windows runner 上执行 FFmpeg/FFprobe。
 
+上一版已验证的 preview 是 `v0.1.0-preview.9`。该 tag 的 Release workflow 已通过 Release Gate、Windows x64、macOS arm64、Linux x64 和 Publish GitHub Release，并已发布到 `https://github.com/lemon-casino/RecordingFreedom/releases/tag/v0.1.0-preview.9`。`v0.1.0-preview.7` 和 `v0.1.0-preview.8` 保留为失败记录：前者暴露 Linux Wails build tag 拼接问题，后者暴露 Windows FFmpeg bootstrap 下载链路问题；两个问题均已在 `preview.9` 前修复。
+
 当前 preview release 必须在 release notes 中明确：macOS ScreenCaptureKit display/window/region capture 已接入代码路径但仍需真机 smoke 验收，Program/Application 当前是 queued 后续项；Windows portable zip 会携带 FFmpeg desktop writer 依赖，但仍需要下载 artifact 后在 clean machine 跑 screen/region/window `video-smoke` 和音频 mux 组合；Windows WASAPI 音频已能在停止阶段 mux 到主 `screen.mp4`，且本机 1 分钟、5 分钟和 20 分钟 smoke 已通过。跨平台长录同步、Linux PipeWire、目标桌面 RNNoise 实录听感仍属于后续验收；摄像头 sidecar 和 PIP 当前暂停，等视频录制和语音/音频录制验收后再恢复。不能把 mock package、未验收的 ScreenCaptureKit/FFmpeg artifact 路径或 `audio-smoke` 说成完整正式录制。
 
 `preview`、`alpha`、`beta`、`rc` 标签会被 workflow 自动标记为 GitHub prerelease；正式稳定版本再移除这些后缀。

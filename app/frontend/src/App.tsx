@@ -26,7 +26,6 @@ import {copyByLocale, type RecorderCopy, type RecoveryMessageKey, type SourceSel
 import {
   cameraDevices,
   fallbackAppData,
-  microphoneDevices,
   localeOptions,
   normalizeLocale,
   sources,
@@ -48,7 +47,7 @@ import {
   fallbackCapabilities,
   fallbackStorageStatus,
 } from './services/mockBackend'
-import {cancelRegionSelector, completeRegionSelection, hideScreenIndicator, hideSettingsWindow, loadBootstrap, loadSettings, pauseRecording, preflightAudioOnlyRecording, preflightRecording, recoverRecordingPackage, resumeRecording, saveSettings, setCapsuleWindowExpanded, setDataRoot, showRegionSelector, showScreenIndicator, showSettingsWindow, startAudioOnlyRecording, startRecording, stopRecording, subscribeRecordingStatus, subscribeRegionSelection, subscribeSettingsChanged, type RecordingRecovery, type RecordingStatusUpdate, type RegionSelectionSession} from './services/recorderBackend'
+import {cancelRegionSelector, completeRegionSelection, hideScreenIndicator, hideSettingsWindow, loadBootstrap, loadSettings, pauseRecording, preflightAudioOnlyRecording, preflightRecording, recoverRecordingPackage, resumeRecording, saveSettings, setCapsuleWindowExpanded, setDataRoot, showRegionSelector, showScreenIndicator, showSettingsWindow, startAudioOnlyRecording, startMicrophoneLevelMonitor, startRecording, stopMicrophoneLevelMonitor, stopRecording, subscribeAudioLevel, subscribeRecordingStatus, subscribeRegionSelection, subscribeSettingsChanged, type AudioLevelUpdate, type RecordingRecovery, type RecordingStatusUpdate, type RegionSelectionSession} from './services/recorderBackend'
 
 const sourceIcon = {
   screen: Monitor,
@@ -100,12 +99,28 @@ function formatBytes(bytes: number) {
   return `${value >= 10 || unitIndex === 0 ? value.toFixed(0) : value.toFixed(1)} ${units[unitIndex]}`
 }
 
+function readableError(error: unknown) {
+  if (error instanceof Error) return error.message
+  if (typeof error === 'string') return error
+  try {
+    return JSON.stringify(error)
+  } catch {
+    return String(error)
+  }
+}
+
 function normalizedClientRect(startX: number, startY: number, currentX: number, currentY: number) {
   const x = Math.round(Math.min(startX, currentX))
   const y = Math.round(Math.min(startY, currentY))
   const width = Math.round(Math.abs(currentX - startX))
   const height = Math.round(Math.abs(currentY - startY))
   return {x, y, width, height}
+}
+
+function currentWindowRoute() {
+  const hashRoute = window.location.hash.replace(/^#/, '')
+  if (hashRoute.startsWith('/')) return hashRoute
+  return window.location.pathname
 }
 
 type StatusMessageState = {
@@ -131,9 +146,10 @@ type SourceSelectionMessageState = {
 }
 
 function App() {
-  const isSettingsWindow = window.location.pathname === '/settings'
-  const isRegionOverlayWindow = window.location.pathname === '/region-overlay'
-  const isScreenIndicatorWindow = window.location.pathname === '/screen-indicator'
+  const route = currentWindowRoute()
+  const isSettingsWindow = route === '/settings'
+  const isRegionOverlayWindow = route === '/region-overlay'
+  const isScreenIndicatorWindow = route === '/screen-indicator'
   if (isScreenIndicatorWindow) {
     return <ScreenIndicatorWindow />
   }
@@ -158,8 +174,12 @@ function App() {
   const [selectedSystemAudio, setSelectedSystemAudio] = useState(systemAudioDevices[0].id)
   const [microphone, setMicrophone] = useState(false)
   const [noiseSuppression, setNoiseSuppression] = useState(false)
-  const [availableMicrophones, setAvailableMicrophones] = useState<MediaDevice[]>(microphoneDevices)
-  const [selectedMic, setSelectedMic] = useState(microphoneDevices[0].id)
+  const [availableMicrophones, setAvailableMicrophones] = useState<MediaDevice[]>([])
+  const [selectedMic, setSelectedMic] = useState('')
+  const [micLevel, setMicLevel] = useState(0)
+  const [micPeak, setMicPeak] = useState(0)
+  const [micMonitorActive, setMicMonitorActive] = useState(false)
+  const [micMonitorError, setMicMonitorError] = useState<string | null>(null)
   const [camera, setCamera] = useState(false)
   const [availableCameras, setAvailableCameras] = useState<MediaDevice[]>(cameraDevices)
   const [selectedCamera, setSelectedCamera] = useState(cameraDevices[0].id)
@@ -180,6 +200,7 @@ function App() {
   const [storageBusy, setStorageBusy] = useState(false)
   const [storageMessage, setStorageMessage] = useState<StorageMessageState | null>(null)
   const [sourceSelectionMessage, setSourceSelectionMessage] = useState<SourceSelectionMessageState | null>(null)
+  const selectedMicRef = useRef(selectedMic)
   const rnnoiseActive = microphone && noiseSuppression
 
   const copy = copyByLocale[locale]
@@ -209,9 +230,9 @@ function App() {
     },
     audio: {
       system: systemAudio,
-      systemDeviceId: selectedSystemAudio,
+      systemDeviceId: selectedSystemAudio || undefined,
       microphone,
-      microphoneDeviceId: selectedMic,
+      microphoneDeviceId: selectedMic || undefined,
       noiseSuppression,
       microphoneGain: 1,
     },
@@ -246,6 +267,30 @@ function App() {
     () => availableCameras.find((device) => device.id === selectedCamera),
     [availableCameras, selectedCamera],
   )
+  const selectedMicrophoneDevice = useMemo(
+    () => availableMicrophones.find((device) => device.id === selectedMic),
+    [availableMicrophones, selectedMic],
+  )
+  const hasAvailableMicrophone = useMemo(
+    () => availableMicrophones.some((device) => device.available !== false),
+    [availableMicrophones],
+  )
+  const micMonitorStatusText = micMonitorError
+    ? copy.panels.microphoneLevelError
+    : !microphone
+      ? copy.panels.microphoneLevelOff
+      : selectedMicrophoneDevice?.available === false || !hasAvailableMicrophone
+        ? copy.panels.microphoneLevelUnavailable
+        : micMonitorActive
+          ? copy.panels.microphoneLevelLive
+          : copy.panels.microphoneLevelWaiting
+  const micMeterLevel = microphone && micMonitorActive ? micLevel : 0
+  const micMeterBars = useMemo(() => Array.from({length: 18}, (_, index) => {
+    const threshold = (index + 1) / 18
+    const active = micMeterLevel >= threshold
+    const height = active ? Math.max(14, Math.min(100, micMeterLevel * 100 + index * 0.9)) : 8
+    return {active, height: `${height}%`}
+  }), [micMeterLevel])
   const applyRecordingStatus = (update: RecordingStatusUpdate) => {
     setState(update.status as RecordingState)
     if (update.session?.packagePath) setLastPackage(update.session.packagePath)
@@ -254,23 +299,24 @@ function App() {
     if (update.message) setLastStatusMessage(statusMessageFromBackend(update.message))
   }
   const applySettingsState = (nextSettings: AppSettings, nextMedia?: MediaInventory, nextSources?: CaptureSource[]) => {
+    const systemAudioList = nextMedia?.systemAudio
+    const microphoneList = nextMedia?.microphones
+    const cameraList = nextMedia?.cameras
     setLocale(normalizeLocale(nextSettings.locale))
     setRecordingQuality(normalizeRecordingQuality(nextSettings.recording.quality))
     setRecordingFPS(fpsOptions.includes(nextSettings.recording.fps) ? nextSettings.recording.fps : 30)
     setCaptureCursor(nextSettings.recording.captureCursor)
     setCountdownSeconds(countdownOptions.includes(nextSettings.recording.countdownSeconds) ? nextSettings.recording.countdownSeconds : 0)
     setSystemAudio(nextSettings.audio.system)
-    setMicrophone(nextSettings.audio.microphone)
-    setNoiseSuppression(nextSettings.audio.noiseSuppression)
+    const nextHasAvailableMicrophone = !microphoneList || microphoneList.some((device) => device.available !== false)
+    setMicrophone(nextSettings.audio.microphone && nextHasAvailableMicrophone)
+    setNoiseSuppression(nextSettings.audio.microphone && nextHasAvailableMicrophone && nextSettings.audio.noiseSuppression)
     setCamera(nextSettings.camera.enabled)
     setPipPreset(normalizePipPreset(nextSettings.camera.pipPreset))
 
-    const systemAudioList = nextMedia?.systemAudio
-    const microphoneList = nextMedia?.microphones
-    const cameraList = nextMedia?.cameras
-    if (systemAudioList?.length) setAvailableSystemAudio(systemAudioList)
-    if (microphoneList?.length) setAvailableMicrophones(microphoneList)
-    if (cameraList?.length) setAvailableCameras(cameraList)
+    if (systemAudioList) setAvailableSystemAudio(systemAudioList)
+    if (microphoneList) setAvailableMicrophones(microphoneList)
+    if (cameraList) setAvailableCameras(cameraList)
     if (nextSettings.audio.systemDeviceId && (!systemAudioList || systemAudioList.some((device) => device.id === nextSettings.audio.systemDeviceId))) {
       setSelectedSystemAudio(nextSettings.audio.systemDeviceId)
     } else if (systemAudioList?.[0]) {
@@ -280,6 +326,8 @@ function App() {
       setSelectedMic(nextSettings.audio.microphoneDeviceId)
     } else if (microphoneList?.[0]) {
       setSelectedMic(microphoneList[0].id)
+    } else if (microphoneList) {
+      setSelectedMic('')
     }
     if (nextSettings.camera.deviceId && (!cameraList || cameraList.some((device) => device.id === nextSettings.camera.deviceId))) {
       setSelectedCamera(nextSettings.camera.deviceId)
@@ -304,6 +352,26 @@ function App() {
   }, [locale])
 
   useEffect(() => {
+    selectedMicRef.current = selectedMic
+  }, [selectedMic])
+
+  useEffect(() => subscribeAudioLevel((update: AudioLevelUpdate) => {
+    const currentMic = selectedMicRef.current
+    if (update.deviceId && currentMic && update.deviceId !== currentMic) return
+    if (update.error) {
+      setMicMonitorError(update.error)
+      setMicMonitorActive(false)
+      setMicLevel(0)
+      setMicPeak(0)
+      return
+    }
+    setMicMonitorError(null)
+    setMicMonitorActive(update.active)
+    setMicLevel(update.active ? update.level : 0)
+    setMicPeak(update.active ? update.peak : 0)
+  }), [])
+
+  useEffect(() => {
     if (isSettingsWindow) return
     void setCapsuleWindowExpanded(activePanel !== null)
   }, [activePanel, isSettingsWindow])
@@ -313,6 +381,41 @@ function App() {
       setActivePanel(null)
     }
   }, [activePanel, recordingMode])
+
+  useEffect(() => {
+    if (isSettingsWindow) return
+    const shouldMonitor = activePanel === 'audio' &&
+      microphone &&
+      !isRecording &&
+      selectedMic !== '' &&
+      selectedMicrophoneDevice?.available !== false &&
+      hasAvailableMicrophone
+    if (!shouldMonitor) {
+      setMicMonitorActive(false)
+      setMicLevel(0)
+      setMicPeak(0)
+      void stopMicrophoneLevelMonitor()
+      return
+    }
+
+    let cancelled = false
+    setMicMonitorError(null)
+    void startMicrophoneLevelMonitor(selectedMic)
+      .then(() => {
+        if (!cancelled) setMicMonitorActive(true)
+      })
+      .catch((error) => {
+        if (cancelled) return
+        setMicMonitorError(readableError(error))
+        setMicMonitorActive(false)
+        setMicLevel(0)
+        setMicPeak(0)
+      })
+    return () => {
+      cancelled = true
+      void stopMicrophoneLevelMonitor()
+    }
+  }, [activePanel, hasAvailableMicrophone, isRecording, isSettingsWindow, microphone, selectedMic, selectedMicrophoneDevice?.available])
 
   useEffect(() => {
     let cancelled = false
@@ -408,9 +511,9 @@ function App() {
         const request = {
           recording,
           systemAudio,
-          systemAudioDeviceId: selectedSystemAudio,
+          systemAudioDeviceId: selectedSystemAudio || undefined,
           microphone,
-          microphoneDeviceId: selectedMic,
+          microphoneDeviceId: selectedMic || undefined,
           noiseSuppression,
         }
         const preflight = await preflightAudioOnlyRecording(request)
@@ -434,9 +537,9 @@ function App() {
         source: selectedSource,
         recording,
         systemAudio,
-        systemAudioDeviceId: selectedSystemAudio,
+        systemAudioDeviceId: selectedSystemAudio || undefined,
         microphone,
-        microphoneDeviceId: selectedMic,
+        microphoneDeviceId: selectedMic || undefined,
         noiseSuppression,
         camera,
         cameraDeviceId: selectedCamera,
@@ -941,14 +1044,50 @@ function App() {
                 <select id="system-audio-device" value={selectedSystemAudio} onChange={(event) => setSelectedSystemAudio(event.target.value)}>
                   {availableSystemAudio.map((device) => <option key={device.id} value={device.id}>{mediaDeviceName(device, copy)}</option>)}
                 </select>
-                <SwitchRow label={copy.panels.microphone} checked={microphone} onChange={setMicrophone} />
-                <SwitchRow label={copy.panels.rnnoise} checked={rnnoiseActive} disabled={!microphone} onChange={setNoiseSuppression} />
+                <SwitchRow
+                  label={copy.panels.microphone}
+                  checked={microphone && hasAvailableMicrophone}
+                  disabled={!hasAvailableMicrophone}
+                  onChange={(value) => {
+                    setMicrophone(value)
+                    if (!value) {
+                      setNoiseSuppression(false)
+                      setMicMonitorError(null)
+                    }
+                  }}
+                />
+                <SwitchRow
+                  label={copy.panels.rnnoise}
+                  checked={rnnoiseActive}
+                  disabled={!microphone || selectedMicrophoneDevice?.rnnoiseEligible === false}
+                  onChange={setNoiseSuppression}
+                />
                 <label className="field-label" htmlFor="mic-device">{copy.panels.microphoneDevice}</label>
-                <select id="mic-device" value={selectedMic} onChange={(event) => setSelectedMic(event.target.value)}>
-                  {availableMicrophones.map((device) => <option key={device.id} value={device.id}>{mediaDeviceName(device, copy)}</option>)}
+                <select
+                  id="mic-device"
+                  value={selectedMic}
+                  disabled={!microphone || !hasAvailableMicrophone}
+                  onChange={(event) => setSelectedMic(event.target.value)}
+                >
+                  {availableMicrophones.length === 0 && <option value="">{copy.panels.noMicrophones}</option>}
+                  {availableMicrophones.map((device) => (
+                    <option key={device.id} value={device.id} disabled={device.available === false}>
+                      {mediaDeviceName(device, copy)}
+                    </option>
+                  ))}
                 </select>
-                <div className="meter" aria-label={copy.aria.microphoneLevel}>
-                  {Array.from({length: 18}, (_, index) => <span key={index} style={{height: `${20 + ((index * 17) % 54)}%`}} />)}
+                <div
+                  className={`meter ${micMonitorActive ? 'live' : ''} ${micMonitorError ? 'error' : ''}`}
+                  aria-label={copy.aria.microphoneLevel}
+                  title={micMonitorError ?? micMonitorStatusText}
+                >
+                  {micMeterBars.map((bar, index) => (
+                    <span key={index} className={bar.active ? 'active' : ''} style={{height: bar.height}} />
+                  ))}
+                </div>
+                <div className="meter-status">
+                  <span>{micMonitorStatusText}</span>
+                  <b>{Math.round(micPeak * 100)}%</b>
                 </div>
               </div>
             )}

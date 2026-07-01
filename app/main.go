@@ -25,6 +25,7 @@ func init() {
 	application.RegisterEvent[recording.StatusEvent]("recording.status")
 	application.RegisterEvent[RegionSelectionResult]("capture.region.selected")
 	application.RegisterEvent[settings.Settings]("settings.changed")
+	application.RegisterEvent[AudioLevelEvent]("audio.level")
 }
 
 func main() {
@@ -54,7 +55,11 @@ func main() {
 	recordingFreedom.setSettingsWindow(settingsWindow)
 	recordingFreedom.setRegionOverlayWindow(regionOverlayWindow)
 	recordingFreedom.setScreenIndicatorWindow(screenIndicatorWindow)
-	configureSystemTray(app, capsuleWindow, settingsWindow)
+	initialLocale := settings.LocaleZhCN
+	if currentSettings, err := recordingFreedom.settings.Load(); err == nil {
+		initialLocale = currentSettings.Locale
+	}
+	recordingFreedom.setTrayLocaleUpdater(configureSystemTray(app, capsuleWindow, settingsWindow, initialLocale))
 
 	if err := app.Run(); err != nil {
 		log.Fatal(err)

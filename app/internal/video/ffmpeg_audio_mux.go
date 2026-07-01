@@ -82,6 +82,7 @@ func MuxAudioIntoMP4(config AudioMuxConfig) (AudioMuxResult, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
 	cmd := exec.CommandContext(ctx, ffmpegPath, args...)
+	configureBackgroundCommand(cmd)
 	stderr := &bytes.Buffer{}
 	cmd.Stdout = io.Discard
 	cmd.Stderr = stderr
@@ -137,6 +138,7 @@ func MuxAudioOnlyToM4A(config AudioOnlyMuxConfig) (AudioOnlyMuxResult, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
 	cmd := exec.CommandContext(ctx, ffmpegPath, args...)
+	configureBackgroundCommand(cmd)
 	stderr := &bytes.Buffer{}
 	cmd.Stdout = io.Discard
 	cmd.Stderr = stderr

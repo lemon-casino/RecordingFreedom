@@ -302,7 +302,7 @@ func TestEvaluateAudioOnlyBlocksMacOSSystemAudioMuxCapability(t *testing.T) {
 	}
 }
 
-func TestEvaluateAudioOnlyBlocksMacOSMicrophoneUntilCoreAudioCaptureLands(t *testing.T) {
+func TestEvaluateAudioOnlyAllowsMacOSMicrophoneWithCoreAudioCapture(t *testing.T) {
 	media := queuedMediaInventory()
 	media.Microphones[0].Available = true
 	media.Microphones[0].Capability = devices.CapabilityEnumerated
@@ -322,11 +322,11 @@ func TestEvaluateAudioOnlyBlocksMacOSMicrophoneUntilCoreAudioCaptureLands(t *tes
 			Reason:   "ready",
 		},
 	})
-	if summary.Status != StatusBlocked {
-		t.Fatalf("audio-only macOS microphone preflight status = %q, want blocked: %#v", summary.Status, summary.Checks)
+	if summary.Status != StatusReady {
+		t.Fatalf("audio-only macOS microphone preflight status = %q, want ready: %#v", summary.Status, summary.Checks)
 	}
-	if !hasCheck(summary.Checks, "microphone", StatusBlocked) {
-		t.Fatalf("audio-only macOS microphone block missing: %#v", summary.Checks)
+	if !hasCheck(summary.Checks, "microphone", StatusReady) {
+		t.Fatalf("audio-only macOS microphone ready check missing: %#v", summary.Checks)
 	}
 }
 

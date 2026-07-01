@@ -20,6 +20,15 @@ import * as recpackage$0 from "./internal/recpackage/models.js";
 // @ts-ignore: Unused imports
 import * as settings$0 from "./internal/settings/models.js";
 
+export interface AudioLevelEvent {
+    "deviceId": string;
+    "level": number;
+    "rms": number;
+    "peak": number;
+    "active": boolean;
+    "error"?: string;
+}
+
 export interface BootstrapState {
     "appData": appdata$0.Info;
     "storage": appdata$0.StorageStatus;

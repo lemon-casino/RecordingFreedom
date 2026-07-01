@@ -70,6 +70,7 @@ func (s *RecordingFreedomService) ShowRegionSelector() (RegionSelectionSession, 
 	s.regionOverlay.SetBounds(bounds)
 	s.regionOverlay.SetAlwaysOnTop(true)
 	s.regionOverlay.Show()
+	s.regionOverlay.SetBounds(bounds)
 	s.regionOverlay.Focus()
 	if payload, err := json.Marshal(session); err == nil {
 		s.regionOverlay.ExecJS(fmt.Sprintf(

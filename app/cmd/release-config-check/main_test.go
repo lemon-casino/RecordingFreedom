@@ -11,6 +11,7 @@ func TestRunAcceptsRequiredReleaseGates(t *testing.T) {
 	root := t.TempDir()
 	writeWorkflow(t, root, ".github/workflows/ci.yml", workflowFixture(".github/workflows/ci.yml"))
 	writeWorkflow(t, root, ".github/workflows/release.yml", workflowFixture(".github/workflows/release.yml"))
+	writeWorkflow(t, root, "app/build/windows/Taskfile.yml", workflowFixture("app/build/windows/Taskfile.yml"))
 
 	report, err := run(root)
 	if err != nil {
@@ -29,6 +30,7 @@ func TestRunRejectsMissingRNNoiseGate(t *testing.T) {
 	ci := strings.ReplaceAll(workflowFixture(".github/workflows/ci.yml"), "-require-rnnoise", "")
 	writeWorkflow(t, root, ".github/workflows/ci.yml", ci)
 	writeWorkflow(t, root, ".github/workflows/release.yml", workflowFixture(".github/workflows/release.yml"))
+	writeWorkflow(t, root, "app/build/windows/Taskfile.yml", workflowFixture("app/build/windows/Taskfile.yml"))
 
 	report, err := run(root)
 	if err != nil {
@@ -63,6 +65,7 @@ func workflowFixture(name string) string {
 	var builder strings.Builder
 	builder.WriteString("RNNOISE_TAG: rnnoise_native\n")
 	builder.WriteString("CGO_ENABLED=1 wails3 build -tags\n")
+	builder.WriteString("CGO_ENABLED=1 wails3 task windows:build EXTRA_TAGS=\"${RNNOISE_TAG}\" CGO_ENABLED=1\n")
 	builder.WriteString("gtk3,${RNNOISE_TAG}\n")
 	builder.WriteString("-require-rnnoise\n")
 	builder.WriteString("pacman -S --noconfirm --needed mingw-w64-x86_64-gcc\n")
@@ -74,6 +77,9 @@ func workflowFixture(name string) string {
 		builder.WriteString("tools/ffprobe.exe\n")
 		builder.WriteString("tools/THIRD_PARTY_FFMPEG.txt\n")
 		builder.WriteString("./scripts/verify-windows-portable.ps1\n")
+	}
+	if strings.Contains(name, "Taskfile.yml") {
+		builder.WriteString("-ldflags=\"-w -s -H windowsgui\"\n")
 	}
 	return builder.String()
 }

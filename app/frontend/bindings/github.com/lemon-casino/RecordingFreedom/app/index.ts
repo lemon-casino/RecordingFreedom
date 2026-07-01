@@ -7,6 +7,7 @@ export {
 };
 
 export type {
+    AudioLevelEvent,
     BootstrapState,
     RegionRect,
     RegionSelectionRequest,

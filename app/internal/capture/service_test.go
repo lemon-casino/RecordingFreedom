@@ -52,6 +52,16 @@ func TestDarwinProgramRecordingCapabilityQueued(t *testing.T) {
 	}
 }
 
+func TestDarwinMicrophoneCapabilityAvailable(t *testing.T) {
+	capability := microphoneCapability("darwin")
+	if capability.Status != StatusAvailable {
+		t.Fatalf("darwin microphone status = %q, want %q", capability.Status, StatusAvailable)
+	}
+	if capability.Backend != "CoreAudio" {
+		t.Fatalf("darwin microphone backend = %q, want CoreAudio", capability.Backend)
+	}
+}
+
 func assertCapability(t *testing.T, capability Capability) {
 	t.Helper()
 	if capability.ID == "" {

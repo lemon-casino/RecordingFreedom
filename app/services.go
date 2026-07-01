@@ -41,8 +41,13 @@ type RecordingFreedomService struct {
 	settingsWindow  *application.WebviewWindow
 	regionOverlay   *application.WebviewWindow
 	screenIndicator *application.WebviewWindow
+	trayLocale      func(settings.Locale)
 	regionMu        sync.Mutex
 	regionSession   *RegionSelectionSession
+	micLevelMu      sync.Mutex
+	micLevelSource  audioLevelCaptureSource
+	micLevelDevice  string
+	micLevelToken   uint64
 }
 
 func NewRecordingFreedomService() *RecordingFreedomService {
@@ -71,6 +76,10 @@ func (s *RecordingFreedomService) setRegionOverlayWindow(window *application.Web
 
 func (s *RecordingFreedomService) setScreenIndicatorWindow(window *application.WebviewWindow) {
 	s.screenIndicator = window
+}
+
+func (s *RecordingFreedomService) setTrayLocaleUpdater(update func(settings.Locale)) {
+	s.trayLocale = update
 }
 
 func (s *RecordingFreedomService) ShowSettingsWindow() error {
@@ -191,6 +200,7 @@ func (s *RecordingFreedomService) SaveSettings(next settings.Settings) (settings
 	if err != nil {
 		return settings.Settings{}, err
 	}
+	s.refreshTrayLocale(saved.Locale)
 	s.emitSettingsChanged(saved)
 	return saved, nil
 }
@@ -212,8 +222,16 @@ func (s *RecordingFreedomService) SetDataRoot(rootDir string) (appdata.Info, err
 	if err != nil {
 		return appdata.Info{}, err
 	}
+	s.refreshTrayLocale(saved.Locale)
 	s.emitSettingsChanged(saved)
 	return info, nil
+}
+
+func (s *RecordingFreedomService) refreshTrayLocale(locale settings.Locale) {
+	if s.trayLocale == nil {
+		return
+	}
+	s.trayLocale(locale)
 }
 
 func (s *RecordingFreedomService) applyDataRootFromSettings(next settings.Settings) error {
@@ -249,6 +267,7 @@ func recorderIsActive(state recording.State) bool {
 }
 
 func (s *RecordingFreedomService) StartRecording(req recording.StartRequest) (recording.Session, error) {
+	_ = s.StopMicrophoneLevelMonitor()
 	media := devices.MediaInventory{}
 	if s.devices != nil {
 		media = s.devices.ListMediaDevices()
@@ -346,6 +365,7 @@ func firstBlockedPreflightReason(summary preflight.Summary) string {
 }
 
 func (s *RecordingFreedomService) StartAudioOnlyRecording(req recording.AudioOnlyRequest) (recording.Session, error) {
+	_ = s.StopMicrophoneLevelMonitor()
 	if summary, blocked := s.blockingAudioOnlyPreflight(req); blocked {
 		err := fmt.Errorf("preflight blocked: %s", firstBlockedPreflightReason(summary))
 		s.emitRecordingStatus(recording.StatusEvent{

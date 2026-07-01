@@ -92,7 +92,7 @@ func systemAudioCapability(platform string) Capability {
 func microphoneCapability(platform string) Capability {
 	switch platform {
 	case "darwin":
-		return queued("microphone", "Microphone", "CoreAudio", PermissionMicrophone, "CoreAudio microphone capture is queued.")
+		return available("microphone", "Microphone", "CoreAudio", PermissionMicrophone, "CoreAudio microphone PCM capture is implemented for device level monitoring and microphone sidecar recording.")
 	case "windows":
 		return available("microphone", "Microphone", "WASAPI capture", PermissionNotRequired, "WASAPI microphone PCM capture is implemented; screen recordings mux it into screen.mp4 at stop and retain diagnostics.")
 	case "linux":

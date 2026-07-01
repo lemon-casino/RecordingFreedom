@@ -175,6 +175,11 @@
 - 已在 GitHub runner 上验证 preview release 链路：
   - `v0.1.0-preview.4` 的 Release Gate、Windows build、macOS build、Linux build 和 Publish GitHub Release 均已通过。
   - GitHub Release 已产出 Windows x64、macOS arm64、Linux x64 三个平台 preview 二进制和对应 SHA256SUMS。
+  - `v0.1.0-preview.9` 已发布为 GitHub prerelease：Release Gate、Windows x64、macOS arm64、Linux x64 和 Publish GitHub Release 均通过。Release URL：`https://github.com/lemon-casino/RecordingFreedom/releases/tag/v0.1.0-preview.9`。
+  - `v0.1.0-preview.9` 产物包含 `RecordingFreedom-windows-x64-v0.1.0-preview.9-portable.zip`、`RecordingFreedom-macos-arm64-v0.1.0-preview.9`、`RecordingFreedom-linux-x64-v0.1.0-preview.9` 和三个平台 SHA256SUMS。
+  - `v0.1.0-preview.7` 曾因 Linux Wails build tag 使用空格拼接 `gtk3 rnnoise_native` 导致 Linux build 失败，已在 `v0.1.0-preview.8` 前修正为 `gtk3,rnnoise_native` 并纳入 `cmd/release-config-check` 门禁。
+  - `v0.1.0-preview.8` 曾因 Windows runner 的 FFmpeg 准备脚本下载链路失败而未发布，已在 `v0.1.0-preview.9` 前改为 BtbN FFmpeg-Builds GitHub 源、`curl.exe` 重试下载和按 asset name 校验 `checksums.sha256`。
+  - 最新 `main` CI 已通过 Bindings/Frontend/Go、macOS Native Capture Contracts、Windows/macOS/Linux Wails Build；其中 Windows Wails Build 已通过 FFmpeg bootstrap、RNNoise gate 和 video gate。
   - 后续 preview tag 会自动标记为 GitHub prerelease。
 
 ## 验证结果
@@ -210,7 +215,7 @@ wails3 build
 .\scripts\ensure-windows-ffmpeg.ps1
 ```
 
-该脚本本机已下载并校验 FFmpeg `N-125365-g9a01c1cb6a-20260630` BtbN static build，写入 `RecordingFreedom/app/tools/ffmpeg.exe`；随后 `go run ./cmd/desktop-doctor -require-video` 返回 `ok: true`，screen/window/ffmpeg required checks 均为 `ready`。
+该脚本本机已下载并校验 FFmpeg `N-125365-g9a01c1cb6a-20260630` BtbN static build，写入 `RecordingFreedom/app/tools/ffmpeg.exe`；随后 `go run ./cmd/desktop-doctor -require-video` 返回 `ok: true`，screen/window/ffmpeg required checks 均为 `ready`。GitHub Windows runner 也已在 `v0.1.0-preview.9` release workflow 中通过该脚本准备 FFmpeg，并通过 portable zip 验证。
 
 本机 Windows 未准备 FFmpeg 时的预期阻断：
 

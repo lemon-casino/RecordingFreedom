@@ -37,6 +37,7 @@ var releaseConfigChecks = []configCheck{
 		Needles: []string{
 			"RNNOISE_TAG: rnnoise_native",
 			"CGO_ENABLED=1 wails3 build -tags",
+			"CGO_ENABLED=1 wails3 task windows:build EXTRA_TAGS=\"${RNNOISE_TAG}\" CGO_ENABLED=1",
 			"gtk3,${RNNOISE_TAG}",
 			"-require-rnnoise",
 			"pacman -S --noconfirm --needed mingw-w64-x86_64-gcc",
@@ -56,6 +57,7 @@ var releaseConfigChecks = []configCheck{
 		Needles: []string{
 			"RNNOISE_TAG: rnnoise_native",
 			"CGO_ENABLED=1 wails3 build -tags",
+			"CGO_ENABLED=1 wails3 task windows:build EXTRA_TAGS=\"${RNNOISE_TAG}\" CGO_ENABLED=1",
 			"gtk3,${RNNOISE_TAG}",
 			"-require-rnnoise",
 			"RNNoise native DSP is compiled into release artifacts",
@@ -70,6 +72,13 @@ var releaseConfigChecks = []configCheck{
 			"tools/ffprobe.exe",
 			"tools/THIRD_PARTY_FFMPEG.txt",
 			"./scripts/verify-windows-portable.ps1",
+		},
+	},
+	{
+		File: "app/build/windows/Taskfile.yml",
+		Name: "Windows build keeps GUI subsystem",
+		Needles: []string{
+			`-ldflags="-w -s -H windowsgui"`,
 		},
 	},
 }

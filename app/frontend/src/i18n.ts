@@ -127,6 +127,12 @@ export type RecorderCopy = {
     microphone: string
     rnnoise: string
     microphoneDevice: string
+    noMicrophones: string
+    microphoneLevelLive: string
+    microphoneLevelWaiting: string
+    microphoneLevelOff: string
+    microphoneLevelUnavailable: string
+    microphoneLevelError: string
     cameraSidecar: string
     cameraDevice: string
     pipPreset: string
@@ -266,8 +272,7 @@ const zhCN: RecorderCopy = {
   mediaDeviceNames: {
     'system-audio:default': '默认系统声音',
     'microphone:default': '默认麦克风',
-    'microphone:studio-usb': 'Studio USB 麦克风',
-    'microphone:virtual-broadcast': '虚拟播报麦克风',
+    'microphone:browser-preview': '浏览器预览麦克风',
     'camera:default': '默认摄像头',
     'camera:facetime-hd': 'FaceTime HD 摄像头',
     'camera:usb-capture': 'USB 采集摄像头',
@@ -307,6 +312,12 @@ const zhCN: RecorderCopy = {
     microphone: '麦克风',
     rnnoise: 'RNNoise 降噪',
     microphoneDevice: '麦克风设备',
+    noMicrophones: '未检测到可用麦克风',
+    microphoneLevelLive: '正在监听麦克风',
+    microphoneLevelWaiting: '等待麦克风输入',
+    microphoneLevelOff: '麦克风已关闭',
+    microphoneLevelUnavailable: '麦克风不可用',
+    microphoneLevelError: '麦克风监听失败',
     cameraSidecar: '摄像头旁路',
     cameraDevice: '摄像头设备',
     pipPreset: '画中画位置',
@@ -378,7 +389,7 @@ const zhCN: RecorderCopy = {
     'window-recording': '窗口目标映射会由平台原生后端处理。',
     'application-recording': '程序录制会在原生采集前按应用窗口分组。',
     'system-audio': '系统声音采集依赖平台能力，目前按平台后端逐步落地。',
-    microphone: '麦克风采集会在原生设备枚举和音频链路完成后启用。',
+    microphone: '麦克风采集使用平台原生输入链路；Windows 走 WASAPI，macOS 走 CoreAudio。',
     'microphone-enhancement': 'RNNoise 只处理麦克风 PCM；仅在带 rnnoise_native 的原生构建中可用。',
     'camera-sidecar': '摄像头会作为独立旁路流录制；Windows 可通过 FFmpeg DirectShow 写入 webcam.mp4，其他平台继续按原生后端推进。',
     'pip-export': '画中画导出会使用屏幕视频和摄像头旁路流进行合成。',
@@ -421,7 +432,7 @@ const zhCN: RecorderCopy = {
     'system-audio-device': '所选系统声音设备不可用。',
     'system-audio': '系统声音采集仍在平台后端排期中。',
     'microphone-device': '所选麦克风设备不可用。',
-    microphone: '麦克风采集仍在平台后端排期中。',
+    microphone: '所选麦克风需要可用的原生输入设备。',
     'microphone-rnnoise-device': '所选麦克风当前不满足 RNNoise 处理条件。',
     'microphone-rnnoise': '当前构建未启用 RNNoise 原生降噪。',
     'microphone-enhancement': '当前构建未启用 RNNoise 原生降噪。',
@@ -572,8 +583,7 @@ const en: RecorderCopy = {
   mediaDeviceNames: {
     'system-audio:default': 'Default System Audio',
     'microphone:default': 'Default Microphone',
-    'microphone:studio-usb': 'Studio USB Mic',
-    'microphone:virtual-broadcast': 'Virtual Broadcast Mic',
+    'microphone:browser-preview': 'Browser Preview Microphone',
     'camera:default': 'Default Camera',
     'camera:facetime-hd': 'FaceTime HD Camera',
     'camera:usb-capture': 'USB Capture Camera',
@@ -613,6 +623,12 @@ const en: RecorderCopy = {
     microphone: 'Microphone',
     rnnoise: 'RNNoise',
     microphoneDevice: 'Microphone device',
+    noMicrophones: 'No available microphones',
+    microphoneLevelLive: 'Listening to microphone',
+    microphoneLevelWaiting: 'Waiting for microphone input',
+    microphoneLevelOff: 'Microphone off',
+    microphoneLevelUnavailable: 'Microphone unavailable',
+    microphoneLevelError: 'Microphone monitor failed',
     cameraSidecar: 'Camera sidecar',
     cameraDevice: 'Camera device',
     pipPreset: 'PIP preset',
@@ -684,7 +700,7 @@ const en: RecorderCopy = {
     'window-recording': 'Window capture target mapping is handled by the platform backend.',
     'application-recording': 'Program capture groups application windows before native recording starts.',
     'system-audio': 'System audio capture is platform-specific and lands through each native backend.',
-    microphone: 'Microphone capture is enabled after native device enumeration and audio plumbing land.',
+    microphone: 'Microphone capture uses the platform-native input chain: WASAPI on Windows and CoreAudio on macOS.',
     'microphone-enhancement': 'RNNoise processes microphone PCM only and is available only in native builds with rnnoise_native.',
     'camera-sidecar': 'Camera sidecar capture is separate from the screen video stream; Windows writes webcam.mp4 through FFmpeg DirectShow when available.',
     'pip-export': 'PIP composition will use the screen video plus camera sidecar during export.',
@@ -727,7 +743,7 @@ const en: RecorderCopy = {
     'system-audio-device': 'The selected system audio device is not available.',
     'system-audio': 'System audio capture is still queued for the platform backend.',
     'microphone-device': 'The selected microphone device is not available.',
-    microphone: 'Microphone capture is still queued for the platform backend.',
+    microphone: 'The selected microphone must be available through the native input backend.',
     'microphone-rnnoise-device': 'The selected microphone is not marked RNNoise eligible.',
     'microphone-rnnoise': 'This build does not enable native RNNoise suppression.',
     'microphone-enhancement': 'This build does not enable native RNNoise suppression.',

@@ -343,17 +343,8 @@ func audioOnlySystemAudioCapability(capabilities capture.Capabilities) capture.C
 
 func audioOnlyMicrophoneCapability(capabilities capture.Capabilities) capture.Capability {
 	switch capabilities.Platform {
-	case "windows":
+	case "windows", "darwin":
 		return capabilities.Microphone
-	case "darwin":
-		return capture.Capability{
-			ID:         "microphone",
-			Label:      "Microphone",
-			Status:     capture.StatusQueued,
-			Backend:    "audio-only-native",
-			Permission: capture.PermissionMicrophone,
-			Reason:     "audio-only CoreAudio microphone capture is queued",
-		}
 	case "linux":
 		return capture.Capability{
 			ID:         "microphone",

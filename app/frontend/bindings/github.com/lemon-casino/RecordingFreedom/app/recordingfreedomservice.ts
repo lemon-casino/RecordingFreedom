@@ -115,12 +115,20 @@ export function StartAudioOnlyRecording(req: recording$0.AudioOnlyRequest): $Can
     return $Call.ByID(3205009257, req);
 }
 
+export function StartMicrophoneLevelMonitor(deviceID: string): $CancellablePromise<void> {
+    return $Call.ByID(4183188046, deviceID);
+}
+
 export function StartMockRecording(req: recording$0.StartRequest): $CancellablePromise<recording$0.Session> {
     return $Call.ByID(989661299, req);
 }
 
 export function StartRecording(req: recording$0.StartRequest): $CancellablePromise<recording$0.Session> {
     return $Call.ByID(171835981, req);
+}
+
+export function StopMicrophoneLevelMonitor(): $CancellablePromise<void> {
+    return $Call.ByID(693365190);
 }
 
 export function StopRecording(): $CancellablePromise<recording$0.Session> {
