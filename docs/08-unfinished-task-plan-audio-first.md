@@ -4,7 +4,7 @@
 
 本文档把初版 preview 之后尚未完成的工作拆成可执行任务。当前策略调整为：先收口语言设置、真实语音/音频录制与视频录制；摄像头 sidecar、画中画、导出和正式发布链路在这三项验收后再恢复。
 
-当前 preview 仍不能对外宣称完整真实录制已完成。已完成的是 UI Shell、设置、语言、图标、mock `.rfrec` 包、`data/video` 写盘结构、全平台 preview build、Windows WASAPI 音频采集、真实麦克风设备枚举与电平监听、RNNoise native wrapper、Windows FFmpeg desktop video writer 代码路径、Windows 停止阶段音视频 mux、Windows 20 分钟音视频长录 smoke、Windows portable zip FFmpeg 依赖准备路径、Windows `v0.1.0-preview.14` release asset 下载/SHA256/portable zip 结构复验、Windows GUI subsystem/FFmpeg 子进程命令窗口隐藏门禁、Windows 默认音频设备保留真实 WASAPI endpoint、录制态来源/音频/摄像头配置锁定、区域录制持久边框、设置窗口打开 `data/video` 目录和最近 `.rfrec` 包内容入口、macOS ScreenCaptureKit video/system-audio mux 代码路径、macOS CoreAudio 麦克风枚举和 PCM 采集代码路径，以及无 GUI doctor/smoke 验收入口。`v0.1.0-preview.14` 已作为 GitHub prerelease 发布，Release Gate、Windows x64、macOS arm64、Linux x64 和 Publish GitHub Release 均通过；本轮修复区域录制开始后的持久边框和清理 macOS CoreAudio deprecated property element annotation。还缺少的是 release artifact 下载复验后的 clean-machine 真实录制 smoke、目标桌面 RNNoise 实录听感/诊断、macOS/Linux 真机视频验收和 Linux PipeWire writer。摄像头 sidecar 和 PIP 当前暂停，不计入本轮视频/语音验收。
+当前 preview 仍不能对外宣称完整真实录制已完成。已完成的是 UI Shell、设置、语言、图标、mock `.rfrec` 包、`data/video` 写盘结构、全平台 preview build、Windows WASAPI 音频采集、真实麦克风设备枚举与电平监听、RNNoise native wrapper、Windows FFmpeg desktop video writer 代码路径、Windows 停止阶段音视频 mux、Windows 20 分钟音视频长录 smoke、Windows portable zip FFmpeg 依赖准备路径、Windows `v0.1.0-preview.15` release asset 下载/SHA256/portable zip 结构复验、Windows portable clean-machine smoke runner 打包、Windows GUI subsystem/FFmpeg 子进程命令窗口隐藏门禁、Windows 默认音频设备保留真实 WASAPI endpoint、录制态来源/音频/摄像头配置锁定、区域录制持久边框、设置窗口打开 `data/video` 目录和最近 `.rfrec` 包内容入口、macOS ScreenCaptureKit video/system-audio mux 代码路径、macOS CoreAudio 麦克风枚举和 PCM 采集代码路径，以及无 GUI doctor/smoke 验收入口。`v0.1.0-preview.15` 已作为 GitHub prerelease 发布，Release Gate、Windows x64、macOS arm64、Linux x64 和 Publish GitHub Release 均通过；本轮新增 Windows portable smoke runner 和 release/CI 门禁。还缺少的是 clean-machine 执行真实录制 smoke、目标桌面 RNNoise 实录听感/诊断、macOS/Linux 真机视频验收和 Linux PipeWire writer。摄像头 sidecar 和 PIP 当前暂停，不计入本轮视频/语音验收。
 
 ## P0-AUDIO：真实音频与 RNNoise 降噪
 
@@ -279,19 +279,19 @@
 
 ## P1-RELEASE：正式发布链路
 
-状态：preview 发布链路已能产出可下载验收包。`v0.1.0-preview.14` 已作为 GitHub prerelease 发布，Release Gate、Windows x64、macOS arm64、Linux x64 和 Publish GitHub Release 均通过；产物包含 Windows portable zip、macOS arm64 raw preview binary、Linux x64 raw preview binary 和 SHA256SUMS。该版本把真实麦克风设备枚举/电平监听、真实 WASAPI endpoint 选择、macOS CoreAudio 麦克风代码路径、Windows GUI subsystem、FFmpeg 子进程命令窗口隐藏、录制态配置锁定、区域录制持久边框、胶囊透明背景、屏幕编号标识、区域编辑 overlay、录制态透明 overlay 边框和 CoreAudio annotation 清理纳入验收包。`scripts/verify-windows-preview-release.ps1 -TagName v0.1.0-preview.14` 已完成真实 GitHub Release 下载复验：Windows portable zip SHA256 匹配 `7FE81996BCEB2D37864432FAAFCEE9D3FF942E1544A66EC3073D0D43340ED97A`，`recordingfreedom.exe` 是 x64 GUI PE，FFmpeg/FFprobe 是 x64 PE 且 `-version` 可执行。正式签名安装包、公证、Linux 包格式和 clean-machine 真实录制验收仍未完成。
+状态：preview 发布链路已能产出可下载验收包。`v0.1.0-preview.15` 已作为 GitHub prerelease 发布，Release Gate、Windows x64、macOS arm64、Linux x64 和 Publish GitHub Release 均通过；产物包含 Windows portable zip、macOS arm64 raw preview binary、Linux x64 raw preview binary 和 SHA256SUMS。该版本在 `preview.14` 的真实麦克风设备枚举/电平监听、真实 WASAPI endpoint 选择、macOS CoreAudio 麦克风代码路径、Windows GUI subsystem、FFmpeg 子进程命令窗口隐藏、录制态配置锁定、区域录制持久边框、胶囊透明背景、屏幕编号标识、区域编辑 overlay、录制态透明 overlay 边框和 CoreAudio annotation 清理基础上，新增 Windows portable clean-machine smoke 工具和 runner。`scripts/verify-windows-preview-release.ps1 -TagName v0.1.0-preview.15` 已完成真实 GitHub Release 下载复验：Windows portable zip SHA256 匹配 `99E1EB5C425B925F0F0269EE364C95A4F0CB7278EEE73C8E6D5A31196A8CD7DD`，`recordingfreedom.exe` 是 x64 GUI PE，FFmpeg/FFprobe 是 x64 PE 且 `-version` 可执行，`desktop-doctor.exe`、`video-smoke.exe` 和 `audio-smoke.exe` 均为 x64 console PE。正式签名安装包、公证、Linux 包格式和 clean-machine 真实录制验收仍未完成。
 
 任务：
 
 - macOS Developer ID Application 签名、公证、staple。
-- Windows installer/MSIX 或 portable zip 验证。preview portable zip 已通过 GitHub Windows runner 内容、x64 GUI PE、FFmpeg/FFprobe 执行校验；`v0.1.0-preview.14` 已用 `scripts/verify-windows-preview-release.ps1` 下载并校验 SHA256 与 portable zip 结构。下一版 Windows portable zip 会内置 `desktop-doctor.exe`、`video-smoke.exe`、`audio-smoke.exe` 和 `run-windows-portable-smoke.ps1`，仍需把 artifact 带到 clean machine 运行真实录制矩阵。
+- Windows installer/MSIX 或 portable zip 验证。preview portable zip 已通过 GitHub Windows runner 内容、x64 GUI PE、FFmpeg/FFprobe 执行校验；`v0.1.0-preview.15` 已用 `scripts/verify-windows-preview-release.ps1` 下载并校验 SHA256 与 portable zip 结构，且已确认内置 `desktop-doctor.exe`、`video-smoke.exe`、`audio-smoke.exe` 和 `run-windows-portable-smoke.ps1`。仍需把 artifact 带到 clean machine 运行真实录制矩阵。
 - Linux deb/rpm/AppImage 取舍和验证。
 - release workflow 缺少签名密钥时必须失败或只产出明确 preview artifact。
 
 验收：
 
 - GitHub Actions 产出可安装包。当前 preview 只产出 Windows portable zip 和 macOS/Linux raw binary，不等同正式安装包。
-- SHA256SUMS 和 release notes 完整。`v0.1.0-preview.14` 已完成 preview 级别 SHA256SUMS 和 release notes。
+- SHA256SUMS 和 release notes 完整。`v0.1.0-preview.15` 已完成 preview 级别 SHA256SUMS 和 release notes。
 - macOS Gatekeeper 不阻止已公证包。
 - Windows clean machine 可启动。
 

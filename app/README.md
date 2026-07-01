@@ -104,12 +104,12 @@ Prepare the same Windows FFmpeg tool layout used by release builds:
 Verify a published Windows preview portable zip from GitHub Releases:
 
 ```powershell
-..\scripts\verify-windows-preview-release.ps1 -TagName v0.1.0-preview.14
+..\scripts\verify-windows-preview-release.ps1 -TagName v0.1.0-preview.15
 ```
 
 The release verifier downloads the Windows x64 portable zip and SHA256SUMS, checks the hash, then verifies the zip contains a x64 GUI `recordingfreedom.exe`, x64 FFmpeg/FFprobe, and the FFmpeg third-party notice. This is an artifact integrity check; real screen/region/window capture still needs the no-GUI video smoke commands below on the target desktop.
 
-Windows portable artifacts produced after `v0.1.0-preview.14` include target-machine smoke tools. After unzipping the portable zip on a Windows desktop, run:
+The current Windows portable preview includes target-machine smoke tools. After unzipping the portable zip on a Windows desktop, run:
 
 ```powershell
 .\tools\run-windows-portable-smoke.ps1

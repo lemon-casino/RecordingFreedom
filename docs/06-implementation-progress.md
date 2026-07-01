@@ -189,6 +189,8 @@
   - `v0.1.0-preview.13` 已发布为 GitHub prerelease：Release Gate、Windows x64、macOS arm64、Linux x64 和 Publish GitHub Release 均通过。Release URL：`https://github.com/lemon-casino/RecordingFreedom/releases/tag/v0.1.0-preview.13`。
   - `v0.1.0-preview.13` 修复胶囊窗口周围透明 WebView 灰底/阴影伪影、单屏标识窗口编号居中与圆角尺寸、区域录制框选编辑态改为透明 overlay，避免窄条 WebView 黑块/白条和编辑遮挡。
   - `v0.1.0-preview.14` 修复区域录制开始后的持久边框，录制态改为鼠标穿透透明 overlay，只保留红色边框，避免四个窄条 WebView 窗口露出浅色背景和关闭按钮；同时清理 macOS CoreAudio 麦克风枚举中的 deprecated property element annotation。
+  - `v0.1.0-preview.15` 已发布为 GitHub prerelease：Release Gate、Windows x64、macOS arm64、Linux x64 和 Publish GitHub Release 均通过。Release URL：`https://github.com/lemon-casino/RecordingFreedom/releases/tag/v0.1.0-preview.15`。
+  - `v0.1.0-preview.15` 把 Windows clean-machine 验收工具纳入 portable zip：`tools/desktop-doctor.exe`、`tools/video-smoke.exe`、`tools/audio-smoke.exe` 和 `tools/run-windows-portable-smoke.ps1`，并把 CI/release 门禁和 portable zip 校验扩展到这些工具。
   - `v0.1.0-preview.7` 曾因 Linux Wails build tag 使用空格拼接 `gtk3 rnnoise_native` 导致 Linux build 失败，已在 `v0.1.0-preview.8` 前修正为 `gtk3,rnnoise_native` 并纳入 `cmd/release-config-check` 门禁。
   - `v0.1.0-preview.8` 曾因 Windows runner 的 FFmpeg 准备脚本下载链路失败而未发布，已在 `v0.1.0-preview.9` 前改为 BtbN FFmpeg-Builds GitHub 源、`curl.exe` 重试下载和按 asset name 校验 `checksums.sha256`。
   - 最新 `main` CI 已通过 Bindings/Frontend/Go、macOS Native Capture Contracts、Windows/macOS/Linux Wails Build；其中 Windows Wails Build 已通过 FFmpeg bootstrap、RNNoise gate 和 video gate。
@@ -348,7 +350,7 @@ CGO_ENABLED=1 go test -tags rnnoise_native ./internal/audio/rnnoise/native ./int
 - `scripts/verify-windows-portable.ps1` 已增强为解压检查 portable zip：验证 `recordingfreedom.exe` 是 x64 GUI PE，`tools/ffmpeg.exe`、`tools/ffprobe.exe`、`tools/desktop-doctor.exe`、`tools/video-smoke.exe` 和 `tools/audio-smoke.exe` 是 x64 PE，并在 Windows host 上执行 FFmpeg/FFprobe `-version`。
 - Windows portable zip 的 release workflow 已新增 clean-machine 验收工具打包：`tools/desktop-doctor.exe`、`tools/video-smoke.exe`、`tools/audio-smoke.exe` 和 `tools/run-windows-portable-smoke.ps1`。该 runner 解压后即可运行，不依赖 Go/Node/Wails 源码环境，默认把 smoke 包写入 portable 根目录下的 `data-smoke/data/video`。
 - 新增 `scripts/verify-windows-preview-release.ps1`：可按 tag 或最近 release 下载 GitHub Windows x64 portable zip 和 `SHA256SUMS-windows-x64*.txt`，校验 SHA256 后复用 `verify-windows-portable.ps1`。该脚本用于 release asset 完整性复验，不替代 clean-machine 真实 screen/region/window 录制 smoke。
-- `v0.1.0-preview.14` Windows portable zip 已用真实 GitHub Release 下载复验通过：SHA256 `7FE81996BCEB2D37864432FAAFCEE9D3FF942E1544A66EC3073D0D43340ED97A` 匹配，`recordingfreedom.exe` 为 x64 GUI PE，`tools/ffmpeg.exe` / `tools/ffprobe.exe` 为 x64 PE 且 `-version` 可执行。`v0.1.0-preview.14` 尚未包含 portable smoke exe 和 runner；下一版 preview 才会包含这些工具。
+- `v0.1.0-preview.15` Windows portable zip 已用真实 GitHub Release 下载复验通过：SHA256 `99E1EB5C425B925F0F0269EE364C95A4F0CB7278EEE73C8E6D5A31196A8CD7DD` 匹配，`recordingfreedom.exe` 为 x64 GUI PE，`tools/ffmpeg.exe` / `tools/ffprobe.exe` 为 x64 PE 且 `-version` 可执行，`tools/desktop-doctor.exe`、`tools/video-smoke.exe` 和 `tools/audio-smoke.exe` 均为 x64 console PE，`tools/run-windows-portable-smoke.ps1` 已打入 zip。
 
 PIP 合同测试：
 
@@ -408,7 +410,7 @@ RecordingFreedom/app/bin/recordingfreedom.exe
 
 - macOS ScreenCaptureKit display/window/region 录制已接入代码路径，但仍需要真机 smoke：授权屏幕录制后运行 `go run ./cmd/video-smoke -duration=1m`、`go run ./cmd/video-smoke -source-type=window -duration=1m`、`go run ./cmd/video-smoke -source-type=region -duration=1m` 和 `go run ./cmd/video-smoke -duration=5m -pause-after=10s -pause-duration=2s`，并确认 `screen.mp4` 可播放、包进入 `ready`、`video-diagnostics.json` 和 `diagnostics.sync` 正确。Application/Program 后端合同仍保留给 smoke 和后端演进，但不在当前用户菜单展示。
 - ScreenCaptureKit 系统声音 mux 已接入代码路径但仍需 macOS 真机 smoke；麦克风 mux 仍未完成。
-- Windows FFmpeg video writer 已接入代码路径，CI/release 已能准备并打包 `tools/ffmpeg.exe`；本机真实 smoke 已验证 screen、all-screens、region、locked-window、pause/resume segment merge、系统声音 mux、麦克风 mux、系统声音 + 麦克风混音 mux，并已完成 1 分钟、5 分钟和 20 分钟录制包可解码验证。下一版 Windows portable artifact 会内置 `tools/run-windows-portable-smoke.ps1`，用于在 clean machine 直接验证真实录制、失败诊断和空间/权限边界；GitHub `v0.1.0-preview.14` 只完成了 artifact 下载复验，还不能算 clean-machine 真实录制通过。
+- Windows FFmpeg video writer 已接入代码路径，CI/release 已能准备并打包 `tools/ffmpeg.exe`；本机真实 smoke 已验证 screen、all-screens、region、locked-window、pause/resume segment merge、系统声音 mux、麦克风 mux、系统声音 + 麦克风混音 mux，并已完成 1 分钟、5 分钟和 20 分钟录制包可解码验证。GitHub `v0.1.0-preview.15` Windows portable artifact 已内置 `tools/run-windows-portable-smoke.ps1` 并通过下载复验；仍需在 clean machine 执行该 runner，验证真实录制、失败诊断和空间/权限边界。
 - 真实区域录制 crop writer：当前已有 `region` 源类型、`source.geometry` 合同、跨显示器透明十字框选 overlay、拖拽红框、尺寸浮标、选择事件，以及进入 `video.CaptureConfig` / `video-diagnostics.json` 的 writer 边界 geometry。macOS 单显示器区域已接入 ScreenCaptureKit `sourceRect` 写入 `screen.mp4`；Windows 已通过 FFmpeg desktop crop 接入；Linux crop writer 仍未完成。
 - 真实全部屏幕多显示器合成录制：当前已有 `all-screens` 源类型和虚拟桌面 bounds；Windows FFmpeg 可按虚拟桌面录制，macOS/Linux 多屏合成仍保持 queued。
 - 真实 PipeWire / XDG Portal 录制。

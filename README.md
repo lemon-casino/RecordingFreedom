@@ -123,7 +123,7 @@ Verify a staged Windows portable zip before uploading it:
 .\scripts\verify-windows-portable.ps1 -ZipPath .\release-out\RecordingFreedom-windows-x64-v0.1.0-preview.9-portable.zip
 ```
 
-For Windows portable artifacts produced after `v0.1.0-preview.14`, the zip also carries clean-machine diagnostics under `tools/`. After unzipping on a target Windows desktop, run:
+The current Windows portable preview also carries clean-machine diagnostics under `tools/`. After unzipping on a target Windows desktop, run:
 
 ```powershell
 .\tools\run-windows-portable-smoke.ps1
