@@ -4,7 +4,7 @@
 
 本文档把初版 preview 之后尚未完成的工作拆成可执行任务。当前策略调整为：先收口语言设置、真实语音/音频录制与视频录制；摄像头 sidecar、画中画、导出和正式发布链路在这三项验收后再恢复。
 
-当前 preview 仍不能对外宣称完整真实录制已完成。已完成的是 UI Shell、设置、语言、图标、mock `.rfrec` 包、`data/video` 写盘结构、全平台 preview build、Windows WASAPI 音频采集、真实麦克风设备枚举与电平监听、RNNoise native wrapper、Windows FFmpeg desktop video writer 代码路径、Windows 停止阶段音视频 mux、Windows 20 分钟音视频长录 smoke、Windows portable zip FFmpeg 依赖准备路径、Windows GUI subsystem/FFmpeg 子进程命令窗口隐藏门禁、macOS ScreenCaptureKit video/system-audio mux 代码路径、macOS CoreAudio 麦克风枚举和 PCM 采集代码路径，以及无 GUI doctor/smoke 验收入口。`v0.1.0-preview.10` 已作为 GitHub prerelease 发布，Release Gate、Windows x64、macOS arm64、Linux x64 和 Publish GitHub Release 均通过。还缺少的是 release artifact clean-machine 验收、目标桌面 RNNoise 实录听感/诊断、macOS/Linux 真机视频验收和 Linux PipeWire writer。摄像头 sidecar 和 PIP 当前暂停，不计入本轮视频/语音验收。
+当前 preview 仍不能对外宣称完整真实录制已完成。已完成的是 UI Shell、设置、语言、图标、mock `.rfrec` 包、`data/video` 写盘结构、全平台 preview build、Windows WASAPI 音频采集、真实麦克风设备枚举与电平监听、RNNoise native wrapper、Windows FFmpeg desktop video writer 代码路径、Windows 停止阶段音视频 mux、Windows 20 分钟音视频长录 smoke、Windows portable zip FFmpeg 依赖准备路径、Windows GUI subsystem/FFmpeg 子进程命令窗口隐藏门禁、Windows 默认音频设备保留真实 WASAPI endpoint、录制态来源/音频/摄像头配置锁定、区域录制持久边框、macOS ScreenCaptureKit video/system-audio mux 代码路径、macOS CoreAudio 麦克风枚举和 PCM 采集代码路径，以及无 GUI doctor/smoke 验收入口。`v0.1.0-preview.11` 已作为 GitHub prerelease 发布，Release Gate、Windows x64、macOS arm64、Linux x64 和 Publish GitHub Release 均通过。还缺少的是 release artifact clean-machine 验收、目标桌面 RNNoise 实录听感/诊断、macOS/Linux 真机视频验收和 Linux PipeWire writer。摄像头 sidecar 和 PIP 当前暂停，不计入本轮视频/语音验收。
 
 ## P0-AUDIO：真实音频与 RNNoise 降噪
 
@@ -279,7 +279,7 @@
 
 ## P1-RELEASE：正式发布链路
 
-状态：preview 发布链路已能产出可下载验收包。`v0.1.0-preview.10` 已作为 GitHub prerelease 发布，Release Gate、Windows x64、macOS arm64、Linux x64 和 Publish GitHub Release 均通过；产物包含 Windows portable zip、macOS arm64 raw preview binary、Linux x64 raw preview binary 和 SHA256SUMS。该版本把真实麦克风设备枚举/电平监听、macOS CoreAudio 麦克风代码路径、Windows GUI subsystem 与 FFmpeg 子进程命令窗口隐藏纳入验收包。正式签名安装包、公证、Linux 包格式和 clean-machine 验收仍未完成。
+状态：preview 发布链路已能产出可下载验收包。`v0.1.0-preview.11` 已作为 GitHub prerelease 发布，Release Gate、Windows x64、macOS arm64、Linux x64 和 Publish GitHub Release 均通过；产物包含 Windows portable zip、macOS arm64 raw preview binary、Linux x64 raw preview binary 和 SHA256SUMS。该版本把真实麦克风设备枚举/电平监听、真实 WASAPI endpoint 选择、macOS CoreAudio 麦克风代码路径、Windows GUI subsystem、FFmpeg 子进程命令窗口隐藏、录制态配置锁定和区域录制持久边框纳入验收包。正式签名安装包、公证、Linux 包格式和 clean-machine 验收仍未完成。
 
 任务：
 
@@ -291,7 +291,7 @@
 验收：
 
 - GitHub Actions 产出可安装包。当前 preview 只产出 Windows portable zip 和 macOS/Linux raw binary，不等同正式安装包。
-- SHA256SUMS 和 release notes 完整。`v0.1.0-preview.10` 已完成 preview 级别 SHA256SUMS 和 release notes。
+- SHA256SUMS 和 release notes 完整。`v0.1.0-preview.11` 已完成 preview 级别 SHA256SUMS 和 release notes。
 - macOS Gatekeeper 不阻止已公证包。
 - Windows clean machine 可启动。
 
@@ -318,7 +318,7 @@
 2. A1 真实音频设备枚举。Windows 已完成；macOS CoreAudio 输入设备枚举代码路径已完成，下一步补 macOS 真机验证和 Linux。
 3. A3 麦克风采集。Windows 已完成并 smoke 验证；macOS CoreAudio 麦克风采集代码路径已完成，下一步补 macOS 真机 smoke、长录同步和 Linux。
 4. A4 RNNoise native DSP。wrapper 已迁移并恢复 CI/release gate 定向验证；能力矩阵已按 `rnnoise.Available()` 动态展示；preview/release artifact 已改为默认启用 `rnnoise_native` 并通过 `desktop-doctor -require-rnnoise`。下一步是在目标桌面补真实 `audio-smoke -rnnoise`、听感检查和长录诊断。
-5. A2 系统声音采集。Windows source 已实现并通过有播放源真实样本 smoke，录屏 runtime 已能启动 WASAPI sidecar 并在停止阶段 mux 到主 `screen.mp4`，Windows 20 分钟音视频长录已通过，Windows portable zip 已能准备 FFmpeg 依赖并在 `v0.1.0-preview.10` release workflow 中通过内容校验；下一步做 release artifact clean-machine 真实录制验收。
+5. A2 系统声音采集。Windows source 已实现并通过有播放源真实样本 smoke，录屏 runtime 已能启动 WASAPI sidecar 并在停止阶段 mux 到主 `screen.mp4`，Windows 20 分钟音视频长录已通过，Windows portable zip 已能准备 FFmpeg 依赖并在 `v0.1.0-preview.11` release workflow 中通过内容校验；下一步做 release artifact clean-machine 真实录制验收。
 6. A5 音频混音、mux 与写盘。Windows 屏幕录制停止阶段 mux 与 audio-only 停止阶段 `audio.m4a` 封装已完成；macOS CoreAudio 麦克风采集源已接入 native audio runtime，下一步补 macOS 真机 mux/sync 验收、Linux 音频源、live PCM pipe/内存水位策略，并做三平台长录同步。
 7. A6 预检、UI 和设置联动。
 8. A7 三平台手动验证矩阵。
