@@ -272,7 +272,7 @@ go run ./cmd/video-smoke -duration=1s
 - `1m screen + system audio + microphone`：`recording-2026-07-01-09-37-05-743.rfrec` 进入 `ready`，`screen.mp4` 2269237 bytes，1829 frames，duration 60993ms；系统声音和麦克风均 mux 到 `screen.mp4`，`systemAudioSamples=5707200`，`microphoneSamples=2880000`；`ffmpeg -v error -i screen.mp4 -f null -` 通过。
 - `5m screen + pause/resume`：`recording-2026-07-01-09-38-35-292.rfrec` 进入 `ready`，`screen.mp4` 5161172 bytes，9017 frames，duration 300574ms；manifest sync message 为 `FFmpeg desktop capture wrote 2 segment(s).`，确认暂停/继续分段合并路径生效；`ffmpeg -v error -i screen.mp4 -f null -` 通过。
 - `20m screen + system audio + microphone + pause/resume`：`recording-2026-07-01-09-46-38-233.rfrec` 进入 `ready`，`screen.mp4` 119345863 bytes，36028 frames，duration 1200935ms；系统声音和麦克风均 mux 到 `screen.mp4`，`systemAudioStorage=muxed`，`microphoneAudioStorage=muxed`，`systemAudioSamples=114340800`，`microphoneSamples=57609600`；manifest sync message 为 `FFmpeg desktop capture wrote 2 segment(s).`，确认暂停/继续分段合并路径在 20 分钟长录中生效；`ffmpeg -v error -i screen.mp4 -f null -` 通过。
-- 仍未完成：release portable zip 解压后的 clean-machine 验收、目标桌面 RNNoise 实录听感/诊断，以及 macOS/Linux 真机录制验收。
+- 仍未完成：release portable zip 下载复验后的 clean-machine 真实录制 smoke、目标桌面 RNNoise 实录听感/诊断，以及 macOS/Linux 真机录制验收。
 - 用户反馈“麦克风设备展示是假的、语音波动没有监听”后，已删除前端假麦克风列表和假波形初始化；后端新增真实麦克风电平监听入口，前端订阅 `audio.level` 事件显示 RMS/peak 推导的真实电平。无可用麦克风时 UI 显示不可用，不再展示虚构设备。
 - 用户反馈 Windows 默认麦克风仍像假设备后，Windows WASAPI 枚举已改为保留真实 `microphone:wasapi:<endpoint-id>` / `system-audio:wasapi:<endpoint-id>` 作为选择 ID，默认设备只通过 `isDefault` 和 subtitle 标记；旧请求 `microphone:default` / `system-audio:default` 在 preflight 中会映射到真实默认 endpoint，避免 UI 能选真实设备但预检误挡。
 - 录制开始后，胶囊 UI 会锁定来源、区域、系统声音、麦克风、RNNoise 和摄像头选择；只有结束录制后重新启用。区域录制完成框选后，未录制时由透明 `region-overlay` 显示可移动、可缩放、可取消的红色选区；开始录制后同一个 overlay 切为鼠标穿透 recording 模式，只绘制一圈红色边框，持续标识被录制范围，不再显示四条窄 WebView 窗口。
@@ -342,6 +342,11 @@ CGO_ENABLED=1 go test -tags rnnoise_native ./internal/audio/rnnoise/native ./int
 - `internal/recording` 覆盖 `NativeRuntimeBackend`：Start/Pause/Resume/Stop 会驱动 runtime，Stop 返回 sync diagnostics，Start 失败会把已创建 native 包标记为 `failed`；backend registry 可选择注册后的 runtime backend。
 - 本机 Windows audio-only M4A smoke 已确认默认麦克风 WASAPI capture 生成 ready 的 audio-only `.rfrec` 包：`recording-2026-07-01-09-29-58-163.rfrec`，manifest 为 `recordingMode: "audio-only"`、`status: "ready"`、`audioPath: "audio.m4a"`，麦克风 track 指向 `audio.m4a` 且 `microphoneAudioStorage=muxed`；包内保留 `audio.wav` sidecar 作为恢复/诊断证据。`ffmpeg -v error -i audio.m4a -f null -` 通过，确认 `audio.m4a` 可解码。
 - 本机 Windows system audio smoke 已确认 WASAPI loopback source 在有活动系统播放时可以写入真实样本：`system-audio.wav` 614444 bytes，`framesReceived=160`，`samplesReceived=153600`，`samplesWritten=153600`，`sampleRate=48000`，`channels=2`，duration 约 `1600ms`。
+
+发布产物验收：
+
+- `scripts/verify-windows-portable.ps1` 已增强为解压检查 portable zip：验证 `recordingfreedom.exe` 是 x64 GUI PE，`tools/ffmpeg.exe` 和 `tools/ffprobe.exe` 是 x64 PE，并在 Windows host 上执行 FFmpeg/FFprobe `-version`。
+- 新增 `scripts/verify-windows-preview-release.ps1`：可按 tag 或最近 release 下载 GitHub Windows x64 portable zip 和 `SHA256SUMS-windows-x64*.txt`，校验 SHA256 后复用 `verify-windows-portable.ps1`。该脚本用于 release asset 完整性复验，不替代 clean-machine 真实 screen/region/window 录制 smoke。
 
 PIP 合同测试：
 

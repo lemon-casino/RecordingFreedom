@@ -101,6 +101,14 @@ Prepare the same Windows FFmpeg tool layout used by release builds:
 ..\scripts\ensure-windows-ffmpeg.ps1
 ```
 
+Verify a published Windows preview portable zip from GitHub Releases:
+
+```powershell
+..\scripts\verify-windows-preview-release.ps1 -TagName v0.1.0-preview.14
+```
+
+The release verifier downloads the Windows x64 portable zip and SHA256SUMS, checks the hash, then verifies the zip contains a x64 GUI `recordingfreedom.exe`, x64 FFmpeg/FFprobe, and the FFmpeg third-party notice. This is an artifact integrity check; real screen/region/window capture still needs the no-GUI video smoke commands below on the target desktop.
+
 Run the no-GUI video smoke on a machine with the required native dependency and desktop permissions:
 
 ```bash

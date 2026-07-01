@@ -12,6 +12,8 @@ func TestRunAcceptsRequiredReleaseGates(t *testing.T) {
 	writeWorkflow(t, root, ".github/workflows/ci.yml", workflowFixture(".github/workflows/ci.yml"))
 	writeWorkflow(t, root, ".github/workflows/release.yml", workflowFixture(".github/workflows/release.yml"))
 	writeWorkflow(t, root, "app/build/windows/Taskfile.yml", workflowFixture("app/build/windows/Taskfile.yml"))
+	writeWorkflow(t, root, "scripts/verify-windows-portable.ps1", workflowFixture("scripts/verify-windows-portable.ps1"))
+	writeWorkflow(t, root, "scripts/verify-windows-preview-release.ps1", workflowFixture("scripts/verify-windows-preview-release.ps1"))
 
 	report, err := run(root)
 	if err != nil {
@@ -31,6 +33,8 @@ func TestRunRejectsMissingRNNoiseGate(t *testing.T) {
 	writeWorkflow(t, root, ".github/workflows/ci.yml", ci)
 	writeWorkflow(t, root, ".github/workflows/release.yml", workflowFixture(".github/workflows/release.yml"))
 	writeWorkflow(t, root, "app/build/windows/Taskfile.yml", workflowFixture("app/build/windows/Taskfile.yml"))
+	writeWorkflow(t, root, "scripts/verify-windows-portable.ps1", workflowFixture("scripts/verify-windows-portable.ps1"))
+	writeWorkflow(t, root, "scripts/verify-windows-preview-release.ps1", workflowFixture("scripts/verify-windows-preview-release.ps1"))
 
 	report, err := run(root)
 	if err != nil {
@@ -80,6 +84,18 @@ func workflowFixture(name string) string {
 	}
 	if strings.Contains(name, "Taskfile.yml") {
 		builder.WriteString("-ldflags=\"-w -s -H windowsgui\"\n")
+	}
+	if strings.Contains(name, "verify-windows-portable.ps1") {
+		builder.WriteString("Assert-PEMetadata\n")
+		builder.WriteString("ExpectedSubsystem 2\n")
+		builder.WriteString("0x8664\n")
+		builder.WriteString("recordingfreedom.exe\n")
+	}
+	if strings.Contains(name, "verify-windows-preview-release.ps1") {
+		builder.WriteString("api.github.com/repos\n")
+		builder.WriteString("SHA256SUMS-windows-x64\n")
+		builder.WriteString("Get-FileHash -Algorithm SHA256\n")
+		builder.WriteString("verify-windows-portable.ps1\n")
 	}
 	return builder.String()
 }

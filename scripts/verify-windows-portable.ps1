@@ -60,6 +60,78 @@ function Invoke-VersionCommand {
     return ($output | Select-Object -First 1)
 }
 
+function Get-PEMetadata {
+    param([Parameter(Mandatory = $true)][string]$Path)
+
+    $stream = [System.IO.File]::Open($Path, [System.IO.FileMode]::Open, [System.IO.FileAccess]::Read, [System.IO.FileShare]::Read)
+    try {
+        $reader = [System.IO.BinaryReader]::new($stream)
+        try {
+            $stream.Seek(0, [System.IO.SeekOrigin]::Begin) | Out-Null
+            $mzSignature = $reader.ReadUInt16()
+            if ($mzSignature -ne 0x5A4D) {
+                throw "$Path is not a PE executable: missing MZ signature"
+            }
+
+            $stream.Seek(0x3C, [System.IO.SeekOrigin]::Begin) | Out-Null
+            $peOffset = $reader.ReadInt32()
+            if ($peOffset -le 0 -or $peOffset -gt ($stream.Length - 24)) {
+                throw "$Path is not a PE executable: invalid PE header offset $peOffset"
+            }
+
+            $stream.Seek($peOffset, [System.IO.SeekOrigin]::Begin) | Out-Null
+            $peSignature = $reader.ReadUInt32()
+            if ($peSignature -ne 0x00004550) {
+                throw "$Path is not a PE executable: missing PE signature"
+            }
+
+            $machine = $reader.ReadUInt16()
+            $stream.Seek($peOffset + 20, [System.IO.SeekOrigin]::Begin) | Out-Null
+            $optionalHeaderSize = $reader.ReadUInt16()
+            if ($optionalHeaderSize -lt 70) {
+                throw "$Path has an unexpectedly small PE optional header"
+            }
+
+            $optionalHeaderOffset = $peOffset + 24
+            $stream.Seek($optionalHeaderOffset, [System.IO.SeekOrigin]::Begin) | Out-Null
+            $optionalMagic = $reader.ReadUInt16()
+            if ($optionalMagic -ne 0x010B -and $optionalMagic -ne 0x020B) {
+                throw "$Path has an unsupported PE optional header magic 0x$($optionalMagic.ToString('X4'))"
+            }
+
+            $stream.Seek($optionalHeaderOffset + 68, [System.IO.SeekOrigin]::Begin) | Out-Null
+            $subsystem = $reader.ReadUInt16()
+
+            [pscustomobject]@{
+                Machine = $machine
+                OptionalMagic = $optionalMagic
+                Subsystem = $subsystem
+            }
+        } finally {
+            $reader.Dispose()
+        }
+    } finally {
+        $stream.Dispose()
+    }
+}
+
+function Assert-PEMetadata {
+    param(
+        [Parameter(Mandatory = $true)][string]$Path,
+        [Parameter(Mandatory = $true)][UInt16]$ExpectedMachine,
+        [int]$ExpectedSubsystem = -1
+    )
+
+    $metadata = Get-PEMetadata -Path $Path
+    if ($metadata.Machine -ne $ExpectedMachine) {
+        throw "$Path has PE machine 0x$($metadata.Machine.ToString('X4')), expected 0x$($ExpectedMachine.ToString('X4'))"
+    }
+    if ($ExpectedSubsystem -ge 0 -and $metadata.Subsystem -ne $ExpectedSubsystem) {
+        throw "$Path has PE subsystem $($metadata.Subsystem), expected $ExpectedSubsystem"
+    }
+    Write-Host "PE verified: $Path machine=0x$($metadata.Machine.ToString('X4')) subsystem=$($metadata.Subsystem)"
+}
+
 $zip = Resolve-FullPath $ZipPath
 if (-not (Test-Path -LiteralPath $zip)) {
     throw "Windows portable zip does not exist: $zip"
@@ -83,22 +155,39 @@ try {
     $archive.Dispose()
 }
 
-if (-not $SkipExecutableCheck -and (Is-WindowsHost)) {
+if (-not $SkipExecutableCheck) {
     $extractDir = Join-Path ([System.IO.Path]::GetTempPath()) ("recordingfreedom-portable-" + [System.Guid]::NewGuid().ToString("N"))
     try {
         New-Item -ItemType Directory -Force -Path $extractDir | Out-Null
         Expand-Archive -LiteralPath $zip -DestinationPath $extractDir -Force
+        $appPath = Join-Path $extractDir "recordingfreedom.exe"
+        if (-not (Test-Path -LiteralPath $appPath)) {
+            throw "Extracted portable zip is missing recordingfreedom.exe"
+        }
+        Assert-PEMetadata -Path $appPath -ExpectedMachine 0x8664 -ExpectedSubsystem 2
+
         $ffmpegPath = Join-Path $extractDir "tools/ffmpeg.exe"
         if (-not (Test-Path -LiteralPath $ffmpegPath)) {
             throw "Extracted portable zip is missing tools/ffmpeg.exe"
         }
-        $version = Invoke-VersionCommand -Path $ffmpegPath
-        Write-Host $version
+        Assert-PEMetadata -Path $ffmpegPath -ExpectedMachine 0x8664
 
         if (-not $AllowMissingFFprobe) {
             $ffprobePath = Join-Path $extractDir "tools/ffprobe.exe"
-            $probeVersion = Invoke-VersionCommand -Path $ffprobePath
-            Write-Host $probeVersion
+            if (-not (Test-Path -LiteralPath $ffprobePath)) {
+                throw "Extracted portable zip is missing tools/ffprobe.exe"
+            }
+            Assert-PEMetadata -Path $ffprobePath -ExpectedMachine 0x8664
+        }
+
+        if (Is-WindowsHost) {
+            $version = Invoke-VersionCommand -Path $ffmpegPath
+            Write-Host $version
+
+            if (-not $AllowMissingFFprobe) {
+                $probeVersion = Invoke-VersionCommand -Path $ffprobePath
+                Write-Host $probeVersion
+            }
         }
     } finally {
         if ($extractDir -and $extractDir.StartsWith([System.IO.Path]::GetTempPath(), [System.StringComparison]::OrdinalIgnoreCase)) {

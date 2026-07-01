@@ -79,11 +79,20 @@ GitHub Actions 会自动运行 `release.yml`，通过后生成 GitHub prerelease
 - Windows、macOS、Linux 三个平台是否能完成 Wails 构建。
 - 发布二进制是否通过 `desktop-doctor -require-rnnoise`，确认 RNNoise native DSP 已真实编入 artifact。
 - Windows portable zip 是否通过 `scripts/verify-windows-portable.ps1`：包含 `recordingfreedom.exe`、`tools/ffmpeg.exe`、`tools/ffprobe.exe` 和 `tools/THIRD_PARTY_FFMPEG.txt`，并能在 Windows runner 上执行 FFmpeg/FFprobe。
+- 已发布的 Windows preview asset 可用 `scripts/verify-windows-preview-release.ps1` 下载复验：脚本会从 GitHub Release 下载 Windows portable zip 和 `SHA256SUMS-windows-x64*.txt`，校验 SHA256，再调用 `scripts/verify-windows-portable.ps1` 检查 portable zip 内容、x64 PE 头、`recordingfreedom.exe` GUI subsystem、FFmpeg/FFprobe 依赖。
 - Windows artifact 是否保持 GUI subsystem 和隐藏 FFmpeg/DirectShow 子进程命令窗口的配置，避免启动软件或开始录制时弹出控制台窗口。
 
 当前已验证的 preview 是 `v0.1.0-preview.14`。该 tag 的 Release workflow 已通过 Release Gate、Windows x64、macOS arm64、Linux x64 和 Publish GitHub Release，并发布到 `https://github.com/lemon-casino/RecordingFreedom/releases/tag/v0.1.0-preview.14`。产物包含 `RecordingFreedom-windows-x64-v0.1.0-preview.14-portable.zip`、`RecordingFreedom-macos-arm64-v0.1.0-preview.14`、`RecordingFreedom-linux-x64-v0.1.0-preview.14` 和三个平台 SHA256SUMS。`v0.1.0-preview.7` 和 `v0.1.0-preview.8` 保留为失败记录：前者暴露 Linux Wails build tag 拼接问题，后者暴露 Windows FFmpeg bootstrap 下载链路问题；两个问题均已在 `preview.9` 前修复。`v0.1.0-preview.11` 在 `preview.10` 基础上修复 Windows 默认麦克风保留真实 WASAPI endpoint、录制中锁定来源/音频/摄像头配置，以及区域录制选区持久边框。`v0.1.0-preview.13` 修复胶囊透明背景灰底、屏幕编号标识尺寸/居中，并把区域框选后的编辑态改为透明 overlay。`v0.1.0-preview.14` 把区域录制开始后的持久边框也改为鼠标穿透透明 overlay，避免四个窄条 WebView 窗口露出浅色背景和关闭按钮，同时清理 macOS CoreAudio deprecated property element annotation。
 
 当前 preview release 必须在 release notes 中明确：macOS ScreenCaptureKit display/window/region capture 已接入代码路径但仍需真机 smoke 验收，Program/Application 当前是 queued 后续项；Windows portable zip 会携带 FFmpeg desktop writer 依赖，但仍需要下载 artifact 后在 clean machine 跑 screen/region/window `video-smoke` 和音频 mux 组合；Windows WASAPI 音频已能在停止阶段 mux 到主 `screen.mp4`，且本机 1 分钟、5 分钟和 20 分钟 smoke 已通过。跨平台长录同步、Linux PipeWire、目标桌面 RNNoise 实录听感仍属于后续验收；摄像头 sidecar 和 PIP 当前暂停，等视频录制和语音/音频录制验收后再恢复。不能把 mock package、未验收的 ScreenCaptureKit/FFmpeg artifact 路径或 `audio-smoke` 说成完整正式录制。
+
+Windows preview asset 下载复验命令：
+
+```powershell
+.\scripts\verify-windows-preview-release.ps1 -TagName v0.1.0-preview.14
+```
+
+不传 `-TagName` 时会自动选择最近一个包含 Windows x64 portable zip 的已发布 release。这个脚本只证明发布 asset 完整、哈希匹配、portable zip 内容正确、Windows exe 是 x64 GUI 子系统且 FFmpeg/FFprobe 可执行；它不替代 clean-machine 真实录制 smoke。下载复验通过后，仍需在目标 Windows 桌面执行 screen/all-screens/region/window `video-smoke` 和系统声音/麦克风 mux 组合。
 
 `preview`、`alpha`、`beta`、`rc` 标签会被 workflow 自动标记为 GitHub prerelease；正式稳定版本再移除这些后缀。
 
@@ -147,7 +156,8 @@ Linux 初期为 experimental：
 - RNNoise native DSP 已进入目标 preview/release toolchain 的 cgo 构建和 doctor 门禁；正式发布前仍需补目标桌面的 `audio-smoke -rnnoise` 实录听感与诊断验证。
 - FFmpeg 或系统编码依赖策略检查。
 - Windows portable zip 解压后 `recordingfreedom.exe` 能从同级 `tools/ffmpeg.exe` 解析依赖。
-- Release workflow 在上传 artifact 前运行 `scripts/verify-windows-portable.ps1`，缺少 exe、FFmpeg、FFprobe 或第三方说明会直接失败。
+- Release workflow 在上传 artifact 前运行 `scripts/verify-windows-portable.ps1`，缺少 exe、FFmpeg、FFprobe 或第三方说明会直接失败；该脚本还会解压 portable zip，检查 `recordingfreedom.exe` 是 x64 GUI PE，并确认 FFmpeg/FFprobe 是 x64 PE，在 Windows host 上继续执行 `-version`。
+- Release 发布后可运行 `scripts/verify-windows-preview-release.ps1` 对 GitHub Release asset 做下载级复验，覆盖 SHA256SUMS 和 portable zip 结构。
 - 正式安装包环境中的 GUI/进程级 smoke test。
 - signed/notarized/package 后的 mock `.rfrec/manifest.json` 创建 smoke test。
 

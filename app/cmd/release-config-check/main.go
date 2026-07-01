@@ -81,6 +81,26 @@ var releaseConfigChecks = []configCheck{
 			`-ldflags="-w -s -H windowsgui"`,
 		},
 	},
+	{
+		File: "scripts/verify-windows-portable.ps1",
+		Name: "Windows portable zip verifies x64 GUI PE metadata",
+		Needles: []string{
+			"Assert-PEMetadata",
+			"ExpectedSubsystem 2",
+			"0x8664",
+			"recordingfreedom.exe",
+		},
+	},
+	{
+		File: "scripts/verify-windows-preview-release.ps1",
+		Name: "Windows preview release asset can be downloaded and verified",
+		Needles: []string{
+			"api.github.com/repos",
+			"SHA256SUMS-windows-x64",
+			"Get-FileHash -Algorithm SHA256",
+			"verify-windows-portable.ps1",
+		},
+	},
 }
 
 func main() {
