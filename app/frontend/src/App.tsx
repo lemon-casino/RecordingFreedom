@@ -1511,10 +1511,12 @@ function RegionOverlayWindow() {
     await completeRegionSelection(rect)
   }
 
+  const shellMode = isRecordingRegion ? 'recording' : isEditingRegion ? 'editing' : 'selecting'
+
   return (
     <main
       ref={shellRef}
-      className={`region-overlay-shell ${isRecordingRegion ? 'recording' : ''}`}
+      className={`region-overlay-shell ${shellMode}`}
       aria-label={copy.aria.regionOverlay}
       onPointerMove={isEditingRegion ? editDrag.updateEdit : undefined}
       onPointerCancel={isEditingRegion ? editDrag.completeEdit : undefined}

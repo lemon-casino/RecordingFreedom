@@ -278,6 +278,7 @@ go run ./cmd/video-smoke -duration=1s
 - 用户反馈“麦克风设备展示是假的、语音波动没有监听”后，已删除前端假麦克风列表和假波形初始化；后端新增真实麦克风电平监听入口，前端订阅 `audio.level` 事件显示 RMS/peak 推导的真实电平。无可用麦克风时 UI 显示不可用，不再展示虚构设备。
 - 用户反馈 Windows 默认麦克风仍像假设备后，Windows WASAPI 枚举已改为保留真实 `microphone:wasapi:<endpoint-id>` / `system-audio:wasapi:<endpoint-id>` 作为选择 ID，默认设备只通过 `isDefault` 和 subtitle 标记；旧请求 `microphone:default` / `system-audio:default` 在 preflight 中会映射到真实默认 endpoint，避免 UI 能选真实设备但预检误挡。
 - 录制开始后，胶囊 UI 会锁定来源、区域、系统声音、麦克风、RNNoise 和摄像头选择；只有结束录制后重新启用。区域录制完成框选后，未录制时由透明 `region-overlay` 显示可移动、可缩放、可取消的红色选区；开始录制后同一个 overlay 切为鼠标穿透 recording 模式，只绘制一圈红色边框，持续标识被录制范围，不再显示四条窄 WebView 窗口。
+- 音频采集会话已从同步处理改为默认 `128` 帧有界异步队列：采集回调只入队，worker 顺序执行 RNNoise / sink 写入；队列满时丢弃新输入帧并写入 `audio-diagnostics.json` 的 `droppedSamples` 和 message；暂停会通过 worker flush 哨兵确认前序帧处理完成后再 reset RNNoise，避免暂停边界污染。`audio-diagnostics.json` 现在会写入 `queue.capacity`、`queue.maxDepth`、`queue.flushCount`、`queue.droppedFrames` 和 `queue.droppedSamples`，方便后续 30 分钟以上长录查看队列水位。
 
 有 C 工具链的环境可用以下命令验证 RNNoise 原生 DSP：
 
@@ -333,7 +334,7 @@ CGO_ENABLED=1 go test -tags rnnoise_native ./internal/audio/rnnoise/native ./int
 
 - `internal/audio` 覆盖系统声音绕过 RNNoise、麦克风按 480-sample frame 进入 suppressor、partial frame pending、reset 清理 pending 和 suppressor 状态、拒绝 stereo microphone RNNoise 输入。
 - `internal/audio` 覆盖音频 pipeline：系统声音即使请求 RNNoise 也会 bypass、麦克风按配置进入 RNNoise、禁用流拒收、reset 清理 enhancer 状态、`audio-diagnostics.json` 可写入可读 JSON。
-- `internal/audio` 覆盖 WAV sidecar header/data 写入、格式变化拒绝、mono resampler、`CaptureSession` source -> pipeline -> sink -> diagnostics 运行时。
+- `internal/audio` 覆盖 WAV sidecar header/data 写入、格式变化拒绝、mono resampler、`CaptureSession` source -> pipeline -> sink -> diagnostics 运行时、有界队列满时丢弃输入帧并记录 diagnostics、queue capacity / maxDepth / flushCount / droppedFrames / droppedSamples 诊断，以及暂停前 flush 队列再 reset RNNoise。
 - `internal/video` 覆盖 Windows FFmpeg audio mux 参数：单音频输入直接映射，系统声音 + 麦克风使用 `amix` 混成主媒体 AAC 音轨。
 - `internal/video` 覆盖视频 capture config 归一化、source geometry 写入 diagnostics、`video-diagnostics.json` 写盘和默认平台 session 明确 unsupported。
 - `internal/audio/rnnoise` 覆盖非 cgo/未带标签 fallback；`rnnoise_native` cgo 构建下会编译 RNNoise C 源并跑 native frame 处理测试。Linux cgo link 的 `-lm` 约束已修正为独立 `linux` / `darwin` LDFLAGS，CI/release gate 执行 native 定向测试；三平台 preview artifact 构建已改为带 `rnnoise_native`，Windows runner 会显式准备 MinGW GCC。
@@ -343,6 +344,9 @@ CGO_ENABLED=1 go test -tags rnnoise_native ./internal/audio/rnnoise/native ./int
 - `internal/recording` 覆盖 `NativeBackendRuntime.SyncDiagnostics()`：runtime 生成的 screen/system/microphone track diagnostics 可被 `recpackage.PatchSyncDiagnostics()` 接受并写回 manifest。
 - `internal/recording` 覆盖 `NativeRuntimeBackend`：Start/Pause/Resume/Stop 会驱动 runtime，Stop 返回 sync diagnostics，Start 失败会把已创建 native 包标记为 `failed`；backend registry 可选择注册后的 runtime backend。
 - 本机 Windows audio-only M4A smoke 已确认默认麦克风 WASAPI capture 生成 ready 的 audio-only `.rfrec` 包：`recording-2026-07-01-09-29-58-163.rfrec`，manifest 为 `recordingMode: "audio-only"`、`status: "ready"`、`audioPath: "audio.m4a"`，麦克风 track 指向 `audio.m4a` 且 `microphoneAudioStorage=muxed`；包内保留 `audio.wav` sidecar 作为恢复/诊断证据。`ffmpeg -v error -i audio.m4a -f null -` 通过，确认 `audio.m4a` 可解码。
+- 有界音频队列接入后，本机 Windows 1 秒 audio-only smoke 再次通过：`recording-2026-07-02-01-19-25-977.rfrec` 进入 `ready`，`audio.m4a` 存在；`audio-diagnostics.json` 记录麦克风 `framesReceived=100`、`samplesReceived=48000`、`samplesWritten=48000`、`droppedSamples=0`。
+- 队列水位 diagnostics 接入后，本机 Windows 1 秒 audio-only smoke 通过：`recording-2026-07-02-01-30-06-400.rfrec` 进入 `ready`，`audio.m4a` 存在；`audio-diagnostics.json` 记录 `queue.capacity=128`、`queue.maxDepth=0`、`queue.flushCount=0`、`queue.droppedFrames=0`、`queue.droppedSamples=0`，麦克风 `framesReceived=100`、`samplesReceived=48000`、`samplesWritten=48000`。
+- `cmd/audio-smoke` 已扩展为直接读取 `audio-diagnostics.json` 并在 JSON 输出里返回 `queue`、`microphone`、`systemAudio` 摘要；本机 Windows 1 秒 smoke `recording-2026-07-02-01-32-35-448.rfrec` 进入 `ready`，命令输出直接显示 `queue.capacity=128`、`queue.droppedFrames=0`、`queue.droppedSamples=0` 和麦克风 `framesReceived=100`。
 - 本机 Windows system audio smoke 已确认 WASAPI loopback source 在有活动系统播放时可以写入真实样本：`system-audio.wav` 614444 bytes，`framesReceived=160`，`samplesReceived=153600`，`samplesWritten=153600`，`sampleRate=48000`，`channels=2`，duration 约 `1600ms`。
 
 发布产物验收：
@@ -434,7 +438,7 @@ RecordingFreedom/app/bin/recordingfreedom.exe
 
 1. 当前验收边界固定为语言设置、语音/音频录制和视频录制；摄像头/画中画等这三项验收后再恢复。
 2. A1 已完成 Windows WASAPI system audio/microphone endpoint 枚举；继续补 macOS CoreAudio 与 Linux PipeWire/PulseAudio 枚举。
-3. Windows 麦克风 PCM 采集、系统声音 loopback 样本写盘、FFmpeg desktop video writer、runtime backend 注册、Windows portable zip FFmpeg 准备路径和停止阶段音视频 mux 已落地；下一步补有 C 工具链本机的 `audio-smoke -rnnoise`、目标桌面 RNNoise 实录听感/诊断，以及 macOS/Linux 音频源。
+3. Windows 麦克风 PCM 采集、系统声音 loopback 样本写盘、FFmpeg desktop video writer、runtime backend 注册、Windows portable zip FFmpeg 准备路径、停止阶段音视频 mux、音频会话有界队列和队列水位/丢帧诊断已落地；下一步补有 C 工具链本机的 `audio-smoke -rnnoise`、目标桌面 RNNoise 实录听感/诊断、30 分钟以上音频队列/内存水位记录，以及 macOS/Linux 音频源。
 4. 在真实 macOS 机器补 ScreenCaptureKit screen/window/region/system-audio `video-smoke`，确认权限、可播放性、`video-diagnostics.json` 和 `diagnostics.sync`。
 5. 下一版 Windows portable artifact 发布后，在真实桌面解压并执行 `.\tools\run-windows-portable-smoke.ps1`，覆盖 screen/all-screens/region/locked-window、pause/resume segment merge、音频 mux、RNNoise 和 audio-only 组合；随后补 20 分钟长录验收。
 6. 把 release workflow 从 preview executable 升级为正式安装包、签名和公证流水线。

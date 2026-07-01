@@ -1174,14 +1174,16 @@ input {
   position: fixed;
   inset: 0;
   overflow: hidden;
-  cursor: crosshair;
   background: transparent;
   color: #ffffff;
   --wails-draggable: no-drag;
 }
 
+.region-overlay-shell.selecting {
+  cursor: crosshair;
+}
+
 .region-overlay-shell.recording {
-  cursor: default;
   pointer-events: none;
 }
 

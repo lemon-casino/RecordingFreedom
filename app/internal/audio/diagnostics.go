@@ -16,6 +16,7 @@ type Diagnostics struct {
 	SystemAudio   StreamDiagnostics      `json:"systemAudio"`
 	Microphone    StreamDiagnostics      `json:"microphone"`
 	Enhancement   EnhancementDiagnostics `json:"enhancement"`
+	Queue         QueueDiagnostics       `json:"queue"`
 	Mixer         MixerDiagnostics       `json:"mixer"`
 	Messages      []string               `json:"messages,omitempty"`
 }
@@ -56,6 +57,14 @@ type EnhancementDiagnostics struct {
 	RequiredSampleRate  int    `json:"requiredSampleRate"`
 	RequiredFrameSize   int    `json:"requiredFrameSize"`
 	RequiredChannelMode string `json:"requiredChannelMode"`
+}
+
+type QueueDiagnostics struct {
+	Capacity       int   `json:"capacity"`
+	MaxDepth       int   `json:"maxDepth"`
+	FlushCount     int64 `json:"flushCount"`
+	DroppedFrames  int64 `json:"droppedFrames"`
+	DroppedSamples int64 `json:"droppedSamples"`
 }
 
 type MixerDiagnostics struct {

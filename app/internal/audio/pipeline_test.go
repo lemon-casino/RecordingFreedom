@@ -109,6 +109,32 @@ func TestPipelineRejectsDisabledStreams(t *testing.T) {
 	}
 }
 
+func TestPipelineRecordsQueueDiagnostics(t *testing.T) {
+	pipeline, err := NewPipeline(CaptureConfig{
+		MaxQueuedFrames: 4,
+		Microphone:      StreamConfig{Enabled: true},
+	}, nil)
+	if err != nil {
+		t.Fatalf("NewPipeline() error = %v", err)
+	}
+
+	pipeline.RecordQueueDepth(2, 4)
+	pipeline.RecordQueueDepth(1, 4)
+	pipeline.RecordQueueFlush()
+	pipeline.RecordDroppedInput(StreamMicrophone, RNNoiseFrameSamples, "queue full")
+
+	diagnostics := pipeline.Diagnostics()
+	if diagnostics.Queue.Capacity != 4 || diagnostics.Queue.MaxDepth != 2 || diagnostics.Queue.FlushCount != 1 {
+		t.Fatalf("queue diagnostics = %#v, want capacity 4, max depth 2, flush count 1", diagnostics.Queue)
+	}
+	if diagnostics.Queue.DroppedFrames != 1 || diagnostics.Queue.DroppedSamples != int64(RNNoiseFrameSamples) {
+		t.Fatalf("queue drop diagnostics = %#v, want one dropped frame", diagnostics.Queue)
+	}
+	if diagnostics.Microphone.DroppedSamples != int64(RNNoiseFrameSamples) {
+		t.Fatalf("microphone dropped samples = %d, want %d", diagnostics.Microphone.DroppedSamples, RNNoiseFrameSamples)
+	}
+}
+
 func TestPipelineResetResetsEnhancerDiagnostics(t *testing.T) {
 	pipeline, err := NewPipeline(CaptureConfig{
 		Microphone:       StreamConfig{Enabled: true},

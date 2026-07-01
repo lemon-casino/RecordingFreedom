@@ -15,6 +15,7 @@ type CaptureConfig struct {
 	MicrophoneGain             float64
 	TargetSampleRate           int
 	TargetChannels             int
+	MaxQueuedFrames            int
 	SystemAudioOutputPath      string
 	MicrophoneAudioPath        string
 	DiagnosticsPath            string
@@ -90,6 +91,9 @@ func NewPipeline(config CaptureConfig, enhancer *Enhancer) (*Pipeline, error) {
 			RequiredFrameSize:   RNNoiseFrameSamples,
 			RequiredChannelMode: "mono",
 		},
+		Queue: QueueDiagnostics{
+			Capacity: config.MaxQueuedFrames,
+		},
 		Mixer: MixerDiagnostics{
 			Enabled: config.SystemAudio.Enabled && config.Microphone.Enabled,
 		},
@@ -142,6 +146,35 @@ func (p *Pipeline) Reset() error {
 	err := p.enhancer.Reset()
 	p.updateEnhancementDiagnostics()
 	return err
+}
+
+func (p *Pipeline) RecordDroppedInput(kind StreamKind, samples int, reason string) {
+	diagnostics := p.streamDiagnostics(kind)
+	if diagnostics != nil {
+		diagnostics.DroppedSamples += int64(samples)
+		if diagnostics.Message == "" {
+			diagnostics.Message = reason
+		}
+	}
+	p.diagnostics.Queue.DroppedFrames++
+	p.diagnostics.Queue.DroppedSamples += int64(samples)
+	p.diagnostics.Mixer.DroppedSamples += int64(samples)
+	if reason != "" && !containsMessage(p.diagnostics.Messages, reason) {
+		p.diagnostics.Messages = append(p.diagnostics.Messages, reason)
+	}
+}
+
+func (p *Pipeline) RecordQueueDepth(depth int, capacity int) {
+	if capacity > 0 {
+		p.diagnostics.Queue.Capacity = capacity
+	}
+	if depth > p.diagnostics.Queue.MaxDepth {
+		p.diagnostics.Queue.MaxDepth = depth
+	}
+}
+
+func (p *Pipeline) RecordQueueFlush() {
+	p.diagnostics.Queue.FlushCount++
 }
 
 func (p *Pipeline) Diagnostics() Diagnostics {
@@ -249,6 +282,18 @@ func normalizeCaptureConfig(config CaptureConfig) CaptureConfig {
 	if config.TargetChannels == 0 {
 		config.TargetChannels = 2
 	}
+	if config.MaxQueuedFrames <= 0 {
+		config.MaxQueuedFrames = 128
+	}
 	config.SystemAudioIsNeverDenoised = true
 	return config
+}
+
+func containsMessage(messages []string, needle string) bool {
+	for _, message := range messages {
+		if message == needle {
+			return true
+		}
+	}
+	return false
 }

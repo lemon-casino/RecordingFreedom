@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/lemon-casino/RecordingFreedom/app/internal/appdata"
+	"github.com/lemon-casino/RecordingFreedom/app/internal/audio"
 	"github.com/lemon-casino/RecordingFreedom/app/internal/audio/rnnoise"
 	"github.com/lemon-casino/RecordingFreedom/app/internal/recording"
 	"github.com/lemon-casino/RecordingFreedom/app/internal/recpackage"
@@ -83,6 +84,11 @@ func main() {
 	if err != nil {
 		fail(err.Error())
 	}
+	diagnosticsPath := absPackagePath(stopped.PackageDir, recpackage.AudioDiagnosticsFile)
+	diagnostics, err := readAudioDiagnostics(diagnosticsPath)
+	if err != nil {
+		fail(err.Error())
+	}
 
 	result := map[string]any{
 		"ok":                  true,
@@ -94,7 +100,10 @@ func main() {
 		"audioPath":           absPackagePath(stopped.PackageDir, manifest.Media.AudioPath),
 		"microphoneAudioPath": absPackagePath(stopped.PackageDir, manifest.Media.MicrophoneAudioPath),
 		"systemAudioPath":     absPackagePath(stopped.PackageDir, manifest.Media.SystemAudioPath),
-		"diagnosticsPath":     absPackagePath(stopped.PackageDir, recpackage.AudioDiagnosticsFile),
+		"diagnosticsPath":     diagnosticsPath,
+		"queue":               diagnostics.Queue,
+		"microphone":          diagnostics.Microphone,
+		"systemAudio":         diagnostics.SystemAudio,
 		"recordingMode":       stopped.RecordingMode,
 		"rnnoiseAvailable":    rnnoise.Available(),
 		"rnnoiseEnabled":      noiseSuppression,
@@ -112,6 +121,21 @@ func absPackagePath(packageDir string, relativePath string) string {
 		return ""
 	}
 	return filepath.Join(packageDir, relativePath)
+}
+
+func readAudioDiagnostics(path string) (audio.Diagnostics, error) {
+	if path == "" {
+		return audio.Diagnostics{}, fmt.Errorf("audio diagnostics path is empty")
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return audio.Diagnostics{}, err
+	}
+	var diagnostics audio.Diagnostics
+	if err := json.Unmarshal(data, &diagnostics); err != nil {
+		return audio.Diagnostics{}, err
+	}
+	return diagnostics, nil
 }
 
 func fail(message string) {

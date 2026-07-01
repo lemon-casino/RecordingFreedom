@@ -158,20 +158,20 @@
 
 ### A5c 内存和磁盘写入优化
 
-状态：设计已明确，底层包合同已支持 mux 优先；Windows 已完成停止阶段 mux，能让最终 `screen.mp4` 包含音频并减少用户侧后续合并成本。具体 live PCM pipe、bounded queue、flush cadence 和长录内存水位监控仍待在各平台 writer 中实现。
+状态：设计已明确，底层包合同已支持 mux 优先；Windows 已完成停止阶段 mux，能让最终 `screen.mp4` 包含音频并减少用户侧后续合并成本。`audio.CaptureSession` 已接入默认 128 帧有界异步处理队列，采集回调只入队，不再同步等待 RNNoise / WAV sink 写盘；队列满时会丢弃新输入帧并写入 `audio-diagnostics.json` 的 `droppedSamples` / message，暂停时通过 worker flush 哨兵确认前序帧处理完成后再 reset RNNoise。`audio-diagnostics.json` 已新增 `queue.capacity`、`queue.maxDepth`、`queue.flushCount`、`queue.droppedFrames` 和 `queue.droppedSamples`，用于后续长录水位验收。仍待补平台 writer live mux 管线和 30 分钟以上真机内存曲线验证。
 
 交付：
 
 - 使用有限环形缓冲和编码队列，不能把完整录制放进内存。
 - 主录制优先 mux 到单个 `screen.mp4`，减少重复写长期音频 sidecar。
 - 内存只用于 sample 队列、短环形缓冲、暂停边界和低频 checkpoint；最终媒体必须持续顺序落盘，避免崩溃时丢失整段录制。
-- 队列需要有明确容量、背压和失败诊断；不能因为编码或磁盘变慢而无限吃内存。
+- 队列需要有明确容量、背压和失败诊断；不能因为编码或磁盘变慢而无限吃内存。当前音频会话队列默认 `128` 帧，测试覆盖队列满丢弃和诊断记录，且 diagnostics 会写入队列容量、峰值深度、flush 次数和丢弃帧/样本。
 - diagnostics 和 manifest 低频批量 flush，状态切换时强制落盘。
 - 预览、波形、缩略图和导出 cache 按需写入包内 `cache/`，不在录制时反复读取完整媒体。
 
 验收：
 
-- 30 分钟录制内存占用保持稳定，不随时长线性增长。
+- 30 分钟录制内存占用保持稳定，不随时长线性增长。当前代码已限制音频帧队列上限，仍需真实 30 分钟以上录制记录内存曲线。
 - 录制中主媒体持续顺序增长，崩溃后保留可检查媒体。
 - 关闭 fallback sidecar 后，启用音频的录制不会重复写长期 WAV 文件。
 
@@ -319,7 +319,7 @@
 3. A3 麦克风采集。Windows 已完成并 smoke 验证；macOS CoreAudio 麦克风采集代码路径已完成，下一步补 macOS 真机 smoke、长录同步和 Linux。
 4. A4 RNNoise native DSP。wrapper 已迁移并恢复 CI/release gate 定向验证；能力矩阵已按 `rnnoise.Available()` 动态展示；preview/release artifact 已改为默认启用 `rnnoise_native` 并通过 `desktop-doctor -require-rnnoise`。下一步是在目标桌面补真实 `audio-smoke -rnnoise`、听感检查和长录诊断。
 5. A2 系统声音采集。Windows source 已实现并通过有播放源真实样本 smoke，录屏 runtime 已能启动 WASAPI sidecar 并在停止阶段 mux 到主 `screen.mp4`，Windows 20 分钟音视频长录已通过，Windows portable zip 已能准备 FFmpeg 依赖并在 release workflow 中通过内容校验；`v0.1.0-preview.15` artifact-run 3 秒矩阵已通过 system audio、microphone 和二者组合。下一步做外部 clean-machine 长时长真实录制验收。
-6. A5 音频混音、mux 与写盘。Windows 屏幕录制停止阶段 mux 与 audio-only 停止阶段 `audio.m4a` 封装已完成；macOS CoreAudio 麦克风采集源已接入 native audio runtime，下一步补 macOS 真机 mux/sync 验收、Linux 音频源、live PCM pipe/内存水位策略，并做三平台长录同步。
+6. A5 音频混音、mux 与写盘。Windows 屏幕录制停止阶段 mux 与 audio-only 停止阶段 `audio.m4a` 封装已完成；音频采集会话已接入有界队列、队列水位 diagnostics 和丢帧诊断，避免磁盘/处理变慢时无限占用内存；macOS CoreAudio 麦克风采集源已接入 native audio runtime，下一步补 macOS 真机 mux/sync 验收、Linux 音频源、live PCM pipe/内存水位记录，并做三平台长录同步。
 7. A6 预检、UI 和设置联动。
 8. A7 三平台手动验证矩阵。
 
