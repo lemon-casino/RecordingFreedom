@@ -347,6 +347,7 @@ CGO_ENABLED=1 go test -tags rnnoise_native ./internal/audio/rnnoise/native ./int
 
 - `scripts/verify-windows-portable.ps1` 已增强为解压检查 portable zip：验证 `recordingfreedom.exe` 是 x64 GUI PE，`tools/ffmpeg.exe` 和 `tools/ffprobe.exe` 是 x64 PE，并在 Windows host 上执行 FFmpeg/FFprobe `-version`。
 - 新增 `scripts/verify-windows-preview-release.ps1`：可按 tag 或最近 release 下载 GitHub Windows x64 portable zip 和 `SHA256SUMS-windows-x64*.txt`，校验 SHA256 后复用 `verify-windows-portable.ps1`。该脚本用于 release asset 完整性复验，不替代 clean-machine 真实 screen/region/window 录制 smoke。
+- `v0.1.0-preview.14` Windows portable zip 已用真实 GitHub Release 下载复验通过：SHA256 `7FE81996BCEB2D37864432FAAFCEE9D3FF942E1544A66EC3073D0D43340ED97A` 匹配，`recordingfreedom.exe` 为 x64 GUI PE，`tools/ffmpeg.exe` / `tools/ffprobe.exe` 为 x64 PE 且 `-version` 可执行。
 
 PIP 合同测试：
 
@@ -406,7 +407,7 @@ RecordingFreedom/app/bin/recordingfreedom.exe
 
 - macOS ScreenCaptureKit display/window/region 录制已接入代码路径，但仍需要真机 smoke：授权屏幕录制后运行 `go run ./cmd/video-smoke -duration=1m`、`go run ./cmd/video-smoke -source-type=window -duration=1m`、`go run ./cmd/video-smoke -source-type=region -duration=1m` 和 `go run ./cmd/video-smoke -duration=5m -pause-after=10s -pause-duration=2s`，并确认 `screen.mp4` 可播放、包进入 `ready`、`video-diagnostics.json` 和 `diagnostics.sync` 正确。Application/Program 后端合同仍保留给 smoke 和后端演进，但不在当前用户菜单展示。
 - ScreenCaptureKit 系统声音 mux 已接入代码路径但仍需 macOS 真机 smoke；麦克风 mux 仍未完成。
-- Windows FFmpeg video writer 已接入代码路径，CI/release 已能准备并打包 `tools/ffmpeg.exe`；本机真实 smoke 已验证 screen、all-screens、region、locked-window、pause/resume segment merge、系统声音 mux、麦克风 mux、系统声音 + 麦克风混音 mux，并已完成 1 分钟、5 分钟和 20 分钟录制包可解码验证。仍需下载 GitHub artifact 后在 clean machine 验证 portable zip、失败诊断和空间/权限边界。
+- Windows FFmpeg video writer 已接入代码路径，CI/release 已能准备并打包 `tools/ffmpeg.exe`；本机真实 smoke 已验证 screen、all-screens、region、locked-window、pause/resume segment merge、系统声音 mux、麦克风 mux、系统声音 + 麦克风混音 mux，并已完成 1 分钟、5 分钟和 20 分钟录制包可解码验证。GitHub `v0.1.0-preview.14` Windows portable artifact 已下载复验通过；仍需在 clean machine 验证真实录制、失败诊断和空间/权限边界。
 - 真实区域录制 crop writer：当前已有 `region` 源类型、`source.geometry` 合同、跨显示器透明十字框选 overlay、拖拽红框、尺寸浮标、选择事件，以及进入 `video.CaptureConfig` / `video-diagnostics.json` 的 writer 边界 geometry。macOS 单显示器区域已接入 ScreenCaptureKit `sourceRect` 写入 `screen.mp4`；Windows 已通过 FFmpeg desktop crop 接入；Linux crop writer 仍未完成。
 - 真实全部屏幕多显示器合成录制：当前已有 `all-screens` 源类型和虚拟桌面 bounds；Windows FFmpeg 可按虚拟桌面录制，macOS/Linux 多屏合成仍保持 queued。
 - 真实 PipeWire / XDG Portal 录制。
