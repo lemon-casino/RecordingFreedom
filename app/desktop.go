@@ -9,8 +9,10 @@ import (
 )
 
 const (
-	capsuleWindowWidth           = 860
-	capsuleWindowCollapsedHeight = 166
+	capsuleWindowWidth           = 960
+	capsuleWindowCollapsedHeight = 112
+	capsuleWindowExpandedHeight  = 640
+	regionFrameThickness         = 4
 )
 
 func createCapsuleWindow(app *application.App) *application.WebviewWindow {
@@ -25,15 +27,21 @@ func createCapsuleWindow(app *application.App) *application.WebviewWindow {
 		HideOnEscape:   true,
 		BackgroundType: application.BackgroundTypeTransparent,
 		Mac: application.MacWindow{
-			InvisibleTitleBarHeight: 50,
-			Backdrop:                application.MacBackdropTranslucent,
-			TitleBar:                application.MacTitleBarHiddenInset,
+			Backdrop: application.MacBackdropTransparent,
+			TitleBar: application.MacTitleBar{
+				AppearsTransparent: true,
+				Hide:               true,
+				HideTitle:          true,
+				FullSizeContent:    true,
+			},
 		},
 		Windows: application.WindowsWindow{
-			HiddenOnTaskbar: true,
+			HiddenOnTaskbar:                   true,
+			DisableFramelessWindowDecorations: true,
 		},
 		Linux: application.LinuxWindow{
-			Icon: appIcon,
+			Icon:                appIcon,
+			WindowIsTranslucent: true,
 		},
 		BackgroundColour: application.NewRGBA(0, 0, 0, 0),
 		URL:              "/",
@@ -198,6 +206,58 @@ func createRegionFrameWindow(app *application.App) *application.WebviewWindow {
 			WindowIsTranslucent: true,
 		},
 		URL: "/#/region-frame",
+	})
+
+	window.RegisterHook(events.Common.WindowClosing, func(e *application.WindowEvent) {
+		window.Hide()
+		e.Cancel()
+	})
+
+	return window
+}
+
+func createRegionFrameWindows(app *application.App) []*application.WebviewWindow {
+	windows := make([]*application.WebviewWindow, 0, 4)
+	for _, name := range []string{"region-frame-top", "region-frame-right", "region-frame-bottom", "region-frame-left"} {
+		windows = append(windows, createRegionFrameEdgeWindow(app, name))
+	}
+	return windows
+}
+
+func createRegionFrameEdgeWindow(app *application.App, name string) *application.WebviewWindow {
+	window := app.Window.NewWithOptions(application.WebviewWindowOptions{
+		Name:              name,
+		Title:             "RecordingFreedom Region Frame",
+		Width:             64,
+		Height:            regionFrameThickness,
+		Frameless:         true,
+		AlwaysOnTop:       true,
+		DisableResize:     true,
+		Hidden:            true,
+		IgnoreMouseEvents: true,
+		BackgroundType:    application.BackgroundTypeTransparent,
+		BackgroundColour:  application.NewRGBA(0, 0, 0, 0),
+		Mac: application.MacWindow{
+			Backdrop: application.MacBackdropTransparent,
+			TitleBar: application.MacTitleBar{
+				AppearsTransparent: true,
+				Hide:               true,
+				HideTitle:          true,
+				FullSizeContent:    true,
+			},
+			CollectionBehavior: application.MacWindowCollectionBehaviorCanJoinAllSpaces |
+				application.MacWindowCollectionBehaviorFullScreenAuxiliary,
+			WindowLevel: application.MacWindowLevelFloating,
+		},
+		Windows: application.WindowsWindow{
+			HiddenOnTaskbar:                   true,
+			DisableFramelessWindowDecorations: true,
+		},
+		Linux: application.LinuxWindow{
+			Icon:                appIcon,
+			WindowIsTranslucent: true,
+		},
+		URL: "/#/region-frame-edge",
 	})
 
 	window.RegisterHook(events.Common.WindowClosing, func(e *application.WindowEvent) {

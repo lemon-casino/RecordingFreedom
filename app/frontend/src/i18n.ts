@@ -46,6 +46,7 @@ export type RecorderCopy = {
     resumeRecording: string
     selectLanguage: string
     openSettings: string
+    closeApplication: string
     recordingMode: string
     menu: (panel: string) => string
     microphoneLevel: string
@@ -53,6 +54,7 @@ export type RecorderCopy = {
   }
   common: {
     close: string
+    cancel: string
     apply: string
     applying: string
     off: string
@@ -119,6 +121,14 @@ export type RecorderCopy = {
     recovering: string
     platform: string
     release: string
+  }
+  closeDialog: {
+    idleTitle: string
+    recordingTitle: string
+    idleMessage: string
+    recordingMessage: string
+    confirmIdle: string
+    confirmRecording: string
   }
   panels: {
     audio: string
@@ -200,6 +210,7 @@ const zhCN: RecorderCopy = {
     resumeRecording: '继续录制',
     selectLanguage: '选择语言',
     openSettings: '打开设置',
+    closeApplication: '关闭软件',
     recordingMode: '录制模式',
     menu: (panel) => `${panel} 菜单`,
     microphoneLevel: '麦克风音量',
@@ -207,6 +218,7 @@ const zhCN: RecorderCopy = {
   },
   common: {
     close: '关闭',
+    cancel: '取消',
     apply: '应用',
     applying: '应用中',
     off: '关闭',
@@ -304,6 +316,14 @@ const zhCN: RecorderCopy = {
     recovering: '恢复中',
     platform: '平台',
     release: '发布',
+  },
+  closeDialog: {
+    idleTitle: '关闭软件',
+    recordingTitle: '结束录制并关闭',
+    idleMessage: '是否关闭 RecordingFreedom？',
+    recordingMessage: '当前正在录制。是否结束录制并关闭软件？',
+    confirmIdle: '关闭软件',
+    confirmRecording: '结束并关闭',
   },
   panels: {
     audio: '音频',
@@ -511,6 +531,7 @@ const en: RecorderCopy = {
     resumeRecording: 'Resume recording',
     selectLanguage: 'Select language',
     openSettings: 'Open settings',
+    closeApplication: 'Close app',
     recordingMode: 'Recording mode',
     menu: (panel) => `${panel} menu`,
     microphoneLevel: 'Microphone level',
@@ -518,6 +539,7 @@ const en: RecorderCopy = {
   },
   common: {
     close: 'Close',
+    cancel: 'Cancel',
     apply: 'Apply',
     applying: 'Applying',
     off: 'Off',
@@ -615,6 +637,14 @@ const en: RecorderCopy = {
     recovering: 'Recovering',
     platform: 'Platform',
     release: 'Release',
+  },
+  closeDialog: {
+    idleTitle: 'Close app',
+    recordingTitle: 'Stop recording and close',
+    idleMessage: 'Close RecordingFreedom?',
+    recordingMessage: 'Recording is in progress. Stop the recording and close the app?',
+    confirmIdle: 'Close app',
+    confirmRecording: 'Stop and close',
   },
   panels: {
     audio: 'Audio',

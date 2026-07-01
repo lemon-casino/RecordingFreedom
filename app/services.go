@@ -37,18 +37,20 @@ type RecordingFreedomService struct {
 	recorder  *recording.Service
 	settings  *settings.Service
 
-	app             *application.App
-	settingsWindow  *application.WebviewWindow
-	regionOverlay   *application.WebviewWindow
-	regionFrame     *application.WebviewWindow
-	screenIndicator *application.WebviewWindow
-	trayLocale      func(settings.Locale)
-	regionMu        sync.Mutex
-	regionSession   *RegionSelectionSession
-	micLevelMu      sync.Mutex
-	micLevelSource  audioLevelCaptureSource
-	micLevelDevice  string
-	micLevelToken   uint64
+	app               *application.App
+	settingsWindow    *application.WebviewWindow
+	regionOverlay     *application.WebviewWindow
+	regionFrame       *application.WebviewWindow
+	regionFrames      []*application.WebviewWindow
+	screenIndicator   *application.WebviewWindow
+	trayLocale        func(settings.Locale)
+	regionMu          sync.Mutex
+	regionSession     *RegionSelectionSession
+	selectedRegionDIP application.Rect
+	micLevelMu        sync.Mutex
+	micLevelSource    audioLevelCaptureSource
+	micLevelDevice    string
+	micLevelToken     uint64
 }
 
 func NewRecordingFreedomService() *RecordingFreedomService {
@@ -77,6 +79,10 @@ func (s *RecordingFreedomService) setRegionOverlayWindow(window *application.Web
 
 func (s *RecordingFreedomService) setRegionFrameWindow(window *application.WebviewWindow) {
 	s.regionFrame = window
+}
+
+func (s *RecordingFreedomService) setRegionFrameWindows(windows []*application.WebviewWindow) {
+	s.regionFrames = windows
 }
 
 func (s *RecordingFreedomService) setScreenIndicatorWindow(window *application.WebviewWindow) {
@@ -301,6 +307,7 @@ func (s *RecordingFreedomService) StartRecording(req recording.StartRequest) (re
 		})
 		return recording.Session{}, err
 	}
+	s.lockRegionFrameForRecording(req)
 	s.emitSessionStatus(session, "Recording started")
 	return session, nil
 }
@@ -443,6 +450,28 @@ func (s *RecordingFreedomService) StopRecording() (recording.Session, error) {
 	}
 	s.emitSessionStatus(session, "Recording package ready")
 	return session, nil
+}
+
+func (s *RecordingFreedomService) lockRegionFrameForRecording(req recording.StartRequest) {
+	if req.SourceType != recording.SourceRegion || req.SourceGeometry == nil {
+		return
+	}
+	rect := s.selectedRegionDisplayBounds()
+	if rect.Width <= 0 || rect.Height <= 0 {
+		rect = application.Rect{
+			X:      req.SourceGeometry.X,
+			Y:      req.SourceGeometry.Y,
+			Width:  req.SourceGeometry.Width,
+			Height: req.SourceGeometry.Height,
+		}
+	}
+	if rect.Width <= 0 || rect.Height <= 0 {
+		return
+	}
+	if s.regionFrame != nil {
+		s.regionFrame.Hide()
+	}
+	_ = s.showRegionFrame(rect)
 }
 
 func (s *RecordingFreedomService) emitSessionStatus(session recording.Session, message string) {

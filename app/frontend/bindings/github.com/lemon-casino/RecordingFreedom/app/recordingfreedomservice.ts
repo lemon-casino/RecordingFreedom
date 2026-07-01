@@ -39,6 +39,10 @@ export function CancelRegionSelection(): $CancellablePromise<$models.RegionSelec
     return $Call.ByID(3597544006);
 }
 
+export function CancelSelectedRegion(): $CancellablePromise<$models.RegionSelectionResult> {
+    return $Call.ByID(1279436437);
+}
+
 export function CompleteRegionSelection(req: $models.RegionSelectionRequest): $CancellablePromise<$models.RegionSelectionResult> {
     return $Call.ByID(1962254349, req);
 }
@@ -137,4 +141,8 @@ export function StopMicrophoneLevelMonitor(): $CancellablePromise<void> {
 
 export function StopRecording(): $CancellablePromise<recording$0.Session> {
     return $Call.ByID(4017105749);
+}
+
+export function UpdateSelectedRegion(req: $models.RegionSelectionRequest): $CancellablePromise<$models.RegionSelectionResult> {
+    return $Call.ByID(22393138, req);
 }

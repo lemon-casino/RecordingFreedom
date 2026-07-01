@@ -48,6 +48,7 @@ type RegionSelectionResult struct {
 
 type RegionFrameState struct {
 	Bounds RegionRect `json:"bounds"`
+	Mode   string     `json:"mode"`
 }
 
 func (s *RecordingFreedomService) ShowRegionSelector() (RegionSelectionSession, error) {
@@ -111,6 +112,7 @@ func (s *RecordingFreedomService) CompleteRegionSelection(req RegionSelectionReq
 		Width:  relative.Width,
 		Height: relative.Height,
 	}
+	s.setSelectedRegionDIP(absoluteDIP)
 	displayMatchRect := application.DipToPhysicalRect(absoluteDIP)
 	if displayMatchRect.Width <= 0 || displayMatchRect.Height <= 0 {
 		displayMatchRect = absoluteDIP
@@ -126,7 +128,7 @@ func (s *RecordingFreedomService) CompleteRegionSelection(req RegionSelectionReq
 		Source:    source,
 		Geometry:  regionRectFromAppRect(captureRect),
 	}
-	_ = s.showRegionFrame(absoluteDIP)
+	_ = s.showRegionEditor(absoluteDIP)
 	s.emitRegionSelection(result)
 	if s.regionOverlay != nil {
 		s.regionOverlay.Hide()
@@ -144,6 +146,7 @@ func (s *RecordingFreedomService) CancelRegionSelection() RegionSelectionResult 
 	if session != nil {
 		result.SessionID = session.ID
 	}
+	s.clearSelectedRegionDIP()
 	s.emitRegionSelection(result)
 	if s.regionOverlay != nil {
 		s.regionOverlay.Hide()
@@ -151,7 +154,53 @@ func (s *RecordingFreedomService) CancelRegionSelection() RegionSelectionResult 
 	return result
 }
 
+func (s *RecordingFreedomService) UpdateSelectedRegion(req RegionSelectionRequest) (RegionSelectionResult, error) {
+	if recorderIsActive(s.recorder.State()) {
+		return RegionSelectionResult{}, errors.New("cannot edit a region while recording is active")
+	}
+	absoluteDIP := normalizeRegionSelection(req)
+	if absoluteDIP.Width < minRegionWidth || absoluteDIP.Height < minRegionHeight {
+		return RegionSelectionResult{}, fmt.Errorf("selected region must be at least %d x %d", minRegionWidth, minRegionHeight)
+	}
+	s.setSelectedRegionDIP(absoluteDIP)
+	result := s.regionResultFromAbsoluteDIP(absoluteDIP)
+	_ = s.showRegionEditor(absoluteDIP)
+	s.emitRegionSelection(result)
+	return result, nil
+}
+
+func (s *RecordingFreedomService) CancelSelectedRegion() RegionSelectionResult {
+	result := RegionSelectionResult{Cancelled: true}
+	s.clearSelectedRegionDIP()
+	_ = s.HideRegionFrame()
+	s.emitRegionSelection(result)
+	return result
+}
+
+func (s *RecordingFreedomService) setSelectedRegionDIP(bounds application.Rect) {
+	s.regionMu.Lock()
+	defer s.regionMu.Unlock()
+	s.selectedRegionDIP = bounds
+}
+
+func (s *RecordingFreedomService) clearSelectedRegionDIP() {
+	s.regionMu.Lock()
+	defer s.regionMu.Unlock()
+	s.selectedRegionDIP = application.Rect{}
+}
+
+func (s *RecordingFreedomService) selectedRegionDisplayBounds() application.Rect {
+	s.regionMu.Lock()
+	defer s.regionMu.Unlock()
+	return s.selectedRegionDIP
+}
+
 func (s *RecordingFreedomService) HideRegionFrame() error {
+	for _, frame := range s.regionFrames {
+		if frame != nil {
+			frame.Hide()
+		}
+	}
 	if s.regionFrame == nil {
 		return nil
 	}
@@ -160,13 +209,16 @@ func (s *RecordingFreedomService) HideRegionFrame() error {
 }
 
 func (s *RecordingFreedomService) showRegionFrame(bounds application.Rect) error {
+	if len(s.regionFrames) > 0 {
+		return s.showRegionFrameEdges(bounds)
+	}
 	if s.regionFrame == nil {
 		return nil
 	}
 	if bounds.Width <= 0 || bounds.Height <= 0 {
 		return nil
 	}
-	state := RegionFrameState{Bounds: regionRectFromAppRect(bounds)}
+	state := RegionFrameState{Bounds: regionRectFromAppRect(bounds), Mode: "recording"}
 	s.regionFrame.SetIgnoreMouseEvents(true)
 	s.regionFrame.SetAlwaysOnTop(true)
 	s.regionFrame.SetBounds(bounds)
@@ -177,6 +229,74 @@ func (s *RecordingFreedomService) showRegionFrame(bounds application.Rect) error
 			"window.__RF_REGION_FRAME__=%s;window.dispatchEvent(new CustomEvent('rf-region-frame',{detail:window.__RF_REGION_FRAME__}));",
 			string(payload),
 		))
+	}
+	return nil
+}
+
+func (s *RecordingFreedomService) showRegionEditor(bounds application.Rect) error {
+	if s.regionFrame == nil {
+		return nil
+	}
+	if bounds.Width <= 0 || bounds.Height <= 0 {
+		return nil
+	}
+	state := RegionFrameState{Bounds: regionRectFromAppRect(bounds), Mode: "edit"}
+	s.regionFrame.SetIgnoreMouseEvents(false)
+	s.regionFrame.SetAlwaysOnTop(true)
+	s.regionFrame.SetBounds(bounds)
+	s.regionFrame.Show()
+	s.regionFrame.SetBounds(bounds)
+	if payload, err := json.Marshal(state); err == nil {
+		s.regionFrame.ExecJS(fmt.Sprintf(
+			"window.__RF_REGION_FRAME__=%s;window.dispatchEvent(new CustomEvent('rf-region-frame',{detail:window.__RF_REGION_FRAME__}));",
+			string(payload),
+		))
+	}
+	return nil
+}
+
+func (s *RecordingFreedomService) regionResultFromAbsoluteDIP(absoluteDIP application.Rect) RegionSelectionResult {
+	displayMatchRect := application.DipToPhysicalRect(absoluteDIP)
+	if displayMatchRect.Width <= 0 || displayMatchRect.Height <= 0 {
+		displayMatchRect = absoluteDIP
+	}
+	captureRect := absoluteDIP
+	if runtime.GOOS == "windows" {
+		captureRect = displayMatchRect
+	}
+	source := regionCaptureSource(captureRect, regionDisplayForRect(displayMatchRect, s.devices.ListSources(), s.app.Screen.GetAll()))
+	return RegionSelectionResult{
+		Source:   source,
+		Geometry: regionRectFromAppRect(captureRect),
+	}
+}
+
+func (s *RecordingFreedomService) showRegionFrameEdges(bounds application.Rect) error {
+	if bounds.Width <= 0 || bounds.Height <= 0 {
+		return nil
+	}
+	thickness := regionFrameThickness
+	if bounds.Width < thickness {
+		thickness = bounds.Width
+	}
+	if bounds.Height < thickness {
+		thickness = bounds.Height
+	}
+	edgeBounds := []application.Rect{
+		{X: bounds.X, Y: bounds.Y, Width: bounds.Width, Height: thickness},
+		{X: bounds.X + bounds.Width - thickness, Y: bounds.Y, Width: thickness, Height: bounds.Height},
+		{X: bounds.X, Y: bounds.Y + bounds.Height - thickness, Width: bounds.Width, Height: thickness},
+		{X: bounds.X, Y: bounds.Y, Width: thickness, Height: bounds.Height},
+	}
+	for index, frame := range s.regionFrames {
+		if frame == nil || index >= len(edgeBounds) {
+			continue
+		}
+		frame.SetIgnoreMouseEvents(true)
+		frame.SetAlwaysOnTop(true)
+		frame.SetBounds(edgeBounds[index])
+		frame.Show()
+		frame.SetBounds(edgeBounds[index])
 	}
 	return nil
 }

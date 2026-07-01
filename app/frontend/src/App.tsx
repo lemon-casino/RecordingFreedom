@@ -21,7 +21,8 @@ import {
   Wand2,
   X,
 } from 'lucide-react'
-import {useEffect, useMemo, useRef, useState, type ReactNode} from 'react'
+import {Window as WailsWindow} from '@wailsio/runtime'
+import {useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent, type ReactNode} from 'react'
 import {copyByLocale, type RecorderCopy, type RecoveryMessageKey, type SourceSelectionMessageKey, type StatusMessageKey, type StorageMessageKey} from './i18n'
 import {
   cameraDevices,
@@ -47,7 +48,7 @@ import {
   fallbackCapabilities,
   fallbackStorageStatus,
 } from './services/mockBackend'
-import {cancelRegionSelector, completeRegionSelection, hideRegionFrame, hideScreenIndicator, hideSettingsWindow, loadBootstrap, loadSettings, pauseRecording, preflightAudioOnlyRecording, preflightRecording, recoverRecordingPackage, resumeRecording, saveSettings, setCapsuleWindowExpanded, setDataRoot, showRegionSelector, showScreenIndicator, showSettingsWindow, startAudioOnlyRecording, startMicrophoneLevelMonitor, startRecording, stopMicrophoneLevelMonitor, stopRecording, subscribeAudioLevel, subscribeRecordingStatus, subscribeRegionSelection, subscribeSettingsChanged, type AudioLevelUpdate, type RecordingRecovery, type RecordingStatusUpdate, type RegionSelectionSession} from './services/recorderBackend'
+import {cancelRegionSelector, cancelSelectedRegion, completeRegionSelection, hideRegionFrame, hideScreenIndicator, hideSettingsWindow, loadBootstrap, loadSettings, pauseRecording, preflightAudioOnlyRecording, preflightRecording, quitApplication, recoverRecordingPackage, resumeRecording, saveSettings, setCapsuleWindowExpanded, setDataRoot, showRegionSelector, showScreenIndicator, startAudioOnlyRecording, startMicrophoneLevelMonitor, startRecording, stopMicrophoneLevelMonitor, stopRecording, subscribeAudioLevel, subscribeRecordingStatus, subscribeRegionSelection, subscribeSettingsChanged, updateSelectedRegion, type AudioLevelUpdate, type RecordingRecovery, type RecordingStatusUpdate, type RegionSelectionSession} from './services/recorderBackend'
 
 const sourceIcon = {
   screen: Monitor,
@@ -62,6 +63,7 @@ const pipPresetOptions: PIPPreset[] = ['bottom-right', 'bottom-left', 'free', 'o
 const recordingQualityOptions: RecordingQuality[] = ['standard', 'balanced', 'high']
 const fpsOptions = [24, 30, 60]
 const countdownOptions = [0, 3, 5, 10]
+type ActivePanel = 'source' | 'audio' | 'camera' | 'language'
 
 function normalizePipPreset(value: PIPPreset): PIPPreset {
   return pipPresetOptions.includes(value) ? value : 'bottom-right'
@@ -151,8 +153,12 @@ function App() {
   const isRegionOverlayWindow = route === '/region-overlay'
   const isScreenIndicatorWindow = route === '/screen-indicator'
   const isRegionFrameWindow = route === '/region-frame'
+  const isRegionFrameEdgeWindow = route === '/region-frame-edge'
   if (isScreenIndicatorWindow) {
     return <ScreenIndicatorWindow />
+  }
+  if (isRegionFrameEdgeWindow) {
+    return <RegionFrameEdgeWindow />
   }
   if (isRegionFrameWindow) {
     return <RegionFrameWindow />
@@ -163,9 +169,11 @@ function App() {
 
   const [selectedSource, setSelectedSource] = useState<CaptureSource>(sources[0])
   const [availableSources, setAvailableSources] = useState<CaptureSource[]>(sources)
-  const [activePanel, setActivePanel] = useState<'source' | 'audio' | 'camera' | 'language' | null>(null)
+  const [activePanel, setActivePanel] = useState<ActivePanel | null>(null)
   const [sourcePickerView, setSourcePickerView] = useState<'overview' | 'windows'>('overview')
   const [settingsOpen, setSettingsOpen] = useState(false)
+  const [closePromptOpen, setClosePromptOpen] = useState(false)
+  const [closeBusy, setCloseBusy] = useState(false)
   const [recordingMode, setRecordingMode] = useState<RecordingMode>('video')
   const [state, setState] = useState<RecordingState>('idle')
   const [elapsed, setElapsed] = useState(0)
@@ -378,8 +386,8 @@ function App() {
 
   useEffect(() => {
     if (isSettingsWindow) return
-    void setCapsuleWindowExpanded(activePanel !== null)
-  }, [activePanel, isSettingsWindow])
+    void setCapsuleWindowExpanded(activePanel !== null || settingsOpen || closePromptOpen)
+  }, [activePanel, closePromptOpen, isSettingsWindow, settingsOpen])
 
   useEffect(() => {
     if (recordingMode === 'audio' && activePanel === 'camera') {
@@ -480,6 +488,12 @@ function App() {
 
   useEffect(() => subscribeRegionSelection((result) => {
     if (result.cancelled) {
+      void hideRegionFrame()
+      setAvailableSources((current) => {
+        const next = current.filter((source) => source.id !== 'region:custom')
+        setSelectedSource((selected) => selected.type === 'region' ? fallbackVisibleSource(next) : selected)
+        return next
+      })
       setSourceSelectionMessage(result.error ? {key: 'regionTooSmall', fallback: result.error} : {key: 'regionCancelled'})
       return
     }
@@ -595,10 +609,13 @@ function App() {
         setState('ready')
         setLastStatusMessage({key: 'ready'})
       }
+      await hideRegionFrame()
+      return true
     } catch (error) {
       console.error('Failed to stop recording:', error)
       setLastStatusMessage({key: 'failedToStop'})
       setState('failed')
+      return false
     }
   }
 
@@ -686,9 +703,39 @@ function App() {
     }
   }
 
-  const openSettings = async () => {
+  const togglePanel = (panel: ActivePanel) => {
+    setSettingsOpen(false)
+    setClosePromptOpen(false)
+    setActivePanel(activePanel === panel ? null : panel)
+  }
+
+  const openSettings = () => {
     setActivePanel(null)
-    await showSettingsWindow()
+    setClosePromptOpen(false)
+    setSettingsOpen((open) => !open)
+  }
+
+  const requestCloseApplication = () => {
+    setActivePanel(null)
+    setSettingsOpen(false)
+    setClosePromptOpen(true)
+  }
+
+  const confirmCloseApplication = async () => {
+    if (closeBusy) return
+    setCloseBusy(true)
+    try {
+      if (state === 'recording' || state === 'paused') {
+        const stopped = await finishRecording()
+        if (!stopped) return
+      }
+      await hideRegionFrame()
+      await hideScreenIndicator()
+      await stopMicrophoneLevelMonitor()
+      await quitApplication()
+    } finally {
+      setCloseBusy(false)
+    }
   }
 
   const chooseSource = (source: CaptureSource) => {
@@ -835,7 +882,7 @@ function App() {
   }
 
   return (
-    <main className="rf-shell" aria-label={copy.aria.recorderShell}>
+    <main className={`rf-shell ${activePanel || settingsOpen || closePromptOpen ? 'is-expanded' : 'is-collapsed'}`} aria-label={copy.aria.recorderShell}>
       <section className="recorder-stage" aria-label={copy.aria.recorderControls}>
         <div className={`capsule ${isRecording ? 'capsule-active' : ''}`}>
           <button
@@ -853,7 +900,7 @@ function App() {
             type="button"
             aria-expanded={activePanel === 'source'}
             disabled={recordingConfigLocked}
-            onClick={() => setActivePanel(activePanel === 'source' ? null : 'source')}
+            onClick={() => togglePanel('source')}
           >
             <SourceIcon size={18} />
             <span className="source-text">
@@ -871,7 +918,7 @@ function App() {
               title={copy.panels.audio}
               aria-expanded={activePanel === 'audio'}
               disabled={recordingConfigLocked}
-              onClick={() => setActivePanel(activePanel === 'audio' ? null : 'audio')}
+              onClick={() => togglePanel('audio')}
             >
               <Volume2 size={18} />
             </button>
@@ -881,7 +928,7 @@ function App() {
               aria-label={copy.aria.openCameraSettings}
               title={copy.panels.cameraSidecar}
               disabled={recordingConfigLocked || recordingMode === 'audio'}
-              onClick={() => setActivePanel(activePanel === 'camera' ? null : 'camera')}
+              onClick={() => togglePanel('camera')}
             >
               <Camera size={18} />
             </button>
@@ -919,7 +966,7 @@ function App() {
             aria-label={copy.aria.selectLanguage}
             title={copy.localeNames[locale]}
             aria-expanded={activePanel === 'language'}
-            onClick={() => setActivePanel(activePanel === 'language' ? null : 'language')}
+            onClick={() => togglePanel('language')}
           >
             <Languages size={18} />
           </button>
@@ -929,9 +976,19 @@ function App() {
             type="button"
             aria-label={copy.aria.openSettings}
             title={copy.settings.title}
-            onClick={() => void openSettings()}
+            onClick={openSettings}
           >
             <Settings size={18} />
+          </button>
+
+          <button
+            className="icon-button close-app-button"
+            type="button"
+            aria-label={copy.aria.closeApplication}
+            title={copy.aria.closeApplication}
+            onClick={requestCloseApplication}
+          >
+            <X size={18} />
           </button>
         </div>
 
@@ -1067,9 +1124,13 @@ function App() {
               <div className="menu-stack">
                 <SwitchRow label={copy.panels.systemAudio} checked={systemAudio} disabled={recordingConfigLocked} onChange={setSystemAudio} />
                 <label className="field-label" htmlFor="system-audio-device">{copy.panels.systemAudioDevice}</label>
-                <select id="system-audio-device" value={selectedSystemAudio} disabled={recordingConfigLocked} onChange={(event) => setSelectedSystemAudio(event.target.value)}>
-                  {availableSystemAudio.map((device) => <option key={device.id} value={device.id}>{mediaDeviceName(device, copy)}</option>)}
-                </select>
+                <SelectMenu
+                  id="system-audio-device"
+                  value={selectedSystemAudio}
+                  disabled={recordingConfigLocked}
+                  options={availableSystemAudio.map((device) => ({value: device.id, label: mediaDeviceName(device, copy), disabled: device.available === false}))}
+                  onChange={setSelectedSystemAudio}
+                />
                 <SwitchRow
                   label={copy.panels.microphone}
                   checked={microphone && hasAvailableMicrophone}
@@ -1089,19 +1150,15 @@ function App() {
                   onChange={setNoiseSuppression}
                 />
                 <label className="field-label" htmlFor="mic-device">{copy.panels.microphoneDevice}</label>
-                <select
+                <SelectMenu
                   id="mic-device"
                   value={selectedMic}
                   disabled={recordingConfigLocked || !microphone || !hasAvailableMicrophone}
-                  onChange={(event) => setSelectedMic(event.target.value)}
-                >
-                  {availableMicrophones.length === 0 && <option value="">{copy.panels.noMicrophones}</option>}
-                  {availableMicrophones.map((device) => (
-                    <option key={device.id} value={device.id} disabled={device.available === false}>
-                      {mediaDeviceName(device, copy)}
-                    </option>
-                  ))}
-                </select>
+                  options={availableMicrophones.length === 0
+                    ? [{value: '', label: copy.panels.noMicrophones, disabled: true}]
+                    : availableMicrophones.map((device) => ({value: device.id, label: mediaDeviceName(device, copy), disabled: device.available === false}))}
+                  onChange={setSelectedMic}
+                />
                 <div
                   className={`meter ${micMonitorActive ? 'live' : ''} ${micMonitorError ? 'error' : ''}`}
                   aria-label={copy.aria.microphoneLevel}
@@ -1122,13 +1179,21 @@ function App() {
               <div className="menu-stack">
                 <SwitchRow label={copy.panels.cameraSidecar} checked={camera} disabled={recordingConfigLocked} onChange={setCamera} />
                 <label className="field-label" htmlFor="camera-device">{copy.panels.cameraDevice}</label>
-                <select id="camera-device" value={selectedCamera} disabled={recordingConfigLocked} onChange={(event) => setSelectedCamera(event.target.value)}>
-                  {availableCameras.map((device) => <option key={device.id} value={device.id}>{mediaDeviceName(device, copy)}</option>)}
-                </select>
+                <SelectMenu
+                  id="camera-device"
+                  value={selectedCamera}
+                  disabled={recordingConfigLocked}
+                  options={availableCameras.map((device) => ({value: device.id, label: mediaDeviceName(device, copy), disabled: device.available === false}))}
+                  onChange={setSelectedCamera}
+                />
                 <label className="field-label" htmlFor="pip-preset">{copy.panels.pipPreset}</label>
-                <select id="pip-preset" value={pipPreset} disabled={recordingConfigLocked} onChange={(event) => setPipPreset(event.target.value as PIPPreset)}>
-                  {pipPresetOptions.map((preset) => <option key={preset} value={preset}>{copy.pipPresetLabels[preset]}</option>)}
-                </select>
+                <SelectMenu
+                  id="pip-preset"
+                  value={pipPreset}
+                  disabled={recordingConfigLocked}
+                  options={pipPresetOptions.map((preset) => ({value: preset, label: copy.pipPresetLabels[preset]}))}
+                  onChange={(value) => setPipPreset(value as PIPPreset)}
+                />
                 <div className="camera-preview">
                   <Video size={26} />
                   <span>{copy.panels.pipPresetPreview(copy.pipPresetLabels[pipPreset])}</span>
@@ -1172,6 +1237,22 @@ function App() {
       </section>
 
       {settingsOpen && settingsPanel}
+      {closePromptOpen && (
+        <section className="close-confirm-panel" role="dialog" aria-modal="true" aria-label={isRecording ? copy.closeDialog.recordingTitle : copy.closeDialog.idleTitle}>
+          <div className="close-confirm-copy">
+            <strong>{isRecording ? copy.closeDialog.recordingTitle : copy.closeDialog.idleTitle}</strong>
+            <span>{isRecording ? copy.closeDialog.recordingMessage : copy.closeDialog.idleMessage}</span>
+          </div>
+          <div className="close-confirm-actions">
+            <button type="button" className="close-confirm-secondary" disabled={closeBusy} onClick={() => setClosePromptOpen(false)}>
+              {copy.common.cancel}
+            </button>
+            <button type="button" className="close-confirm-primary" disabled={closeBusy} onClick={() => void confirmCloseApplication()}>
+              {isRecording ? copy.closeDialog.confirmRecording : copy.closeDialog.confirmIdle}
+            </button>
+          </div>
+        </section>
+      )}
     </main>
   )
 }
@@ -1201,13 +1282,31 @@ function ScreenIndicatorWindow() {
   )
 }
 
+function RegionFrameEdgeWindow() {
+  useEffect(() => {
+    document.body.classList.add('rf-region-frame-window')
+    return () => document.body.classList.remove('rf-region-frame-window')
+  }, [])
+
+  return <main className="region-frame-edge-strip" aria-hidden="true" />
+}
+
 type RegionFrameState = {
   bounds: {x: number; y: number; width: number; height: number}
+  mode?: 'edit' | 'recording'
 }
 
 function RegionFrameWindow() {
   const frameWindow = window as Window & {__RF_REGION_FRAME__?: RegionFrameState}
   const [frame, setFrame] = useState<RegionFrameState | undefined>(frameWindow.__RF_REGION_FRAME__)
+  const [draftBounds, setDraftBounds] = useState(frameWindow.__RF_REGION_FRAME__?.bounds)
+  const editRef = useRef<{
+    action: RegionEditAction
+    startX: number
+    startY: number
+    bounds: RegionFrameState['bounds']
+    latest: RegionFrameState['bounds']
+  } | null>(null)
 
   useEffect(() => {
     document.body.classList.add('rf-region-frame-window')
@@ -1217,27 +1316,132 @@ function RegionFrameWindow() {
   useEffect(() => {
     const onFrame = (event: Event) => {
       const next = (event as CustomEvent<RegionFrameState>).detail
-      if (next) setFrame(next)
+      if (next) {
+        setFrame(next)
+        setDraftBounds(next.bounds)
+      }
     }
     window.addEventListener('rf-region-frame', onFrame)
     return () => window.removeEventListener('rf-region-frame', onFrame)
   }, [])
 
-  const width = frame?.bounds.width ?? 0
-  const height = frame?.bounds.height ?? 0
+  if (!frame || frame.mode === 'recording') {
+    return <main className="region-frame-empty" aria-hidden="true" />
+  }
+
+  const bounds = draftBounds ?? frame.bounds
+  const width = bounds.width
+  const height = bounds.height
+
+  const applyWindowBounds = async (next: RegionFrameState['bounds']) => {
+    try {
+      await WailsWindow.SetPosition(next.x, next.y)
+      await WailsWindow.SetSize(next.width, next.height)
+    } catch (error) {
+      console.info('Using browser region frame move fallback:', error)
+    }
+  }
+
+  const beginEdit = (event: ReactPointerEvent<HTMLElement>, action: RegionEditAction) => {
+    if (event.button !== 0) return
+    event.preventDefault()
+    event.stopPropagation()
+    event.currentTarget.setPointerCapture(event.pointerId)
+    editRef.current = {
+      action,
+      startX: event.screenX,
+      startY: event.screenY,
+      bounds,
+      latest: bounds,
+    }
+  }
+
+  const updateEdit = (event: ReactPointerEvent<HTMLElement>) => {
+    const edit = editRef.current
+    if (!edit) return
+    event.preventDefault()
+    const next = resizeRegionBounds(edit.bounds, edit.action, event.screenX - edit.startX, event.screenY - edit.startY)
+    edit.latest = next
+    setDraftBounds(next)
+    void applyWindowBounds(next)
+  }
+
+  const completeEdit = (event: ReactPointerEvent<HTMLElement>) => {
+    const edit = editRef.current
+    if (!edit) return
+    if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+      event.currentTarget.releasePointerCapture(event.pointerId)
+    }
+    editRef.current = null
+    void updateSelectedRegion(edit.latest)
+  }
 
   return (
-    <main className="region-frame-shell" aria-hidden="true">
-      <div className="region-frame-line top" />
-      <div className="region-frame-line right" />
-      <div className="region-frame-line bottom" />
-      <div className="region-frame-line left" />
-      {width > 0 && height > 0 && (
-        <b className="region-frame-badge">{width} x {height}</b>
-      )}
+    <main
+      className="region-frame-shell editable"
+      aria-label="Selected recording region"
+      onPointerMove={updateEdit}
+      onPointerUp={completeEdit}
+      onPointerCancel={completeEdit}
+    >
+      <div className="region-frame-border" />
+      <button className="region-frame-move" type="button" aria-label="Move selected region" onPointerDown={(event) => beginEdit(event, 'move')}>
+        <span />
+      </button>
+      {regionResizeActions.map((action) => (
+        <button
+          key={action}
+          className={`region-frame-resize ${action}`}
+          type="button"
+          aria-label={`Resize ${action}`}
+          onPointerDown={(event) => beginEdit(event, action)}
+        />
+      ))}
+      {width > 0 && height > 0 && <b className="region-frame-badge">{width} x {height}</b>}
+      <button
+        className="region-frame-cancel"
+        type="button"
+        aria-label="Cancel selected region"
+        onPointerDown={(event) => event.stopPropagation()}
+        onClick={() => void cancelSelectedRegion()}
+      >
+        <X size={16} />
+      </button>
     </main>
   )
 }
+
+type RegionEditAction = 'move' | 'n' | 'e' | 's' | 'w' | 'ne' | 'nw' | 'se' | 'sw'
+
+const regionResizeActions: RegionEditAction[] = ['n', 'e', 's', 'w', 'ne', 'nw', 'se', 'sw']
+
+function resizeRegionBounds(bounds: RegionFrameState['bounds'], action: RegionEditAction, dx: number, dy: number) {
+  const next = {...bounds}
+  if (action === 'move') {
+    next.x = Math.round(bounds.x + dx)
+    next.y = Math.round(bounds.y + dy)
+    return next
+  }
+  if (action.includes('e')) {
+    next.width = Math.round(Math.max(minRegionEditorSize, bounds.width + dx))
+  }
+  if (action.includes('s')) {
+    next.height = Math.round(Math.max(minRegionEditorSize, bounds.height + dy))
+  }
+  if (action.includes('w')) {
+    const width = Math.round(Math.max(minRegionEditorSize, bounds.width - dx))
+    next.x = Math.round(bounds.x + bounds.width - width)
+    next.width = width
+  }
+  if (action.includes('n')) {
+    const height = Math.round(Math.max(minRegionEditorSize, bounds.height - dy))
+    next.y = Math.round(bounds.y + bounds.height - height)
+    next.height = height
+  }
+  return next
+}
+
+const minRegionEditorSize = 64
 
 function RegionOverlayWindow() {
   const overlayWindow = window as Window & {__RF_REGION_SESSION__?: RegionSelectionSession}
@@ -1388,6 +1592,95 @@ function SwitchRow({label, checked, disabled = false, onChange}: {label: string;
   )
 }
 
+type SelectMenuOption = {
+  value: string
+  label: string
+  disabled?: boolean
+}
+
+function SelectMenu({
+  id,
+  value,
+  options,
+  disabled = false,
+  className = '',
+  onChange,
+}: {
+  id?: string
+  value: string
+  options: SelectMenuOption[]
+  disabled?: boolean
+  className?: string
+  onChange: (value: string) => void
+}) {
+  const [open, setOpen] = useState(false)
+  const rootRef = useRef<HTMLDivElement | null>(null)
+  const selected = options.find((option) => option.value === value) ?? options.find((option) => !option.disabled) ?? options[0]
+
+  useEffect(() => {
+    if (!open) return
+    const onPointerDown = (event: PointerEvent) => {
+      if (!rootRef.current?.contains(event.target as Node)) {
+        setOpen(false)
+      }
+    }
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        setOpen(false)
+      }
+    }
+    document.addEventListener('pointerdown', onPointerDown)
+    document.addEventListener('keydown', onKeyDown)
+    return () => {
+      document.removeEventListener('pointerdown', onPointerDown)
+      document.removeEventListener('keydown', onKeyDown)
+    }
+  }, [open])
+
+  useEffect(() => {
+    if (disabled) setOpen(false)
+  }, [disabled])
+
+  return (
+    <div ref={rootRef} className={`select-menu ${open ? 'open' : ''} ${disabled ? 'disabled' : ''} ${className}`}>
+      <button
+        id={id}
+        type="button"
+        className="select-menu-button"
+        disabled={disabled || options.length === 0}
+        aria-haspopup="listbox"
+        aria-expanded={open}
+        onClick={() => setOpen((value) => !value)}
+      >
+        <span>{selected?.label ?? ''}</span>
+        <ChevronDown size={16} />
+      </button>
+      {open && (
+        <div className="select-menu-list" role="listbox" aria-labelledby={id}>
+          {options.map((option) => (
+            <button
+              key={option.value}
+              type="button"
+              role="option"
+              className={`select-menu-option ${option.value === value ? 'selected' : ''}`}
+              aria-selected={option.value === value}
+              disabled={option.disabled}
+              onClick={() => {
+                if (option.disabled) return
+                onChange(option.value)
+                setOpen(false)
+              }}
+            >
+              <span>{option.label}</span>
+              {option.value === value && <Check size={15} />}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
 function SourceGroup({title, children}: {title: string; children: ReactNode}) {
   return (
     <section className="source-group" aria-label={title}>
@@ -1528,6 +1821,11 @@ function selectVisibleInitialSource(nextSources: CaptureSource[], lastSourceId: 
   return fallback
 }
 
+function fallbackVisibleSource(nextSources: CaptureSource[]) {
+  const visibleSources = nextSources.filter((source) => source.type !== 'application' && source.type !== 'region')
+  return visibleSources.find((source) => source.type === 'screen') ?? visibleSources[0] ?? sources[0]
+}
+
 function capabilityTitle(capability: CaptureCapability, copy: RecorderCopy) {
   return copy.capabilityLabels[capability.id] ?? capability.label
 }
@@ -1630,9 +1928,7 @@ function SettingSelect({
   return (
     <label className="setting-line setting-control">
       <span>{title}</span>
-      <select className="setting-control-select" value={value} onChange={(event) => onChange(event.target.value)}>
-        {options.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
-      </select>
+      <SelectMenu className="setting-control-select" value={value} options={options} onChange={onChange} />
       {detail && <small>{detail}</small>}
     </label>
   )

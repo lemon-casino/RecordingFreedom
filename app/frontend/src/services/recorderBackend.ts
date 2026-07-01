@@ -1,4 +1,4 @@
-import {Events, Window as WailsWindow} from '@wailsio/runtime'
+import {Application, Events, Window as WailsWindow} from '@wailsio/runtime'
 import {RecordingFreedomService} from '../../bindings/github.com/lemon-casino/RecordingFreedom/app'
 import {
   type BootstrapState as BoundBootstrapState,
@@ -96,9 +96,9 @@ export type RecorderBootstrap = {
 }
 
 const browserSettingsKey = 'recordingfreedom.settings.v1'
-const capsuleWindowWidth = 860
-const capsuleWindowCollapsedHeight = 166
-const capsuleWindowExpandedHeight = 520
+const capsuleWindowWidth = 960
+const capsuleWindowCollapsedHeight = 112
+const capsuleWindowExpandedHeight = 640
 
 export type RegionSelectionSession = {
   id: string
@@ -126,9 +126,20 @@ export type ScreenIndicatorResult = {
 
 export async function setCapsuleWindowExpanded(expanded: boolean): Promise<void> {
   try {
+    const position = await WailsWindow.Position()
     await WailsWindow.SetSize(capsuleWindowWidth, expanded ? capsuleWindowExpandedHeight : capsuleWindowCollapsedHeight)
+    await WailsWindow.SetPosition(position.x, position.y)
   } catch (error) {
     console.info('Using browser capsule window size fallback:', error)
+  }
+}
+
+export async function quitApplication(): Promise<void> {
+  try {
+    await Application.Quit()
+  } catch (error) {
+    console.info('Using browser quit fallback:', error)
+    window.close()
   }
 }
 
@@ -266,6 +277,24 @@ export async function cancelRegionSelector(): Promise<RegionSelectionResult> {
     return fromBoundRegionSelectionResult(await RecordingFreedomService.CancelRegionSelection())
   } catch (error) {
     console.info('Using browser region selection cancel fallback:', error)
+    return {cancelled: true}
+  }
+}
+
+export async function updateSelectedRegion(request: RegionSelectionSession['bounds']): Promise<RegionSelectionResult> {
+  try {
+    return fromBoundRegionSelectionResult(await RecordingFreedomService.UpdateSelectedRegion(toBoundRegionSelectionRequest(request)))
+  } catch (error) {
+    console.info('Using browser selected region update fallback:', error)
+    return {geometry: request, cancelled: false}
+  }
+}
+
+export async function cancelSelectedRegion(): Promise<RegionSelectionResult> {
+  try {
+    return fromBoundRegionSelectionResult(await RecordingFreedomService.CancelSelectedRegion())
+  } catch (error) {
+    console.info('Using browser selected region cancel fallback:', error)
     return {cancelled: true}
   }
 }
