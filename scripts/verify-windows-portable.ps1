@@ -148,6 +148,10 @@ try {
     Require-Entry -Entries $entries -Name "recordingfreedom.exe" | Out-Null
     Require-Entry -Entries $entries -Name "tools/ffmpeg.exe" | Out-Null
     Require-Entry -Entries $entries -Name "tools/THIRD_PARTY_FFMPEG.txt" | Out-Null
+    Require-Entry -Entries $entries -Name "tools/desktop-doctor.exe" | Out-Null
+    Require-Entry -Entries $entries -Name "tools/video-smoke.exe" | Out-Null
+    Require-Entry -Entries $entries -Name "tools/audio-smoke.exe" | Out-Null
+    Require-Entry -Entries $entries -Name "tools/run-windows-portable-smoke.ps1" | Out-Null
     if (-not $AllowMissingFFprobe) {
         Require-Entry -Entries $entries -Name "tools/ffprobe.exe" | Out-Null
     }
@@ -178,6 +182,29 @@ if (-not $SkipExecutableCheck) {
                 throw "Extracted portable zip is missing tools/ffprobe.exe"
             }
             Assert-PEMetadata -Path $ffprobePath -ExpectedMachine 0x8664
+        }
+
+        $doctorPath = Join-Path $extractDir "tools/desktop-doctor.exe"
+        if (-not (Test-Path -LiteralPath $doctorPath)) {
+            throw "Extracted portable zip is missing tools/desktop-doctor.exe"
+        }
+        Assert-PEMetadata -Path $doctorPath -ExpectedMachine 0x8664 -ExpectedSubsystem 3
+
+        $videoSmokePath = Join-Path $extractDir "tools/video-smoke.exe"
+        if (-not (Test-Path -LiteralPath $videoSmokePath)) {
+            throw "Extracted portable zip is missing tools/video-smoke.exe"
+        }
+        Assert-PEMetadata -Path $videoSmokePath -ExpectedMachine 0x8664 -ExpectedSubsystem 3
+
+        $audioSmokePath = Join-Path $extractDir "tools/audio-smoke.exe"
+        if (-not (Test-Path -LiteralPath $audioSmokePath)) {
+            throw "Extracted portable zip is missing tools/audio-smoke.exe"
+        }
+        Assert-PEMetadata -Path $audioSmokePath -ExpectedMachine 0x8664 -ExpectedSubsystem 3
+
+        $portableSmokePath = Join-Path $extractDir "tools/run-windows-portable-smoke.ps1"
+        if (-not (Test-Path -LiteralPath $portableSmokePath)) {
+            throw "Extracted portable zip is missing tools/run-windows-portable-smoke.ps1"
         }
 
         if (Is-WindowsHost) {

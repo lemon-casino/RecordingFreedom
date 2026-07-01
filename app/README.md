@@ -109,6 +109,14 @@ Verify a published Windows preview portable zip from GitHub Releases:
 
 The release verifier downloads the Windows x64 portable zip and SHA256SUMS, checks the hash, then verifies the zip contains a x64 GUI `recordingfreedom.exe`, x64 FFmpeg/FFprobe, and the FFmpeg third-party notice. This is an artifact integrity check; real screen/region/window capture still needs the no-GUI video smoke commands below on the target desktop.
 
+Windows portable artifacts produced after `v0.1.0-preview.14` include target-machine smoke tools. After unzipping the portable zip on a Windows desktop, run:
+
+```powershell
+.\tools\run-windows-portable-smoke.ps1
+```
+
+The runner uses bundled `desktop-doctor.exe`, `video-smoke.exe`, `audio-smoke.exe`, FFmpeg, and FFprobe, and writes smoke packages under `data-smoke/data/video` unless `-DataDir` is passed.
+
 Run the no-GUI video smoke on a machine with the required native dependency and desktop permissions:
 
 ```bash

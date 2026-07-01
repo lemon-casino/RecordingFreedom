@@ -123,6 +123,14 @@ Verify a staged Windows portable zip before uploading it:
 .\scripts\verify-windows-portable.ps1 -ZipPath .\release-out\RecordingFreedom-windows-x64-v0.1.0-preview.9-portable.zip
 ```
 
+For Windows portable artifacts produced after `v0.1.0-preview.14`, the zip also carries clean-machine diagnostics under `tools/`. After unzipping on a target Windows desktop, run:
+
+```powershell
+.\tools\run-windows-portable-smoke.ps1
+```
+
+That runner uses the bundled `tools/desktop-doctor.exe`, `tools/video-smoke.exe`, `tools/audio-smoke.exe`, `tools/ffmpeg.exe`, and `tools/ffprobe.exe`. It writes all smoke output under the portable-local `data-smoke/data/video` tree unless `-DataDir` is provided.
+
 Use the desktop doctor to inspect the same dependency gate before trying a real recording:
 
 ```bash
@@ -149,7 +157,7 @@ git tag v0.1.0-preview.9
 git push origin v0.1.0-preview.9
 ```
 
-Preview tags are published as GitHub prereleases. The Windows preview artifact is a portable zip containing `recordingfreedom.exe` and `tools/ffmpeg.exe`; macOS/Linux remain raw preview binaries. Release artifacts are built with the `rnnoise_native` cgo tag and gated by `desktop-doctor -require-rnnoise`, so a preview that cannot create the native RNNoise suppressor must fail before publishing. This preview release is for UI shell, settings, mock package, developer audio smoke, Windows FFmpeg video + WASAPI audio mux verification, RNNoise native artifact gating, FFmpeg dependency gating, and full-platform build verification. It is not a signed installer release, and it does not claim full native screen/audio/camera recording yet. See [docs/04-ci-release-plan.md](docs/04-ci-release-plan.md).
+Preview tags are published as GitHub prereleases. The Windows preview artifact is a portable zip containing `recordingfreedom.exe`, FFmpeg/FFprobe, and portable diagnostics for desktop doctor, video smoke, audio smoke, and the Windows smoke runner; macOS/Linux remain raw preview binaries. Release artifacts are built with the `rnnoise_native` cgo tag and gated by `desktop-doctor -require-rnnoise`, so a preview that cannot create the native RNNoise suppressor must fail before publishing. This preview release is for UI shell, settings, mock package, developer audio smoke, Windows FFmpeg video + WASAPI audio mux verification, RNNoise native artifact gating, FFmpeg dependency gating, and full-platform build verification. It is not a signed installer release, and it does not claim full native screen/audio/camera recording yet. See [docs/04-ci-release-plan.md](docs/04-ci-release-plan.md).
 
 ## Data Directory
 
@@ -186,6 +194,6 @@ User settings are persisted in:
 1. Validate CI on the new GitHub repository.
 2. Replace queued media-device placeholders with native macOS/Linux audio and camera enumeration; Windows WASAPI/DirectShow enumeration is already wired.
 3. Real-device smoke macOS ScreenCaptureKit recording.
-4. Download the Windows portable preview artifact and verify screen/region/locked-window plus system/microphone mux `video-smoke` on a real desktop.
+4. Download the Windows portable preview artifact and run `.\tools\run-windows-portable-smoke.ps1` on a real desktop to verify screen/all-screens/region/locked-window, pause/resume, system audio, microphone, RNNoise, and audio-only smoke.
 5. Smoke `audio-smoke -rnnoise` on target desktops built with the same `rnnoise_native` release toolchain, then keep the release `desktop-doctor -require-rnnoise` gate green on every desktop runner.
 6. After video recording and voice/audio recording are accepted, resume camera sidecar and PIP preview/export work.

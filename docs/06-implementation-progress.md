@@ -345,9 +345,10 @@ CGO_ENABLED=1 go test -tags rnnoise_native ./internal/audio/rnnoise/native ./int
 
 发布产物验收：
 
-- `scripts/verify-windows-portable.ps1` 已增强为解压检查 portable zip：验证 `recordingfreedom.exe` 是 x64 GUI PE，`tools/ffmpeg.exe` 和 `tools/ffprobe.exe` 是 x64 PE，并在 Windows host 上执行 FFmpeg/FFprobe `-version`。
+- `scripts/verify-windows-portable.ps1` 已增强为解压检查 portable zip：验证 `recordingfreedom.exe` 是 x64 GUI PE，`tools/ffmpeg.exe`、`tools/ffprobe.exe`、`tools/desktop-doctor.exe`、`tools/video-smoke.exe` 和 `tools/audio-smoke.exe` 是 x64 PE，并在 Windows host 上执行 FFmpeg/FFprobe `-version`。
+- Windows portable zip 的 release workflow 已新增 clean-machine 验收工具打包：`tools/desktop-doctor.exe`、`tools/video-smoke.exe`、`tools/audio-smoke.exe` 和 `tools/run-windows-portable-smoke.ps1`。该 runner 解压后即可运行，不依赖 Go/Node/Wails 源码环境，默认把 smoke 包写入 portable 根目录下的 `data-smoke/data/video`。
 - 新增 `scripts/verify-windows-preview-release.ps1`：可按 tag 或最近 release 下载 GitHub Windows x64 portable zip 和 `SHA256SUMS-windows-x64*.txt`，校验 SHA256 后复用 `verify-windows-portable.ps1`。该脚本用于 release asset 完整性复验，不替代 clean-machine 真实 screen/region/window 录制 smoke。
-- `v0.1.0-preview.14` Windows portable zip 已用真实 GitHub Release 下载复验通过：SHA256 `7FE81996BCEB2D37864432FAAFCEE9D3FF942E1544A66EC3073D0D43340ED97A` 匹配，`recordingfreedom.exe` 为 x64 GUI PE，`tools/ffmpeg.exe` / `tools/ffprobe.exe` 为 x64 PE 且 `-version` 可执行。
+- `v0.1.0-preview.14` Windows portable zip 已用真实 GitHub Release 下载复验通过：SHA256 `7FE81996BCEB2D37864432FAAFCEE9D3FF942E1544A66EC3073D0D43340ED97A` 匹配，`recordingfreedom.exe` 为 x64 GUI PE，`tools/ffmpeg.exe` / `tools/ffprobe.exe` 为 x64 PE 且 `-version` 可执行。`v0.1.0-preview.14` 尚未包含 portable smoke exe 和 runner；下一版 preview 才会包含这些工具。
 
 PIP 合同测试：
 
@@ -407,7 +408,7 @@ RecordingFreedom/app/bin/recordingfreedom.exe
 
 - macOS ScreenCaptureKit display/window/region 录制已接入代码路径，但仍需要真机 smoke：授权屏幕录制后运行 `go run ./cmd/video-smoke -duration=1m`、`go run ./cmd/video-smoke -source-type=window -duration=1m`、`go run ./cmd/video-smoke -source-type=region -duration=1m` 和 `go run ./cmd/video-smoke -duration=5m -pause-after=10s -pause-duration=2s`，并确认 `screen.mp4` 可播放、包进入 `ready`、`video-diagnostics.json` 和 `diagnostics.sync` 正确。Application/Program 后端合同仍保留给 smoke 和后端演进，但不在当前用户菜单展示。
 - ScreenCaptureKit 系统声音 mux 已接入代码路径但仍需 macOS 真机 smoke；麦克风 mux 仍未完成。
-- Windows FFmpeg video writer 已接入代码路径，CI/release 已能准备并打包 `tools/ffmpeg.exe`；本机真实 smoke 已验证 screen、all-screens、region、locked-window、pause/resume segment merge、系统声音 mux、麦克风 mux、系统声音 + 麦克风混音 mux，并已完成 1 分钟、5 分钟和 20 分钟录制包可解码验证。GitHub `v0.1.0-preview.14` Windows portable artifact 已下载复验通过；仍需在 clean machine 验证真实录制、失败诊断和空间/权限边界。
+- Windows FFmpeg video writer 已接入代码路径，CI/release 已能准备并打包 `tools/ffmpeg.exe`；本机真实 smoke 已验证 screen、all-screens、region、locked-window、pause/resume segment merge、系统声音 mux、麦克风 mux、系统声音 + 麦克风混音 mux，并已完成 1 分钟、5 分钟和 20 分钟录制包可解码验证。下一版 Windows portable artifact 会内置 `tools/run-windows-portable-smoke.ps1`，用于在 clean machine 直接验证真实录制、失败诊断和空间/权限边界；GitHub `v0.1.0-preview.14` 只完成了 artifact 下载复验，还不能算 clean-machine 真实录制通过。
 - 真实区域录制 crop writer：当前已有 `region` 源类型、`source.geometry` 合同、跨显示器透明十字框选 overlay、拖拽红框、尺寸浮标、选择事件，以及进入 `video.CaptureConfig` / `video-diagnostics.json` 的 writer 边界 geometry。macOS 单显示器区域已接入 ScreenCaptureKit `sourceRect` 写入 `screen.mp4`；Windows 已通过 FFmpeg desktop crop 接入；Linux crop writer 仍未完成。
 - 真实全部屏幕多显示器合成录制：当前已有 `all-screens` 源类型和虚拟桌面 bounds；Windows FFmpeg 可按虚拟桌面录制，macOS/Linux 多屏合成仍保持 queued。
 - 真实 PipeWire / XDG Portal 录制。
@@ -432,5 +433,5 @@ RecordingFreedom/app/bin/recordingfreedom.exe
 2. A1 已完成 Windows WASAPI system audio/microphone endpoint 枚举；继续补 macOS CoreAudio 与 Linux PipeWire/PulseAudio 枚举。
 3. Windows 麦克风 PCM 采集、系统声音 loopback 样本写盘、FFmpeg desktop video writer、runtime backend 注册、Windows portable zip FFmpeg 准备路径和停止阶段音视频 mux 已落地；下一步补有 C 工具链本机的 `audio-smoke -rnnoise`、目标桌面 RNNoise 实录听感/诊断，以及 macOS/Linux 音频源。
 4. 在真实 macOS 机器补 ScreenCaptureKit screen/window/region/system-audio `video-smoke`，确认权限、可播放性、`video-diagnostics.json` 和 `diagnostics.sync`。
-5. 下载 Windows portable artifact 后，在真实桌面执行 screen/all-screens/region/locked-window `video-smoke`、pause/resume segment merge、音频 mux 组合和 20 分钟长录验收。
+5. 下一版 Windows portable artifact 发布后，在真实桌面解压并执行 `.\tools\run-windows-portable-smoke.ps1`，覆盖 screen/all-screens/region/locked-window、pause/resume segment merge、音频 mux、RNNoise 和 audio-only 组合；随后补 20 分钟长录验收。
 6. 把 release workflow 从 preview executable 升级为正式安装包、签名和公证流水线。

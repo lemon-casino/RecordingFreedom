@@ -284,7 +284,7 @@
 任务：
 
 - macOS Developer ID Application 签名、公证、staple。
-- Windows installer/MSIX 或 portable zip 验证。preview portable zip 已通过 GitHub Windows runner 内容、x64 GUI PE、FFmpeg/FFprobe 执行校验；`v0.1.0-preview.14` 已用 `scripts/verify-windows-preview-release.ps1` 下载并校验 SHA256 与 portable zip 结构；仍需把 artifact 带到 clean machine 跑真实 `video-smoke` 矩阵。
+- Windows installer/MSIX 或 portable zip 验证。preview portable zip 已通过 GitHub Windows runner 内容、x64 GUI PE、FFmpeg/FFprobe 执行校验；`v0.1.0-preview.14` 已用 `scripts/verify-windows-preview-release.ps1` 下载并校验 SHA256 与 portable zip 结构。下一版 Windows portable zip 会内置 `desktop-doctor.exe`、`video-smoke.exe`、`audio-smoke.exe` 和 `run-windows-portable-smoke.ps1`，仍需把 artifact 带到 clean machine 运行真实录制矩阵。
 - Linux deb/rpm/AppImage 取舍和验证。
 - release workflow 缺少签名密钥时必须失败或只产出明确 preview artifact。
 

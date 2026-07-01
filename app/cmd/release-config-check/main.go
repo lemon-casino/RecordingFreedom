@@ -52,6 +52,16 @@ var releaseConfigChecks = []configCheck{
 		},
 	},
 	{
+		File: ".github/workflows/ci.yml",
+		Name: "CI builds Windows portable smoke tools",
+		Needles: []string{
+			"Build Windows portable smoke tools",
+			"bin\\desktop-doctor.exe",
+			"bin\\video-smoke.exe",
+			"bin\\audio-smoke.exe",
+		},
+	},
+	{
 		File: ".github/workflows/release.yml",
 		Name: "Release builds RNNoise artifacts",
 		Needles: []string{
@@ -71,7 +81,22 @@ var releaseConfigChecks = []configCheck{
 			"tools/ffmpeg.exe",
 			"tools/ffprobe.exe",
 			"tools/THIRD_PARTY_FFMPEG.txt",
+			"tools/desktop-doctor.exe",
+			"tools/video-smoke.exe",
+			"tools/audio-smoke.exe",
+			"tools/run-windows-portable-smoke.ps1",
 			"./scripts/verify-windows-portable.ps1",
+		},
+	},
+	{
+		File: ".github/workflows/release.yml",
+		Name: "Release builds Windows portable smoke tools",
+		Needles: []string{
+			"Build Windows portable smoke tools",
+			"bin\\desktop-doctor.exe",
+			"bin\\video-smoke.exe",
+			"bin\\audio-smoke.exe",
+			"run-windows-portable-smoke.ps1",
 		},
 	},
 	{
@@ -89,6 +114,25 @@ var releaseConfigChecks = []configCheck{
 			"ExpectedSubsystem 2",
 			"0x8664",
 			"recordingfreedom.exe",
+			"tools/desktop-doctor.exe",
+			"tools/video-smoke.exe",
+			"tools/audio-smoke.exe",
+			"tools/run-windows-portable-smoke.ps1",
+		},
+	},
+	{
+		File: "scripts/run-windows-portable-smoke.ps1",
+		Name: "Windows portable smoke runner executes real recording diagnostics",
+		Needles: []string{
+			"desktop-doctor.exe",
+			"video-smoke.exe",
+			"audio-smoke.exe",
+			"RECORDINGFREEDOM_FFMPEG_PATH",
+			"-source-type=region",
+			"-source-type=window",
+			"-microphone",
+			"-system",
+			"-rnnoise",
 		},
 	},
 	{

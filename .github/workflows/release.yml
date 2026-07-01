@@ -168,6 +168,18 @@ jobs:
             CGO_ENABLED=1 wails3 build -tags "${RNNOISE_TAG}"
           fi
 
+      - name: Build Windows portable smoke tools
+        if: runner.os == 'Windows'
+        working-directory: ${{ env.APP_DIR }}
+        shell: pwsh
+        env:
+          CGO_ENABLED: "1"
+        run: |
+          New-Item -ItemType Directory -Force -Path "bin" | Out-Null
+          go build -tags "$env:RNNOISE_TAG" -trimpath -ldflags "-w -s" -o "bin\desktop-doctor.exe" ".\cmd\desktop-doctor"
+          go build -tags "$env:RNNOISE_TAG" -trimpath -ldflags "-w -s" -o "bin\video-smoke.exe" ".\cmd\video-smoke"
+          go build -tags "$env:RNNOISE_TAG" -trimpath -ldflags "-w -s" -o "bin\audio-smoke.exe" ".\cmd\audio-smoke"
+
       - name: Run desktop dependency doctor
         working-directory: ${{ env.APP_DIR }}
         shell: bash
@@ -194,6 +206,10 @@ jobs:
               cp "${APP_DIR}/tools/ffprobe.exe" "${portable_dir}/tools/ffprobe.exe"
             fi
             cp "${APP_DIR}/tools/THIRD_PARTY_FFMPEG.txt" "${portable_dir}/tools/THIRD_PARTY_FFMPEG.txt"
+            cp "${APP_DIR}/bin/desktop-doctor.exe" "${portable_dir}/tools/desktop-doctor.exe"
+            cp "${APP_DIR}/bin/video-smoke.exe" "${portable_dir}/tools/video-smoke.exe"
+            cp "${APP_DIR}/bin/audio-smoke.exe" "${portable_dir}/tools/audio-smoke.exe"
+            cp "scripts/run-windows-portable-smoke.ps1" "${portable_dir}/tools/run-windows-portable-smoke.ps1"
             powershell -NoProfile -Command "Compress-Archive -Path '${portable_dir}/*' -DestinationPath 'release-out/RecordingFreedom-${{ matrix.name }}-${{ github.ref_name }}-portable.zip' -Force"
             rm -rf "${portable_dir}"
           else
@@ -266,12 +282,13 @@ jobs:
           - Explicit mock .rfrec package flow for UI/package validation.
           - No-GUI preview smoke for settings, storage, preflight, mock start/pause/resume/stop, ready manifest, RNNoise/camera/PIP manifest contract, and recovery scan.
           - Developer audio smoke for Windows WASAPI microphone and system-loopback capture.
-          - Windows FFmpeg desktop video writer contract for screen/all-screen/region/locked-window capture; enabled WASAPI system audio and microphone tracks are muxed into the final screen.mp4 at stop, and the Windows preview artifact is staged as a portable zip with tools/ffmpeg.exe.
+          - Windows FFmpeg desktop video writer contract for screen/all-screen/region/locked-window capture; enabled WASAPI system audio and microphone tracks are muxed into the final screen.mp4 at stop, and the Windows preview artifact is staged as a portable zip with tools/ffmpeg.exe plus desktop-doctor/video-smoke/audio-smoke diagnostics.
+          - Windows clean-machine portable smoke entrypoint at tools/run-windows-portable-smoke.ps1.
           - RNNoise native DSP is compiled into release artifacts with the rnnoise_native cgo build tag; desktop-doctor -require-rnnoise is a release build gate.
           - Windows, macOS, and Linux Wails build artifacts.
 
           Not included yet:
-          - End-to-end verified native recording on every desktop platform. macOS ScreenCaptureKit display/window/single-display region capture is wired in code but still needs real-device smoke validation; Windows portable artifacts still need clean-machine video-smoke validation after artifact download; PipeWire media writer is not complete.
+          - End-to-end verified native recording on every desktop platform. macOS ScreenCaptureKit display/window/single-display region capture is wired in code but still needs real-device smoke validation; Windows portable artifacts include the clean-machine smoke runner but still need the downloaded artifact to be executed on a target desktop; PipeWire media writer is not complete.
           - Cross-platform long-recording audio sync validation. Windows local smoke has passed 1 minute, 5 minute, and 20 minute recording with stop-time mux into screen.mp4; macOS system audio is wired through ScreenCaptureKit mux and still needs real-device smoke; Linux audio capture is queued.
           - Camera sidecar capture and PIP export are paused until video recording and voice/audio recording are accepted.
           - Signed installers, notarization, or Linux packages.

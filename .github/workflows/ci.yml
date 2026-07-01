@@ -179,6 +179,18 @@ jobs:
             CGO_ENABLED=1 wails3 build -tags "${RNNOISE_TAG}"
           fi
 
+      - name: Build Windows portable smoke tools
+        if: runner.os == 'Windows'
+        working-directory: ${{ env.APP_DIR }}
+        shell: pwsh
+        env:
+          CGO_ENABLED: "1"
+        run: |
+          New-Item -ItemType Directory -Force -Path "bin" | Out-Null
+          go build -tags "$env:RNNOISE_TAG" -trimpath -ldflags "-w -s" -o "bin\desktop-doctor.exe" ".\cmd\desktop-doctor"
+          go build -tags "$env:RNNOISE_TAG" -trimpath -ldflags "-w -s" -o "bin\video-smoke.exe" ".\cmd\video-smoke"
+          go build -tags "$env:RNNOISE_TAG" -trimpath -ldflags "-w -s" -o "bin\audio-smoke.exe" ".\cmd\audio-smoke"
+
       - name: Run desktop dependency doctor
         working-directory: ${{ env.APP_DIR }}
         shell: bash

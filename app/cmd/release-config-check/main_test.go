@@ -14,6 +14,7 @@ func TestRunAcceptsRequiredReleaseGates(t *testing.T) {
 	writeWorkflow(t, root, "app/build/windows/Taskfile.yml", workflowFixture("app/build/windows/Taskfile.yml"))
 	writeWorkflow(t, root, "scripts/verify-windows-portable.ps1", workflowFixture("scripts/verify-windows-portable.ps1"))
 	writeWorkflow(t, root, "scripts/verify-windows-preview-release.ps1", workflowFixture("scripts/verify-windows-preview-release.ps1"))
+	writeWorkflow(t, root, "scripts/run-windows-portable-smoke.ps1", workflowFixture("scripts/run-windows-portable-smoke.ps1"))
 
 	report, err := run(root)
 	if err != nil {
@@ -35,6 +36,7 @@ func TestRunRejectsMissingRNNoiseGate(t *testing.T) {
 	writeWorkflow(t, root, "app/build/windows/Taskfile.yml", workflowFixture("app/build/windows/Taskfile.yml"))
 	writeWorkflow(t, root, "scripts/verify-windows-portable.ps1", workflowFixture("scripts/verify-windows-portable.ps1"))
 	writeWorkflow(t, root, "scripts/verify-windows-preview-release.ps1", workflowFixture("scripts/verify-windows-preview-release.ps1"))
+	writeWorkflow(t, root, "scripts/run-windows-portable-smoke.ps1", workflowFixture("scripts/run-windows-portable-smoke.ps1"))
 
 	report, err := run(root)
 	if err != nil {
@@ -75,11 +77,20 @@ func workflowFixture(name string) string {
 	builder.WriteString("pacman -S --noconfirm --needed mingw-w64-x86_64-gcc\n")
 	builder.WriteString("./scripts/ensure-windows-ffmpeg.ps1\n")
 	builder.WriteString("-require-video -require-rnnoise\n")
+	builder.WriteString("Build Windows portable smoke tools\n")
+	builder.WriteString("bin\\desktop-doctor.exe\n")
+	builder.WriteString("bin\\video-smoke.exe\n")
+	builder.WriteString("bin\\audio-smoke.exe\n")
 	if strings.Contains(name, "release.yml") {
 		builder.WriteString("RNNoise native DSP is compiled into release artifacts\n")
 		builder.WriteString("tools/ffmpeg.exe\n")
 		builder.WriteString("tools/ffprobe.exe\n")
 		builder.WriteString("tools/THIRD_PARTY_FFMPEG.txt\n")
+		builder.WriteString("tools/desktop-doctor.exe\n")
+		builder.WriteString("tools/video-smoke.exe\n")
+		builder.WriteString("tools/audio-smoke.exe\n")
+		builder.WriteString("tools/run-windows-portable-smoke.ps1\n")
+		builder.WriteString("run-windows-portable-smoke.ps1\n")
 		builder.WriteString("./scripts/verify-windows-portable.ps1\n")
 	}
 	if strings.Contains(name, "Taskfile.yml") {
@@ -90,12 +101,27 @@ func workflowFixture(name string) string {
 		builder.WriteString("ExpectedSubsystem 2\n")
 		builder.WriteString("0x8664\n")
 		builder.WriteString("recordingfreedom.exe\n")
+		builder.WriteString("tools/desktop-doctor.exe\n")
+		builder.WriteString("tools/video-smoke.exe\n")
+		builder.WriteString("tools/audio-smoke.exe\n")
+		builder.WriteString("tools/run-windows-portable-smoke.ps1\n")
 	}
 	if strings.Contains(name, "verify-windows-preview-release.ps1") {
 		builder.WriteString("api.github.com/repos\n")
 		builder.WriteString("SHA256SUMS-windows-x64\n")
 		builder.WriteString("Get-FileHash -Algorithm SHA256\n")
 		builder.WriteString("verify-windows-portable.ps1\n")
+	}
+	if strings.Contains(name, "run-windows-portable-smoke.ps1") {
+		builder.WriteString("desktop-doctor.exe\n")
+		builder.WriteString("video-smoke.exe\n")
+		builder.WriteString("audio-smoke.exe\n")
+		builder.WriteString("RECORDINGFREEDOM_FFMPEG_PATH\n")
+		builder.WriteString("-source-type=region\n")
+		builder.WriteString("-source-type=window\n")
+		builder.WriteString("-microphone\n")
+		builder.WriteString("-system\n")
+		builder.WriteString("-rnnoise\n")
 	}
 	return builder.String()
 }
