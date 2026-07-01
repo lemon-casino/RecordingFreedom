@@ -140,6 +140,7 @@
   - 独立设置窗口已接入 `Bootstrap().appData`，Storage 显示真实 `videoDir`，App data 显示真实数据根目录。
   - 独立设置窗口新增 Storage health 行，显示 `data/video` 可写性、可用空间和建议最低空间。
   - 独立设置窗口新增 Data root 输入和 Apply 操作；修改的是应用数据根，录制仍进入其下的 `data/video`。
+  - 独立设置窗口的 Storage 行新增打开目录操作，调用后端 `OpenVideoDirectory()` 打开当前应用管理的 `data/video`，便于用户直接查验录制包位置。
   - 独立设置窗口新增 Recovery 行，存在 recoverable `.rfrec` 包时可以触发恢复并重新扫描。
   - `loadSources()` 现在读取 Go `DeviceService` 返回的 `devices.CaptureSource`。
   - `loadMediaDevices()` 现在读取 Go `DeviceService` 返回的 `devices.MediaInventory`。

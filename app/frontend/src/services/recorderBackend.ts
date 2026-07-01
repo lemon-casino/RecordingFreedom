@@ -404,6 +404,19 @@ export async function setDataRoot(rootDir: string): Promise<AppDataInfo> {
   }
 }
 
+export async function openVideoDirectory(): Promise<AppDataInfo> {
+  try {
+    const info = await RecordingFreedomService.OpenVideoDirectory()
+    return {
+      rootDir: info.rootDir,
+      videoDir: info.videoDir,
+    }
+  } catch (error) {
+    console.info('Desktop video directory open unavailable:', error)
+    throw error
+  }
+}
+
 export async function scanRecordingPackages(): Promise<RecordingRecovery[]> {
   try {
     const recoveries = await RecordingFreedomService.ScanRecordingPackages()

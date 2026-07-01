@@ -98,6 +98,7 @@ export type RecorderCopy = {
     title: string
     storage: string
     storageDetail: string
+    openRecordings: string
     storageHealth: string
     dataRoot: string
     dataRootDetail: string
@@ -293,6 +294,7 @@ const zhCN: RecorderCopy = {
     title: '设置',
     storage: '存储目录',
     storageDetail: '所有新的录制包都会创建在应用管理的 data/video 目录中。',
+    openRecordings: '打开目录',
     storageHealth: '存储状态',
     dataRoot: '数据根目录',
     dataRootDetail: '修改应用管理的数据根目录；录制仍会写入其下方的 data/video。',
@@ -614,6 +616,7 @@ const en: RecorderCopy = {
     title: 'Settings',
     storage: 'Storage',
     storageDetail: 'All new recording packages are created inside this app-managed data/video directory.',
+    openRecordings: 'Open folder',
     storageHealth: 'Storage health',
     dataRoot: 'Data root',
     dataRootDetail: 'Change the managed app data root; recordings still go into data/video below it.',

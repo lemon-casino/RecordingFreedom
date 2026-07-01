@@ -304,7 +304,7 @@
 - `cache/media-info.json`。
 - chunked cursor/audio diagnostics。
 - 崩溃恢复分级原因。
-- 用户可见的“显示录制文件夹”和诊断包入口。
+- 用户可见的诊断包入口。显示录制文件夹已完成：设置窗口 Storage 行会打开当前应用管理的 `data/video`。
 
 验收：
 

@@ -93,6 +93,31 @@ func TestSetDataRootRejectsActiveRecording(t *testing.T) {
 	}
 }
 
+func TestOpenVideoDirectoryUsesManagedDataVideo(t *testing.T) {
+	data := appdata.NewService(t.TempDir())
+	service := &RecordingFreedomService{appData: data}
+	var opened string
+	originalOpenPath := openPath
+	openPath = func(path string) error {
+		opened = path
+		return nil
+	}
+	t.Cleanup(func() {
+		openPath = originalOpenPath
+	})
+
+	info, err := service.OpenVideoDirectory()
+	if err != nil {
+		t.Fatalf("OpenVideoDirectory() error = %v", err)
+	}
+	if opened != info.VideoDir {
+		t.Fatalf("opened path = %q, want %q", opened, info.VideoDir)
+	}
+	if filepath.Base(opened) != "video" || filepath.Base(filepath.Dir(opened)) != "data" {
+		t.Fatalf("opened path = %q, want managed data/video directory", opened)
+	}
+}
+
 func TestStartRecordingRejectsBlockedPreflightBeforeCreatingPackage(t *testing.T) {
 	t.Setenv(appdata.EnvDataDir, "")
 	root := t.TempDir()

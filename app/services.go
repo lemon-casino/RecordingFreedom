@@ -3,7 +3,9 @@ package main
 import (
 	"errors"
 	"fmt"
+	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"sync"
 
@@ -180,6 +182,17 @@ func (s *RecordingFreedomService) RecoverRecordingPackage(packageDir string) (re
 	return s.recorder.RecoverPackage(packageDir)
 }
 
+func (s *RecordingFreedomService) OpenVideoDirectory() (appdata.Info, error) {
+	info, err := s.appData.Info()
+	if err != nil {
+		return appdata.Info{}, err
+	}
+	if err := openPath(info.VideoDir); err != nil {
+		return appdata.Info{}, err
+	}
+	return info, nil
+}
+
 func (s *RecordingFreedomService) GetSettings() (settings.Settings, error) {
 	info, err := s.appData.Info()
 	if err != nil {
@@ -191,6 +204,23 @@ func (s *RecordingFreedomService) GetSettings() (settings.Settings, error) {
 	}
 	currentSettings.Storage.DataRootDir = info.RootDir
 	return currentSettings, nil
+}
+
+var openPath = func(path string) error {
+	var command string
+	var args []string
+	switch runtime.GOOS {
+	case "darwin":
+		command = "open"
+		args = []string{path}
+	case "windows":
+		command = "explorer.exe"
+		args = []string{path}
+	default:
+		command = "xdg-open"
+		args = []string{path}
+	}
+	return exec.Command(command, args...).Start()
 }
 
 func (s *RecordingFreedomService) SaveSettings(next settings.Settings) (settings.Settings, error) {

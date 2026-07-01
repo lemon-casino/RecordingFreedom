@@ -47,7 +47,7 @@ import {
   fallbackCapabilities,
   fallbackStorageStatus,
 } from './services/mockBackend'
-import {cancelRegionSelector, cancelSelectedRegion, completeRegionSelection, hideRegionFrame, hideScreenIndicator, hideSettingsWindow, loadBootstrap, loadSettings, pauseRecording, preflightAudioOnlyRecording, preflightRecording, quitApplication, recoverRecordingPackage, resumeRecording, saveSettings, setCapsuleWindowExpanded, setDataRoot, showRegionSelector, showScreenIndicator, startAudioOnlyRecording, startMicrophoneLevelMonitor, startRecording, stopMicrophoneLevelMonitor, stopRecording, subscribeAudioLevel, subscribeRecordingStatus, subscribeRegionSelection, subscribeSettingsChanged, updateSelectedRegion, type AudioLevelUpdate, type RecordingRecovery, type RecordingStatusUpdate, type RegionSelectionSession} from './services/recorderBackend'
+import {cancelRegionSelector, cancelSelectedRegion, completeRegionSelection, hideRegionFrame, hideScreenIndicator, hideSettingsWindow, loadBootstrap, loadSettings, openVideoDirectory, pauseRecording, preflightAudioOnlyRecording, preflightRecording, quitApplication, recoverRecordingPackage, resumeRecording, saveSettings, setCapsuleWindowExpanded, setDataRoot, showRegionSelector, showScreenIndicator, startAudioOnlyRecording, startMicrophoneLevelMonitor, startRecording, stopMicrophoneLevelMonitor, stopRecording, subscribeAudioLevel, subscribeRecordingStatus, subscribeRegionSelection, subscribeSettingsChanged, updateSelectedRegion, type AudioLevelUpdate, type RecordingRecovery, type RecordingStatusUpdate, type RegionSelectionSession} from './services/recorderBackend'
 
 const sourceIcon = {
   screen: Monitor,
@@ -706,6 +706,16 @@ function App() {
     }
   }
 
+  const openRecordingsDirectory = async () => {
+    try {
+      const info = await openVideoDirectory()
+      setAppData(info)
+      setStorageRootDraft(info.rootDir)
+    } catch (error) {
+      console.error('Failed to open recordings directory:', error)
+    }
+  }
+
   const togglePanel = (panel: ActivePanel) => {
     setSettingsOpen(false)
     setClosePromptOpen(false)
@@ -794,7 +804,13 @@ function App() {
         <button type="button" className="sheet-close" onClick={closeSettings}>{copy.common.close}</button>
       </div>
       <div className="settings-list">
-        <SettingLine title={copy.settings.storage} value={appData.videoDir} detail={copy.settings.storageDetail} />
+        <SettingLine
+          title={copy.settings.storage}
+          value={appData.videoDir}
+          detail={copy.settings.storageDetail}
+          actionLabel={copy.settings.openRecordings}
+          onAction={() => void openRecordingsDirectory()}
+        />
         <SettingLine
           title={copy.settings.storageHealth}
           value={formatStorageStatusValue(storageStatus, copy)}
