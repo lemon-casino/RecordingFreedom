@@ -144,7 +144,7 @@
   - `loadSources()` 现在读取 Go `DeviceService` 返回的 `devices.CaptureSource`。
   - `loadMediaDevices()` 现在读取 Go `DeviceService` 返回的 `devices.MediaInventory`。
   - 源模型包含 `available`、`capability`、`unavailableReason`、虚拟桌面坐标和 native id，用于区分已枚举源、待原生后端源、全部屏幕和区域录制入口。
-  - 胶囊来源面板的视频模式已显示真实可用的 `All screens / 全部屏幕`、按显示器编号的 `Screen 1..N / 屏幕 1..N`、`Region / 区域` 和 `Locked window / 锁定窗口`；不可启动的 all-screens 不再作为用户入口展示。Program/Application 后端合同保留给后续演进，但当前菜单和能力矩阵都不展示程序来源。鼠标移入或键盘聚焦某个单屏来源时，会调用 `ShowScreenIndicator()` 在对应物理屏幕中央显示黑底大号编号标识，离开或选择后调用 `HideScreenIndicator()` 隐藏；定位优先按源物理 bounds 匹配 Wails screen，匹配失败再按 display index 兜底。区域选择 overlay 已接通，只有框选成功后才会把 `region:custom` 写为当前录制源；框选后未录制时使用透明 overlay 编辑选区，可移动、缩放或取消，录制中再切换为四条独立鼠标穿透红边窗口持续标识录制范围。macOS 单显示器区域会绑定显示器 native id 并进入 ScreenCaptureKit `sourceRect` crop writer，Windows 区域会使用物理像素矩形进入 FFmpeg `gdigrab` crop，Linux 区域 crop 和 macOS/Linux 多屏合成 writer 在真实平台实现完成前保持 queued。
+  - 胶囊来源面板的视频模式已显示真实可用的 `All screens / 全部屏幕`、按显示器编号的 `Screen 1..N / 屏幕 1..N`、`Region / 区域` 和 `Locked window / 锁定窗口`；不可启动的 all-screens 不再作为用户入口展示。Program/Application 后端合同保留给后续演进，但当前菜单和能力矩阵都不展示程序来源。鼠标移入或键盘聚焦某个单屏来源时，会调用 `ShowScreenIndicator()` 在对应物理屏幕中央显示黑底大号编号标识，离开或选择后调用 `HideScreenIndicator()` 隐藏；定位优先按源物理 bounds 匹配 Wails screen，匹配失败再按 display index 兜底。区域选择 overlay 已接通，只有框选成功后才会把 `region:custom` 写为当前录制源；框选后未录制时使用透明 overlay 编辑选区，可移动、缩放或取消，录制中同一个透明 overlay 切到鼠标穿透 recording 模式，只绘制红色边框持续标识录制范围，不再创建四个窄条 WebView 边框窗口。macOS 单显示器区域会绑定显示器 native id 并进入 ScreenCaptureKit `sourceRect` crop writer，Windows 区域会使用物理像素矩形进入 FFmpeg `gdigrab` crop，Linux 区域 crop 和 macOS/Linux 多屏合成 writer 在真实平台实现完成前保持 queued。
   - 锁定窗口入口已改为窗口列表视图，用户选择的是枚举出来的具体 window source，而不是“当前活动窗口”。
   - 麦克风和摄像头下拉已从后端媒体设备合同读取；浏览器预览仍有 mock fallback。
   - `scanRecordingPackages()` 已接入恢复扫描，胶囊底部状态条显示 recoverable 包数量或 clean。
@@ -184,7 +184,9 @@
   - `v0.1.0-preview.11` 产物包含 `RecordingFreedom-windows-x64-v0.1.0-preview.11-portable.zip`、`RecordingFreedom-macos-arm64-v0.1.0-preview.11`、`RecordingFreedom-linux-x64-v0.1.0-preview.11` 和三个平台 SHA256SUMS。
   - `v0.1.0-preview.11` 修复 Windows 默认麦克风不再退化为 `microphone:default`，录制中锁定来源/音频/摄像头配置，并新增区域录制持久边框窗口。
   - `v0.1.0-preview.12` 已发布为 GitHub prerelease：Release Gate、Windows x64、macOS arm64、Linux x64 和 Publish GitHub Release 均通过。Release URL：`https://github.com/lemon-casino/RecordingFreedom/releases/tag/v0.1.0-preview.12`。
-  - `v0.1.0-preview.13` 发布目标：修复胶囊窗口周围透明 WebView 灰底/阴影伪影、单屏标识窗口编号居中与圆角尺寸、区域录制框选编辑态改为透明 overlay，避免窄条 WebView 黑块/白条和编辑遮挡。
+  - `v0.1.0-preview.13` 已发布为 GitHub prerelease：Release Gate、Windows x64、macOS arm64、Linux x64 和 Publish GitHub Release 均通过。Release URL：`https://github.com/lemon-casino/RecordingFreedom/releases/tag/v0.1.0-preview.13`。
+  - `v0.1.0-preview.13` 修复胶囊窗口周围透明 WebView 灰底/阴影伪影、单屏标识窗口编号居中与圆角尺寸、区域录制框选编辑态改为透明 overlay，避免窄条 WebView 黑块/白条和编辑遮挡。
+  - `v0.1.0-preview.14` 修复区域录制开始后的持久边框，录制态改为鼠标穿透透明 overlay，只保留红色边框，避免四个窄条 WebView 窗口露出浅色背景和关闭按钮；同时清理 macOS CoreAudio 麦克风枚举中的 deprecated property element annotation。
   - `v0.1.0-preview.7` 曾因 Linux Wails build tag 使用空格拼接 `gtk3 rnnoise_native` 导致 Linux build 失败，已在 `v0.1.0-preview.8` 前修正为 `gtk3,rnnoise_native` 并纳入 `cmd/release-config-check` 门禁。
   - `v0.1.0-preview.8` 曾因 Windows runner 的 FFmpeg 准备脚本下载链路失败而未发布，已在 `v0.1.0-preview.9` 前改为 BtbN FFmpeg-Builds GitHub 源、`curl.exe` 重试下载和按 asset name 校验 `checksums.sha256`。
   - 最新 `main` CI 已通过 Bindings/Frontend/Go、macOS Native Capture Contracts、Windows/macOS/Linux Wails Build；其中 Windows Wails Build 已通过 FFmpeg bootstrap、RNNoise gate 和 video gate。
@@ -271,7 +273,7 @@ go run ./cmd/video-smoke -duration=1s
 - 仍未完成：release portable zip 解压后的 clean-machine 验收、目标桌面 RNNoise 实录听感/诊断，以及 macOS/Linux 真机录制验收。
 - 用户反馈“麦克风设备展示是假的、语音波动没有监听”后，已删除前端假麦克风列表和假波形初始化；后端新增真实麦克风电平监听入口，前端订阅 `audio.level` 事件显示 RMS/peak 推导的真实电平。无可用麦克风时 UI 显示不可用，不再展示虚构设备。
 - 用户反馈 Windows 默认麦克风仍像假设备后，Windows WASAPI 枚举已改为保留真实 `microphone:wasapi:<endpoint-id>` / `system-audio:wasapi:<endpoint-id>` 作为选择 ID，默认设备只通过 `isDefault` 和 subtitle 标记；旧请求 `microphone:default` / `system-audio:default` 在 preflight 中会映射到真实默认 endpoint，避免 UI 能选真实设备但预检误挡。
-- 录制开始后，胶囊 UI 会锁定来源、区域、系统声音、麦克风、RNNoise 和摄像头选择；只有结束录制后重新启用。区域录制完成框选后，未录制时由透明 `region-overlay` 显示可移动、可缩放、可取消的红色选区；开始录制后隐藏编辑 overlay，仅显示四条独立、置顶、鼠标穿透的红色边框窗口，持续标识被录制范围。
+- 录制开始后，胶囊 UI 会锁定来源、区域、系统声音、麦克风、RNNoise 和摄像头选择；只有结束录制后重新启用。区域录制完成框选后，未录制时由透明 `region-overlay` 显示可移动、可缩放、可取消的红色选区；开始录制后同一个 overlay 切为鼠标穿透 recording 模式，只绘制一圈红色边框，持续标识被录制范围，不再显示四条窄 WebView 窗口。
 
 有 C 工具链的环境可用以下命令验证 RNNoise 原生 DSP：
 

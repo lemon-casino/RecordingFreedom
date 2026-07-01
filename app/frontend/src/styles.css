@@ -64,11 +64,6 @@ body.rf-screen-indicator-window {
   user-select: none;
 }
 
-body.rf-region-frame-window {
-  background: transparent;
-  user-select: none;
-}
-
 button,
 select,
 input {
@@ -1175,82 +1170,6 @@ input {
   color: #ffdfdc;
 }
 
-.region-frame-empty,
-.region-frame-edge-shell {
-  width: 100%;
-  height: 100%;
-  background: transparent;
-  --wails-draggable: no-drag;
-}
-
-.region-frame-empty {
-  pointer-events: none;
-}
-
-.region-frame-edge-shell {
-  position: relative;
-  overflow: hidden;
-}
-
-.region-frame-edge-shell.recording {
-  pointer-events: none;
-}
-
-.region-frame-edge-shell.edit {
-  pointer-events: auto;
-}
-
-.region-frame-edge-shell span {
-  position: absolute;
-  display: block;
-  border-radius: 999px;
-  background: #ff3b3b;
-}
-
-.region-frame-edge-shell.edge-top,
-.region-frame-edge-shell.edge-bottom {
-  cursor: ns-resize;
-}
-
-.region-frame-edge-shell.edge-right,
-.region-frame-edge-shell.edge-left {
-  cursor: ew-resize;
-}
-
-.region-frame-edge-shell.edge-top span,
-.region-frame-edge-shell.edge-bottom span {
-  left: 0;
-  right: 0;
-  height: 2px;
-}
-
-.region-frame-edge-shell.edge-top span {
-  top: 0;
-}
-
-.region-frame-edge-shell.edge-bottom span {
-  bottom: 0;
-}
-
-.region-frame-edge-shell.edge-right span,
-.region-frame-edge-shell.edge-left span {
-  top: 0;
-  bottom: 0;
-  width: 2px;
-}
-
-.region-frame-edge-shell.edge-right span {
-  right: 0;
-}
-
-.region-frame-edge-shell.edge-left span {
-  left: 0;
-}
-
-.region-frame-edge-shell.recording span {
-  box-shadow: none;
-}
-
 .region-overlay-shell {
   position: fixed;
   inset: 0;
@@ -1259,6 +1178,11 @@ input {
   background: transparent;
   color: #ffffff;
   --wails-draggable: no-drag;
+}
+
+.region-overlay-shell.recording {
+  cursor: default;
+  pointer-events: none;
 }
 
 .region-overlay-scrim {
@@ -1302,6 +1226,15 @@ input {
 
 .region-selection-rect .corner {
   display: none;
+}
+
+.region-recording-frame {
+  position: fixed;
+  z-index: 4;
+  border: 2px solid #ff3b3b;
+  background: transparent;
+  box-shadow: none;
+  pointer-events: none;
 }
 
 .region-selection-rect .top-left {

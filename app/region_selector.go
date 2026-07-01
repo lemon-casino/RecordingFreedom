@@ -47,8 +47,9 @@ type RegionSelectionResult struct {
 }
 
 type RegionFrameState struct {
-	Bounds RegionRect `json:"bounds"`
-	Mode   string     `json:"mode"`
+	Bounds        RegionRect `json:"bounds"`
+	OverlayBounds RegionRect `json:"overlayBounds,omitempty"`
+	Mode          string     `json:"mode"`
 }
 
 func (s *RecordingFreedomService) ShowRegionSelector() (RegionSelectionSession, error) {
@@ -196,11 +197,6 @@ func (s *RecordingFreedomService) selectedRegionDisplayBounds() application.Rect
 }
 
 func (s *RecordingFreedomService) HideRegionFrame() error {
-	for _, frame := range s.regionFrames {
-		if frame != nil {
-			frame.Hide()
-		}
-	}
 	if s.regionOverlay != nil {
 		s.regionOverlay.Hide()
 	}
@@ -211,12 +207,19 @@ func (s *RecordingFreedomService) showRegionFrame(bounds application.Rect) error
 	if bounds.Width <= 0 || bounds.Height <= 0 {
 		return nil
 	}
-	if s.regionOverlay != nil {
-		s.regionOverlay.Hide()
+	overlayBounds := application.Rect{}
+	if s.regionOverlay != nil && s.app != nil {
+		overlayBounds, _ = regionOverlayBounds(s.app.Screen.GetAll())
+		s.regionOverlay.SetIgnoreMouseEvents(true)
+		s.regionOverlay.SetAlwaysOnTop(true)
+		s.regionOverlay.SetBounds(overlayBounds)
+		s.regionOverlay.Show()
+		s.regionOverlay.SetBounds(overlayBounds)
 	}
-	state := RegionFrameState{Bounds: regionRectFromAppRect(bounds), Mode: "recording"}
-	if err := s.showRegionFrameEdges(bounds); err != nil {
-		return err
+	state := RegionFrameState{
+		Bounds:        regionRectFromAppRect(bounds),
+		OverlayBounds: regionRectFromAppRect(overlayBounds),
+		Mode:          "recording",
 	}
 	s.broadcastRegionFrameState(state)
 	return nil
@@ -226,20 +229,20 @@ func (s *RecordingFreedomService) showRegionEditor(bounds application.Rect) erro
 	if bounds.Width <= 0 || bounds.Height <= 0 {
 		return nil
 	}
-	for _, frame := range s.regionFrames {
-		if frame != nil {
-			frame.Hide()
-		}
-	}
+	overlayBounds := application.Rect{}
 	if s.regionOverlay != nil && s.app != nil {
-		overlayBounds, _ := regionOverlayBounds(s.app.Screen.GetAll())
+		overlayBounds, _ = regionOverlayBounds(s.app.Screen.GetAll())
 		s.regionOverlay.SetIgnoreMouseEvents(false)
 		s.regionOverlay.SetAlwaysOnTop(true)
 		s.regionOverlay.SetBounds(overlayBounds)
 		s.regionOverlay.Show()
 		s.regionOverlay.SetBounds(overlayBounds)
 	}
-	state := RegionFrameState{Bounds: regionRectFromAppRect(bounds), Mode: "edit"}
+	state := RegionFrameState{
+		Bounds:        regionRectFromAppRect(bounds),
+		OverlayBounds: regionRectFromAppRect(overlayBounds),
+		Mode:          "edit",
+	}
 	s.broadcastRegionFrameState(state)
 	if s.capsuleWindow != nil {
 		s.capsuleWindow.SetAlwaysOnTop(true)
@@ -260,11 +263,6 @@ func (s *RecordingFreedomService) broadcastRegionFrameState(state RegionFrameSta
 	if s.regionOverlay != nil {
 		s.regionOverlay.ExecJS(script)
 	}
-	for _, frame := range s.regionFrames {
-		if frame != nil {
-			frame.ExecJS(script)
-		}
-	}
 }
 
 func (s *RecordingFreedomService) regionResultFromAbsoluteDIP(absoluteDIP application.Rect) RegionSelectionResult {
@@ -281,36 +279,6 @@ func (s *RecordingFreedomService) regionResultFromAbsoluteDIP(absoluteDIP applic
 		Source:   source,
 		Geometry: regionRectFromAppRect(captureRect),
 	}
-}
-
-func (s *RecordingFreedomService) showRegionFrameEdges(bounds application.Rect) error {
-	if bounds.Width <= 0 || bounds.Height <= 0 {
-		return nil
-	}
-	thickness := regionFrameThickness
-	if bounds.Width < thickness {
-		thickness = bounds.Width
-	}
-	if bounds.Height < thickness {
-		thickness = bounds.Height
-	}
-	edgeBounds := []application.Rect{
-		{X: bounds.X, Y: bounds.Y, Width: bounds.Width, Height: thickness},
-		{X: bounds.X + bounds.Width - thickness, Y: bounds.Y, Width: thickness, Height: bounds.Height},
-		{X: bounds.X, Y: bounds.Y + bounds.Height - thickness, Width: bounds.Width, Height: thickness},
-		{X: bounds.X, Y: bounds.Y, Width: thickness, Height: bounds.Height},
-	}
-	for index, frame := range s.regionFrames {
-		if frame == nil || index >= len(edgeBounds) {
-			continue
-		}
-		frame.SetIgnoreMouseEvents(true)
-		frame.SetAlwaysOnTop(true)
-		frame.SetBounds(edgeBounds[index])
-		frame.Show()
-		frame.SetBounds(edgeBounds[index])
-	}
-	return nil
 }
 
 func (s *RecordingFreedomService) emitRegionSelection(result RegionSelectionResult) {

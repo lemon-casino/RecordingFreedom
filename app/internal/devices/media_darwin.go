@@ -9,9 +9,11 @@ package devices
 #include <stdlib.h>
 #include <string.h>
 
-#ifndef kAudioObjectPropertyElementMain
-#define kAudioObjectPropertyElementMain kAudioObjectPropertyElementMaster
-#endif
+enum {
+	// CoreAudio's main property element is ABI value 0. Avoid the SDK macro because
+	// current headers expand it through the deprecated Master alias and warn in CI.
+	rfcaAudioObjectPropertyElementMain = 0,
+};
 
 typedef struct {
 	char *uid;
@@ -62,7 +64,7 @@ static char *rfca_audio_string_property(AudioObjectID objectID, AudioObjectPrope
 	AudioObjectPropertyAddress address = {
 		.mSelector = selector,
 		.mScope = kAudioObjectPropertyScopeGlobal,
-		.mElement = kAudioObjectPropertyElementMain,
+		.mElement = rfcaAudioObjectPropertyElementMain,
 	};
 	CFStringRef value = NULL;
 	UInt32 size = sizeof(value);
@@ -79,7 +81,7 @@ static int rfca_input_channel_count(AudioDeviceID deviceID) {
 	AudioObjectPropertyAddress address = {
 		.mSelector = kAudioDevicePropertyStreamConfiguration,
 		.mScope = kAudioDevicePropertyScopeInput,
-		.mElement = kAudioObjectPropertyElementMain,
+		.mElement = rfcaAudioObjectPropertyElementMain,
 	};
 	UInt32 size = 0;
 	OSStatus status = AudioObjectGetPropertyDataSize(deviceID, &address, 0, NULL, &size);
@@ -108,7 +110,7 @@ static AudioDeviceID rfca_default_input_device(void) {
 	AudioObjectPropertyAddress address = {
 		.mSelector = kAudioHardwarePropertyDefaultInputDevice,
 		.mScope = kAudioObjectPropertyScopeGlobal,
-		.mElement = kAudioObjectPropertyElementMain,
+		.mElement = rfcaAudioObjectPropertyElementMain,
 	};
 	UInt32 size = sizeof(deviceID);
 	OSStatus status = AudioObjectGetPropertyData(kAudioObjectSystemObject, &address, 0, NULL, &size, &deviceID);
@@ -127,7 +129,7 @@ static rf_coreaudio_device_list rfca_list_input_devices(void) {
 	AudioObjectPropertyAddress address = {
 		.mSelector = kAudioHardwarePropertyDevices,
 		.mScope = kAudioObjectPropertyScopeGlobal,
-		.mElement = kAudioObjectPropertyElementMain,
+		.mElement = rfcaAudioObjectPropertyElementMain,
 	};
 	UInt32 size = 0;
 	OSStatus status = AudioObjectGetPropertyDataSize(kAudioObjectSystemObject, &address, 0, NULL, &size);

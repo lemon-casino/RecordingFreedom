@@ -21,7 +21,6 @@ import {
   Wand2,
   X,
 } from 'lucide-react'
-import {Window as WailsWindow} from '@wailsio/runtime'
 import {useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent, type ReactNode} from 'react'
 import {copyByLocale, type RecorderCopy, type RecoveryMessageKey, type SourceSelectionMessageKey, type StatusMessageKey, type StorageMessageKey} from './i18n'
 import {
@@ -152,12 +151,8 @@ function App() {
   const isSettingsWindow = route === '/settings'
   const isRegionOverlayWindow = route === '/region-overlay'
   const isScreenIndicatorWindow = route === '/screen-indicator'
-  const isRegionFrameEdgeWindow = route === '/region-frame-edge'
   if (isScreenIndicatorWindow) {
     return <ScreenIndicatorWindow />
-  }
-  if (isRegionFrameEdgeWindow) {
-    return <RegionFrameEdgeWindow />
   }
   if (isRegionOverlayWindow) {
     return <RegionOverlayWindow />
@@ -1290,40 +1285,13 @@ function ScreenIndicatorWindow() {
   )
 }
 
-function RegionFrameEdgeWindow() {
-  const [edge, setEdge] = useState<RegionFrameEdge>('top')
-  const frame = useRegionFrameState()
-
-  useEffect(() => {
-    document.body.classList.add('rf-region-frame-window')
-    return () => document.body.classList.remove('rf-region-frame-window')
-  }, [])
-
-  useEffect(() => {
-    void WailsWindow.Name()
-      .then((name) => setEdge(regionFrameEdgeFromName(name)))
-      .catch(() => setEdge('top'))
-  }, [])
-
-  const mode = frame?.mode ?? 'recording'
-
-  return (
-    <main
-      className={`region-frame-edge-shell edge-${edge} ${mode}`}
-      aria-label={`Selected recording region edge ${edge}`}
-    >
-      <span />
-    </main>
-  )
-}
-
 type RegionFrameState = {
   bounds: {x: number; y: number; width: number; height: number}
+  overlayBounds?: {x: number; y: number; width: number; height: number}
   mode?: 'edit' | 'recording'
 }
 
 type RegionEditAction = 'move' | 'n' | 'e' | 's' | 'w' | 'ne' | 'nw' | 'se' | 'sw'
-type RegionFrameEdge = 'top' | 'right' | 'bottom' | 'left'
 
 const regionResizeActions: RegionEditAction[] = ['n', 'e', 's', 'w', 'ne', 'nw', 'se', 'sw']
 
@@ -1388,13 +1356,6 @@ function useRegionEditorDrag(bounds: RegionFrameState['bounds'] | undefined) {
   return {beginEdit, updateEdit, completeEdit}
 }
 
-function regionFrameEdgeFromName(name: string): RegionFrameEdge {
-  if (name.endsWith('right')) return 'right'
-  if (name.endsWith('bottom')) return 'bottom'
-  if (name.endsWith('left')) return 'left'
-  return 'top'
-}
-
 function resizeRegionBounds(bounds: RegionFrameState['bounds'], action: RegionEditAction, dx: number, dy: number) {
   const next = {...bounds}
   if (action === 'move') {
@@ -1439,8 +1400,15 @@ function RegionOverlayWindow() {
   const minimumHeight = session?.minimumHeight ?? 64
   const selectedRect = drag ? normalizedClientRect(drag.startX, drag.startY, drag.currentX, drag.currentY) : null
   const isEditingRegion = editFrame?.mode === 'edit'
-  const overlayOrigin = session?.bounds ?? {x: 0, y: 0, width: 0, height: 0}
+  const isRecordingRegion = editFrame?.mode === 'recording'
+  const overlayOrigin = editFrame?.overlayBounds ?? session?.bounds ?? {x: 0, y: 0, width: 0, height: 0}
   const editableRect = isEditingRegion ? {
+    x: editFrame.bounds.x - overlayOrigin.x,
+    y: editFrame.bounds.y - overlayOrigin.y,
+    width: editFrame.bounds.width,
+    height: editFrame.bounds.height,
+  } : null
+  const recordingRect = isRecordingRegion ? {
     x: editFrame.bounds.x - overlayOrigin.x,
     y: editFrame.bounds.y - overlayOrigin.y,
     width: editFrame.bounds.width,
@@ -1501,25 +1469,26 @@ function RegionOverlayWindow() {
   return (
     <main
       ref={shellRef}
-      className="region-overlay-shell"
+      className={`region-overlay-shell ${isRecordingRegion ? 'recording' : ''}`}
       aria-label={copy.aria.regionOverlay}
       onPointerMove={isEditingRegion ? editDrag.updateEdit : undefined}
       onPointerCancel={isEditingRegion ? editDrag.completeEdit : undefined}
       onPointerMoveCapture={(event) => {
-        if (isEditingRegion) return
+        if (isEditingRegion || isRecordingRegion) return
         setCursor({x: event.clientX, y: event.clientY})
         if (drag) {
           setDrag({...drag, currentX: event.clientX, currentY: event.clientY})
         }
       }}
       onPointerDown={(event) => {
-        if (isEditingRegion) return
+        if (isEditingRegion || isRecordingRegion) return
         if (event.button !== 0) return
         event.currentTarget.setPointerCapture(event.pointerId)
         setDrag({startX: event.clientX, startY: event.clientY, currentX: event.clientX, currentY: event.clientY})
         setInvalid(false)
       }}
       onPointerUp={(event) => {
+        if (isRecordingRegion) return
         if (isEditingRegion) {
           editDrag.completeEdit(event)
           return
@@ -1533,18 +1502,18 @@ function RegionOverlayWindow() {
         void completeSelection(rect)
       }}
       onPointerLeave={(event) => {
-        if (isEditingRegion) return
+        if (isEditingRegion || isRecordingRegion) return
         setCursor({x: event.clientX, y: event.clientY})
       }}
     >
       <div className="region-overlay-scrim" />
-      {!isEditingRegion && cursor.x >= 0 && (
+      {!isEditingRegion && !isRecordingRegion && cursor.x >= 0 && (
         <>
           <div className="region-crosshair horizontal" style={{top: cursor.y}} />
           <div className="region-crosshair vertical" style={{left: cursor.x}} />
         </>
       )}
-      {!isEditingRegion && selectedRect && (
+      {!isEditingRegion && !isRecordingRegion && selectedRect && (
         <div
           className={`region-selection-rect ${invalid ? 'invalid' : ''}`}
           style={{
@@ -1562,6 +1531,17 @@ function RegionOverlayWindow() {
           <span className="corner bottom-left" />
           <span className="corner bottom-right" />
         </div>
+      )}
+      {recordingRect && (
+        <div
+          className="region-recording-frame"
+          style={{
+            left: recordingRect.x,
+            top: recordingRect.y,
+            width: recordingRect.width,
+            height: recordingRect.height,
+          }}
+        />
       )}
       {editableRect && (
         <div
@@ -1599,7 +1579,7 @@ function RegionOverlayWindow() {
           </div>
         </div>
       )}
-      <button
+      {!isRecordingRegion && <button
         className="region-cancel-button"
         type="button"
         aria-label={copy.regionOverlay.cancel}
@@ -1608,8 +1588,8 @@ function RegionOverlayWindow() {
         onClick={() => void (isEditingRegion ? cancelSelectedRegion() : cancelSelection())}
       >
         <X size={22} />
-      </button>
-      {!isEditingRegion && <div className="region-overlay-badge" aria-hidden="true">
+      </button>}
+      {!isEditingRegion && !isRecordingRegion && <div className="region-overlay-badge" aria-hidden="true">
         <MousePointer2 size={16} />
         <span>{copy.regionOverlay.esc}</span>
       </div>}

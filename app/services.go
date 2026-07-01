@@ -41,7 +41,6 @@ type RecordingFreedomService struct {
 	capsuleWindow     *application.WebviewWindow
 	settingsWindow    *application.WebviewWindow
 	regionOverlay     *application.WebviewWindow
-	regionFrames      []*application.WebviewWindow
 	screenIndicator   *application.WebviewWindow
 	trayLocale        func(settings.Locale)
 	regionMu          sync.Mutex
@@ -79,10 +78,6 @@ func (s *RecordingFreedomService) setSettingsWindow(window *application.WebviewW
 
 func (s *RecordingFreedomService) setRegionOverlayWindow(window *application.WebviewWindow) {
 	s.regionOverlay = window
-}
-
-func (s *RecordingFreedomService) setRegionFrameWindows(windows []*application.WebviewWindow) {
-	s.regionFrames = windows
 }
 
 func (s *RecordingFreedomService) setScreenIndicatorWindow(window *application.WebviewWindow) {
