@@ -169,7 +169,7 @@
 - 新增无 GUI `cmd/desktop-doctor` 依赖检查入口：
   - 输出 JSON，检查 app data、`data/video`、storage health、当前 backend、能力矩阵和 Windows FFmpeg 依赖状态。
   - 默认只报告状态，不阻断 preview CI/release；传 `-require-video` 时会把当前平台真实 screen/window video 能力作为硬门禁，缺 FFmpeg 或平台 writer queued 时退出非零。
-- 新增 Windows FFmpeg 依赖准备脚本 `scripts/ensure-windows-ffmpeg.ps1`：下载 release essentials zip、校验 SHA256 sidecar、写入 `app/tools/ffmpeg.exe` / `ffprobe.exe` 和 `THIRD_PARTY_FFMPEG.txt`；Windows CI/release build 会先执行该脚本，再用 `desktop-doctor -require-video` 阻断缺依赖的 artifact。
+- 新增 Windows FFmpeg 依赖准备脚本 `scripts/ensure-windows-ffmpeg.ps1`：下载 BtbN FFmpeg-Builds static Windows zip、按 `checksums.sha256` 校验、写入 `app/tools/ffmpeg.exe` / `ffprobe.exe` 和 `THIRD_PARTY_FFMPEG.txt`；Windows CI/release build 会先执行该脚本，再用 `desktop-doctor -require-video` 阻断缺依赖的 artifact。
 - Release Windows preview artifact 已调整为 portable zip，包含 `recordingfreedom.exe` 和 `tools/ffmpeg.exe`；app 运行时会按现有解析顺序从 exe 同级 `tools/` 找到 FFmpeg。
 - 新增 `RecordingFreedom/README.md`，用于新仓库根目录说明、开发命令、验证命令和 roadmap。
 - 已在 GitHub runner 上验证 preview release 链路：
@@ -210,7 +210,7 @@ wails3 build
 .\scripts\ensure-windows-ffmpeg.ps1
 ```
 
-该脚本本机已下载并校验 FFmpeg `8.1.2-essentials_build-www.gyan.dev`，写入 `RecordingFreedom/app/tools/ffmpeg.exe`；随后 `go run ./cmd/desktop-doctor -require-video` 返回 `ok: true`，screen/window/ffmpeg required checks 均为 `ready`。
+该脚本本机已下载并校验 FFmpeg `N-125365-g9a01c1cb6a-20260630` BtbN static build，写入 `RecordingFreedom/app/tools/ffmpeg.exe`；随后 `go run ./cmd/desktop-doctor -require-video` 返回 `ok: true`，screen/window/ffmpeg required checks 均为 `ready`。
 
 本机 Windows 未准备 FFmpeg 时的预期阻断：
 

@@ -1,12 +1,13 @@
 [CmdletBinding()]
 param(
     [string]$DestinationDir = "",
-    [string]$Uri = "https://www.gyan.dev/ffmpeg/builds/ffmpeg-release-essentials.zip",
-    [string]$Sha256Uri = "https://www.gyan.dev/ffmpeg/builds/ffmpeg-release-essentials.zip.sha256",
+    [string]$Uri = "https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/ffmpeg-master-latest-win64-gpl.zip",
+    [string]$Sha256Uri = "https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/checksums.sha256",
     [switch]$Force
 )
 
 $ErrorActionPreference = "Stop"
+$ProgressPreference = "SilentlyContinue"
 
 function Resolve-FullPath {
     param([Parameter(Mandatory = $true)][string]$Path)
@@ -14,6 +15,49 @@ function Resolve-FullPath {
         return [System.IO.Path]::GetFullPath($Path)
     }
     return [System.IO.Path]::GetFullPath((Join-Path (Get-Location) $Path))
+}
+
+function Save-Url {
+    param(
+        [Parameter(Mandatory = $true)][string]$Url,
+        [Parameter(Mandatory = $true)][string]$OutFile
+    )
+
+    $curl = Get-Command curl.exe -ErrorAction SilentlyContinue
+    if ($null -ne $curl) {
+        & $curl.Source -fL --retry 5 --retry-delay 5 --connect-timeout 30 --output $OutFile $Url
+        if ($LASTEXITCODE -ne 0) {
+            throw "curl failed to download $Url with exit code $LASTEXITCODE"
+        }
+        return
+    }
+
+    Invoke-WebRequest -Uri $Url -OutFile $OutFile
+}
+
+function Get-ExpectedSha256 {
+    param(
+        [Parameter(Mandatory = $true)][string]$ChecksumPath,
+        [Parameter(Mandatory = $true)][string]$AssetName,
+        [Parameter(Mandatory = $true)][string]$ChecksumSource
+    )
+
+    $checksumText = Get-Content -Raw -LiteralPath $ChecksumPath
+    $matchingLine = ($checksumText -split "`r?`n") |
+        Where-Object { $_ -like "*$AssetName*" } |
+        Select-Object -First 1
+    if (-not [string]::IsNullOrWhiteSpace($matchingLine)) {
+        $lineMatch = [regex]::Match($matchingLine, "[A-Fa-f0-9]{64}")
+        if ($lineMatch.Success) {
+            return $lineMatch.Value.ToUpperInvariant()
+        }
+    }
+
+    $match = [regex]::Match($checksumText, "[A-Fa-f0-9]{64}")
+    if ($match.Success) {
+        return $match.Value.ToUpperInvariant()
+    }
+    throw "Could not parse SHA256 checksum for $AssetName from $ChecksumSource"
 }
 
 $repoRoot = [System.IO.Path]::GetFullPath((Join-Path $PSScriptRoot ".."))
@@ -45,17 +89,13 @@ try {
     New-Item -ItemType Directory -Force -Path $workDir, $extractDir | Out-Null
 
     Write-Host "Downloading FFmpeg from $Uri"
-    Invoke-WebRequest -Uri $Uri -OutFile $zipPath
+    Save-Url -Url $Uri -OutFile $zipPath
 
     Write-Host "Downloading FFmpeg checksum from $Sha256Uri"
-    Invoke-WebRequest -Uri $Sha256Uri -OutFile $shaPath
+    Save-Url -Url $Sha256Uri -OutFile $shaPath
 
-    $checksumText = Get-Content -Raw -LiteralPath $shaPath
-    $match = [regex]::Match($checksumText, "[A-Fa-f0-9]{64}")
-    if (-not $match.Success) {
-        throw "Could not parse SHA256 checksum from $Sha256Uri"
-    }
-    $expectedHash = $match.Value.ToUpperInvariant()
+    $assetName = Split-Path ([System.Uri]$Uri).AbsolutePath -Leaf
+    $expectedHash = Get-ExpectedSha256 -ChecksumPath $shaPath -AssetName $assetName -ChecksumSource $Sha256Uri
     $actualHash = (Get-FileHash -Algorithm SHA256 -LiteralPath $zipPath).Hash.ToUpperInvariant()
     if ($actualHash -ne $expectedHash) {
         throw "FFmpeg SHA256 mismatch. Expected $expectedHash, got $actualHash"

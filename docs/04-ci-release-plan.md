@@ -65,8 +65,8 @@ SHA256SUMS-linux-x64.txt
 ```bash
 git remote add origin https://github.com/lemon-casino/RecordingFreedom.git
 git push -u origin main
-git tag v0.1.0-preview.8
-git push origin v0.1.0-preview.8
+git tag v0.1.0-preview.9
+git push origin v0.1.0-preview.9
 ```
 
 GitHub Actions 会自动运行 `release.yml`，通过后生成 GitHub prerelease 和三平台 preview artifacts。这个版本可用于检查：
@@ -108,7 +108,7 @@ GitHub Actions 会自动运行 `release.yml`，通过后生成 GitHub prerelease
 正式公开发布前必须满足：
 
 - Windows FFmpeg desktop writer 能检测 ffmpeg，缺失时 preflight blocked，存在时能启动 video-smoke。
-- FFmpeg 二进制来源、SHA256 校验、许可证文本和再分发义务在 release notes 或第三方 notices 中明确；当前 preview 通过 `scripts/ensure-windows-ffmpeg.ps1` 下载 release essentials zip 并生成 `tools/THIRD_PARTY_FFMPEG.txt`。
+- FFmpeg 二进制来源、SHA256 校验、许可证文本和再分发义务在 release notes 或第三方 notices 中明确；当前 preview 通过 `scripts/ensure-windows-ffmpeg.ps1` 下载 BtbN FFmpeg-Builds static Windows zip，按 `checksums.sha256` 校验，并生成 `tools/THIRD_PARTY_FFMPEG.txt`。
 - WASAPI system audio 和 microphone capture smoke test 通过。
 - Media Foundation webcam smoke test 通过。
 - MSVC runtime 静态链接，或随包附带并验证 DLL。
