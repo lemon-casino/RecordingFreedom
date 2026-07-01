@@ -120,7 +120,7 @@ That script downloads the release essentials archive, verifies its SHA256 sideca
 Verify a staged Windows portable zip before uploading it:
 
 ```powershell
-.\scripts\verify-windows-portable.ps1 -ZipPath .\release-out\RecordingFreedom-windows-x64-v0.1.0-preview.7-portable.zip
+.\scripts\verify-windows-portable.ps1 -ZipPath .\release-out\RecordingFreedom-windows-x64-v0.1.0-preview.8-portable.zip
 ```
 
 Use the desktop doctor to inspect the same dependency gate before trying a real recording:
@@ -145,8 +145,8 @@ CGO_ENABLED=1 go run -tags rnnoise_native ./cmd/audio-smoke -duration=3s -rnnois
 After `RecordingFreedom/` becomes the new repository root, pushing a `v*` tag publishes a GitHub Release with Windows, macOS, and Linux preview artifacts plus SHA256 files:
 
 ```bash
-git tag v0.1.0-preview.7
-git push origin v0.1.0-preview.7
+git tag v0.1.0-preview.8
+git push origin v0.1.0-preview.8
 ```
 
 Preview tags are published as GitHub prereleases. The Windows preview artifact is a portable zip containing `recordingfreedom.exe` and `tools/ffmpeg.exe`; macOS/Linux remain raw preview binaries. Release artifacts are built with the `rnnoise_native` cgo tag and gated by `desktop-doctor -require-rnnoise`, so a preview that cannot create the native RNNoise suppressor must fail before publishing. This preview release is for UI shell, settings, mock package, developer audio smoke, Windows FFmpeg video + WASAPI audio mux verification, RNNoise native artifact gating, FFmpeg dependency gating, and full-platform build verification. It is not a signed installer release, and it does not claim full native screen/audio/camera recording yet. See [docs/04-ci-release-plan.md](docs/04-ci-release-plan.md).

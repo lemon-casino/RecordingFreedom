@@ -161,7 +161,7 @@ jobs:
         shell: bash
         run: |
           if [ "${{ runner.os }}" = "Linux" ]; then
-            CGO_ENABLED=1 wails3 build -tags "gtk3 ${RNNOISE_TAG}"
+            CGO_ENABLED=1 wails3 build -tags "gtk3,${RNNOISE_TAG}"
           else
             CGO_ENABLED=1 wails3 build -tags "${RNNOISE_TAG}"
           fi

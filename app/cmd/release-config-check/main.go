@@ -37,6 +37,7 @@ var releaseConfigChecks = []configCheck{
 		Needles: []string{
 			"RNNOISE_TAG: rnnoise_native",
 			"CGO_ENABLED=1 wails3 build -tags",
+			"gtk3,${RNNOISE_TAG}",
 			"-require-rnnoise",
 			"pacman -S --noconfirm --needed mingw-w64-x86_64-gcc",
 		},
@@ -55,6 +56,7 @@ var releaseConfigChecks = []configCheck{
 		Needles: []string{
 			"RNNOISE_TAG: rnnoise_native",
 			"CGO_ENABLED=1 wails3 build -tags",
+			"gtk3,${RNNOISE_TAG}",
 			"-require-rnnoise",
 			"RNNoise native DSP is compiled into release artifacts",
 		},

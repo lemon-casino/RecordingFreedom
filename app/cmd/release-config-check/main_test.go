@@ -63,6 +63,7 @@ func workflowFixture(name string) string {
 	var builder strings.Builder
 	builder.WriteString("RNNOISE_TAG: rnnoise_native\n")
 	builder.WriteString("CGO_ENABLED=1 wails3 build -tags\n")
+	builder.WriteString("gtk3,${RNNOISE_TAG}\n")
 	builder.WriteString("-require-rnnoise\n")
 	builder.WriteString("pacman -S --noconfirm --needed mingw-w64-x86_64-gcc\n")
 	builder.WriteString("./scripts/ensure-windows-ffmpeg.ps1\n")
