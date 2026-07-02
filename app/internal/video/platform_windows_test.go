@@ -152,6 +152,38 @@ func TestWindowsFFmpegInputArgsUsesDDAGrabForDisplayBoundRegion(t *testing.T) {
 	}
 }
 
+func TestWindowsFFmpegInputArgsUsesSingleDesktopInputForAllScreensCursorCapture(t *testing.T) {
+	input, err := windowsFFmpegInputArgs(windowsGraphicsCaptureTarget{Kind: windowsTargetAllScreens, ScreenID: "virtual-desktop"})(CaptureConfig{
+		SourceGeometry: &SourceGeometry{X: -1920, Y: 0, Width: 4480, Height: 1440},
+		Profile: recordingprofile.Profile{
+			Quality:       recordingprofile.QualityBalanced,
+			FPS:           30,
+			CaptureCursor: true,
+		},
+	})
+	if err != nil {
+		t.Fatalf("windowsFFmpegInputArgs() error = %v", err)
+	}
+	if input.Engine != "windows-gdi" || input.VideoPreFiltered {
+		t.Fatalf("input = %#v, want single windows-gdi desktop input", input)
+	}
+	if got := flagValue(input.Args, "-offset_x"); got != "-1920" {
+		t.Fatalf("-offset_x = %q, want -1920 in args %v", got, input.Args)
+	}
+	if got := flagValue(input.Args, "-video_size"); got != "4480x1440" {
+		t.Fatalf("-video_size = %q, want 4480x1440 in args %v", got, input.Args)
+	}
+	if got := flagValue(input.Args, "-draw_mouse"); got != "1" {
+		t.Fatalf("-draw_mouse = %q, want 1 in args %v", got, input.Args)
+	}
+	if input.Args[len(input.Args)-1] != "desktop" {
+		t.Fatalf("input args = %v, want desktop input", input.Args)
+	}
+	if !strings.Contains(strings.Join(input.Messages, " "), "avoid multi-output cursor flicker") {
+		t.Fatalf("messages = %v, want all-screens cursor flicker diagnostic", input.Messages)
+	}
+}
+
 func TestWindowsDDAGrabAllScreensBuildsStackedFilter(t *testing.T) {
 	input := windowsDDAGrabAllScreensInputSpec(CaptureConfig{
 		Profile: recordingprofile.Profile{

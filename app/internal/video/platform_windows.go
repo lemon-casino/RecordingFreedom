@@ -231,6 +231,9 @@ func windowsFFmpegInputArgs(target windowsGraphicsCaptureTarget) ffmpegInputArgs
 			}
 			return windowsGDIGGrabInputSpec(config, target, "screen"), nil
 		case windowsTargetAllScreens:
+			if config.Profile.CaptureCursor {
+				return windowsGDIGGrabInputSpec(config, target, "all-screens virtual desktop cursor capture"), nil
+			}
 			if input, ok := windowsDDAGrabInputSpec(config, target); ok {
 				return input, nil
 			}
@@ -398,6 +401,9 @@ func windowsGDIGGrabInputSpec(config CaptureConfig, target windowsGraphicsCaptur
 	messages := []string{}
 	if config.Profile.CaptureCursor {
 		messages = append(messages, fmt.Sprintf("GDI cursor drawing is only used for %s capture because this source cannot use a single-output Desktop Duplication input.", label))
+		if target.Kind == windowsTargetAllScreens {
+			messages = append(messages, "All-screens cursor recording uses one virtual-desktop input to avoid multi-output cursor flicker on mixed-resolution displays.")
+		}
 	}
 	return ffmpegInputSpec{
 		Args:     args,
