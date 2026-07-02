@@ -29,9 +29,6 @@ func parseDirectShowCameraDevices(output string) []MediaDevice {
 			pending = -1
 			continue
 		}
-		if !inVideoSection {
-			continue
-		}
 		value := firstQuotedValue(line)
 		if value == "" {
 			continue
@@ -40,6 +37,13 @@ func parseDirectShowCameraDevices(output string) []MediaDevice {
 			if pending >= 0 && pending < len(devices) {
 				devices[pending].ID = directShowCameraID(value, pending+1)
 			}
+			continue
+		}
+		if strings.Contains(lower, "(audio)") {
+			pending = -1
+			continue
+		}
+		if !inVideoSection && !strings.Contains(lower, "(video)") {
 			continue
 		}
 		device := MediaDevice{

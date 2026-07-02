@@ -1116,7 +1116,7 @@ function App() {
               type="button"
               aria-label={copy.aria.openCameraSettings}
               title={copy.panels.cameraSidecar}
-              disabled={recordingConfigLocked || recordingMode === 'audio' || !hasUsableCamera}
+              disabled={recordingConfigLocked || recordingMode === 'audio'}
               onClick={() => togglePanel('camera')}
             >
               <Camera size={18} />
@@ -1371,10 +1371,15 @@ function App() {
                 <SelectMenu
                   id="camera-device"
                   value={selectedCamera}
-                  disabled={recordingConfigLocked || !hasUsableCamera}
+                  disabled={recordingConfigLocked || availableCameras.length === 0}
                   options={availableCameras.map((device) => ({value: device.id, label: mediaDeviceName(device, copy), disabled: !isUsableCameraDevice(device)}))}
                   onChange={setSelectedCamera}
                 />
+                {!hasUsableCamera && (
+                  <div className="meter-status">
+                    <span>{selectedCameraDevice?.unavailableReason || selectedCameraDevice?.meta || copy.pipOverlay.cameraUnavailable}</span>
+                  </div>
+                )}
                 <label className="field-label" htmlFor="pip-preset">{copy.panels.pipPreset}</label>
                 <SelectMenu
                   id="pip-preset"

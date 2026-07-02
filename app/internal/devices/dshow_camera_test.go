@@ -41,3 +41,23 @@ func TestParseDirectShowCameraDevicesIgnoresAudioSection(t *testing.T) {
 		t.Fatalf("devices = %#v, want no cameras", devices)
 	}
 }
+
+func TestParseDirectShowCameraDevicesFromInlineMediaTypeOutput(t *testing.T) {
+	output := `
+[in#0 @ 000001] "HD Webcam" (video)
+[in#0 @ 000001]   Alternative name "@device_pnp_\\?\usb#vid_5986&pid_211c&mi_00#6&4d9c116&0&0000#{65e8773d-8f56-11d0-a3b9-00a0c9223196}\global"
+[in#0 @ 000001] "麦克风阵列 (2- 适用于数字麦克风的英特尔® 智音技术)" (audio)
+[in#0 @ 000001]   Alternative name "@device_cm_{33D9A762-90C8-11D0-BD43-00A0C911CE86}\wave_{7B4C2AF0-E362-406D-BD2F-5C6112CA59F0}"
+Error opening input file dummy.
+`
+	devices := parseDirectShowCameraDevices(output)
+	if len(devices) != 1 {
+		t.Fatalf("devices = %#v, want one inline video camera", devices)
+	}
+	if devices[0].Name != "Default HD Webcam" || devices[0].NativeID != "HD Webcam" {
+		t.Fatalf("camera = %#v, want HD Webcam as DirectShow native device", devices[0])
+	}
+	if devices[0].ID != "camera:dshow:device-pnp-usb-vid-5986-pid-211c-mi-00-6-4d9c116-0-0000-65e8773d-8f56-11d0-a3b9-00a0c9223196-global" {
+		t.Fatalf("camera id = %q, want stable alternative-name id", devices[0].ID)
+	}
+}
