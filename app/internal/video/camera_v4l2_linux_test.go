@@ -16,7 +16,7 @@ func TestV4L2CameraInputArgsUseDevicePath(t *testing.T) {
 	if err != nil {
 		t.Fatalf("v4l2CameraInputArgs() error = %v", err)
 	}
-	if !slices.Contains(args, "/dev/video0") {
+	if !slices.Contains(args.Args, "/dev/video0") {
 		t.Fatalf("args = %#v, want v4l2 device path", args)
 	}
 }

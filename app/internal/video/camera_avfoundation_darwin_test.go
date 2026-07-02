@@ -16,7 +16,7 @@ func TestAVFoundationCameraInputArgsUseNativeIndex(t *testing.T) {
 	if err != nil {
 		t.Fatalf("avFoundationCameraInputArgs() error = %v", err)
 	}
-	if !slices.Contains(args, "0:none") {
+	if !slices.Contains(args.Args, "0:none") {
 		t.Fatalf("args = %#v, want AVFoundation video index with no audio", args)
 	}
 }
