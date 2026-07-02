@@ -277,7 +277,7 @@ export const mediaInventory: MediaInventory = {
       id: 'camera:default',
       type: 'camera',
       name: 'Default Camera',
-      meta: 'Camera sidecar endpoint',
+      meta: 'Camera endpoint',
       nativeId: 'browser-default-camera',
       isDefault: true,
       available: true,
@@ -373,11 +373,11 @@ export const fallbackCapabilities: CaptureCapabilities = {
   },
   cameraSidecar: {
     id: 'camera-sidecar',
-    label: 'Camera Sidecar',
+    label: 'Camera',
     status: 'queued',
     backend: 'native camera backend',
     permission: 'camera',
-    reason: 'Camera sidecar capture is separate from the screen video stream.',
+    reason: 'Camera media is composed into the screen recording as picture-in-picture.',
   },
   pipExport: {
     id: 'pip-export',

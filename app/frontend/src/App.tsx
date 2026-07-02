@@ -63,7 +63,8 @@ const sourceIcon = {
   application: Radio,
 }
 
-const pipPresetOptions: PIPPreset[] = ['bottom-right', 'bottom-left', 'free', 'off']
+const pipPresetOptions: PIPPreset[] = ['bottom-right', 'bottom-left', 'free']
+const allPipPresetOptions: PIPPreset[] = [...pipPresetOptions, 'off']
 const pipShapeOptions: PIPShape[] = ['circle', 'square']
 
 const recordingQualityOptions: RecordingQuality[] = ['standard', 'balanced', 'high']
@@ -73,7 +74,7 @@ const previewPackagePath = 'data/video/recording-preview.rfrec'
 type ActivePanel = 'source' | 'audio' | 'camera' | 'language'
 
 function normalizePipPreset(value: PIPPreset): PIPPreset {
-  return pipPresetOptions.includes(value) ? value : 'bottom-right'
+  return allPipPresetOptions.includes(value) ? value : 'bottom-right'
 }
 
 function normalizePipShape(value: PIPShape): PIPShape {
@@ -103,6 +104,15 @@ function normalizePipConfig(value: Partial<PIPConfig> | undefined, fallbackPrese
     scale: clampNumber(value?.scale ?? 0.2, 0.1, 0.42),
     edgeFeather: clampNumber(value?.edgeFeather ?? 0.16, 0.02, 0.42),
   }
+}
+
+function ensureVisiblePipConfig(value: PIPConfig): PIPConfig {
+  if (value.preset !== 'off') return value
+  return normalizePipConfig({
+    ...value,
+    preset: 'bottom-right',
+    position: defaultPipPosition('bottom-right'),
+  }, 'bottom-right')
 }
 
 function normalizeRecordingQuality(value: string): RecordingQuality {
@@ -277,6 +287,8 @@ function App() {
   const [recoveryMessage, setRecoveryMessage] = useState<RecoveryMessageState | null>(null)
   const [exportBusy, setExportBusy] = useState(false)
   const [exportMessage, setExportMessage] = useState<ExportMessageState | null>(null)
+  const [cameraPreviewReady, setCameraPreviewReady] = useState(false)
+  const [cameraPreviewError, setCameraPreviewError] = useState<string | null>(null)
   const [settingsLoaded, setSettingsLoaded] = useState(false)
   const [capabilities, setCapabilities] = useState<CaptureCapabilities>(fallbackCapabilities)
   const [appData, setAppData] = useState<AppDataInfo>(fallbackAppData)
@@ -290,6 +302,7 @@ function App() {
   const popoverRef = useRef<HTMLDivElement | null>(null)
   const settingsPanelRef = useRef<HTMLElement | null>(null)
   const closePromptRef = useRef<HTMLElement | null>(null)
+  const cameraPreviewRef = useRef<HTMLVideoElement | null>(null)
   const selectedMicRef = useRef(selectedMic)
   const rnnoiseActive = microphone && noiseSuppression
 
@@ -409,8 +422,10 @@ function App() {
   const cameraUnavailableText = selectedCameraDevice?.unavailableReason || selectedCameraDevice?.meta || copy.pipOverlay.cameraUnavailable
   const cameraStatusText = !hasUsableCamera || !selectedCameraUsable
     ? cameraUnavailableText
+    : cameraPreviewError && activePanel === 'camera'
+      ? `${copy.panels.cameraPreviewUnavailable}: ${cameraPreviewError}`
     : camera
-      ? copy.panels.cameraEnabled
+      ? (cameraPreviewReady && activePanel === 'camera' ? copy.panels.cameraPreviewLive : copy.panels.cameraEnabled)
       : copy.panels.cameraOff
   const micMonitorStatusText = micMonitorError
     ? copy.panels.microphoneLevelError
@@ -428,7 +443,6 @@ function App() {
     const height = active ? Math.max(14, Math.min(100, micMeterLevel * 100 + index * 0.9)) : 8
     return {active, height: `${height}%`}
   }), [micMeterLevel])
-  const pipPreviewSize = Math.round(68 + ((pipScale - 0.1) / 0.32) * 54)
   const canOpenLastPackage = isRecordingPackagePath(lastPackage) && lastPackage !== previewPackagePath
   const lastPackageName = canOpenLastPackage ? packageDisplayName(lastPackage) : copy.settings.noRecordingPackage
   const openPipEditor = async () => {
@@ -465,10 +479,13 @@ function App() {
     const nextHasAvailableMicrophone = !microphoneList || microphoneList.some((device) => device.available !== false)
     const nextCameraDevice = selectPreferredCameraDevice(cameraList, nextSettings.camera.deviceId)
     const nextHasUsableCamera = !cameraList || Boolean(nextCameraDevice)
+    const nextCameraEnabled = nextSettings.camera.enabled && nextHasUsableCamera
     setMicrophone(nextSettings.audio.microphone && nextHasAvailableMicrophone)
     setNoiseSuppression(nextSettings.audio.microphone && nextHasAvailableMicrophone && nextSettings.audio.noiseSuppression)
-    setCamera(nextSettings.camera.enabled && nextHasUsableCamera)
-    const nextPip = normalizePipConfig(nextSettings.camera.pip, normalizePipPreset(nextSettings.camera.pipPreset))
+    setCamera(nextCameraEnabled)
+    const nextPip = nextCameraEnabled
+      ? ensureVisiblePipConfig(normalizePipConfig(nextSettings.camera.pip, normalizePipPreset(nextSettings.camera.pipPreset)))
+      : normalizePipConfig(nextSettings.camera.pip, normalizePipPreset(nextSettings.camera.pipPreset))
     setPipPreset(nextPip.preset)
     setPipShape(nextPip.shape)
     setPipMirror(nextPip.mirror)
@@ -611,6 +628,56 @@ function App() {
       void hidePipOverlay()
     }
   }, [camera, isSettingsWindow, recordingMode])
+
+  useEffect(() => {
+    const shouldPreview = !isSettingsWindow &&
+      activePanel === 'camera' &&
+      camera &&
+      recordingMode === 'video' &&
+      !isRecording &&
+      hasUsableCamera &&
+      selectedCameraUsable
+
+    if (!shouldPreview) {
+      setCameraPreviewReady(false)
+      setCameraPreviewError(null)
+      if (cameraPreviewRef.current) cameraPreviewRef.current.srcObject = null
+      return
+    }
+    if (!navigator.mediaDevices?.getUserMedia) {
+      setCameraPreviewReady(false)
+      setCameraPreviewError('media-devices-unavailable')
+      return
+    }
+
+    let cancelled = false
+    let stream: MediaStream | null = null
+    setCameraPreviewReady(false)
+    setCameraPreviewError(null)
+    void openPipCameraStream(pipCameraTarget).then((nextStream) => {
+      if (cancelled) {
+        stopMediaStream(nextStream)
+        return
+      }
+      stream = nextStream
+      if (cameraPreviewRef.current) {
+        cameraPreviewRef.current.srcObject = nextStream
+      }
+      setCameraPreviewReady(true)
+      setCameraPreviewError(null)
+    }).catch((error) => {
+      if (cancelled) return
+      setCameraPreviewReady(false)
+      setCameraPreviewError(readableError(error))
+    })
+
+    return () => {
+      cancelled = true
+      if (stream) stopMediaStream(stream)
+      if (cameraPreviewRef.current) cameraPreviewRef.current.srcObject = null
+      setCameraPreviewReady(false)
+    }
+  }, [activePanel, camera, hasUsableCamera, isRecording, isSettingsWindow, pipCameraTarget, recordingMode, selectedCameraUsable])
 
   useEffect(() => {
     if (!recordingConfigLocked) return
@@ -766,8 +833,8 @@ function App() {
     camera,
     cameraDeviceId: selectedCamera,
     cameraDeviceNativeId: selectedCameraDevice?.nativeId,
-    pipPreset,
-    pip: currentPipConfig,
+    pipPreset: camera ? ensureVisiblePipConfig(currentPipConfig).preset : 'off',
+    pip: camera ? ensureVisiblePipConfig(currentPipConfig) : currentPipConfig,
   })
 
   const runCurrentPreflight = async () => {
@@ -852,6 +919,9 @@ function App() {
           backend: session.backend,
           session,
         })
+        if (shouldAutoExportPipRecording(session)) {
+          await autoExportPipRecording(session.packagePath)
+        }
       } else {
         setState('ready')
         setLastStatusMessage({key: 'ready'})
@@ -863,6 +933,33 @@ function App() {
       setLastStatusMessage({key: 'failedToStop'})
       setState('failed')
       return false
+    }
+  }
+
+  const shouldAutoExportPipRecording = (session: {packagePath?: string; recordingMode?: string}) => {
+    return Boolean(
+      session.packagePath &&
+      recordingMode === 'video' &&
+      session.recordingMode !== 'audio-only' &&
+      camera &&
+      currentPipConfig.preset !== 'off',
+    )
+  }
+
+  const autoExportPipRecording = async (packagePath: string) => {
+    setExportBusy(true)
+    setExportMessage(null)
+    setLastStatusMessage({key: 'exportingPip'})
+    try {
+      const result = await exportRecordingPackage(packagePath)
+      setExportMessage({key: 'ready', path: result.outputPath})
+      setLastStatusMessage({key: result.pipVisible ? 'pipReady' : 'ready'})
+    } catch (error) {
+      console.error('Failed to auto export PIP recording:', error)
+      setExportMessage({key: 'failed', fallback: error instanceof Error ? error.message : undefined})
+      setLastStatusMessage({key: 'ready'})
+    } finally {
+      setExportBusy(false)
     }
   }
 
@@ -1487,7 +1584,14 @@ function App() {
                   label={copy.panels.cameraSidecar}
                   checked={camera}
                   disabled={recordingConfigLocked || !hasUsableCamera}
-                  onChange={(value) => setCamera(value && hasUsableCamera)}
+                  onChange={(value) => {
+                    const enabled = value && hasUsableCamera
+                    setCamera(enabled)
+                    if (enabled && pipPreset === 'off') {
+                      setPipPreset('bottom-right')
+                      setPipPosition(defaultPipPosition('bottom-right'))
+                    }
+                  }}
                 />
                 <label className="field-label" htmlFor="camera-device">{copy.panels.cameraDevice}</label>
                 <SelectMenu
@@ -1500,11 +1604,16 @@ function App() {
                 <div className={`meter-status ${!hasUsableCamera || !selectedCameraUsable ? 'error' : ''}`}>
                   <span>{cameraStatusText}</span>
                 </div>
+                {camera && !cameraPreviewError && !recordingConfigLocked && selectedCameraUsable && (
+                  <div className={`camera-live-preview ${cameraPreviewReady ? 'ready' : ''}`}>
+                    <video ref={cameraPreviewRef} className={pipMirror ? 'mirrored' : ''} autoPlay muted playsInline />
+                  </div>
+                )}
                 <label className="field-label" htmlFor="pip-preset">{copy.panels.pipPreset}</label>
                 <SelectMenu
                   id="pip-preset"
                   value={pipPreset}
-                  disabled={recordingConfigLocked || !hasUsableCamera}
+                  disabled={recordingConfigLocked || !camera || !hasUsableCamera}
                   options={pipPresetOptions.map((preset) => ({value: preset, label: copy.pipPresetLabels[preset]}))}
                   onChange={(value) => {
                     const nextPreset = value as PIPPreset
@@ -1521,7 +1630,7 @@ function App() {
                         key={shape}
                         type="button"
                         className={pipShape === shape ? 'selected' : ''}
-                        disabled={recordingConfigLocked || !hasUsableCamera}
+                        disabled={recordingConfigLocked || !camera || !hasUsableCamera}
                         onClick={() => setPipShape(shape)}
                       >
                         <ShapeIcon size={15} />
@@ -1530,7 +1639,7 @@ function App() {
                     )
                   })}
                 </div>
-                <SwitchRow label={copy.panels.pipMirror} checked={pipMirror} disabled={recordingConfigLocked || !hasUsableCamera} onChange={setPipMirror} />
+                <SwitchRow label={copy.panels.pipMirror} checked={pipMirror} disabled={recordingConfigLocked || !camera || !hasUsableCamera} onChange={setPipMirror} />
                 <label className="field-label" htmlFor="pip-size">{copy.panels.pipSize}</label>
                 <div className="pip-slider-row">
                   <input
@@ -1540,7 +1649,7 @@ function App() {
                     max="0.42"
                     step="0.01"
                     value={pipScale}
-                    disabled={recordingConfigLocked || !hasUsableCamera}
+                    disabled={recordingConfigLocked || !camera || !hasUsableCamera}
                     onChange={(event) => setPipScale(Number(event.currentTarget.value))}
                   />
                   <b>{Math.round(pipScale * 100)}%</b>
@@ -1554,20 +1663,10 @@ function App() {
                     max="0.42"
                     step="0.01"
                     value={pipEdgeFeather}
-                    disabled={recordingConfigLocked || !hasUsableCamera}
+                    disabled={recordingConfigLocked || !camera || !hasUsableCamera}
                     onChange={(event) => setPipEdgeFeather(Number(event.currentTarget.value))}
                   />
                   <b>{Math.round(pipEdgeFeather * 100)}%</b>
-                </div>
-                <div className="camera-preview">
-                  <div
-                    className={`pip-preview-frame ${pipShape} ${pipMirror ? 'mirrored' : ''}`}
-                    style={{width: pipPreviewSize, height: pipPreviewSize}}
-                    aria-hidden="true"
-                  >
-                    <Video size={24} />
-                  </div>
-                  <span>{copy.panels.pipPresetPreview(copy.pipPresetLabels[pipPreset])}</span>
                 </div>
                 <button
                   type="button"
