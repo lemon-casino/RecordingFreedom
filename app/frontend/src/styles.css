@@ -470,7 +470,7 @@ select:disabled {
   top: 86px;
   left: 62px;
   width: 360px;
-  max-height: calc(100% - 104px);
+  max-height: min(430px, calc(100vh - 118px));
   padding: 8px;
   border: 1px solid var(--line);
   border-radius: 22px;
@@ -513,7 +513,15 @@ body.rf-recorder-window .select-menu-list {
 }
 
 .popover.panel-camera {
-  max-height: min(468px, calc(100% - 104px));
+  max-height: min(468px, calc(100vh - 118px));
+}
+
+.popover.panel-audio {
+  max-height: min(430px, calc(100vh - 118px));
+}
+
+.popover.panel-language {
+  max-height: min(180px, calc(100vh - 118px));
 }
 
 .popover.panel-source {
