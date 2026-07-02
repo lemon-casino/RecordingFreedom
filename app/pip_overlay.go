@@ -46,6 +46,13 @@ func (s *RecordingFreedomService) ShowPIPOverlay(req PIPOverlayRequest) (PIPOver
 	}
 	config := pip.NormalizeConfig(req.Config)
 	camera := normalizePIPCamera(req.Camera, req.CameraName)
+	s.logEvent("pip-overlay", "show-request", map[string]string{
+		"preset":   string(config.Preset),
+		"mode":     normalizePIPOverlayMode(req.Mode),
+		"cameraId": camera.DeviceID,
+		"nativeId": camera.NativeID,
+		"name":     camera.Name,
+	})
 	if config.Preset == pip.PresetOff {
 		_ = s.HidePIPOverlay()
 		return s.pipOverlayState(config, req.Mode, camera)
@@ -61,6 +68,13 @@ func (s *RecordingFreedomService) ShowPIPOverlay(req PIPOverlayRequest) (PIPOver
 func (s *RecordingFreedomService) UpdatePIPOverlay(req PIPOverlayRequest) (PIPOverlayState, error) {
 	config := pip.NormalizeConfig(req.Config)
 	camera := normalizePIPCamera(req.Camera, req.CameraName)
+	s.logEvent("pip-overlay", "update-request", map[string]string{
+		"preset":   string(config.Preset),
+		"mode":     normalizePIPOverlayMode(req.Mode),
+		"cameraId": camera.DeviceID,
+		"nativeId": camera.NativeID,
+		"name":     camera.Name,
+	})
 	if err := s.persistCameraPIPConfig(config); err != nil {
 		return PIPOverlayState{}, err
 	}
@@ -83,6 +97,7 @@ func (s *RecordingFreedomService) HidePIPOverlay() error {
 	if s.pipOverlay == nil {
 		return nil
 	}
+	s.logEvent("pip-overlay", "hide", nil)
 	s.nextPIPOverlayToken()
 	s.pipOverlay.ExecJS(stopPIPOverlayMediaScript)
 	if state, err := s.pipOverlayState(pip.OffConfig(), "edit", PIPCamera{}); err == nil {
@@ -101,6 +116,11 @@ func (s *RecordingFreedomService) showRecordingPIPOverlay(req recording.StartReq
 	if config.Preset == pip.PresetOff {
 		return
 	}
+	s.logEvent("pip-overlay", "show-recording", map[string]string{
+		"preset":   string(config.Preset),
+		"cameraId": strings.TrimSpace(req.Camera.DeviceID),
+		"nativeId": strings.TrimSpace(req.Camera.DeviceNativeID),
+	})
 	_, _ = s.ShowPIPOverlay(PIPOverlayRequest{
 		Config: config,
 		Mode:   "recording",

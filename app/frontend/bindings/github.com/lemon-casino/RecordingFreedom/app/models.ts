@@ -67,6 +67,13 @@ export interface CapsuleWindowHitRegionsRequest {
     "regions": CapsuleWindowHitRegion[] | null;
 }
 
+export interface ClientLogEvent {
+    "component": string;
+    "event": string;
+    "message"?: string;
+    "fields"?: { [_ in string]?: string } | null;
+}
+
 export interface ExportRecordingRequest {
     "packageDir": string;
     "outputPath"?: string;

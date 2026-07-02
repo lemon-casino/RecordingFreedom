@@ -145,6 +145,19 @@ export async function restoreCapsuleWindow(focus = true): Promise<void> {
   }
 }
 
+export async function logClientEvent(component: string, event: string, fields: Record<string, unknown> = {}, message = ''): Promise<void> {
+  try {
+    await RecordingFreedomService.LogClientEvent({
+      component,
+      event,
+      message,
+      fields: Object.fromEntries(Object.entries(fields).map(([key, value]) => [key, String(value ?? '')])),
+    })
+  } catch (error) {
+    console.info('Using browser client log fallback:', error)
+  }
+}
+
 export type RegionSelectionSession = {
   id: string
   bounds: {x: number; y: number; width: number; height: number}

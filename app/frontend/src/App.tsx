@@ -23,7 +23,7 @@ import {
   Wand2,
   X,
 } from 'lucide-react'
-import {useEffect, useMemo, useRef, useState, type CSSProperties, type PointerEvent as ReactPointerEvent, type ReactNode} from 'react'
+import {useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type PointerEvent as ReactPointerEvent, type ReactNode} from 'react'
 import {copyByLocale, type RecorderCopy, type RecoveryMessageKey, type SourceSelectionMessageKey, type StatusMessageKey, type StorageMessageKey} from './i18n'
 import {
   cameraDevices,
@@ -53,7 +53,7 @@ import {
   fallbackCapabilities,
   fallbackStorageStatus,
 } from './services/mockBackend'
-import {cancelRegionSelector, cancelSelectedRegion, completeRegionSelection, exportRecordingPackage, hidePipOverlay, hideRegionFrame, hideScreenIndicator, hideSettingsWindow, loadBootstrap, loadSettings, openRecordingPackage, openVideoDirectory, pauseRecording, preflightAudioOnlyRecording, preflightRecording, quitApplication, recoverRecordingPackage, restoreCapsuleWindow, resumeRecording, saveSettings, setCapsuleWindowExpanded, setCapsuleWindowHitRegions, setDataRoot, showPipOverlay, showRegionSelector, showScreenIndicator, startAudioOnlyRecording, startMicrophoneLevelMonitor, startRecording, stopMicrophoneLevelMonitor, stopRecording, subscribeAudioLevel, subscribeRecordingStatus, subscribeRegionSelection, subscribeSettingsChanged, updatePipOverlay, updateSelectedRegion, type AudioLevelUpdate, type CapsuleWindowExpandDirection, type CapsuleWindowHitRegion, type PIPOverlayCamera, type PIPOverlayState, type RecordingRecovery, type RecordingStatusUpdate, type RegionSelectionSession} from './services/recorderBackend'
+import {cancelRegionSelector, cancelSelectedRegion, completeRegionSelection, exportRecordingPackage, hidePipOverlay, hideRegionFrame, hideScreenIndicator, hideSettingsWindow, loadBootstrap, loadSettings, logClientEvent, openRecordingPackage, openVideoDirectory, pauseRecording, preflightAudioOnlyRecording, preflightRecording, quitApplication, recoverRecordingPackage, restoreCapsuleWindow, resumeRecording, saveSettings, setCapsuleWindowExpanded, setCapsuleWindowHitRegions, setDataRoot, showPipOverlay, showRegionSelector, showScreenIndicator, startAudioOnlyRecording, startMicrophoneLevelMonitor, startRecording, stopMicrophoneLevelMonitor, stopRecording, subscribeAudioLevel, subscribeRecordingStatus, subscribeRegionSelection, subscribeSettingsChanged, updatePipOverlay, updateSelectedRegion, type AudioLevelUpdate, type CapsuleWindowExpandDirection, type CapsuleWindowHitRegion, type PIPOverlayCamera, type PIPOverlayState, type RecordingRecovery, type RecordingStatusUpdate, type RegionSelectionSession} from './services/recorderBackend'
 
 const sourceIcon = {
   screen: Monitor,
@@ -326,6 +326,7 @@ function App() {
   const settingsPanelRef = useRef<HTMLElement | null>(null)
   const closePromptRef = useRef<HTMLElement | null>(null)
   const floatingPointerInsideAtRef = useRef(0)
+  const floatingPointerInsideRef = useRef(false)
   const countdownTimerRef = useRef<number | null>(null)
   const countdownTokenRef = useRef(0)
   const cameraPreviewGenerationRef = useRef(0)
@@ -501,12 +502,20 @@ function App() {
       console.info('PIP editor unavailable:', error)
     }
   }
-  const stopCameraPreview = () => {
+  const stopCameraPreview = (reason = 'unspecified') => {
+    void logClientEvent('camera', 'preview-stop-request', {reason})
     cameraPreviewGenerationRef.current += 1
     void hidePipOverlay()
   }
   const setCameraEnabled = (enabled: boolean) => {
     const nextEnabled = enabled && hasUsableCamera
+    void logClientEvent('camera', 'toggle', {
+      requested: enabled,
+      enabled: nextEnabled,
+      hasUsableCamera,
+      selectedCamera,
+      selectedCameraName: selectedCameraDevice?.name ?? '',
+    })
     cameraPreviewGenerationRef.current += 1
     cameraRef.current = nextEnabled
     setCamera(nextEnabled)
@@ -661,7 +670,7 @@ function App() {
       .then(setCapsuleExpandDirection)
   }, [capsuleExpanded, capsuleExpandedHeight, capsuleWindowCompact, isSettingsWindow])
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (isSettingsWindow) return
     let disposed = false
     let frame = 0
@@ -729,7 +738,7 @@ function App() {
   useEffect(() => {
     if (isSettingsWindow) return
     if (!camera || recordingMode === 'audio') {
-      stopCameraPreview()
+      stopCameraPreview(!camera ? 'camera-disabled' : 'audio-mode')
     }
   }, [camera, isSettingsWindow, recordingMode])
 
@@ -738,13 +747,28 @@ function App() {
     if (isSettingsWindow || !camera || recordingMode !== 'video' || !hasUsableCamera) return
 
     const generation = cameraPreviewGenerationRef.current
+    void logClientEvent('camera', 'preview-show-request', {
+      generation,
+      preset: ensureVisiblePipConfig(currentPipConfig).preset,
+      selectedCamera,
+      selectedCameraName: selectedCameraDevice?.name ?? '',
+    })
     void showPipOverlay(ensureVisiblePipConfig(currentPipConfig), 'edit', pipCameraTarget)
       .then(() => {
         if (generation !== cameraPreviewGenerationRef.current || !cameraRef.current || recordingMode !== 'video') {
+          void logClientEvent('camera', 'preview-show-cancelled-after-show', {
+            generation,
+            currentGeneration: cameraPreviewGenerationRef.current,
+            camera: cameraRef.current,
+            recordingMode,
+          })
           void hidePipOverlay()
         }
       })
-      .catch((error) => console.info('PIP camera preview unavailable:', error))
+      .catch((error) => {
+        void logClientEvent('camera', 'preview-show-failed', {error: readableError(error)})
+        console.info('PIP camera preview unavailable:', error)
+      })
   }, [camera, currentPipConfig, hasUsableCamera, isRecording, isSettingsWindow, pipCameraTarget, recordingMode])
 
   useEffect(() => {
@@ -845,7 +869,7 @@ function App() {
   useEffect(() => subscribeSettingsChanged((settings) => {
     const incomingCameraOff = !settings.camera.enabled
     if (incomingCameraOff) {
-      stopCameraPreview()
+      stopCameraPreview('settings-camera-off')
     }
     applySettingsState(settings, undefined, undefined, {
       preserveAudioEnabled: true,
@@ -889,6 +913,16 @@ function App() {
 
   useEffect(() => {
     if (isSettingsWindow || (!activePanel && !settingsOpen && !closePromptOpen)) return
+    const pointerInsideFloatingPanels = (event: Event) => (
+      eventPathContains(event, capsuleRef.current) ||
+      eventPathContains(event, popoverRef.current) ||
+      eventPathContains(event, settingsPanelRef.current) ||
+      eventPathContains(event, closePromptRef.current)
+    )
+    const markFloatingPointer = (inside: boolean) => {
+      floatingPointerInsideRef.current = inside
+      if (inside) floatingPointerInsideAtRef.current = Date.now()
+    }
     const closeFloatingPanels = () => {
       setActivePanel(null)
       setSettingsOpen(false)
@@ -896,33 +930,35 @@ function App() {
       void hideScreenIndicator()
     }
     const onPointerDown = (event: PointerEvent) => {
-      if (
-        eventPathContains(event, capsuleRef.current) ||
-        eventPathContains(event, popoverRef.current) ||
-        eventPathContains(event, settingsPanelRef.current) ||
-        eventPathContains(event, closePromptRef.current)
-      ) {
-        floatingPointerInsideAtRef.current = Date.now()
+      if (pointerInsideFloatingPanels(event)) {
+        markFloatingPointer(true)
         return
       }
+      markFloatingPointer(false)
       closeFloatingPanels()
+    }
+    const onPointerMove = (event: PointerEvent) => {
+      markFloatingPointer(pointerInsideFloatingPanels(event))
     }
     const onWindowBlur = () => {
       window.setTimeout(() => {
-        if (Date.now() - floatingPointerInsideAtRef.current < 250) return
+        if (floatingPointerInsideRef.current || Date.now() - floatingPointerInsideAtRef.current < 650) return
         closeFloatingPanels()
-      }, 0)
+      }, 120)
     }
     const onVisibilityChange = () => {
-      if (document.visibilityState !== 'visible') closeFloatingPanels()
+      if (document.visibilityState !== 'visible' && !floatingPointerInsideRef.current) closeFloatingPanels()
     }
     document.addEventListener('pointerdown', onPointerDown, true)
+    document.addEventListener('pointermove', onPointerMove, true)
     document.addEventListener('visibilitychange', onVisibilityChange)
     window.addEventListener('blur', onWindowBlur)
     return () => {
       document.removeEventListener('pointerdown', onPointerDown, true)
+      document.removeEventListener('pointermove', onPointerMove, true)
       document.removeEventListener('visibilitychange', onVisibilityChange)
       window.removeEventListener('blur', onWindowBlur)
+      floatingPointerInsideRef.current = false
     }
   }, [activePanel, closePromptOpen, isSettingsWindow, settingsOpen])
 
@@ -1962,17 +1998,27 @@ function PIPOverlayWindow() {
   const [cameraError, setCameraError] = useState<string | null>(null)
   const [overlayLocale, setOverlayLocale] = useState<LocaleCode>(navigator.language.toLowerCase().startsWith('zh') ? 'zh-CN' : 'en')
   const copy = copyByLocale[overlayLocale]
+  const logPipCameraEvent = (event: string, fields: Record<string, unknown> = {}) => {
+    void logClientEvent('pip-camera', event, fields)
+  }
 
   const pipStopTokenChanged = (stopToken: number) => (pipWindow.__RF_PIP_STOP_TOKEN__ ?? 0) !== stopToken
 
   const trackPipCameraStream = (stream: MediaStream, requestToken: number, stopToken: number, isCancelled: () => boolean) => {
     cameraStreamsRef.current.add(stream)
+    logPipCameraEvent('stream-opened', {
+      requestToken,
+      stopToken,
+      tracks: describeMediaStream(stream),
+    })
     if (isCancelled() || cameraRequestTokenRef.current !== requestToken || pipStopTokenChanged(stopToken)) {
+      logPipCameraEvent('stream-opened-cancelled', {requestToken, stopToken})
       stopAndForgetPipCameraStream(stream)
     }
   }
 
   const stopAndForgetPipCameraStream = (stream: MediaStream) => {
+    logPipCameraEvent('stream-stop', {tracks: describeMediaStream(stream)})
     cameraStreamsRef.current.delete(stream)
     stopMediaStream(stream)
   }
@@ -1987,10 +2033,17 @@ function PIPOverlayWindow() {
     activeCameraStreamRef.current = null
     const streams = Array.from(cameraStreamsRef.current)
     cameraStreamsRef.current.clear()
+    if (streams.length > 0) {
+      logPipCameraEvent('stop-active-streams', {count: streams.length})
+    }
     streams.forEach(stopMediaStream)
   }
 
   const cancelPipCameraStream = () => {
+    logPipCameraEvent('cancel', {
+      nextStopToken: (pipWindow.__RF_PIP_STOP_TOKEN__ ?? 0) + 1,
+      nextRequestToken: cameraRequestTokenRef.current + 1,
+    })
     pipWindow.__RF_PIP_STOP_TOKEN__ = (pipWindow.__RF_PIP_STOP_TOKEN__ ?? 0) + 1
     cameraRequestTokenRef.current += 1
     stopActivePipCameraStream()
@@ -2007,7 +2060,7 @@ function PIPOverlayWindow() {
     pipWindow.__RF_STOP_PIP_CAMERA__ = cancelPipCameraStream
     const stopOnWindowLifecycle = () => cancelPipCameraStream()
     const stopOnHidden = () => {
-      if (document.visibilityState !== 'visible') cancelPipCameraStream()
+      logPipCameraEvent('visibility-change', {visibilityState: document.visibilityState})
     }
     window.addEventListener('pagehide', stopOnWindowLifecycle)
     window.addEventListener('beforeunload', stopOnWindowLifecycle)
@@ -2037,12 +2090,19 @@ function PIPOverlayWindow() {
       const next = (event as CustomEvent<PIPOverlayState>).detail
       if (next) {
         if (next.config.preset === 'off') {
+          logPipCameraEvent('overlay-state-off')
           cancelPipCameraStream()
           overlayStateRef.current = undefined
           setOverlayState(undefined)
           setCameraError(null)
           return
         }
+        logPipCameraEvent('overlay-state', {
+          mode: next.mode,
+          preset: next.config.preset,
+          cameraId: next.camera?.deviceId ?? '',
+          cameraName: next.camera?.name ?? next.cameraName ?? '',
+        })
         overlayStateRef.current = next
         setOverlayState(next)
       }
@@ -2072,12 +2132,21 @@ function PIPOverlayWindow() {
     setCameraReady(false)
     setCameraError(null)
     const isCancelled = () => cancelled || cameraRequestTokenRef.current !== requestToken || pipStopTokenChanged(stopToken)
+    logPipCameraEvent('stream-request-start', {
+      requestToken,
+      stopToken,
+      targetDeviceId: cameraTarget?.deviceId ?? '',
+      targetNativeId: cameraTarget?.nativeId ?? '',
+      targetName: cameraTarget?.name ?? '',
+      mode: overlayState.mode,
+    })
     void openPipCameraStream(
       cameraTarget,
       (stream) => trackPipCameraStream(stream, requestToken, stopToken, isCancelled),
       isCancelled,
     ).then(async (nextStream) => {
       if (isCancelled()) {
+        logPipCameraEvent('stream-request-cancelled-before-attach', {requestToken})
         stopAndForgetPipCameraStream(nextStream)
         return
       }
@@ -2092,19 +2161,23 @@ function PIPOverlayWindow() {
         }
       }
       if (isCancelled()) {
+        logPipCameraEvent('stream-request-cancelled-after-attach', {requestToken})
         if (activeCameraStreamRef.current === nextStream) activeCameraStreamRef.current = null
         stopAndForgetPipCameraStream(nextStream)
         return
       }
+      logPipCameraEvent('stream-ready', {requestToken, tracks: describeMediaStream(nextStream)})
       setCameraReady(true)
       setCameraError(null)
     }).catch((error) => {
       if (isCancelled()) return
+      logPipCameraEvent('stream-error', {requestToken, error: readableError(error)})
       setCameraReady(false)
       setCameraError(readableError(error))
     })
     return () => {
       cancelled = true
+      logPipCameraEvent('stream-effect-cleanup', {requestToken})
       if (cameraRequestTokenRef.current === requestToken) {
         cameraRequestTokenRef.current += 1
       }
@@ -2294,6 +2367,41 @@ async function openPipCameraStream(
     width: {ideal: 1280},
     height: {ideal: 720},
   }
+  const device = await selectPipPreviewDevice(target)
+  if (device?.deviceId) {
+    if (isCancelled()) throw new Error('pip camera request cancelled')
+    try {
+      void logClientEvent('pip-camera', 'get-user-media-exact-start', {
+        deviceLabel: device.label,
+        deviceId: device.deviceId,
+      })
+      const exactStream = await navigator.mediaDevices.getUserMedia({
+        video: {
+          ...videoConstraints,
+          deviceId: {exact: device.deviceId},
+        },
+        audio: false,
+      })
+      onStreamOpened(exactStream)
+      if (isCancelled()) {
+        stopMediaStream(exactStream)
+        throw new Error('pip camera request cancelled')
+      }
+      return exactStream
+    } catch (error) {
+      if (isCancelled()) throw error
+      void logClientEvent('pip-camera', 'get-user-media-exact-failed', {
+        deviceLabel: device.label,
+        error: readableError(error),
+      })
+      console.info('PIP preview selected camera unavailable, using default camera:', error)
+    }
+  }
+  if (isCancelled()) throw new Error('pip camera request cancelled')
+  void logClientEvent('pip-camera', 'get-user-media-default-start', {
+    targetName: target?.name ?? '',
+    targetNativeId: target?.nativeId ?? '',
+  })
   const defaultStream = await navigator.mediaDevices.getUserMedia({
     video: videoConstraints,
     audio: false,
@@ -2303,51 +2411,37 @@ async function openPipCameraStream(
     stopMediaStream(defaultStream)
     throw new Error('pip camera request cancelled')
   }
-  const device = await selectPipPreviewDevice(target, defaultStream)
-  if (isCancelled()) {
-    stopMediaStream(defaultStream)
-    throw new Error('pip camera request cancelled')
-  }
-  if (!device?.deviceId) return defaultStream
-  const currentDeviceId = defaultStream.getVideoTracks()[0]?.getSettings().deviceId
-  if (currentDeviceId && currentDeviceId === device.deviceId) return defaultStream
-  try {
-    const exactStream = await navigator.mediaDevices.getUserMedia({
-      video: {
-        ...videoConstraints,
-        deviceId: {exact: device.deviceId},
-      },
-      audio: false,
-    })
-    onStreamOpened(exactStream)
-    if (isCancelled()) {
-      stopMediaStream(defaultStream)
-      stopMediaStream(exactStream)
-      throw new Error('pip camera request cancelled')
-    }
-    stopMediaStream(defaultStream)
-    return exactStream
-  } catch (error) {
-    if (isCancelled()) {
-      stopMediaStream(defaultStream)
-      throw error
-    }
-    console.info('PIP preview selected camera unavailable, using default camera:', error)
-    return defaultStream
-  }
+  return defaultStream
 }
 
-async function selectPipPreviewDevice(target: PIPOverlayCamera | undefined, stream: MediaStream): Promise<MediaDeviceInfo | undefined> {
-  const devices = await navigator.mediaDevices.enumerateDevices?.()
+async function selectPipPreviewDevice(target: PIPOverlayCamera | undefined): Promise<MediaDeviceInfo | undefined> {
+  const devices = await navigator.mediaDevices.enumerateDevices?.().catch((error) => {
+    void logClientEvent('pip-camera', 'enumerate-devices-failed', {error: readableError(error)})
+    return []
+  })
   const videoDevices = devices?.filter((device) => device.kind === 'videoinput') ?? []
   if (videoDevices.length === 0) return undefined
-  const currentDeviceId = stream.getVideoTracks()[0]?.getSettings().deviceId
   const matched = findMatchingPipPreviewDevice(target, videoDevices)
   if (matched) return matched
-  if (currentDeviceId) {
-    return videoDevices.find((device) => device.deviceId === currentDeviceId)
-  }
-  return videoDevices[0]
+  return undefined
+}
+
+function describeMediaStream(stream: MediaStream) {
+  return stream.getTracks().map((track) => {
+    const settings = typeof track.getSettings === 'function' ? track.getSettings() : {}
+    return [
+      track.kind,
+      track.readyState,
+      track.label,
+      settings.deviceId,
+      settings.width && settings.height ? `${settings.width}x${settings.height}` : '',
+      settings.frameRate ? `${settings.frameRate}fps` : '',
+    ].filter(Boolean).join('|')
+  }).join(';')
+}
+
+function stopMediaStream(stream: MediaStream) {
+  stream.getTracks().forEach((track) => track.stop())
 }
 
 function findMatchingPipPreviewDevice(target: PIPOverlayCamera | undefined, devices: MediaDeviceInfo[]) {
@@ -2389,10 +2483,6 @@ function normalizePipPreviewText(value?: string) {
     .replace(/[^a-z0-9\u4e00-\u9fa5]+/g, ' ')
     .replace(/\s+/g, ' ')
     .trim()
-}
-
-function stopMediaStream(stream: MediaStream) {
-  stream.getTracks().forEach((track) => track.stop())
 }
 
 function pipAbsoluteContentRect(state: PIPOverlayState) {
@@ -2805,6 +2895,7 @@ function SelectMenu({
   const [dropDirection, setDropDirection] = useState<'down' | 'up'>('down')
   const rootRef = useRef<HTMLDivElement | null>(null)
   const pointerInsideAtRef = useRef(0)
+  const pointerInsideRef = useRef(false)
   const selected = options.find((option) => option.value === value) ?? options.find((option) => !option.disabled) ?? options[0]
   const selectOption = (option: SelectMenuOption) => {
     if (option.disabled) return
@@ -2824,12 +2915,20 @@ function SelectMenu({
     if (!open) return
     updateDropDirection()
     const close = () => setOpen(false)
+    const markPointerInside = (inside: boolean) => {
+      pointerInsideRef.current = inside
+      if (inside) pointerInsideAtRef.current = Date.now()
+    }
     const onPointerDown = (event: PointerEvent) => {
       if (eventPathContains(event, rootRef.current)) {
-        pointerInsideAtRef.current = Date.now()
+        markPointerInside(true)
         return
       }
+      markPointerInside(false)
       close()
+    }
+    const onPointerMove = (event: PointerEvent) => {
+      markPointerInside(eventPathContains(event, rootRef.current))
     }
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key === 'Escape') {
@@ -2837,25 +2936,28 @@ function SelectMenu({
       }
     }
     const onVisibilityChange = () => {
-      if (document.visibilityState !== 'visible') close()
+      if (document.visibilityState !== 'visible' && !pointerInsideRef.current) close()
     }
     const onWindowBlur = () => {
       window.setTimeout(() => {
-        if (Date.now() - pointerInsideAtRef.current < 250) return
+        if (pointerInsideRef.current || Date.now() - pointerInsideAtRef.current < 650) return
         close()
-      }, 0)
+      }, 120)
     }
     document.addEventListener('pointerdown', onPointerDown, true)
+    document.addEventListener('pointermove', onPointerMove, true)
     document.addEventListener('keydown', onKeyDown)
     document.addEventListener('visibilitychange', onVisibilityChange)
     window.addEventListener('resize', updateDropDirection)
     window.addEventListener('blur', onWindowBlur)
     return () => {
       document.removeEventListener('pointerdown', onPointerDown, true)
+      document.removeEventListener('pointermove', onPointerMove, true)
       document.removeEventListener('keydown', onKeyDown)
       document.removeEventListener('visibilitychange', onVisibilityChange)
       window.removeEventListener('resize', updateDropDirection)
       window.removeEventListener('blur', onWindowBlur)
+      pointerInsideRef.current = false
     }
   }, [open, options.length])
 
@@ -2868,6 +2970,11 @@ function SelectMenu({
       ref={rootRef}
       className={`select-menu ${open ? 'open' : ''} drop-${dropDirection} ${disabled ? 'disabled' : ''} ${className}`}
       onPointerDownCapture={() => {
+        pointerInsideRef.current = true
+        pointerInsideAtRef.current = Date.now()
+      }}
+      onPointerMoveCapture={() => {
+        pointerInsideRef.current = true
         pointerInsideAtRef.current = Date.now()
       }}
     >

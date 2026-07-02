@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
@@ -9,6 +10,7 @@ import (
 	"runtime"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/lemon-casino/RecordingFreedom/app/internal/appdata"
 	"github.com/lemon-casino/RecordingFreedom/app/internal/capture"
@@ -47,6 +49,13 @@ type ExportRecordingResult struct {
 	Export exporter.Result `json:"export"`
 }
 
+type ClientLogEvent struct {
+	Component string            `json:"component"`
+	Event     string            `json:"event"`
+	Message   string            `json:"message,omitempty"`
+	Fields    map[string]string `json:"fields,omitempty"`
+}
+
 type RecordingFreedomService struct {
 	appData   *appdata.Service
 	capture   *capture.Service
@@ -72,6 +81,7 @@ type RecordingFreedomService struct {
 	micLevelSource    audioLevelCaptureSource
 	micLevelDevice    string
 	micLevelToken     uint64
+	logMu             sync.Mutex
 }
 
 func NewRecordingFreedomService() *RecordingFreedomService {
@@ -112,6 +122,80 @@ func (s *RecordingFreedomService) setPIPOverlayWindow(window *application.Webvie
 
 func (s *RecordingFreedomService) setTrayLocaleUpdater(update func(settings.Locale)) {
 	s.trayLocale = update
+}
+
+func (s *RecordingFreedomService) LogClientEvent(event ClientLogEvent) error {
+	return s.writeLog("client."+strings.TrimSpace(event.Component), strings.TrimSpace(event.Event), strings.TrimSpace(event.Message), event.Fields)
+}
+
+func (s *RecordingFreedomService) logEvent(component string, event string, fields map[string]string) {
+	_ = s.writeLog(component, event, "", fields)
+}
+
+func (s *RecordingFreedomService) writeLog(component string, event string, message string, fields map[string]string) error {
+	component = strings.TrimSpace(component)
+	event = strings.TrimSpace(event)
+	if component == "" {
+		component = "app"
+	}
+	if event == "" {
+		event = "event"
+	}
+	dir := s.logDir()
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		return err
+	}
+	now := time.Now()
+	entry := map[string]any{
+		"timestamp": now.Format(time.RFC3339Nano),
+		"component": component,
+		"event":     event,
+	}
+	if message != "" {
+		entry["message"] = message
+	}
+	if len(fields) > 0 {
+		entry["fields"] = fields
+	}
+	line, err := json.Marshal(entry)
+	if err != nil {
+		return err
+	}
+	path := filepath.Join(dir, "recordingfreedom-"+now.Format("2006-01-02")+".log")
+	s.logMu.Lock()
+	defer s.logMu.Unlock()
+	file, err := os.OpenFile(path, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o644)
+	if err != nil {
+		return err
+	}
+	defer file.Close()
+	if _, err := file.Write(append(line, '\n')); err != nil {
+		return err
+	}
+	return nil
+}
+
+func (s *RecordingFreedomService) logDir() string {
+	root := ""
+	if s != nil && s.appData != nil {
+		root, _ = s.appData.RootDir()
+	}
+	if strings.TrimSpace(root) == "" {
+		root = softwareRootFallback()
+	}
+	return filepath.Join(root, "logs")
+}
+
+func softwareRootFallback() string {
+	if executable, err := os.Executable(); err == nil {
+		if dir := strings.TrimSpace(filepath.Dir(executable)); dir != "" && dir != "." {
+			return dir
+		}
+	}
+	if workingDir, err := os.Getwd(); err == nil && strings.TrimSpace(workingDir) != "" {
+		return workingDir
+	}
+	return "."
 }
 
 func (s *RecordingFreedomService) restoreCapsuleWindow() {
@@ -469,6 +553,15 @@ func (s *RecordingFreedomService) StartRecording(req recording.StartRequest) (re
 		media = s.devices.ListMediaDevices()
 		req = enrichRecordingCameraRequest(req, media)
 	}
+	s.logEvent("recording", "start-request", map[string]string{
+		"sourceType":        string(req.SourceType),
+		"cameraEnabled":     fmt.Sprint(req.Camera.Enabled),
+		"cameraDeviceId":    strings.TrimSpace(req.Camera.DeviceID),
+		"cameraNativeId":    strings.TrimSpace(req.Camera.DeviceNativeID),
+		"cameraPipPreset":   strings.TrimSpace(req.Camera.PIPPreset),
+		"microphoneEnabled": fmt.Sprint(req.Audio.Microphone),
+		"systemAudio":       fmt.Sprint(req.Audio.System),
+	})
 	if summary, blocked := s.blockingRecordingPreflight(req, media); blocked {
 		err := fmt.Errorf("preflight blocked: %s", firstBlockedPreflightReason(summary))
 		s.emitRecordingStatus(recording.StatusEvent{

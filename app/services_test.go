@@ -1,6 +1,8 @@
 package main
 
 import (
+	"bytes"
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"testing"
@@ -39,6 +41,43 @@ func TestBootstrapIncludesStorageStatus(t *testing.T) {
 	}
 	if bootstrap.Storage.Status == "" {
 		t.Fatalf("storage status is empty: %#v", bootstrap.Storage)
+	}
+}
+
+func TestLogClientEventWritesRootLogFile(t *testing.T) {
+	root := t.TempDir()
+	service := &RecordingFreedomService{appData: appdata.NewService(root)}
+
+	if err := service.LogClientEvent(ClientLogEvent{
+		Component: "pip-camera",
+		Event:     "stream-error",
+		Fields: map[string]string{
+			"error": "NotReadableError",
+		},
+	}); err != nil {
+		t.Fatalf("LogClientEvent() error = %v", err)
+	}
+	matches, err := filepath.Glob(filepath.Join(root, "logs", "recordingfreedom-*.log"))
+	if err != nil {
+		t.Fatalf("Glob(logs) error = %v", err)
+	}
+	if len(matches) != 1 {
+		t.Fatalf("log files = %#v, want one root logs file", matches)
+	}
+	data, err := os.ReadFile(matches[0])
+	if err != nil {
+		t.Fatalf("ReadFile(log) error = %v", err)
+	}
+	var entry map[string]any
+	if err := json.Unmarshal(bytes.TrimSpace(data), &entry); err != nil {
+		t.Fatalf("log JSON = %q, error = %v", data, err)
+	}
+	if entry["component"] != "client.pip-camera" || entry["event"] != "stream-error" {
+		t.Fatalf("entry = %#v, want client pip-camera stream-error", entry)
+	}
+	fields, ok := entry["fields"].(map[string]any)
+	if !ok || fields["error"] != "NotReadableError" {
+		t.Fatalf("fields = %#v, want error field", entry["fields"])
 	}
 }
 

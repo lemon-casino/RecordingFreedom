@@ -2,8 +2,8 @@ package main
 
 import (
 	"embed"
-
 	"log"
+	"runtime"
 
 	"github.com/lemon-casino/RecordingFreedom/app/internal/recording"
 	"github.com/lemon-casino/RecordingFreedom/app/internal/settings"
@@ -30,6 +30,7 @@ func init() {
 
 func main() {
 	recordingFreedom := NewRecordingFreedomService()
+	recordingFreedom.logEvent("app", "startup", map[string]string{"platform": runtime.GOOS})
 
 	app := application.New(application.Options{
 		Name:        "RecordingFreedom",
