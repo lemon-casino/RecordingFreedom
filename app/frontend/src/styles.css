@@ -75,11 +75,24 @@ input {
   font: inherit;
 }
 
-button {
+button:not(:disabled),
+select:not(:disabled),
+input[type="button"]:not(:disabled),
+input[type="checkbox"]:not(:disabled),
+input[type="file"]:not(:disabled),
+input[type="radio"]:not(:disabled),
+input[type="range"]:not(:disabled),
+input[type="reset"]:not(:disabled),
+input[type="submit"]:not(:disabled),
+[role="button"]:not([aria-disabled="true"]),
+[role="option"]:not([aria-disabled="true"]) {
   cursor: pointer;
 }
 
-button:disabled {
+button:disabled,
+select:disabled,
+input:disabled,
+[aria-disabled="true"] {
   cursor: not-allowed;
 }
 
@@ -118,7 +131,12 @@ button:disabled {
     inset 0 -1px 0 rgba(0, 0, 0, 0.36);
   backdrop-filter: blur(22px) saturate(150%);
   transition: border-color 180ms ease, box-shadow 180ms ease;
+  cursor: grab;
   --wails-draggable: drag;
+}
+
+.capsule:active {
+  cursor: grabbing;
 }
 
 .rf-shell.is-collapsed .storage-strip {
@@ -146,7 +164,12 @@ button:disabled {
   border-radius: var(--radius-pill);
   background: transparent;
   color: var(--quiet);
+  cursor: grab;
   --wails-draggable: drag;
+}
+
+.grabber:active {
+  cursor: grabbing;
 }
 
 .grabber span {
@@ -622,6 +645,7 @@ body.rf-recorder-window .select-menu-list {
   min-height: 44px;
   padding: 6px 8px 6px 12px;
   color: var(--text);
+  cursor: pointer;
 }
 
 .switch-row span {
@@ -855,34 +879,6 @@ input {
 
 .meter-status.error {
   color: rgba(251, 113, 133, 0.92);
-}
-
-.camera-live-preview {
-  position: relative;
-  width: 100%;
-  aspect-ratio: 16 / 9;
-  max-height: 132px;
-  overflow: hidden;
-  border: 1px solid rgba(17, 183, 167, 0.22);
-  border-radius: 18px;
-  background: rgba(8, 12, 16, 0.58);
-}
-
-.camera-live-preview video {
-  width: 100%;
-  height: 100%;
-  display: block;
-  object-fit: cover;
-  opacity: 0;
-  transition: opacity 180ms ease;
-}
-
-.camera-live-preview.ready video {
-  opacity: 1;
-}
-
-.camera-live-preview video.mirrored {
-  transform: scaleX(-1);
 }
 
 .pip-edit-button {
@@ -1366,8 +1362,12 @@ input {
   border-radius: var(--radius-pill);
   background: rgba(20, 24, 28, 0.48);
   color: #ffffff;
-  cursor: move;
+  cursor: grab;
   transform: translate(-50%, -50%);
+}
+
+.region-edit-move:active {
+  cursor: grabbing;
 }
 
 .region-edit-move span,
@@ -1614,7 +1614,7 @@ input {
 .pip-live-media video {
   width: 100%;
   height: 100%;
-  object-fit: cover;
+  object-fit: contain;
   opacity: 0;
   transition: opacity 180ms ease;
 }
@@ -1689,11 +1689,15 @@ input {
   border-radius: var(--radius-pill);
   background: rgba(10, 14, 18, 0.48);
   color: #ffffff;
-  cursor: move;
+  cursor: grab;
   opacity: 0;
   backdrop-filter: blur(12px);
   transform: translate(-50%, -50%);
   transition: opacity 140ms ease, background 140ms ease;
+}
+
+.pip-drag-anchor:active {
+  cursor: grabbing;
 }
 
 .pip-live-frame:hover .pip-drag-anchor,

@@ -9,10 +9,19 @@ import (
 
 const (
 	mp4HandlerTypeSound = "soun"
+	mp4HandlerTypeVideo = "vide"
 	mp4MaxProbeDepth    = 8
 )
 
 func mp4HasAudioTrack(path string) (bool, error) {
+	return mp4HasHandlerType(path, mp4HandlerTypeSound)
+}
+
+func mp4HasVideoTrack(path string) (bool, error) {
+	return mp4HasHandlerType(path, mp4HandlerTypeVideo)
+}
+
+func mp4HasHandlerType(path string, handlerType string) (bool, error) {
 	file, err := os.Open(path)
 	if err != nil {
 		return false, err
@@ -26,10 +35,10 @@ func mp4HasAudioTrack(path string) (bool, error) {
 	if info.IsDir() || info.Size() == 0 {
 		return false, nil
 	}
-	return scanMP4BoxesForAudioTrack(file, 0, uint64(info.Size()), 0)
+	return scanMP4BoxesForHandlerType(file, 0, uint64(info.Size()), 0, handlerType)
 }
 
-func scanMP4BoxesForAudioTrack(file *os.File, start uint64, end uint64, depth int) (bool, error) {
+func scanMP4BoxesForHandlerType(file *os.File, start uint64, end uint64, depth int, handlerType string) (bool, error) {
 	if depth > mp4MaxProbeDepth {
 		return false, nil
 	}
@@ -44,17 +53,17 @@ func scanMP4BoxesForAudioTrack(file *os.File, start uint64, end uint64, depth in
 		}
 		switch box.kind {
 		case "hdlr":
-			handlerType, err := readMP4HandlerType(file, box)
+			boxHandlerType, err := readMP4HandlerType(file, box)
 			if err != nil {
 				return false, err
 			}
-			if handlerType == mp4HandlerTypeSound {
+			if boxHandlerType == handlerType {
 				return true, nil
 			}
 		case "moov", "trak", "mdia":
-			hasAudio, err := scanMP4BoxesForAudioTrack(file, box.payloadStart, box.end, depth+1)
-			if err != nil || hasAudio {
-				return hasAudio, err
+			matched, err := scanMP4BoxesForHandlerType(file, box.payloadStart, box.end, depth+1, handlerType)
+			if err != nil || matched {
+				return matched, err
 			}
 		}
 		offset = box.end

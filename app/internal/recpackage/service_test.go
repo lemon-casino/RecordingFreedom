@@ -494,9 +494,13 @@ func TestValidateReadyRequiresCameraSidecarWhenCameraEnabled(t *testing.T) {
 	if err := service.ValidateReady(plan.Package.ManifestPath); err == nil || !strings.Contains(err.Error(), "not readable media") {
 		t.Fatalf("ValidateReady(empty webcam) error = %v, want readable media error", err)
 	}
-	if err := os.WriteFile(plan.WebcamVideoPath, []byte("real webcam media"), 0o644); err != nil {
-		t.Fatalf("WriteFile(webcam) error = %v", err)
+	if err := os.WriteFile(plan.WebcamVideoPath, bytes.Repeat([]byte{1}, 48), 0o644); err != nil {
+		t.Fatalf("WriteFile(invalid webcam) error = %v", err)
 	}
+	if err := service.ValidateReady(plan.Package.ManifestPath); err == nil || !strings.Contains(err.Error(), "video track") {
+		t.Fatalf("ValidateReady(invalid webcam) error = %v, want video track error", err)
+	}
+	writeMinimalMP4(t, plan.WebcamVideoPath, "vide")
 	if err := service.ValidateReady(plan.Package.ManifestPath); err != nil {
 		t.Fatalf("ValidateReady(webcam sidecar) error = %v", err)
 	}

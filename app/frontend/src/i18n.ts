@@ -162,8 +162,6 @@ export type RecorderCopy = {
     cameraSidecar: string
     cameraDevice: string
     cameraEnabled: string
-    cameraPreviewLive: string
-    cameraPreviewUnavailable: string
     cameraOff: string
     pipPreset: string
     pipShape: string
@@ -389,8 +387,6 @@ const zhCN: RecorderCopy = {
     cameraSidecar: '摄像头',
     cameraDevice: '摄像头设备',
     cameraEnabled: '摄像头已开启，录制时会合成为屏幕画中画',
-    cameraPreviewLive: '摄像头预览中',
-    cameraPreviewUnavailable: '摄像头预览不可用',
     cameraOff: '摄像头已关闭',
     pipPreset: '画中画位置',
     pipShape: '画中画形状',
@@ -747,8 +743,6 @@ const en: RecorderCopy = {
     cameraSidecar: 'Camera',
     cameraDevice: 'Camera device',
     cameraEnabled: 'Camera is on and will be composed as screen picture-in-picture',
-    cameraPreviewLive: 'Camera preview live',
-    cameraPreviewUnavailable: 'Camera preview unavailable',
     cameraOff: 'Camera off',
     pipPreset: 'PIP preset',
     pipShape: 'PIP shape',

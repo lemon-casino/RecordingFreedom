@@ -287,8 +287,6 @@ function App() {
   const [recoveryMessage, setRecoveryMessage] = useState<RecoveryMessageState | null>(null)
   const [exportBusy, setExportBusy] = useState(false)
   const [exportMessage, setExportMessage] = useState<ExportMessageState | null>(null)
-  const [cameraPreviewReady, setCameraPreviewReady] = useState(false)
-  const [cameraPreviewError, setCameraPreviewError] = useState<string | null>(null)
   const [settingsLoaded, setSettingsLoaded] = useState(false)
   const [capabilities, setCapabilities] = useState<CaptureCapabilities>(fallbackCapabilities)
   const [appData, setAppData] = useState<AppDataInfo>(fallbackAppData)
@@ -302,7 +300,6 @@ function App() {
   const popoverRef = useRef<HTMLDivElement | null>(null)
   const settingsPanelRef = useRef<HTMLElement | null>(null)
   const closePromptRef = useRef<HTMLElement | null>(null)
-  const cameraPreviewRef = useRef<HTMLVideoElement | null>(null)
   const selectedMicRef = useRef(selectedMic)
   const rnnoiseActive = microphone && noiseSuppression
 
@@ -422,10 +419,8 @@ function App() {
   const cameraUnavailableText = selectedCameraDevice?.unavailableReason || selectedCameraDevice?.meta || copy.pipOverlay.cameraUnavailable
   const cameraStatusText = !hasUsableCamera || !selectedCameraUsable
     ? cameraUnavailableText
-    : cameraPreviewError && activePanel === 'camera'
-      ? `${copy.panels.cameraPreviewUnavailable}: ${cameraPreviewError}`
     : camera
-      ? (cameraPreviewReady && activePanel === 'camera' ? copy.panels.cameraPreviewLive : copy.panels.cameraEnabled)
+      ? copy.panels.cameraEnabled
       : copy.panels.cameraOff
   const micMonitorStatusText = micMonitorError
     ? copy.panels.microphoneLevelError
@@ -630,54 +625,21 @@ function App() {
   }, [camera, isSettingsWindow, recordingMode])
 
   useEffect(() => {
+    if (isRecording) return
     const shouldPreview = !isSettingsWindow &&
-      activePanel === 'camera' &&
       camera &&
       recordingMode === 'video' &&
-      !isRecording &&
       hasUsableCamera &&
       selectedCameraUsable
 
     if (!shouldPreview) {
-      setCameraPreviewReady(false)
-      setCameraPreviewError(null)
-      if (cameraPreviewRef.current) cameraPreviewRef.current.srcObject = null
-      return
-    }
-    if (!navigator.mediaDevices?.getUserMedia) {
-      setCameraPreviewReady(false)
-      setCameraPreviewError('media-devices-unavailable')
+      void hidePipOverlay()
       return
     }
 
-    let cancelled = false
-    let stream: MediaStream | null = null
-    setCameraPreviewReady(false)
-    setCameraPreviewError(null)
-    void openPipCameraStream(pipCameraTarget).then((nextStream) => {
-      if (cancelled) {
-        stopMediaStream(nextStream)
-        return
-      }
-      stream = nextStream
-      if (cameraPreviewRef.current) {
-        cameraPreviewRef.current.srcObject = nextStream
-      }
-      setCameraPreviewReady(true)
-      setCameraPreviewError(null)
-    }).catch((error) => {
-      if (cancelled) return
-      setCameraPreviewReady(false)
-      setCameraPreviewError(readableError(error))
-    })
-
-    return () => {
-      cancelled = true
-      if (stream) stopMediaStream(stream)
-      if (cameraPreviewRef.current) cameraPreviewRef.current.srcObject = null
-      setCameraPreviewReady(false)
-    }
-  }, [activePanel, camera, hasUsableCamera, isRecording, isSettingsWindow, pipCameraTarget, recordingMode, selectedCameraUsable])
+    void showPipOverlay(ensureVisiblePipConfig(currentPipConfig), 'edit', pipCameraTarget)
+      .catch((error) => console.info('PIP camera preview unavailable:', error))
+  }, [camera, currentPipConfig, hasUsableCamera, isRecording, isSettingsWindow, pipCameraTarget, recordingMode, selectedCameraUsable])
 
   useEffect(() => {
     if (!recordingConfigLocked) return
@@ -893,6 +855,7 @@ function App() {
         setLastStatusMessage({key: 'preflightBlocked'})
         return
       }
+      await hidePipOverlay()
       const session = await startRecording(request)
       applyRecordingStatus({
         status: session.status ?? 'recording',
@@ -1604,11 +1567,6 @@ function App() {
                 <div className={`meter-status ${!hasUsableCamera || !selectedCameraUsable ? 'error' : ''}`}>
                   <span>{cameraStatusText}</span>
                 </div>
-                {camera && !cameraPreviewError && !recordingConfigLocked && selectedCameraUsable && (
-                  <div className={`camera-live-preview ${cameraPreviewReady ? 'ready' : ''}`}>
-                    <video ref={cameraPreviewRef} className={pipMirror ? 'mirrored' : ''} autoPlay muted playsInline />
-                  </div>
-                )}
                 <label className="field-label" htmlFor="pip-preset">{copy.panels.pipPreset}</label>
                 <SelectMenu
                   id="pip-preset"
@@ -1815,7 +1773,22 @@ function PIPOverlayWindow() {
   }, [])
 
   useEffect(() => {
-    if (!overlayState || overlayState.config.preset === 'off') return
+    if (!overlayState || overlayState.config.preset === 'off') {
+      setCameraReady(false)
+      setCameraError(null)
+      if (videoRef.current) {
+        videoRef.current.srcObject = null
+      }
+      return
+    }
+    if (overlayState.mode === 'recording') {
+      setCameraReady(false)
+      setCameraError(null)
+      if (videoRef.current) {
+        videoRef.current.srcObject = null
+      }
+      return
+    }
     if (!navigator.mediaDevices?.getUserMedia) {
       setCameraReady(false)
       setCameraError('media-devices-unavailable')

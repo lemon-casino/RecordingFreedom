@@ -407,8 +407,16 @@ func (s *Service) ValidateReady(manifestPath string) error {
 		return err
 	}
 	if manifest.Camera.Enabled {
-		if err := requireReadablePackageFile(packageDir, "webcamVideoPath", manifest.Media.WebcamVideoPath, false); err != nil {
+		if err := requireReadablePackageFileMinSize(packageDir, "webcamVideoPath", manifest.Media.WebcamVideoPath, false, 45); err != nil {
 			return err
+		}
+		webcamFile := filepath.Join(packageDir, filepath.Clean(manifest.Media.WebcamVideoPath))
+		hasVideoTrack, err := mp4HasVideoTrack(webcamFile)
+		if err != nil {
+			return fmt.Errorf("webcamVideoPath video track probe failed: %w", err)
+		}
+		if !hasVideoTrack {
+			return fmt.Errorf("webcamVideoPath %q video track is missing", manifest.Media.WebcamVideoPath)
 		}
 	}
 	if manifest.Audio.System {

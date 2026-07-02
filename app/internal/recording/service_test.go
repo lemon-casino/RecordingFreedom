@@ -578,7 +578,7 @@ func (b *nativeProbeBackend) Start(_ context.Context, req BackendStartRequest) (
 		}
 	}
 	if b.writeWebcam && plan.WebcamVideoPath != "" {
-		if err := os.WriteFile(plan.WebcamVideoPath, []byte("native webcam media"), 0o644); err != nil {
+		if err := os.WriteFile(plan.WebcamVideoPath, minimalMP4Data("vide"), 0o644); err != nil {
 			return BackendStartResult{}, err
 		}
 	}
@@ -660,15 +660,20 @@ func nativeSyncDiagnostics(includeWebcam bool) *recpackage.ManifestSyncDiagnosti
 
 func writeMinimalMP4File(t *testing.T, path string, handlerType string) {
 	t.Helper()
+	data := minimalMP4Data(handlerType)
+	if err := os.WriteFile(path, data, 0o644); err != nil {
+		t.Fatalf("WriteFile(minimal mp4) error = %v", err)
+	}
+}
+
+func minimalMP4Data(handlerType string) []byte {
 	payload := make([]byte, 0, 12)
 	payload = append(payload, 0, 0, 0, 0)
 	payload = append(payload, 0, 0, 0, 0)
 	payload = append(payload, []byte(handlerType)...)
 	data := mp4Box("ftyp", []byte("isom0000"))
 	data = append(data, mp4Box("moov", mp4Box("trak", mp4Box("mdia", mp4Box("hdlr", payload))))...)
-	if err := os.WriteFile(path, data, 0o644); err != nil {
-		t.Fatalf("WriteFile(minimal mp4) error = %v", err)
-	}
+	return data
 }
 
 func mp4Box(kind string, payload []byte) []byte {
