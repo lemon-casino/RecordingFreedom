@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/lemon-casino/RecordingFreedom/app/internal/pip"
 	"github.com/lemon-casino/RecordingFreedom/app/internal/recording"
@@ -175,6 +176,14 @@ func (s *RecordingFreedomService) applyPIPOverlayState(state PIPOverlayState) {
 	s.pipOverlay.SetBounds(windowBounds)
 	state.CaptureExcluded = setWindowCaptureExcluded(s.pipOverlay, true)
 	s.broadcastPIPOverlayState(state)
+	go s.rebroadcastPIPOverlayState(state)
+}
+
+func (s *RecordingFreedomService) rebroadcastPIPOverlayState(state PIPOverlayState) {
+	for _, delay := range []time.Duration{120 * time.Millisecond, 500 * time.Millisecond} {
+		time.Sleep(delay)
+		s.broadcastPIPOverlayState(state)
+	}
 }
 
 func (s *RecordingFreedomService) broadcastPIPOverlayState(state PIPOverlayState) {

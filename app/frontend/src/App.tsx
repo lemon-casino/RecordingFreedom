@@ -379,6 +379,13 @@ function App() {
     () => availableCameras.some(isUsableCameraDevice),
     [availableCameras],
   )
+  const selectedCameraUsable = selectedCameraDevice ? isUsableCameraDevice(selectedCameraDevice) : hasUsableCamera
+  const cameraUnavailableText = selectedCameraDevice?.unavailableReason || selectedCameraDevice?.meta || copy.pipOverlay.cameraUnavailable
+  const cameraStatusText = !hasUsableCamera || !selectedCameraUsable
+    ? cameraUnavailableText
+    : camera
+      ? copy.panels.cameraEnabled
+      : copy.panels.cameraOff
   const micMonitorStatusText = micMonitorError
     ? copy.panels.microphoneLevelError
     : !microphone
@@ -1366,7 +1373,12 @@ function App() {
 
             {activePanel === 'camera' && (
               <div className="menu-stack">
-                <SwitchRow label={copy.panels.cameraSidecar} checked={camera && hasUsableCamera} disabled={recordingConfigLocked || !hasUsableCamera} onChange={setCamera} />
+                <SwitchRow
+                  label={copy.panels.cameraSidecar}
+                  checked={camera}
+                  disabled={recordingConfigLocked || !hasUsableCamera}
+                  onChange={(value) => setCamera(value && hasUsableCamera)}
+                />
                 <label className="field-label" htmlFor="camera-device">{copy.panels.cameraDevice}</label>
                 <SelectMenu
                   id="camera-device"
@@ -1375,11 +1387,9 @@ function App() {
                   options={availableCameras.map((device) => ({value: device.id, label: mediaDeviceName(device, copy), disabled: !isUsableCameraDevice(device)}))}
                   onChange={setSelectedCamera}
                 />
-                {!hasUsableCamera && (
-                  <div className="meter-status">
-                    <span>{selectedCameraDevice?.unavailableReason || selectedCameraDevice?.meta || copy.pipOverlay.cameraUnavailable}</span>
-                  </div>
-                )}
+                <div className={`meter-status ${!hasUsableCamera || !selectedCameraUsable ? 'error' : ''}`}>
+                  <span>{cameraStatusText}</span>
+                </div>
                 <label className="field-label" htmlFor="pip-preset">{copy.panels.pipPreset}</label>
                 <SelectMenu
                   id="pip-preset"
@@ -1630,7 +1640,7 @@ function PIPOverlayWindow() {
         videoRef.current.srcObject = null
       }
     }
-  }, [overlayState?.camera?.deviceId, overlayState?.camera?.name, overlayState?.camera?.nativeId, overlayState?.cameraName, overlayState?.config.preset])
+  }, [overlayState?.camera?.deviceId, overlayState?.camera?.name, overlayState?.camera?.nativeId, overlayState?.cameraName, overlayState?.config.preset, overlayState?.mode])
 
   useEffect(() => () => {
     if (previewFrameRef.current !== null) {
@@ -1729,6 +1739,15 @@ function PIPOverlayWindow() {
   }
 
   const content = overlayState?.config.preset !== 'off' ? overlayState?.contentBounds : undefined
+  const cameraName = overlayState?.camera?.name || overlayState?.cameraName || copy.panels.cameraSidecar
+  const cameraPlaceholderTitle = overlayState?.mode === 'recording'
+    ? copy.pipOverlay.cameraRecording
+    : cameraError
+      ? copy.pipOverlay.cameraUnavailable
+      : copy.pipOverlay.cameraPreparing
+  const cameraPlaceholderDetail = overlayState?.mode === 'recording'
+    ? cameraName
+    : cameraError || cameraName
   const featherPx = content && overlayState ? Math.max(2, Math.round(content.width * overlayState.config.edgeFeather)) : 12
   const frameStyle = content ? {
     left: content.x,
@@ -1751,9 +1770,10 @@ function PIPOverlayWindow() {
           <div className={`pip-live-media ${overlayState.config.shape} ${overlayState.config.mirror ? 'mirrored' : ''}`}>
             <video ref={videoRef} autoPlay muted playsInline className={cameraReady ? 'ready' : ''} />
             {!cameraReady && (
-              <div className="pip-camera-placeholder">
+              <div className={`pip-camera-placeholder ${overlayState.mode === 'recording' ? 'recording' : cameraError ? 'error' : 'pending'}`}>
                 <Camera size={24} />
-                <span>{cameraError ? copy.pipOverlay.cameraUnavailable : overlayState.camera?.name || overlayState.cameraName || copy.panels.cameraSidecar}</span>
+                <strong>{cameraPlaceholderTitle}</strong>
+                <span>{cameraPlaceholderDetail}</span>
               </div>
             )}
           </div>

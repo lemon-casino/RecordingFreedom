@@ -853,6 +853,10 @@ input {
   font-size: 11px;
 }
 
+.meter-status.error {
+  color: rgba(251, 113, 133, 0.92);
+}
+
 .camera-preview {
   display: flex;
   align-items: center;
@@ -1654,8 +1658,10 @@ input {
 .pip-camera-placeholder {
   position: absolute;
   inset: 0;
-  display: grid;
-  place-items: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
   gap: 8px;
   padding: 18px;
   background:
@@ -1663,6 +1669,28 @@ input {
     linear-gradient(145deg, rgba(18, 23, 28, 0.9), rgba(7, 10, 13, 0.62));
   color: #d7fffb;
   text-align: center;
+}
+
+.pip-camera-placeholder.recording {
+  background:
+    radial-gradient(circle at 50% 38%, rgba(17, 183, 167, 0.38), transparent 48%),
+    linear-gradient(145deg, rgba(18, 23, 28, 0.82), rgba(7, 10, 13, 0.52));
+}
+
+.pip-camera-placeholder.error {
+  background:
+    radial-gradient(circle at 50% 38%, rgba(244, 63, 94, 0.26), transparent 48%),
+    linear-gradient(145deg, rgba(18, 23, 28, 0.9), rgba(7, 10, 13, 0.62));
+}
+
+.pip-camera-placeholder strong {
+  max-width: 88%;
+  overflow: hidden;
+  color: #d7fffb;
+  font-size: 12px;
+  font-weight: 900;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .pip-camera-placeholder span {

@@ -25,6 +25,7 @@ func createCapsuleWindow(app *application.App) *application.WebviewWindow {
 		DisableResize:  true,
 		HideOnEscape:   true,
 		BackgroundType: application.BackgroundTypeTransparent,
+		Permissions:    mediaPreviewPermissions(),
 		Mac: application.MacWindow{
 			Backdrop: application.MacBackdropTransparent,
 			TitleBar: application.MacTitleBar{
@@ -183,6 +184,7 @@ func createPIPOverlayWindow(app *application.App) *application.WebviewWindow {
 		Hidden:           true,
 		BackgroundType:   application.BackgroundTypeTransparent,
 		BackgroundColour: application.NewRGBA(0, 0, 0, 0),
+		Permissions:      mediaPreviewPermissions(),
 		Mac: application.MacWindow{
 			Backdrop: application.MacBackdropTransparent,
 			TitleBar: application.MacTitleBar{
@@ -212,6 +214,13 @@ func createPIPOverlayWindow(app *application.App) *application.WebviewWindow {
 	})
 
 	return window
+}
+
+func mediaPreviewPermissions() map[application.PermissionType]application.Permission {
+	return map[application.PermissionType]application.Permission{
+		application.PermissionCamera:     application.PermissionAllow,
+		application.PermissionMicrophone: application.PermissionAllow,
+	}
 }
 
 type trayMenuCopy struct {

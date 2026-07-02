@@ -156,6 +156,8 @@ export type RecorderCopy = {
     microphoneLevelError: string
     cameraSidecar: string
     cameraDevice: string
+    cameraEnabled: string
+    cameraOff: string
     pipPreset: string
     pipShape: string
     pipMirror: string
@@ -171,6 +173,8 @@ export type RecorderCopy = {
     mirror: string
     close: string
     cameraUnavailable: string
+    cameraPreparing: string
+    cameraRecording: string
   }
   statusChips: Record<RecordingState, string>
   statusMessages: Record<StatusMessageKey, string>
@@ -375,6 +379,8 @@ const zhCN: RecorderCopy = {
     microphoneLevelError: '麦克风监听失败',
     cameraSidecar: '摄像头旁路',
     cameraDevice: '摄像头设备',
+    cameraEnabled: '摄像头会随下一次视频录制一起采集',
+    cameraOff: '摄像头已关闭',
     pipPreset: '画中画位置',
     pipShape: '画中画形状',
     pipMirror: '镜像摄像头',
@@ -390,6 +396,8 @@ const zhCN: RecorderCopy = {
     mirror: '镜像摄像头',
     close: '关闭画中画',
     cameraUnavailable: '摄像头预览不可用',
+    cameraPreparing: '正在打开摄像头预览',
+    cameraRecording: '摄像头录制中',
   },
   statusChips: {
     idle: '待机',
@@ -723,6 +731,8 @@ const en: RecorderCopy = {
     microphoneLevelError: 'Microphone monitor failed',
     cameraSidecar: 'Camera sidecar',
     cameraDevice: 'Camera device',
+    cameraEnabled: 'Camera will be captured with the next video recording',
+    cameraOff: 'Camera off',
     pipPreset: 'PIP preset',
     pipShape: 'PIP shape',
     pipMirror: 'Mirror camera',
@@ -738,6 +748,8 @@ const en: RecorderCopy = {
     mirror: 'Mirror camera',
     close: 'Close PIP',
     cameraUnavailable: 'Camera preview unavailable',
+    cameraPreparing: 'Opening camera preview',
+    cameraRecording: 'Camera recording',
   },
   statusChips: {
     idle: 'IDLE',
