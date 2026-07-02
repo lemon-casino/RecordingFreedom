@@ -74,3 +74,28 @@ func TestCapsuleHitRegionsDisabledUntilValidGeometry(t *testing.T) {
 		t.Fatalf("empty geometry handled/hit = %v/%v, want false/true", handled, hit)
 	}
 }
+
+func TestCapsuleHitRegionsUpdateSkipsUnchangedState(t *testing.T) {
+	var regions capsuleWindowHitRegions
+	request := CapsuleWindowHitRegionsRequest{
+		Enabled:        true,
+		ViewportWidth:  760,
+		ViewportHeight: 96,
+		Regions: []CapsuleWindowHitRegion{
+			{X: 18, Y: 8, Width: 704, Height: 64, Kind: "pill", Radius: 999},
+		},
+	}
+
+	if _, changed := regions.Update(request); !changed {
+		t.Fatalf("first update changed = false, want true")
+	}
+	if _, changed := regions.Update(request); changed {
+		t.Fatalf("unchanged update changed = true, want false")
+	}
+	if _, changed := regions.Update(CapsuleWindowHitRegionsRequest{}); !changed {
+		t.Fatalf("disable update changed = false, want true")
+	}
+	if _, changed := regions.Update(CapsuleWindowHitRegionsRequest{}); changed {
+		t.Fatalf("repeated disabled update changed = true, want false")
+	}
+}

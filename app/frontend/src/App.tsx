@@ -208,6 +208,32 @@ function elementHitRegion(
   return {x, y, width: right - x, height: bottom - y, kind, radius}
 }
 
+function capsuleHitRegionRequestSignature(req: {
+  enabled: boolean
+  viewportWidth: number
+  viewportHeight: number
+  devicePixelRatio: number
+  regions: CapsuleWindowHitRegion[]
+}) {
+  const viewport = [
+    req.enabled ? 1 : 0,
+    Math.round(req.viewportWidth),
+    Math.round(req.viewportHeight),
+    Math.round((req.devicePixelRatio || 1) * 100),
+  ].join(':')
+  const regions = req.regions
+    .map((region) => [
+      Math.round(region.x),
+      Math.round(region.y),
+      Math.round(region.width),
+      Math.round(region.height),
+      region.kind ?? '',
+      Math.round(region.radius ?? 0),
+    ].join(','))
+    .join('|')
+  return `${viewport}|${regions}`
+}
+
 function currentWindowRoute() {
   const hashRoute = window.location.hash.replace(/^#/, '')
   if (hashRoute.startsWith('/')) return hashRoute
@@ -325,6 +351,7 @@ function App() {
   const popoverRef = useRef<HTMLDivElement | null>(null)
   const settingsPanelRef = useRef<HTMLElement | null>(null)
   const closePromptRef = useRef<HTMLElement | null>(null)
+  const capsuleHitRegionSignatureRef = useRef('')
   const floatingPointerInsideAtRef = useRef(0)
   const floatingPointerInsideRef = useRef(false)
   const countdownTimerRef = useRef<number | null>(null)
@@ -707,13 +734,17 @@ function App() {
         ...Array.from(shellRef.current?.querySelectorAll('.select-menu-list') ?? [])
           .map((element) => elementHitRegion(element, viewportWidth, viewportHeight, 'round-rect', 16)),
       ].filter((region): region is CapsuleWindowHitRegion => region !== null)
-      void setCapsuleWindowHitRegions({
+      const request = {
         enabled: regions.length > 0,
         viewportWidth,
         viewportHeight,
         devicePixelRatio: window.devicePixelRatio || 1,
         regions,
-      })
+      }
+      const signature = capsuleHitRegionRequestSignature(request)
+      if (signature === capsuleHitRegionSignatureRef.current) return
+      capsuleHitRegionSignatureRef.current = signature
+      void setCapsuleWindowHitRegions(request)
     }
 
     const schedule = () => {
@@ -721,7 +752,6 @@ function App() {
       frame = window.requestAnimationFrame(publish)
     }
 
-    publish()
     schedule()
     const resizeObserver = typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(schedule)
     ;[
@@ -737,7 +767,12 @@ function App() {
     const mutationObserver = typeof MutationObserver === 'undefined' || !shellElement
       ? null
       : new MutationObserver(schedule)
-    if (shellElement) mutationObserver?.observe(shellElement, {childList: true, subtree: true})
+    if (shellElement) mutationObserver?.observe(shellElement, {
+      childList: true,
+      subtree: true,
+      attributes: true,
+      attributeFilter: ['aria-expanded', 'class', 'style'],
+    })
     window.addEventListener('resize', schedule)
 
     return () => {

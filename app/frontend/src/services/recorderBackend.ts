@@ -1,4 +1,4 @@
-import {Application, Events, Window as WailsWindow} from '@wailsio/runtime'
+import {Application, Events, Screens, Window as WailsWindow} from '@wailsio/runtime'
 import {RecordingFreedomService} from '../../bindings/github.com/lemon-casino/RecordingFreedom/app'
 import {
   type BootstrapState as BoundBootstrapState,
@@ -119,6 +119,7 @@ export type CapsuleWindowExpandDirection = 'down' | 'up'
 let lastCapsuleExpandedDirection: CapsuleWindowExpandDirection = 'down'
 let lastCapsuleExpandedHeight = capsuleWindowExpandedHeight
 let lastCapsuleCollapsedPosition: {x: number; y: number} | null = null
+let lastCapsuleHitRegionsSignature = ''
 
 export async function setCapsuleWindowHitRegions(req: {
   enabled: boolean
@@ -127,8 +128,11 @@ export async function setCapsuleWindowHitRegions(req: {
   devicePixelRatio: number
   regions: CapsuleWindowHitRegion[]
 }): Promise<void> {
+  const signature = capsuleHitRegionsSignature(req)
+  if (signature === lastCapsuleHitRegionsSignature) return
   try {
     await RecordingFreedomService.SetCapsuleWindowHitRegions(req as BoundCapsuleWindowHitRegionsRequest)
+    lastCapsuleHitRegionsSignature = signature
   } catch (error) {
     console.info('Using browser capsule hit-region fallback:', error)
   }
@@ -226,33 +230,39 @@ export async function setCapsuleWindowExpanded(
   compactCollapsed = false,
 ): Promise<CapsuleWindowExpandDirection> {
   try {
+    await restoreCapsuleWindow(false)
     const position = await WailsWindow.Position()
     const size = await WailsWindow.Size().catch(() => ({
       width: expanded ? capsuleWindowWidth : compactCollapsed ? capsuleWindowCompactWidth : capsuleWindowWidth,
       height: expanded ? expandedHeight : capsuleWindowCollapsedHeight,
     }))
+    const workArea = await capsuleWorkAreaForPosition(position, size).catch(() => null)
     const targetCollapsedWidth = compactCollapsed ? capsuleWindowCompactWidth : capsuleWindowWidth
     if (!expanded) {
       const collapsedY = lastCapsuleExpandedDirection === 'up'
         ? lastCapsuleCollapsedPosition?.y ?? position.y + Math.max(0, lastCapsuleExpandedHeight - capsuleWindowCollapsedHeight)
         : position.y
       const collapsedX = Math.round(position.x + (size.width - targetCollapsedWidth) / 2)
+      const collapsedPosition = clampCapsuleWindowPosition(collapsedX, collapsedY, targetCollapsedWidth, capsuleWindowCollapsedHeight, workArea)
       await WailsWindow.SetSize(targetCollapsedWidth, capsuleWindowCollapsedHeight)
-      await WailsWindow.SetPosition(collapsedX, collapsedY)
+      await WailsWindow.SetPosition(collapsedPosition.x, collapsedPosition.y)
+      await restoreCapsuleWindow(false)
       lastCapsuleCollapsedPosition = null
       return lastCapsuleExpandedDirection
     }
 
-    const direction = resolveCapsuleExpandDirection(position.y, expandedHeight, preferredDirection)
+    const direction = resolveCapsuleExpandDirection(position.y, expandedHeight, preferredDirection, workArea)
     const nextY = direction === 'up'
-      ? Math.max(capsuleScreenTop(), position.y + capsuleWindowCollapsedHeight - expandedHeight)
+      ? Math.max(workArea?.y ?? capsuleScreenTop(), position.y + capsuleWindowCollapsedHeight - expandedHeight)
       : position.y
     const expandedX = Math.round(position.x + (size.width - capsuleWindowWidth) / 2)
+    const expandedPosition = clampCapsuleWindowPosition(expandedX, nextY, capsuleWindowWidth, expandedHeight, workArea)
     lastCapsuleExpandedDirection = direction
     lastCapsuleExpandedHeight = expandedHeight
     lastCapsuleCollapsedPosition = {x: position.x, y: position.y}
     await WailsWindow.SetSize(capsuleWindowWidth, expandedHeight)
-    await WailsWindow.SetPosition(expandedX, nextY)
+    await WailsWindow.SetPosition(expandedPosition.x, expandedPosition.y)
+    await restoreCapsuleWindow(false)
     return direction
   } catch (error) {
     console.info('Using browser capsule window size fallback:', error)
@@ -264,13 +274,106 @@ function resolveCapsuleExpandDirection(
   windowY: number,
   expandedHeight: number,
   preferredDirection: CapsuleWindowExpandDirection | 'auto',
+  workArea: CapsuleWorkArea | null = null,
 ): CapsuleWindowExpandDirection {
   if (preferredDirection === 'up' || preferredDirection === 'down') return preferredDirection
-  const top = capsuleScreenTop()
-  const bottom = capsuleScreenBottom()
+  const top = workArea?.y ?? capsuleScreenTop()
+  const bottom = workArea ? workArea.y + workArea.height : capsuleScreenBottom()
   const wouldOverflowBottom = windowY + expandedHeight > bottom
   const canFitAbove = windowY + capsuleWindowCollapsedHeight - expandedHeight >= top
   return wouldOverflowBottom && canFitAbove ? 'up' : 'down'
+}
+
+type CapsuleWorkArea = {
+  x: number
+  y: number
+  width: number
+  height: number
+}
+
+async function capsuleWorkAreaForPosition(
+  position: {x: number; y: number},
+  size: {width: number; height: number},
+): Promise<CapsuleWorkArea | null> {
+  const screens = await Screens.GetAll()
+  if (!screens.length) return null
+  const centerX = position.x + size.width / 2
+  const centerY = position.y + size.height / 2
+  const candidates = screens
+    .map((screen) => normalizeCapsuleWorkArea(screen.WorkArea) ?? normalizeCapsuleWorkArea(screen.Bounds))
+    .filter((area): area is CapsuleWorkArea => area !== null)
+  if (!candidates.length) return null
+  return candidates.find((area) => pointInsideWorkArea(centerX, centerY, area)) ?? nearestWorkArea(centerX, centerY, candidates)
+}
+
+function normalizeCapsuleWorkArea(rect: {X: number; Y: number; Width: number; Height: number} | undefined): CapsuleWorkArea | null {
+  if (!rect || rect.Width <= 0 || rect.Height <= 0) return null
+  return {x: rect.X, y: rect.Y, width: rect.Width, height: rect.Height}
+}
+
+function pointInsideWorkArea(x: number, y: number, area: CapsuleWorkArea) {
+  return x >= area.x && y >= area.y && x <= area.x + area.width && y <= area.y + area.height
+}
+
+function nearestWorkArea(x: number, y: number, areas: CapsuleWorkArea[]) {
+  return areas.reduce((nearest, area) => {
+    const nearestDistance = distanceToWorkArea(x, y, nearest)
+    const areaDistance = distanceToWorkArea(x, y, area)
+    return areaDistance < nearestDistance ? area : nearest
+  }, areas[0])
+}
+
+function distanceToWorkArea(x: number, y: number, area: CapsuleWorkArea) {
+  const nearestX = clampNumber(x, area.x, area.x + area.width)
+  const nearestY = clampNumber(y, area.y, area.y + area.height)
+  return Math.hypot(x - nearestX, y - nearestY)
+}
+
+function clampCapsuleWindowPosition(
+  x: number,
+  y: number,
+  width: number,
+  height: number,
+  workArea: CapsuleWorkArea | null,
+) {
+  if (!workArea) return {x, y}
+  const maxX = Math.max(workArea.x, workArea.x + workArea.width - width)
+  const maxY = Math.max(workArea.y, workArea.y + workArea.height - height)
+  return {
+    x: Math.round(clampNumber(x, workArea.x, maxX)),
+    y: Math.round(clampNumber(y, workArea.y, maxY)),
+  }
+}
+
+function clampNumber(value: number, min: number, max: number) {
+  if (max < min) return min
+  return Math.min(max, Math.max(min, value))
+}
+
+function capsuleHitRegionsSignature(req: {
+  enabled: boolean
+  viewportWidth: number
+  viewportHeight: number
+  devicePixelRatio: number
+  regions: CapsuleWindowHitRegion[]
+}) {
+  const viewport = [
+    req.enabled ? 1 : 0,
+    Math.round(req.viewportWidth),
+    Math.round(req.viewportHeight),
+    Math.round((req.devicePixelRatio || 1) * 100),
+  ].join(':')
+  const regions = req.regions
+    .map((region) => [
+      Math.round(region.x),
+      Math.round(region.y),
+      Math.round(region.width),
+      Math.round(region.height),
+      region.kind ?? '',
+      Math.round(region.radius ?? 0),
+    ].join(','))
+    .join('|')
+  return `${viewport}|${regions}`
 }
 
 function capsuleScreenTop() {

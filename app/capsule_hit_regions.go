@@ -37,11 +37,19 @@ type capsuleWindowHitRegions struct {
 }
 
 func (s *RecordingFreedomService) SetCapsuleWindowHitRegions(req CapsuleWindowHitRegionsRequest) error {
-	state := s.capsuleHitRegions.Set(req)
+	state, changed := s.capsuleHitRegions.Update(req)
+	if !changed {
+		return nil
+	}
 	return s.applyCapsuleWindowRegion(state)
 }
 
 func (r *capsuleWindowHitRegions) Set(req CapsuleWindowHitRegionsRequest) capsuleWindowHitRegionState {
+	state, _ := r.Update(req)
+	return state
+}
+
+func (r *capsuleWindowHitRegions) Update(req CapsuleWindowHitRegionsRequest) (capsuleWindowHitRegionState, bool) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
@@ -59,8 +67,11 @@ func (r *capsuleWindowHitRegions) Set(req CapsuleWindowHitRegionsRequest) capsul
 	if state.viewportWidth <= 0 || state.viewportHeight <= 0 || len(state.regions) == 0 {
 		state.enabled = false
 	}
+	if capsuleHitRegionStatesEqual(r.state, state) {
+		return r.state, false
+	}
 	r.state = state
-	return state
+	return state, true
 }
 
 func (r *capsuleWindowHitRegions) TestClientPoint(clientX int, clientY int, clientWidth int, clientHeight int) (handled bool, hit bool) {
@@ -128,4 +139,25 @@ func sanePositive(value float64) float64 {
 
 func isSaneScale(value float64) bool {
 	return !math.IsNaN(value) && !math.IsInf(value, 0) && value > 0.1 && value < 10
+}
+
+func capsuleHitRegionStatesEqual(a capsuleWindowHitRegionState, b capsuleWindowHitRegionState) bool {
+	if a.enabled != b.enabled {
+		return false
+	}
+	if !a.enabled && !b.enabled {
+		return true
+	}
+	if a.viewportWidth != b.viewportWidth || a.viewportHeight != b.viewportHeight {
+		return false
+	}
+	if len(a.regions) != len(b.regions) {
+		return false
+	}
+	for index := range a.regions {
+		if a.regions[index] != b.regions[index] {
+			return false
+		}
+	}
+	return true
 }
