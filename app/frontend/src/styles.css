@@ -1874,7 +1874,7 @@ label,
   --wails-draggable: drag;
 }
 
-@media (max-width: 840px) {
+@media (max-width: 520px) {
   body.rf-recorder-window,
   body.rf-recorder-window #root {
     min-width: 360px;
