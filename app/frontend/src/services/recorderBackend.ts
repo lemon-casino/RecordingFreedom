@@ -111,6 +111,7 @@ export type CapsuleWindowHitRegion = {
 
 const browserSettingsKey = 'recordingfreedom.settings.v1'
 const capsuleWindowWidth = 760
+const capsuleWindowCompactWidth = 380
 const capsuleWindowCollapsedHeight = 96
 const capsuleWindowExpandedHeight = 600
 export type CapsuleWindowExpandDirection = 'down' | 'up'
@@ -198,15 +199,22 @@ export async function setCapsuleWindowExpanded(
   expanded: boolean,
   expandedHeight = capsuleWindowExpandedHeight,
   preferredDirection: CapsuleWindowExpandDirection | 'auto' = 'auto',
+  compactCollapsed = false,
 ): Promise<CapsuleWindowExpandDirection> {
   try {
     const position = await WailsWindow.Position()
+    const size = await WailsWindow.Size().catch(() => ({
+      width: expanded ? capsuleWindowWidth : compactCollapsed ? capsuleWindowCompactWidth : capsuleWindowWidth,
+      height: expanded ? expandedHeight : capsuleWindowCollapsedHeight,
+    }))
+    const targetCollapsedWidth = compactCollapsed ? capsuleWindowCompactWidth : capsuleWindowWidth
     if (!expanded) {
       const collapsedY = lastCapsuleExpandedDirection === 'up'
         ? lastCapsuleCollapsedPosition?.y ?? position.y + Math.max(0, lastCapsuleExpandedHeight - capsuleWindowCollapsedHeight)
         : position.y
-      await WailsWindow.SetSize(capsuleWindowWidth, capsuleWindowCollapsedHeight)
-      await WailsWindow.SetPosition(position.x, collapsedY)
+      const collapsedX = Math.round(position.x + (size.width - targetCollapsedWidth) / 2)
+      await WailsWindow.SetSize(targetCollapsedWidth, capsuleWindowCollapsedHeight)
+      await WailsWindow.SetPosition(collapsedX, collapsedY)
       lastCapsuleCollapsedPosition = null
       return lastCapsuleExpandedDirection
     }
@@ -215,11 +223,12 @@ export async function setCapsuleWindowExpanded(
     const nextY = direction === 'up'
       ? Math.max(capsuleScreenTop(), position.y + capsuleWindowCollapsedHeight - expandedHeight)
       : position.y
+    const expandedX = Math.round(position.x + (size.width - capsuleWindowWidth) / 2)
     lastCapsuleExpandedDirection = direction
     lastCapsuleExpandedHeight = expandedHeight
-    lastCapsuleCollapsedPosition = position
+    lastCapsuleCollapsedPosition = {x: position.x, y: position.y}
     await WailsWindow.SetSize(capsuleWindowWidth, expandedHeight)
-    await WailsWindow.SetPosition(position.x, nextY)
+    await WailsWindow.SetPosition(expandedX, nextY)
     return direction
   } catch (error) {
     console.info('Using browser capsule window size fallback:', error)

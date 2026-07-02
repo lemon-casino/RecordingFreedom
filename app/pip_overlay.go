@@ -13,7 +13,7 @@ import (
 )
 
 const pipOverlayPadding = 24
-const stopPIPOverlayMediaScript = `if(window.__RF_STOP_PIP_CAMERA__){window.__RF_STOP_PIP_CAMERA__();}document.querySelectorAll("video").forEach((video)=>{const stream=video.srcObject;if(stream&&typeof stream.getTracks==="function"){stream.getTracks().forEach((track)=>track.stop());}video.srcObject=null;});`
+const stopPIPOverlayMediaScript = `window.__RF_PIP_STOP_TOKEN__=(window.__RF_PIP_STOP_TOKEN__||0)+1;if(window.__RF_STOP_PIP_CAMERA__){window.__RF_STOP_PIP_CAMERA__();}document.querySelectorAll("video").forEach((video)=>{const stream=video.srcObject;if(stream&&typeof stream.getTracks==="function"){stream.getTracks().forEach((track)=>track.stop());}video.srcObject=null;});`
 
 type PIPOverlayRequest struct {
 	Config     pip.Config `json:"config"`
@@ -83,6 +83,7 @@ func (s *RecordingFreedomService) HidePIPOverlay() error {
 	if s.pipOverlay == nil {
 		return nil
 	}
+	s.nextPIPOverlayToken()
 	s.pipOverlay.ExecJS(stopPIPOverlayMediaScript)
 	if state, err := s.pipOverlayState(pip.OffConfig(), "edit", PIPCamera{}); err == nil {
 		s.broadcastPIPOverlayState(state)
@@ -172,6 +173,7 @@ func (s *RecordingFreedomService) applyPIPOverlayState(state PIPOverlayState) {
 	if s.pipOverlay == nil {
 		return
 	}
+	token := s.nextPIPOverlayToken()
 	windowBounds := application.Rect{
 		X:      state.WindowBounds.X,
 		Y:      state.WindowBounds.Y,
@@ -188,14 +190,30 @@ func (s *RecordingFreedomService) applyPIPOverlayState(state PIPOverlayState) {
 	_ = setWindowCaptureExcluded(s.pipOverlay, false)
 	state.CaptureExcluded = false
 	s.broadcastPIPOverlayState(state)
-	go s.rebroadcastPIPOverlayState(state)
+	go s.rebroadcastPIPOverlayState(state, token)
 }
 
-func (s *RecordingFreedomService) rebroadcastPIPOverlayState(state PIPOverlayState) {
+func (s *RecordingFreedomService) rebroadcastPIPOverlayState(state PIPOverlayState, token uint64) {
 	for _, delay := range []time.Duration{120 * time.Millisecond, 500 * time.Millisecond} {
 		time.Sleep(delay)
+		if !s.isPIPOverlayTokenCurrent(token) {
+			return
+		}
 		s.broadcastPIPOverlayState(state)
 	}
+}
+
+func (s *RecordingFreedomService) nextPIPOverlayToken() uint64 {
+	s.pipOverlayMu.Lock()
+	defer s.pipOverlayMu.Unlock()
+	s.pipOverlayToken++
+	return s.pipOverlayToken
+}
+
+func (s *RecordingFreedomService) isPIPOverlayTokenCurrent(token uint64) bool {
+	s.pipOverlayMu.Lock()
+	defer s.pipOverlayMu.Unlock()
+	return token != 0 && s.pipOverlayToken == token
 }
 
 func (s *RecordingFreedomService) broadcastPIPOverlayState(state PIPOverlayState) {

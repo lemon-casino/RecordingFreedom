@@ -328,6 +328,7 @@ function App() {
   const floatingPointerInsideAtRef = useRef(0)
   const countdownTimerRef = useRef<number | null>(null)
   const countdownTokenRef = useRef(0)
+  const cameraPreviewGenerationRef = useRef(0)
   const selectedMicRef = useRef(selectedMic)
   const systemAudioRef = useRef(systemAudio)
   const microphoneRef = useRef(microphone)
@@ -344,6 +345,7 @@ function App() {
   const isRecording = state === 'recording' || state === 'paused' || state === 'preparing' || state === 'stopping'
   const recordingConfigLocked = isRecording
   const capsuleExpanded = activePanel !== null || settingsOpen || closePromptOpen
+  const capsuleWindowCompact = recordingConfigLocked && !capsuleExpanded
   const capsuleExpandedHeight = settingsOpen
     ? 560
     : closePromptOpen
@@ -477,6 +479,7 @@ function App() {
   const canOpenLastPackage = isRecordingPackagePath(lastPackage) && lastPackage !== previewPackagePath
   const lastPackageName = canOpenLastPackage ? packageDisplayName(lastPackage) : copy.settings.noRecordingPackage
   const openPipEditor = async () => {
+    if (!cameraRef.current || !hasUsableCamera || recordingMode !== 'video') return
     const nextConfig = currentPipConfig.preset === 'off'
       ? normalizePipConfig({...currentPipConfig, preset: 'bottom-right', position: defaultPipPosition('bottom-right')}, 'bottom-right')
       : currentPipConfig
@@ -485,14 +488,39 @@ function App() {
       setPipPosition(nextConfig.position)
     }
     try {
+      const generation = cameraPreviewGenerationRef.current
       await showPipOverlay(nextConfig, 'edit', pipCameraTarget)
+      if (generation !== cameraPreviewGenerationRef.current || !cameraRef.current) {
+        await hidePipOverlay()
+      }
     } catch (error) {
       console.info('PIP editor unavailable:', error)
     }
   }
+  const stopCameraPreview = () => {
+    cameraPreviewGenerationRef.current += 1
+    void hidePipOverlay()
+  }
+  const setCameraEnabled = (enabled: boolean) => {
+    const nextEnabled = enabled && hasUsableCamera
+    cameraPreviewGenerationRef.current += 1
+    cameraRef.current = nextEnabled
+    setCamera(nextEnabled)
+    if (!nextEnabled) {
+      void hidePipOverlay()
+    }
+    if (nextEnabled && pipPreset === 'off') {
+      setPipPreset('bottom-right')
+      setPipPosition(defaultPipPosition('bottom-right'))
+    }
+  }
   const applyRecordingStatus = (update: RecordingStatusUpdate) => {
-    setState(update.status as RecordingState)
+    const nextStatus = update.status as RecordingState
+    setState(nextStatus)
     if (update.status !== 'preparing') setCountdownRemaining(0)
+    if (nextStatus === 'idle' || nextStatus === 'ready' || nextStatus === 'failed') {
+      setElapsed(0)
+    }
     if (update.session?.packagePath) setLastPackage(update.session.packagePath)
     const backend = update.session?.backend || update.backend
     if (backend) setLastBackend(backend)
@@ -621,9 +649,9 @@ function App() {
 
   useEffect(() => {
     if (isSettingsWindow) return
-    void setCapsuleWindowExpanded(capsuleExpanded, capsuleExpandedHeight, 'auto')
+    void setCapsuleWindowExpanded(capsuleExpanded, capsuleExpandedHeight, 'auto', capsuleWindowCompact)
       .then(setCapsuleExpandDirection)
-  }, [capsuleExpanded, capsuleExpandedHeight, isSettingsWindow])
+  }, [capsuleExpanded, capsuleExpandedHeight, capsuleWindowCompact, isSettingsWindow])
 
   useEffect(() => {
     if (isSettingsWindow) return
@@ -693,7 +721,7 @@ function App() {
   useEffect(() => {
     if (isSettingsWindow) return
     if (!camera || recordingMode === 'audio') {
-      void hidePipOverlay()
+      stopCameraPreview()
     }
   }, [camera, isSettingsWindow, recordingMode])
 
@@ -701,7 +729,13 @@ function App() {
     if (isRecording) return
     if (isSettingsWindow || !camera || recordingMode !== 'video' || !hasUsableCamera) return
 
+    const generation = cameraPreviewGenerationRef.current
     void showPipOverlay(ensureVisiblePipConfig(currentPipConfig), 'edit', pipCameraTarget)
+      .then(() => {
+        if (generation !== cameraPreviewGenerationRef.current || !cameraRef.current || recordingMode !== 'video') {
+          void hidePipOverlay()
+        }
+      })
       .catch((error) => console.info('PIP camera preview unavailable:', error))
   }, [camera, currentPipConfig, hasUsableCamera, isRecording, isSettingsWindow, pipCameraTarget, recordingMode])
 
@@ -802,6 +836,9 @@ function App() {
 
   useEffect(() => subscribeSettingsChanged((settings) => {
     const incomingCameraOff = !settings.camera.enabled || settings.camera.pipPreset === 'off' || settings.camera.pip?.preset === 'off'
+    if (incomingCameraOff) {
+      stopCameraPreview()
+    }
     applySettingsState(settings, undefined, undefined, {
       preserveAudioEnabled: true,
       preserveAudioSelection: true,
@@ -1406,9 +1443,9 @@ function App() {
   }
 
   return (
-    <main ref={shellRef} className={`rf-shell ${capsuleExpanded ? 'is-expanded' : 'is-collapsed'} drop-${capsuleExpandDirection}`} aria-label={copy.aria.recorderShell}>
+    <main ref={shellRef} className={`rf-shell ${capsuleExpanded ? 'is-expanded' : 'is-collapsed'} ${recordingConfigLocked ? 'is-recording-compact' : ''} drop-${capsuleExpandDirection}`} aria-label={copy.aria.recorderShell}>
       <section className="recorder-stage" aria-label={copy.aria.recorderControls}>
-        <div ref={capsuleRef} className={`capsule ${isRecording ? 'capsule-active' : ''}`}>
+        <div ref={capsuleRef} className={`capsule ${isRecording ? 'capsule-active capsule-compact' : ''}`}>
           <button
             className="grabber"
             type="button"
@@ -1419,43 +1456,45 @@ function App() {
             <span />
           </button>
 
-          <button
-            className="source-pill"
-            type="button"
-            aria-expanded={activePanel === 'source'}
-            disabled={recordingConfigLocked}
-            onClick={() => togglePanel('source')}
-          >
-            <SourceIcon size={18} />
-            <span className="source-text">
-              <strong>{sourceTitle}</strong>
-              <small>{sourceSubtitle}</small>
-            </span>
-            <ChevronDown size={14} />
-          </button>
-
-          <div className="control-group" aria-label={copy.aria.audioCameraControls}>
+          <div className="capsule-config-segment" aria-hidden={recordingConfigLocked}>
             <button
-              className={`icon-button ${systemAudio || microphone ? 'is-on' : ''} ${rnnoiseActive ? 'strong' : ''}`}
+              className="source-pill"
               type="button"
-              aria-label={copy.aria.openAudioSettings}
-              title={copy.panels.audio}
-              aria-expanded={activePanel === 'audio'}
+              aria-expanded={activePanel === 'source'}
               disabled={recordingConfigLocked}
-              onClick={() => togglePanel('audio')}
+              onClick={() => togglePanel('source')}
             >
-              <Volume2 size={18} />
+              <SourceIcon size={18} />
+              <span className="source-text">
+                <strong>{sourceTitle}</strong>
+                <small>{sourceSubtitle}</small>
+              </span>
+              <ChevronDown size={14} />
             </button>
-            <button
-              className={`icon-button ${recordingMode === 'video' && camera ? 'is-on' : ''}`}
-              type="button"
-              aria-label={copy.aria.openCameraSettings}
-              title={copy.panels.cameraSidecar}
-              disabled={recordingConfigLocked || recordingMode === 'audio'}
-              onClick={() => togglePanel('camera')}
-            >
-              <Camera size={18} />
-            </button>
+
+            <div className="control-group" aria-label={copy.aria.audioCameraControls}>
+              <button
+                className={`icon-button ${systemAudio || microphone ? 'is-on' : ''} ${rnnoiseActive ? 'strong' : ''}`}
+                type="button"
+                aria-label={copy.aria.openAudioSettings}
+                title={copy.panels.audio}
+                aria-expanded={activePanel === 'audio'}
+                disabled={recordingConfigLocked}
+                onClick={() => togglePanel('audio')}
+              >
+                <Volume2 size={18} />
+              </button>
+              <button
+                className={`icon-button ${recordingMode === 'video' && camera ? 'is-on' : ''}`}
+                type="button"
+                aria-label={copy.aria.openCameraSettings}
+                title={copy.panels.cameraSidecar}
+                disabled={recordingConfigLocked || recordingMode === 'audio'}
+                onClick={() => togglePanel('camera')}
+              >
+                <Camera size={18} />
+              </button>
+            </div>
           </div>
 
           <button
@@ -1474,7 +1513,7 @@ function App() {
           </div>
 
           <button
-            className="icon-button soft"
+            className="icon-button soft pause-button"
             type="button"
             aria-label={state === 'paused' ? copy.aria.resumeRecording : copy.aria.pauseRecording}
             title={state === 'paused' ? copy.aria.resumeRecording : copy.aria.pauseRecording}
@@ -1484,26 +1523,29 @@ function App() {
             {state === 'paused' ? <Play size={18} /> : <Pause size={18} />}
           </button>
 
-          <button
-            className="icon-button soft"
-            type="button"
-            aria-label={copy.aria.selectLanguage}
-            title={copy.localeNames[locale]}
-            aria-expanded={activePanel === 'language'}
-            onClick={() => togglePanel('language')}
-          >
-            <Languages size={18} />
-          </button>
-
-          <button
-            className="icon-button soft"
-            type="button"
-            aria-label={copy.aria.openSettings}
-            title={copy.settings.title}
-            onClick={openSettings}
-          >
-            <Settings size={18} />
-          </button>
+          <div className="capsule-utility-segment" aria-hidden={recordingConfigLocked}>
+            <button
+              className="icon-button soft"
+              type="button"
+              aria-label={copy.aria.selectLanguage}
+              title={copy.localeNames[locale]}
+              aria-expanded={activePanel === 'language'}
+              disabled={recordingConfigLocked}
+              onClick={() => togglePanel('language')}
+            >
+              <Languages size={18} />
+            </button>
+            <button
+              className="icon-button soft"
+              type="button"
+              aria-label={copy.aria.openSettings}
+              title={copy.settings.title}
+              disabled={recordingConfigLocked}
+              onClick={openSettings}
+            >
+              <Settings size={18} />
+            </button>
+          </div>
 
           <button
             className="icon-button close-app-button"
@@ -1710,12 +1752,7 @@ function App() {
                     if (enabled && !selectedCameraUsable && fallbackUsableCameraDevice) {
                       setSelectedCamera(fallbackUsableCameraDevice.id)
                     }
-                    cameraRef.current = enabled
-                    setCamera(enabled)
-                    if (enabled && pipPreset === 'off') {
-                      setPipPreset('bottom-right')
-                      setPipPosition(defaultPipPosition('bottom-right'))
-                    }
+                    setCameraEnabled(enabled)
                   }}
                 />
                 <label className="field-label" htmlFor="camera-device">{copy.panels.cameraDevice}</label>
@@ -1889,6 +1926,7 @@ const pipMinimumContentSize = 72
 type PIPOverlayWindowGlobal = Window & {
   __RF_PIP_OVERLAY__?: PIPOverlayState
   __RF_STOP_PIP_CAMERA__?: () => void
+  __RF_PIP_STOP_TOKEN__?: number
 }
 
 function PIPOverlayWindow() {
@@ -1914,9 +1952,11 @@ function PIPOverlayWindow() {
   const [overlayLocale, setOverlayLocale] = useState<LocaleCode>(navigator.language.toLowerCase().startsWith('zh') ? 'zh-CN' : 'en')
   const copy = copyByLocale[overlayLocale]
 
-  const trackPipCameraStream = (stream: MediaStream, requestToken: number, isCancelled: () => boolean) => {
+  const pipStopTokenChanged = (stopToken: number) => (pipWindow.__RF_PIP_STOP_TOKEN__ ?? 0) !== stopToken
+
+  const trackPipCameraStream = (stream: MediaStream, requestToken: number, stopToken: number, isCancelled: () => boolean) => {
     cameraStreamsRef.current.add(stream)
-    if (isCancelled() || cameraRequestTokenRef.current !== requestToken) {
+    if (isCancelled() || cameraRequestTokenRef.current !== requestToken || pipStopTokenChanged(stopToken)) {
       stopAndForgetPipCameraStream(stream)
     }
   }
@@ -1937,6 +1977,7 @@ function PIPOverlayWindow() {
   }
 
   const cancelPipCameraStream = () => {
+    pipWindow.__RF_PIP_STOP_TOKEN__ = (pipWindow.__RF_PIP_STOP_TOKEN__ ?? 0) + 1
     cameraRequestTokenRef.current += 1
     stopActivePipCameraStream()
     setCameraReady(false)
@@ -1948,9 +1989,20 @@ function PIPOverlayWindow() {
 
   useEffect(() => {
     document.body.classList.add('rf-pip-overlay-window')
+    pipWindow.__RF_PIP_STOP_TOKEN__ = pipWindow.__RF_PIP_STOP_TOKEN__ ?? 0
     pipWindow.__RF_STOP_PIP_CAMERA__ = cancelPipCameraStream
+    const stopOnWindowLifecycle = () => cancelPipCameraStream()
+    const stopOnHidden = () => {
+      if (document.visibilityState !== 'visible') cancelPipCameraStream()
+    }
+    window.addEventListener('pagehide', stopOnWindowLifecycle)
+    window.addEventListener('beforeunload', stopOnWindowLifecycle)
+    document.addEventListener('visibilitychange', stopOnHidden)
     return () => {
       cancelPipCameraStream()
+      window.removeEventListener('pagehide', stopOnWindowLifecycle)
+      window.removeEventListener('beforeunload', stopOnWindowLifecycle)
+      document.removeEventListener('visibilitychange', stopOnHidden)
       delete pipWindow.__RF_STOP_PIP_CAMERA__
       document.body.classList.remove('rf-pip-overlay-window')
     }
@@ -1993,12 +2045,14 @@ function PIPOverlayWindow() {
     const cameraTarget = overlayState.camera ?? (overlayState.cameraName ? {name: overlayState.cameraName} : undefined)
     const requestToken = cameraRequestTokenRef.current + 1
     cameraRequestTokenRef.current = requestToken
+    const stopToken = pipWindow.__RF_PIP_STOP_TOKEN__ ?? 0
     let cancelled = false
     stopActivePipCameraStream()
     setCameraReady(false)
     setCameraError(null)
-    void openPipCameraStream(cameraTarget, (stream) => trackPipCameraStream(stream, requestToken, () => cancelled)).then(async (nextStream) => {
-      if (cancelled || cameraRequestTokenRef.current !== requestToken) {
+    const isCancelled = () => cancelled || cameraRequestTokenRef.current !== requestToken || pipStopTokenChanged(stopToken)
+    void openPipCameraStream(cameraTarget, (stream) => trackPipCameraStream(stream, requestToken, stopToken, isCancelled)).then(async (nextStream) => {
+      if (isCancelled()) {
         stopAndForgetPipCameraStream(nextStream)
         return
       }
@@ -2012,7 +2066,7 @@ function PIPOverlayWindow() {
           console.info('PIP preview video play was deferred:', error)
         }
       }
-      if (cancelled || cameraRequestTokenRef.current !== requestToken) {
+      if (isCancelled()) {
         if (activeCameraStreamRef.current === nextStream) activeCameraStreamRef.current = null
         stopAndForgetPipCameraStream(nextStream)
         return
@@ -2020,7 +2074,7 @@ function PIPOverlayWindow() {
       setCameraReady(true)
       setCameraError(null)
     }).catch((error) => {
-      if (cancelled) return
+      if (isCancelled()) return
       setCameraReady(false)
       setCameraError(readableError(error))
     })
@@ -2706,6 +2760,11 @@ function SelectMenu({
   const rootRef = useRef<HTMLDivElement | null>(null)
   const pointerInsideAtRef = useRef(0)
   const selected = options.find((option) => option.value === value) ?? options.find((option) => !option.disabled) ?? options[0]
+  const selectOption = (option: SelectMenuOption) => {
+    if (option.disabled) return
+    onChange(option.value)
+    setOpen(false)
+  }
   const updateDropDirection = () => {
     const rect = rootRef.current?.getBoundingClientRect()
     if (!rect) return
@@ -2791,10 +2850,13 @@ function SelectMenu({
               className={`select-menu-option ${option.value === value ? 'selected' : ''}`}
               aria-selected={option.value === value}
               disabled={option.disabled}
+              onPointerDown={(event) => {
+                event.preventDefault()
+                event.stopPropagation()
+                selectOption(option)
+              }}
               onClick={() => {
-                if (option.disabled) return
-                onChange(option.value)
-                setOpen(false)
+                selectOption(option)
               }}
             >
               <span>{option.label}</span>
@@ -3069,11 +3131,11 @@ function SettingSelect({
   onChange: (value: string) => void
 }) {
   return (
-    <label className="setting-line setting-control">
+    <div className="setting-line setting-control">
       <span>{title}</span>
       <SelectMenu className="setting-control-select" value={value} options={options} onChange={onChange} />
       {detail && <small>{detail}</small>}
-    </label>
+    </div>
   )
 }
 

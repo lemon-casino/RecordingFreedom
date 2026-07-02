@@ -130,15 +130,21 @@ input:disabled,
   display: grid;
   justify-items: center;
   gap: 10px;
-  width: min(724px, 100%);
+  width: min(var(--capsule-stage-width, 724px), 100%);
   --wails-draggable: drag;
+  transition: width 220ms ease;
+}
+
+.rf-shell.is-recording-compact {
+  --capsule-stage-width: 344px;
+  --capsule-width: 324px;
 }
 
 .capsule {
   display: flex;
   align-items: center;
   gap: 6px;
-  width: min(704px, 100%);
+  width: min(var(--capsule-width, 704px), 100%);
   min-height: 64px;
   padding: 8px;
   border: 1px solid var(--line);
@@ -149,7 +155,7 @@ input:disabled,
     inset 0 1px 0 rgba(255, 255, 255, 0.08),
     inset 0 -1px 0 rgba(0, 0, 0, 0.36);
   backdrop-filter: blur(22px) saturate(150%);
-  transition: border-color 180ms ease, box-shadow 180ms ease;
+  transition: width 220ms ease, border-color 180ms ease, box-shadow 180ms ease, gap 180ms ease;
   cursor: grab;
   --wails-draggable: drag;
 }
@@ -174,6 +180,36 @@ input:disabled,
     inset 0 0 0 1px rgba(240, 68, 56, 0.12);
 }
 
+.capsule-config-segment,
+.capsule-utility-segment {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex: 0 0 auto;
+  max-width: 278px;
+  overflow: hidden;
+  opacity: 1;
+  transform: translateX(0) scale(1);
+  transform-origin: left center;
+  transition: max-width 220ms ease, opacity 160ms ease, transform 220ms ease;
+}
+
+.capsule-utility-segment {
+  max-width: 82px;
+}
+
+.capsule.capsule-compact {
+  gap: 5px;
+}
+
+.capsule.capsule-compact .capsule-config-segment,
+.capsule.capsule-compact .capsule-utility-segment {
+  max-width: 0;
+  opacity: 0;
+  pointer-events: none;
+  transform: translateX(-8px) scale(0.9);
+}
+
 .grabber {
   display: grid;
   width: 20px;
@@ -185,6 +221,8 @@ input:disabled,
   color: var(--quiet);
   cursor: grab;
   --wails-draggable: drag;
+  flex: 0 0 auto;
+  order: 0;
 }
 
 .grabber:active {
@@ -212,6 +250,7 @@ input:disabled,
   background: rgba(255, 255, 255, 0.055);
   color: var(--text);
   transition: background 160ms ease, border-color 160ms ease;
+  flex: 0 0 auto;
 }
 
 .source-pill:hover,
@@ -273,6 +312,7 @@ select:disabled {
   border: 1px solid var(--line);
   border-radius: var(--radius-pill);
   background: rgba(255, 255, 255, 0.04);
+  flex: 0 0 auto;
 }
 
 .icon-button,
@@ -335,6 +375,12 @@ select:disabled {
   border-radius: var(--radius-pill);
   background: var(--red-soft);
   color: #ffdfdc;
+  flex: 0 0 auto;
+  order: 2;
+}
+
+.capsule.capsule-compact .record-button {
+  order: 1;
 }
 
 .record-button.idle,
@@ -370,6 +416,20 @@ select:disabled {
   background: rgba(255, 255, 255, 0.045);
   font-size: 12px;
   tab-size: 4;
+  flex: 0 0 auto;
+  order: 3;
+}
+
+.pause-button {
+  order: 4;
+}
+
+.capsule-utility-segment {
+  order: 5;
+}
+
+.close-app-button {
+  order: 6;
 }
 
 .time-chip strong {
@@ -410,7 +470,7 @@ select:disabled {
   top: 86px;
   left: 62px;
   width: 360px;
-  max-height: calc(100vh - 98px);
+  max-height: calc(100% - 104px);
   padding: 8px;
   border: 1px solid var(--line);
   border-radius: 22px;
@@ -418,7 +478,8 @@ select:disabled {
   box-shadow: var(--shadow-panel);
   backdrop-filter: blur(24px) saturate(150%);
   --wails-draggable: no-drag;
-  overflow: visible;
+  overflow-x: hidden;
+  overflow-y: auto;
 }
 
 .popover.drop-up {
@@ -449,6 +510,10 @@ body.rf-recorder-window .select-menu-list {
 .popover.panel-camera {
   left: 68px;
   width: 400px;
+}
+
+.popover.panel-camera {
+  max-height: min(468px, calc(100% - 104px));
 }
 
 .popover.panel-source {
@@ -1014,18 +1079,21 @@ input {
 }
 
 .settings-panel::-webkit-scrollbar,
+.popover::-webkit-scrollbar,
 .source-list-scroll::-webkit-scrollbar,
 .select-menu-list::-webkit-scrollbar {
   width: 8px;
 }
 
 .settings-panel::-webkit-scrollbar-track,
+.popover::-webkit-scrollbar-track,
 .source-list-scroll::-webkit-scrollbar-track,
 .select-menu-list::-webkit-scrollbar-track {
   background: transparent;
 }
 
 .settings-panel::-webkit-scrollbar-thumb,
+.popover::-webkit-scrollbar-thumb,
 .source-list-scroll::-webkit-scrollbar-thumb,
 .select-menu-list::-webkit-scrollbar-thumb {
   border: 2px solid transparent;
@@ -1941,7 +2009,7 @@ label,
   --wails-draggable: drag;
 }
 
-@media (max-width: 520px) {
+@media (max-width: 520px) and (min-height: 520px) {
   body.rf-recorder-window,
   body.rf-recorder-window #root {
     min-width: 360px;
