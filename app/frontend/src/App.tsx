@@ -335,6 +335,7 @@ function App() {
   const microphoneRef = useRef(microphone)
   const noiseSuppressionRef = useRef(noiseSuppression)
   const cameraRef = useRef(camera)
+  const persistedSettingsRef = useRef<AppSettings | null>(null)
   const rnnoiseActive = microphone && noiseSuppression
 
   const copy = copyByLocale[locale]
@@ -371,7 +372,7 @@ function App() {
       edgeFeather: pipEdgeFeather,
     }, pipPreset)
     const savedPipConfig = camera ? ensureVisiblePipConfig(rawPipConfig) : rawPipConfig
-    return {
+    const nextSettings = {
       schemaVersion: 1,
       locale,
       source: {
@@ -405,7 +406,25 @@ function App() {
         minimizeToTray: true,
       },
     }
-  }, [appData.rootDir, camera, captureCursor, countdownSeconds, locale, microphone, noiseSuppression, pipEdgeFeather, pipMirror, pipPosition, pipPreset, pipScale, pipShape, recordingFPS, recordingQuality, selectedCamera, selectedMic, selectedSource.id, selectedSource.type, selectedSystemAudio, systemAudio])
+    if (!isSettingsWindow || !persistedSettingsRef.current) return nextSettings
+    return {
+      ...persistedSettingsRef.current,
+      schemaVersion: 1,
+      locale,
+      storage: {
+        dataRootDir: appData.rootDir,
+      },
+      recording: {
+        quality: recordingQuality,
+        fps: recordingFPS,
+        captureCursor,
+        countdownSeconds,
+      },
+      window: {
+        minimizeToTray: true,
+      },
+    }
+  }, [appData.rootDir, camera, captureCursor, countdownSeconds, isSettingsWindow, locale, microphone, noiseSuppression, pipEdgeFeather, pipMirror, pipPosition, pipPreset, pipScale, pipShape, recordingFPS, recordingQuality, selectedCamera, selectedMic, selectedSource.id, selectedSource.type, selectedSystemAudio, systemAudio])
   const capabilityRows = useMemo(() => [
     capabilities.sourceEnumeration,
     capabilities.screenRecording,
@@ -544,6 +563,7 @@ function App() {
     if (update.message) setLastStatusMessage(statusMessageFromBackend(update.message))
   }
   const applySettingsState = (nextSettings: AppSettings, nextMedia?: MediaInventory, nextSources?: CaptureSource[], options: ApplySettingsOptions = {}) => {
+    persistedSettingsRef.current = nextSettings
     const systemAudioList = nextMedia?.systemAudio
     const microphoneList = nextMedia?.microphones
     const cameraList = nextMedia?.cameras
@@ -843,7 +863,11 @@ function App() {
   useEffect(() => {
     if (!settingsLoaded) return
     const saveTimer = window.setTimeout(() => {
-      void saveSettings(currentSettings).catch((error) => console.error('Failed to save settings:', error))
+      void saveSettings(currentSettings)
+        .then((saved) => {
+          persistedSettingsRef.current = saved
+        })
+        .catch((error) => console.error('Failed to save settings:', error))
     }, 300)
     return () => window.clearTimeout(saveTimer)
   }, [currentSettings, settingsLoaded])
@@ -868,16 +892,17 @@ function App() {
 
   useEffect(() => subscribeSettingsChanged((settings) => {
     const incomingCameraOff = !settings.camera.enabled
-    if (incomingCameraOff) {
+    void logClientEvent('settings', 'changed', {
+      window: isSettingsWindow ? 'settings' : 'recorder',
+      cameraEnabled: settings.camera.enabled,
+      currentCamera: cameraRef.current,
+      pipPreset: settings.camera.pipPreset,
+    })
+    if (incomingCameraOff && cameraRef.current) {
       stopCameraPreview('settings-camera-off')
     }
-    applySettingsState(settings, undefined, undefined, {
-      preserveAudioEnabled: true,
-      preserveAudioSelection: true,
-      preserveCameraEnabled: !incomingCameraOff,
-      preserveCameraSelection: true,
-    })
-  }), [])
+    applySettingsState(settings)
+  }), [isSettingsWindow])
 
   useEffect(() => subscribeRegionSelection((result) => {
     if (result.cancelled) {
