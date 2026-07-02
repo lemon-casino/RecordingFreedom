@@ -411,9 +411,7 @@ func (s *ffmpegDesktopSession) stopActiveSegmentLocked(reason string) error {
 		if active.stdin != nil {
 			_ = active.stdin.Close()
 		}
-		if active.cmd.Process != nil {
-			_ = active.cmd.Process.Kill()
-		}
+		_ = terminateCommandProcess(active.cmd)
 		waitErr = fmt.Errorf("timed out stopping FFmpeg segment for %s", reason)
 		<-done
 	}

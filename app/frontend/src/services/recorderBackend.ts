@@ -134,6 +134,17 @@ export async function setCapsuleWindowHitRegions(req: {
   }
 }
 
+export async function restoreCapsuleWindow(focus = true): Promise<void> {
+  try {
+    await WailsWindow.Show()
+    await WailsWindow.UnMinimise().catch(() => undefined)
+    await WailsWindow.SetAlwaysOnTop(true).catch(() => undefined)
+    if (focus) await WailsWindow.Focus().catch(() => undefined)
+  } catch (error) {
+    console.info('Using browser capsule window restore fallback:', error)
+  }
+}
+
 export type RegionSelectionSession = {
   id: string
   bounds: {x: number; y: number; width: number; height: number}

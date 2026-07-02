@@ -4,6 +4,7 @@ package video
 
 import (
 	"os/exec"
+	"strconv"
 	"syscall"
 )
 
@@ -17,4 +18,16 @@ func configureBackgroundCommand(cmd *exec.Cmd) {
 		HideWindow:    true,
 		CreationFlags: windowsCreateNoWindow,
 	}
+}
+
+func terminateCommandProcess(cmd *exec.Cmd) error {
+	if cmd == nil || cmd.Process == nil {
+		return nil
+	}
+	taskkill := exec.Command("taskkill.exe", "/PID", strconv.Itoa(cmd.Process.Pid), "/T", "/F")
+	configureBackgroundCommand(taskkill)
+	if err := taskkill.Run(); err == nil {
+		return nil
+	}
+	return cmd.Process.Kill()
 }

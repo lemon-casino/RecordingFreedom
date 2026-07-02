@@ -13,7 +13,7 @@ import (
 )
 
 const pipOverlayPadding = 24
-const stopPIPOverlayMediaScript = `window.__RF_PIP_STOP_TOKEN__=(window.__RF_PIP_STOP_TOKEN__||0)+1;if(window.__RF_STOP_PIP_CAMERA__){window.__RF_STOP_PIP_CAMERA__();}document.querySelectorAll("video").forEach((video)=>{const stream=video.srcObject;if(stream&&typeof stream.getTracks==="function"){stream.getTracks().forEach((track)=>track.stop());}video.srcObject=null;});`
+const stopPIPOverlayMediaScript = `window.__RF_PIP_STOP_TOKEN__=(window.__RF_PIP_STOP_TOKEN__||0)+1;if(window.__RF_STOP_PIP_CAMERA__){window.__RF_STOP_PIP_CAMERA__();}document.querySelectorAll("video").forEach((video)=>{try{video.pause();}catch(e){}const stream=video.srcObject;if(stream&&typeof stream.getTracks==="function"){stream.getTracks().forEach((track)=>track.stop());}video.srcObject=null;video.removeAttribute("src");try{video.load();}catch(e){}});window.__RF_PIP_OVERLAY__=undefined;`
 
 type PIPOverlayRequest struct {
 	Config     pip.Config `json:"config"`

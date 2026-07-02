@@ -82,6 +82,28 @@ func TestNormalizeStartRequestPreservesCustomPIPConfig(t *testing.T) {
 	}
 }
 
+func TestNormalizeStartRequestForcesVisiblePIPWhenCameraEnabled(t *testing.T) {
+	got, err := NormalizeStartRequest(StartRequest{
+		SourceID:   "screen:primary",
+		SourceType: SourceScreen,
+		Camera: CameraRequest{
+			Enabled:   true,
+			DeviceID:  "camera:dshow:integrated-camera",
+			PIPPreset: "off",
+			PIP:       pip.OffConfig(),
+		},
+	})
+	if err != nil {
+		t.Fatalf("NormalizeStartRequest() error = %v", err)
+	}
+	if !got.Camera.Enabled {
+		t.Fatal("camera was disabled")
+	}
+	if got.Camera.PIPPreset != string(pip.DefaultPreset) || got.Camera.PIP.Preset != pip.DefaultPreset {
+		t.Fatalf("enabled camera pip = %q/%q, want visible default", got.Camera.PIPPreset, got.Camera.PIP.Preset)
+	}
+}
+
 func TestNormalizeStartRequestKeepsRecordingProfile(t *testing.T) {
 	got, err := NormalizeStartRequest(StartRequest{
 		SourceID:   "screen:primary",

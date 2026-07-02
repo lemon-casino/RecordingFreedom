@@ -114,6 +114,16 @@ func (s *RecordingFreedomService) setTrayLocaleUpdater(update func(settings.Loca
 	s.trayLocale = update
 }
 
+func (s *RecordingFreedomService) restoreCapsuleWindow() {
+	if s == nil || s.capsuleWindow == nil {
+		return
+	}
+	s.capsuleWindow.SetAlwaysOnTop(true)
+	s.capsuleWindow.Show()
+	s.capsuleWindow.UnMinimise()
+	s.capsuleWindow.Focus()
+}
+
 func (s *RecordingFreedomService) ShowSettingsWindow() error {
 	if s.settingsWindow == nil {
 		return errors.New("settings window is not configured")
@@ -622,6 +632,7 @@ func (s *RecordingFreedomService) StopRecording() (recording.Session, error) {
 		Backend: s.recorder.ActiveBackendID(),
 		Message: "Finalizing recording package",
 	})
+	defer s.restoreCapsuleWindow()
 	session, err := s.recorder.Stop()
 	if err != nil {
 		s.emitRecordingStatus(recording.StatusEvent{
