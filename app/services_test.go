@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -78,6 +79,54 @@ func TestLogClientEventWritesRootLogFile(t *testing.T) {
 	fields, ok := entry["fields"].(map[string]any)
 	if !ok || fields["error"] != "NotReadableError" {
 		t.Fatalf("fields = %#v, want error field", entry["fields"])
+	}
+}
+
+func TestReadPIPPreviewImageReadsManagedJPEG(t *testing.T) {
+	data := appdata.NewService(t.TempDir())
+	info, err := data.Info()
+	if err != nil {
+		t.Fatalf("Info() error = %v", err)
+	}
+	previewPath := filepath.Join(info.VideoDir, "recording-preview.rfrec", recpackage.CacheDir, "pip-camera-preview.jpg")
+	if err := os.MkdirAll(filepath.Dir(previewPath), 0o755); err != nil {
+		t.Fatalf("MkdirAll(preview) error = %v", err)
+	}
+	if err := os.WriteFile(previewPath, []byte{0xff, 0xd8, 0xff, 0xd9}, 0o644); err != nil {
+		t.Fatalf("WriteFile(preview) error = %v", err)
+	}
+
+	service := &RecordingFreedomService{appData: data}
+	result, err := service.ReadPIPPreviewImage(PIPPreviewImageRequest{Path: previewPath})
+	if err != nil {
+		t.Fatalf("ReadPIPPreviewImage() error = %v", err)
+	}
+	if !result.Available || !strings.HasPrefix(result.DataURL, "data:image/jpeg;base64,") || result.ModifiedUnixNano <= 0 {
+		t.Fatalf("result = %#v, want available JPEG data URL with modified time", result)
+	}
+
+	unchanged, err := service.ReadPIPPreviewImage(PIPPreviewImageRequest{
+		Path:                  previewPath,
+		KnownModifiedUnixNano: result.ModifiedUnixNano,
+	})
+	if err != nil {
+		t.Fatalf("ReadPIPPreviewImage(known) error = %v", err)
+	}
+	if unchanged.Available || unchanged.DataURL != "" || unchanged.ModifiedUnixNano != result.ModifiedUnixNano {
+		t.Fatalf("unchanged result = %#v, want unavailable without re-reading data URL", unchanged)
+	}
+}
+
+func TestReadPIPPreviewImageRejectsOutsideManagedVideoDir(t *testing.T) {
+	data := appdata.NewService(t.TempDir())
+	outsidePath := filepath.Join(t.TempDir(), "pip-camera-preview.jpg")
+	if err := os.WriteFile(outsidePath, []byte{0xff, 0xd8, 0xff, 0xd9}, 0o644); err != nil {
+		t.Fatalf("WriteFile(outside) error = %v", err)
+	}
+
+	service := &RecordingFreedomService{appData: data}
+	if _, err := service.ReadPIPPreviewImage(PIPPreviewImageRequest{Path: outsidePath}); err == nil {
+		t.Fatal("ReadPIPPreviewImage() accepted a path outside managed data/video")
 	}
 }
 

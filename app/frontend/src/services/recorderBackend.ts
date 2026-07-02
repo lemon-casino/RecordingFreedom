@@ -4,6 +4,8 @@ import {
   type BootstrapState as BoundBootstrapState,
   type CapsuleWindowHitRegionsRequest as BoundCapsuleWindowHitRegionsRequest,
   type ExportRecordingResult as BoundExportRecordingResult,
+  type PIPPreviewImageRequest as BoundPIPPreviewImageRequest,
+  type PIPPreviewImageResult as BoundPIPPreviewImageResult,
   type PIPOverlayRequest as BoundPIPOverlayRequest,
   type PIPOverlayState as BoundPIPOverlayState,
   type RegionSelectionRequest as BoundRegionSelectionRequest,
@@ -209,7 +211,14 @@ export type PIPOverlayState = {
   mode: PIPOverlayMode
   cameraName?: string
   camera?: PIPOverlayCamera
+  previewImagePath?: string
   captureExcluded: boolean
+}
+
+export type PIPPreviewImage = {
+  available: boolean
+  dataUrl?: string
+  modifiedUnixNano?: number
 }
 
 export type RecordingExportResult = {
@@ -562,21 +571,21 @@ export async function hideRegionFrame(): Promise<void> {
   }
 }
 
-export async function showPipOverlay(config: PIPConfig, mode: PIPOverlayMode = 'edit', camera: string | PIPOverlayCamera = ''): Promise<PIPOverlayState> {
+export async function showPipOverlay(config: PIPConfig, mode: PIPOverlayMode = 'edit', camera: string | PIPOverlayCamera = '', previewImagePath = ''): Promise<PIPOverlayState> {
   try {
-    return fromBoundPipOverlayState(await RecordingFreedomService.ShowPIPOverlay(toBoundPipOverlayRequest(config, mode, camera)))
+    return fromBoundPipOverlayState(await RecordingFreedomService.ShowPIPOverlay(toBoundPipOverlayRequest(config, mode, camera, previewImagePath)))
   } catch (error) {
     console.info('Using browser PIP overlay fallback:', error)
-    return browserPipOverlayState(config, mode, camera)
+    return browserPipOverlayState(config, mode, camera, previewImagePath)
   }
 }
 
-export async function updatePipOverlay(config: PIPConfig, mode: PIPOverlayMode = 'edit', camera: string | PIPOverlayCamera = ''): Promise<PIPOverlayState> {
+export async function updatePipOverlay(config: PIPConfig, mode: PIPOverlayMode = 'edit', camera: string | PIPOverlayCamera = '', previewImagePath = ''): Promise<PIPOverlayState> {
   try {
-    return fromBoundPipOverlayState(await RecordingFreedomService.UpdatePIPOverlay(toBoundPipOverlayRequest(config, mode, camera)))
+    return fromBoundPipOverlayState(await RecordingFreedomService.UpdatePIPOverlay(toBoundPipOverlayRequest(config, mode, camera, previewImagePath)))
   } catch (error) {
     console.info('Using browser PIP overlay update fallback:', error)
-    return browserPipOverlayState(config, mode, camera)
+    return browserPipOverlayState(config, mode, camera, previewImagePath)
   }
 }
 
@@ -585,6 +594,19 @@ export async function hidePipOverlay(): Promise<void> {
     await RecordingFreedomService.HidePIPOverlay()
   } catch (error) {
     console.info('Using browser PIP overlay hide fallback:', error)
+  }
+}
+
+export async function readPipPreviewImage(path: string, knownModifiedUnixNano = 0): Promise<PIPPreviewImage> {
+  try {
+    const result = await RecordingFreedomService.ReadPIPPreviewImage({
+      path,
+      knownModifiedUnixNano,
+    } as BoundPIPPreviewImageRequest)
+    return fromBoundPipPreviewImage(result)
+  } catch (error) {
+    console.info('Using browser PIP preview image fallback:', error)
+    return {available: false}
   }
 }
 
@@ -957,7 +979,16 @@ function fromBoundPipOverlayState(state: BoundPIPOverlayState): PIPOverlayState 
     mode: state.mode === 'recording' ? 'recording' : 'edit',
     cameraName: state.cameraName,
     camera: fromBoundPipCamera(state.camera),
+    previewImagePath: state.previewImagePath,
     captureExcluded: state.captureExcluded,
+  }
+}
+
+function fromBoundPipPreviewImage(result: BoundPIPPreviewImageResult): PIPPreviewImage {
+  return {
+    available: result.available,
+    dataUrl: result.dataUrl,
+    modifiedUnixNano: result.modifiedUnixNano,
   }
 }
 
@@ -1261,17 +1292,18 @@ function toBoundScreenIndicatorRequest(sourceId: string): BoundScreenIndicatorRe
   }
 }
 
-function toBoundPipOverlayRequest(config: PIPConfig, mode: PIPOverlayMode, camera: string | PIPOverlayCamera): BoundPIPOverlayRequest {
+function toBoundPipOverlayRequest(config: PIPConfig, mode: PIPOverlayMode, camera: string | PIPOverlayCamera, previewImagePath = ''): BoundPIPOverlayRequest {
   const target = normalizePipOverlayCamera(camera)
   return {
     config: config as unknown as BoundPIPOverlayRequest['config'],
     mode,
     cameraName: target.name,
     camera: target as BoundPIPOverlayRequest['camera'],
+    previewImagePath,
   }
 }
 
-function browserPipOverlayState(config: PIPConfig, mode: PIPOverlayMode, camera: string | PIPOverlayCamera): PIPOverlayState {
+function browserPipOverlayState(config: PIPConfig, mode: PIPOverlayMode, camera: string | PIPOverlayCamera, previewImagePath = ''): PIPOverlayState {
   const target = normalizePipOverlayCamera(camera)
   const overlayBounds = {x: 0, y: 0, width: Math.max(320, window.innerWidth || 1280), height: Math.max(240, window.innerHeight || 720)}
   const normalized = fromBoundPipConfig(config, config.preset)
@@ -1292,6 +1324,7 @@ function browserPipOverlayState(config: PIPConfig, mode: PIPOverlayMode, camera:
     mode,
     cameraName: target.name,
     camera: target,
+    previewImagePath,
     captureExcluded: false,
   }
 }

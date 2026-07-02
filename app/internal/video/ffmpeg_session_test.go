@@ -44,9 +44,44 @@ func TestFFmpegEncodingArgsUsesSegmentMuxer(t *testing.T) {
 	}
 }
 
+func TestFFmpegEncodingArgsWritesPreviewImageAsSecondOutput(t *testing.T) {
+	t.Setenv(EnvFFmpegSegmentSeconds, "12")
+	previewPath := filepath.Join("cache", "pip-camera-preview.jpg")
+	session := &ffmpegDesktopSession{}
+	args := session.encodingArgs("segment-%03d.mp4", ffmpegInputSpec{
+		PreviewImagePath:  previewPath,
+		PreviewImageFPS:   30,
+		PreviewImageWidth: 999,
+	})
+
+	segmentIndex := slices.Index(args, "segment-%03d.mp4")
+	previewIndex := slices.Index(args, previewPath)
+	if segmentIndex < 0 || previewIndex < 0 || previewIndex <= segmentIndex {
+		t.Fatalf("encoding args = %#v, want segment output followed by preview image output", args)
+	}
+	if ffmpegTestFlagValueAfter(args, segmentIndex, "-map") != "0:v:0" {
+		t.Fatalf("preview -map = %q, want camera video stream in args %v", ffmpegTestFlagValueAfter(args, segmentIndex, "-map"), args)
+	}
+	if ffmpegTestFlagValueAfter(args, segmentIndex, "-vf") != "fps=15,scale=720:-2" {
+		t.Fatalf("preview filter = %q, want capped fps/width in args %v", ffmpegTestFlagValueAfter(args, segmentIndex, "-vf"), args)
+	}
+	if ffmpegTestFlagValueAfter(args, segmentIndex, "-f") != "image2" || ffmpegTestFlagValueAfter(args, segmentIndex, "-update") != "1" {
+		t.Fatalf("preview output args = %#v, want image2 -update 1", args[segmentIndex+1:])
+	}
+}
+
 func ffmpegTestFlagValue(args []string, flag string) string {
 	for index, value := range args {
 		if value == flag && index+1 < len(args) {
+			return args[index+1]
+		}
+	}
+	return ""
+}
+
+func ffmpegTestFlagValueAfter(args []string, start int, flag string) string {
+	for index := start + 1; index < len(args)-1; index++ {
+		if args[index] == flag {
 			return args[index+1]
 		}
 	}

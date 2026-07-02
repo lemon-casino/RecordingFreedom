@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -49,12 +50,25 @@ type ExportRecordingResult struct {
 	Export exporter.Result `json:"export"`
 }
 
+type PIPPreviewImageRequest struct {
+	Path                  string `json:"path"`
+	KnownModifiedUnixNano int64  `json:"knownModifiedUnixNano,omitempty"`
+}
+
+type PIPPreviewImageResult struct {
+	Available        bool   `json:"available"`
+	DataURL          string `json:"dataUrl,omitempty"`
+	ModifiedUnixNano int64  `json:"modifiedUnixNano,omitempty"`
+}
+
 type ClientLogEvent struct {
 	Component string            `json:"component"`
 	Event     string            `json:"event"`
 	Message   string            `json:"message,omitempty"`
 	Fields    map[string]string `json:"fields,omitempty"`
 }
+
+const maxPIPPreviewImageBytes = 2 * 1024 * 1024
 
 type RecordingFreedomService struct {
 	appData   *appdata.Service
@@ -126,6 +140,72 @@ func (s *RecordingFreedomService) setTrayLocaleUpdater(update func(settings.Loca
 
 func (s *RecordingFreedomService) LogClientEvent(event ClientLogEvent) error {
 	return s.writeLog("client."+strings.TrimSpace(event.Component), strings.TrimSpace(event.Event), strings.TrimSpace(event.Message), event.Fields)
+}
+
+func (s *RecordingFreedomService) ReadPIPPreviewImage(req PIPPreviewImageRequest) (PIPPreviewImageResult, error) {
+	path := strings.TrimSpace(req.Path)
+	if path == "" {
+		return PIPPreviewImageResult{}, errors.New("PIP preview image path is required")
+	}
+	if s.appData == nil {
+		return PIPPreviewImageResult{}, errors.New("app data service is not initialized")
+	}
+	videoDir, err := s.appData.VideoDir()
+	if err != nil {
+		return PIPPreviewImageResult{}, err
+	}
+	path, err = filepath.Abs(path)
+	if err != nil {
+		return PIPPreviewImageResult{}, err
+	}
+	videoDir, err = filepath.Abs(videoDir)
+	if err != nil {
+		return PIPPreviewImageResult{}, err
+	}
+	rel, err := filepath.Rel(videoDir, path)
+	if err != nil {
+		return PIPPreviewImageResult{}, err
+	}
+	if rel == "." || strings.HasPrefix(rel, ".."+string(os.PathSeparator)) || filepath.IsAbs(rel) {
+		return PIPPreviewImageResult{}, fmt.Errorf("PIP preview image %q is outside the managed video directory", path)
+	}
+	ext := strings.ToLower(filepath.Ext(path))
+	if ext != ".jpg" && ext != ".jpeg" {
+		return PIPPreviewImageResult{}, fmt.Errorf("PIP preview image %q must be a JPEG", path)
+	}
+
+	info, err := os.Stat(path)
+	if errors.Is(err, os.ErrNotExist) {
+		return PIPPreviewImageResult{Available: false}, nil
+	}
+	if err != nil {
+		return PIPPreviewImageResult{}, err
+	}
+	if info.IsDir() {
+		return PIPPreviewImageResult{}, fmt.Errorf("PIP preview image %q is a directory", path)
+	}
+	modified := info.ModTime().UnixNano()
+	if req.KnownModifiedUnixNano > 0 && modified <= req.KnownModifiedUnixNano {
+		return PIPPreviewImageResult{Available: false, ModifiedUnixNano: modified}, nil
+	}
+	if info.Size() <= 0 {
+		return PIPPreviewImageResult{Available: false, ModifiedUnixNano: modified}, nil
+	}
+	if info.Size() > maxPIPPreviewImageBytes {
+		return PIPPreviewImageResult{}, fmt.Errorf("PIP preview image %q is too large", path)
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return PIPPreviewImageResult{}, err
+	}
+	if len(data) == 0 {
+		return PIPPreviewImageResult{Available: false, ModifiedUnixNano: modified}, nil
+	}
+	return PIPPreviewImageResult{
+		Available:        true,
+		DataURL:          "data:image/jpeg;base64," + base64.StdEncoding.EncodeToString(data),
+		ModifiedUnixNano: modified,
+	}, nil
 }
 
 func (s *RecordingFreedomService) logEvent(component string, event string, fields map[string]string) {
@@ -586,7 +666,7 @@ func (s *RecordingFreedomService) StartRecording(req recording.StartRequest) (re
 		return recording.Session{}, err
 	}
 	s.lockRegionFrameForRecording(req)
-	s.showRecordingPIPOverlay(req)
+	s.showRecordingPIPOverlay(req, session)
 	s.emitSessionStatus(session, "Recording started")
 	return session, nil
 }

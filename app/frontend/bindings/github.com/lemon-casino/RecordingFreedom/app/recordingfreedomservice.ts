@@ -107,6 +107,10 @@ export function PreflightRecording(req: recording$0.StartRequest): $CancellableP
     return $Call.ByID(2137129988, req);
 }
 
+export function ReadPIPPreviewImage(req: $models.PIPPreviewImageRequest): $CancellablePromise<$models.PIPPreviewImageResult> {
+    return $Call.ByID(4117878330, req);
+}
+
 export function RecoverRecordingPackage(packageDir: string): $CancellablePromise<recpackage$0.RecoverySummary> {
     return $Call.ByID(919661591, packageDir);
 }

@@ -17,6 +17,8 @@ export type {
     PIPCamera,
     PIPOverlayRequest,
     PIPOverlayState,
+    PIPPreviewImageRequest,
+    PIPPreviewImageResult,
     RegionRect,
     RegionSelectionRequest,
     RegionSelectionResult,

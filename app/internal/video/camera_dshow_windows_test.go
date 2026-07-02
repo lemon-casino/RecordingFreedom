@@ -10,8 +10,9 @@ import (
 
 func TestDirectShowCameraInputArgsUseNativeDeviceName(t *testing.T) {
 	args, err := directShowCameraInputArgs(CameraCaptureConfig{
-		DeviceID:       "camera:dshow:integrated-camera",
-		DeviceNativeID: "Integrated Camera",
+		DeviceID:         "camera:dshow:integrated-camera",
+		DeviceNativeID:   "Integrated Camera",
+		PreviewImagePath: filepath.Join("cache", "pip-camera-preview.jpg"),
 	})(CaptureConfig{})
 	if err != nil {
 		t.Fatalf("directShowCameraInputArgs() error = %v", err)
@@ -21,6 +22,9 @@ func TestDirectShowCameraInputArgsUseNativeDeviceName(t *testing.T) {
 	}
 	if !slices.Contains(args.Args, "video=Integrated Camera") {
 		t.Fatalf("args = %#v, want native DirectShow camera name", args)
+	}
+	if args.PreviewImagePath != filepath.Join("cache", "pip-camera-preview.jpg") || args.PreviewImageFPS != 8 || args.PreviewImageWidth != 360 {
+		t.Fatalf("preview image spec = path:%q fps:%d width:%d", args.PreviewImagePath, args.PreviewImageFPS, args.PreviewImageWidth)
 	}
 }
 

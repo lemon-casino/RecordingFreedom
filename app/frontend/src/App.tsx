@@ -53,7 +53,7 @@ import {
   fallbackCapabilities,
   fallbackStorageStatus,
 } from './services/mockBackend'
-import {cancelRegionSelector, cancelSelectedRegion, completeRegionSelection, exportRecordingPackage, hidePipOverlay, hideRegionFrame, hideScreenIndicator, hideSettingsWindow, loadBootstrap, loadSettings, logClientEvent, openRecordingPackage, openVideoDirectory, pauseRecording, preflightAudioOnlyRecording, preflightRecording, quitApplication, recoverRecordingPackage, restoreCapsuleWindow, resumeRecording, saveSettings, setCapsuleWindowExpanded, setCapsuleWindowHitRegions, setDataRoot, showPipOverlay, showRegionSelector, showScreenIndicator, startAudioOnlyRecording, startMicrophoneLevelMonitor, startRecording, stopMicrophoneLevelMonitor, stopRecording, subscribeAudioLevel, subscribeRecordingStatus, subscribeRegionSelection, subscribeSettingsChanged, updatePipOverlay, updateSelectedRegion, type AudioLevelUpdate, type CapsuleWindowExpandDirection, type CapsuleWindowHitRegion, type PIPOverlayCamera, type PIPOverlayState, type RecordingRecovery, type RecordingStatusUpdate, type RegionSelectionSession} from './services/recorderBackend'
+import {cancelRegionSelector, cancelSelectedRegion, completeRegionSelection, exportRecordingPackage, hidePipOverlay, hideRegionFrame, hideScreenIndicator, hideSettingsWindow, loadBootstrap, loadSettings, logClientEvent, openRecordingPackage, openVideoDirectory, pauseRecording, preflightAudioOnlyRecording, preflightRecording, quitApplication, readPipPreviewImage, recoverRecordingPackage, restoreCapsuleWindow, resumeRecording, saveSettings, setCapsuleWindowExpanded, setCapsuleWindowHitRegions, setDataRoot, showPipOverlay, showRegionSelector, showScreenIndicator, startAudioOnlyRecording, startMicrophoneLevelMonitor, startRecording, stopMicrophoneLevelMonitor, stopRecording, subscribeAudioLevel, subscribeRecordingStatus, subscribeRegionSelection, subscribeSettingsChanged, updatePipOverlay, updateSelectedRegion, type AudioLevelUpdate, type CapsuleWindowExpandDirection, type CapsuleWindowHitRegion, type PIPOverlayCamera, type PIPOverlayState, type RecordingRecovery, type RecordingStatusUpdate, type RegionSelectionSession} from './services/recorderBackend'
 
 const sourceIcon = {
   screen: Monitor,
@@ -2157,8 +2157,11 @@ function PIPOverlayWindow() {
   const activeCameraStreamRef = useRef<MediaStream | null>(null)
   const cameraStreamsRef = useRef<Set<MediaStream>>(new Set())
   const cameraRequestTokenRef = useRef(0)
+  const previewImageModifiedRef = useRef(0)
+  const previewImageDataUrlRef = useRef<string | null>(null)
   const [cameraReady, setCameraReady] = useState(false)
   const [cameraError, setCameraError] = useState<string | null>(null)
+  const [previewImageDataUrl, setPreviewImageDataUrl] = useState<string | null>(null)
   const [overlayLocale, setOverlayLocale] = useState<LocaleCode>(navigator.language.toLowerCase().startsWith('zh') ? 'zh-CN' : 'en')
   const copy = copyByLocale[overlayLocale]
   const logPipCameraEvent = (event: string, fields: Record<string, unknown> = {}) => {
@@ -2166,6 +2169,16 @@ function PIPOverlayWindow() {
   }
 
   const pipStopTokenChanged = (stopToken: number) => (pipWindow.__RF_PIP_STOP_TOKEN__ ?? 0) !== stopToken
+
+  const setPipPreviewImage = (dataUrl: string | null) => {
+    previewImageDataUrlRef.current = dataUrl
+    setPreviewImageDataUrl(dataUrl)
+  }
+
+  const clearPipPreviewImage = () => {
+    previewImageModifiedRef.current = 0
+    setPipPreviewImage(null)
+  }
 
   const trackPipCameraStream = (stream: MediaStream, requestToken: number, stopToken: number, isCancelled: () => boolean) => {
     cameraStreamsRef.current.add(stream)
@@ -2210,6 +2223,7 @@ function PIPOverlayWindow() {
     pipWindow.__RF_PIP_STOP_TOKEN__ = (pipWindow.__RF_PIP_STOP_TOKEN__ ?? 0) + 1
     cameraRequestTokenRef.current += 1
     stopActivePipCameraStream()
+    clearPipPreviewImage()
     setCameraReady(false)
   }
 
@@ -2280,6 +2294,64 @@ function PIPOverlayWindow() {
       setCameraError(null)
       return
     }
+    const recordingPreviewImagePath = overlayState.mode === 'recording' ? overlayState.previewImagePath?.trim() ?? '' : ''
+    if (recordingPreviewImagePath) {
+      const requestToken = cameraRequestTokenRef.current + 1
+      cameraRequestTokenRef.current = requestToken
+      const stopToken = pipWindow.__RF_PIP_STOP_TOKEN__ ?? 0
+      let cancelled = false
+      let timer: number | null = null
+      stopActivePipCameraStream()
+      clearPipPreviewImage()
+      setCameraReady(false)
+      setCameraError(null)
+      const isCancelled = () => cancelled || cameraRequestTokenRef.current !== requestToken || pipStopTokenChanged(stopToken)
+      logPipCameraEvent('preview-image-poll-start', {
+        requestToken,
+        stopToken,
+        mode: overlayState.mode,
+      })
+      const scheduleNextPoll = () => {
+        if (!isCancelled()) {
+          timer = window.setTimeout(pollPreviewImage, 125)
+        }
+      }
+      async function pollPreviewImage() {
+        if (isCancelled()) return
+        try {
+          const result = await readPipPreviewImage(recordingPreviewImagePath, previewImageModifiedRef.current)
+          if (isCancelled()) return
+          if (result.modifiedUnixNano && result.modifiedUnixNano > previewImageModifiedRef.current) {
+            previewImageModifiedRef.current = result.modifiedUnixNano
+          }
+          if (result.available && result.dataUrl) {
+            setPipPreviewImage(result.dataUrl)
+            setCameraReady(true)
+            setCameraError(null)
+          }
+        } catch (error) {
+          if (!isCancelled()) {
+            logPipCameraEvent('preview-image-error', {requestToken, error: readableError(error)})
+            setCameraError(readableError(error))
+            setCameraReady(Boolean(previewImageDataUrlRef.current))
+          }
+        } finally {
+          scheduleNextPoll()
+        }
+      }
+      void pollPreviewImage()
+      return () => {
+        cancelled = true
+        if (timer !== null) {
+          window.clearTimeout(timer)
+        }
+        logPipCameraEvent('preview-image-cleanup', {requestToken})
+        if (cameraRequestTokenRef.current === requestToken) {
+          cameraRequestTokenRef.current += 1
+        }
+      }
+    }
+    clearPipPreviewImage()
     if (!navigator.mediaDevices?.getUserMedia) {
       cancelPipCameraStream()
       setCameraReady(false)
@@ -2349,7 +2421,7 @@ function PIPOverlayWindow() {
       stopActivePipCameraStream()
       setCameraReady(false)
     }
-  }, [overlayState?.camera?.deviceId, overlayState?.camera?.name, overlayState?.camera?.nativeId, overlayState?.cameraName, overlayState?.config.preset])
+  }, [overlayState?.camera?.deviceId, overlayState?.camera?.name, overlayState?.camera?.nativeId, overlayState?.cameraName, overlayState?.config.preset, overlayState?.mode, overlayState?.previewImagePath])
 
   useEffect(() => () => {
     if (previewFrameRef.current !== null) {
@@ -2362,10 +2434,11 @@ function PIPOverlayWindow() {
     const state = overlayStateRef.current
     const mode = state?.mode ?? 'edit'
     const cameraTarget = state?.camera ?? (state?.cameraName ? {name: state.cameraName} : '')
+    const previewImagePath = state?.previewImagePath ?? ''
     const nextConfig = normalizePipConfig(config, config.preset)
     const nextState = commit
-      ? await updatePipOverlay(nextConfig, mode, cameraTarget)
-      : await showPipOverlay(nextConfig, mode, cameraTarget)
+      ? await updatePipOverlay(nextConfig, mode, cameraTarget, previewImagePath)
+      : await showPipOverlay(nextConfig, mode, cameraTarget, previewImagePath)
     overlayStateRef.current = nextState
     setOverlayState(nextState)
   }
@@ -2452,6 +2525,7 @@ function PIPOverlayWindow() {
   }
 
   const content = overlayState?.config.preset !== 'off' ? overlayState?.contentBounds : undefined
+  const usesBackendPreviewImage = overlayState?.mode === 'recording' && Boolean(overlayState.previewImagePath?.trim())
   const cameraName = overlayState?.camera?.name || overlayState?.cameraName || copy.panels.cameraSidecar
   const cameraPlaceholderTitle = overlayState?.mode === 'recording'
     ? copy.pipOverlay.cameraRecording
@@ -2481,8 +2555,19 @@ function PIPOverlayWindow() {
       {overlayState && content && frameStyle && (
         <div className="pip-live-frame" style={frameStyle}>
           <div className={`pip-live-media ${overlayState.config.shape} ${overlayState.config.mirror ? 'mirrored' : ''}`}>
-            <video ref={videoRef} autoPlay muted playsInline className={cameraReady ? 'ready' : ''} />
-            {!cameraReady && (
+            {usesBackendPreviewImage ? (
+              previewImageDataUrl ? (
+                <img
+                  className={`pip-camera-preview-image ${cameraReady ? 'ready' : ''}`}
+                  src={previewImageDataUrl}
+                  alt=""
+                  draggable={false}
+                />
+              ) : null
+            ) : (
+              <video ref={videoRef} autoPlay muted playsInline className={cameraReady ? 'ready' : ''} />
+            )}
+            {!cameraReady && !usesBackendPreviewImage && (
               <div className={`pip-camera-placeholder ${overlayState.mode} ${cameraError ? 'error' : 'pending'}`}>
                 <Camera size={24} />
                 <strong>{cameraPlaceholderTitle}</strong>

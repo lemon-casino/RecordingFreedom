@@ -97,6 +97,7 @@ export interface PIPOverlayRequest {
     "mode"?: string;
     "cameraName"?: string;
     "camera"?: PIPCamera;
+    "previewImagePath"?: string;
 }
 
 export interface PIPOverlayState {
@@ -108,7 +109,19 @@ export interface PIPOverlayState {
     "mode": string;
     "cameraName"?: string;
     "camera"?: PIPCamera;
+    "previewImagePath"?: string;
     "captureExcluded": boolean;
+}
+
+export interface PIPPreviewImageRequest {
+    "path": string;
+    "knownModifiedUnixNano"?: number;
+}
+
+export interface PIPPreviewImageResult {
+    "available": boolean;
+    "dataUrl"?: string;
+    "modifiedUnixNano"?: number;
 }
 
 export interface RegionRect {

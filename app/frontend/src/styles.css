@@ -1749,7 +1749,9 @@ input {
   mask-composite: intersect;
 }
 
-.pip-live-media video {
+.pip-live-media video,
+.pip-live-media img.pip-camera-preview-image {
+  display: block;
   width: 100%;
   height: 100%;
   object-fit: cover;
@@ -1757,11 +1759,13 @@ input {
   transition: opacity 180ms ease;
 }
 
-.pip-live-media video.ready {
+.pip-live-media video.ready,
+.pip-live-media img.pip-camera-preview-image.ready {
   opacity: 1;
 }
 
 .pip-live-media.mirrored video,
+.pip-live-media.mirrored img.pip-camera-preview-image,
 .pip-live-media.mirrored .pip-camera-placeholder svg {
   transform: scaleX(-1);
 }

@@ -24,11 +24,12 @@ type CaptureConfig struct {
 }
 
 type CameraCaptureConfig struct {
-	Backend        string
-	DeviceID       string
-	DeviceNativeID string
-	OutputPath     string
-	Profile        recordingprofile.Profile
+	Backend          string
+	DeviceID         string
+	DeviceNativeID   string
+	OutputPath       string
+	PreviewImagePath string
+	Profile          recordingprofile.Profile
 }
 
 type SourceGeometry struct {
@@ -123,6 +124,7 @@ func NormalizeCameraCaptureConfig(config CameraCaptureConfig) CameraCaptureConfi
 	config.DeviceID = strings.TrimSpace(config.DeviceID)
 	config.DeviceNativeID = strings.TrimSpace(config.DeviceNativeID)
 	config.OutputPath = strings.TrimSpace(config.OutputPath)
+	config.PreviewImagePath = strings.TrimSpace(config.PreviewImagePath)
 	config.Profile = recordingprofile.Normalize(config.Profile)
 	return config
 }

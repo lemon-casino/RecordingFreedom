@@ -1,9 +1,11 @@
 package main
 
 import (
+	"path/filepath"
 	"testing"
 
 	"github.com/lemon-casino/RecordingFreedom/app/internal/devices"
+	"github.com/lemon-casino/RecordingFreedom/app/internal/pip"
 	"github.com/lemon-casino/RecordingFreedom/app/internal/recording"
 )
 
@@ -37,6 +39,22 @@ func TestPIPCameraFromRecordingRequestUsesMediaInventoryName(t *testing.T) {
 	})
 	if got.DeviceID != "camera:avfoundation:facetime" || got.NativeID != "0" || got.Name != "FaceTime HD Camera" {
 		t.Fatalf("camera target = %#v, want media inventory display name for preview matching", got)
+	}
+}
+
+func TestPIPOverlayStateCarriesRecordingPreviewImagePath(t *testing.T) {
+	service := &RecordingFreedomService{}
+	previewPath := filepath.Join("data", "video", "recording.rfrec", "cache", "pip-camera-preview.jpg")
+
+	state, err := service.pipOverlayState(pip.DefaultConfig(), "recording", PIPCamera{
+		DeviceID: "camera:dshow:integrated-camera",
+		Name:     "Integrated Camera",
+	}, " "+previewPath+" ")
+	if err != nil {
+		t.Fatalf("pipOverlayState() error = %v", err)
+	}
+	if state.Mode != "recording" || state.PreviewImagePath != previewPath {
+		t.Fatalf("state mode/path = %q/%q, want recording preview path %q", state.Mode, state.PreviewImagePath, previewPath)
 	}
 }
 

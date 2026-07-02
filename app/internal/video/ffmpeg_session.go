@@ -34,11 +34,14 @@ const (
 type ffmpegInputArgsBuilder func(CaptureConfig) (ffmpegInputSpec, error)
 
 type ffmpegInputSpec struct {
-	Args             []string
-	VideoFilter      string
-	VideoPreFiltered bool
-	Engine           string
-	Messages         []string
+	Args              []string
+	VideoFilter       string
+	VideoPreFiltered  bool
+	Engine            string
+	Messages          []string
+	PreviewImagePath  string
+	PreviewImageFPS   int
+	PreviewImageWidth int
 }
 
 type ffmpegDesktopSession struct {
@@ -301,6 +304,9 @@ func (s *ffmpegDesktopSession) startSegmentLocked(ctx context.Context) error {
 	if len(input.Args) == 0 {
 		return errors.New("FFmpeg input args builder returned no input arguments")
 	}
+	if err := prepareFFmpegPreviewImage(input); err != nil {
+		return err
+	}
 	group := s.nextGroup
 	s.nextGroup++
 	segmentPattern := s.segmentPattern(group)
@@ -364,7 +370,50 @@ func (s *ffmpegDesktopSession) encodingArgs(outputPattern string, input ffmpegIn
 		"-segment_format_options", "movflags=+faststart",
 		outputPattern,
 	)
+	if previewPath := strings.TrimSpace(input.PreviewImagePath); previewPath != "" {
+		args = append(args,
+			"-map", "0:v:0",
+			"-an",
+			"-vf", ffmpegPreviewImageFilter(input),
+			"-q:v", "5",
+			"-f", "image2",
+			"-update", "1",
+			previewPath,
+		)
+	}
 	return args
+}
+
+func prepareFFmpegPreviewImage(input ffmpegInputSpec) error {
+	previewPath := strings.TrimSpace(input.PreviewImagePath)
+	if previewPath == "" {
+		return nil
+	}
+	if err := os.MkdirAll(filepath.Dir(previewPath), 0o755); err != nil {
+		return err
+	}
+	if err := os.Remove(previewPath); err != nil && !errors.Is(err, os.ErrNotExist) {
+		return err
+	}
+	return nil
+}
+
+func ffmpegPreviewImageFilter(input ffmpegInputSpec) string {
+	fps := input.PreviewImageFPS
+	if fps <= 0 {
+		fps = 8
+	}
+	if fps > 15 {
+		fps = 15
+	}
+	width := input.PreviewImageWidth
+	if width <= 0 {
+		width = 360
+	}
+	if width > 720 {
+		width = 720
+	}
+	return fmt.Sprintf("fps=%d,scale=%d:-2", fps, width)
 }
 
 func defaultFFmpegVideoFilter() string {

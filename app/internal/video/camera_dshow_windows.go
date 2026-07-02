@@ -52,7 +52,10 @@ func directShowCameraInputArgs(camera CameraCaptureConfig) ffmpegInputArgsBuilde
 				"-framerate", fmt.Sprintf("%d", config.Profile.FPS),
 				"-i", "video=" + camera.DeviceNativeID,
 			},
-			Engine: "windows-dshow-camera",
+			Engine:            "windows-dshow-camera",
+			PreviewImagePath:  camera.PreviewImagePath,
+			PreviewImageFPS:   8,
+			PreviewImageWidth: 360,
 		}, nil
 	}
 }
