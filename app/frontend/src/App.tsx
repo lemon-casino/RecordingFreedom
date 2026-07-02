@@ -35,6 +35,7 @@ import {
   type AppDataInfo,
   type AppSettings,
   type AppStorageStatus,
+  type AudioOnlyRecordingRequest,
   type CaptureCapabilities,
   type CaptureCapability,
   type CaptureSource,
@@ -42,6 +43,7 @@ import {
   type PIPConfig,
   type MediaDevice,
   type MediaInventory,
+  type MockRecordingRequest,
   type PIPShape,
   type PIPPreset,
   type RecordingMode,
@@ -269,6 +271,7 @@ function App() {
   const [lastBackend, setLastBackend] = useState<string>('ui-preview')
   const [lastStatusMessage, setLastStatusMessage] = useState<StatusMessageState>({key: 'waiting'})
   const [lastPreflight, setLastPreflight] = useState<RecordingPreflight | null>(null)
+  const [preflightBusy, setPreflightBusy] = useState(false)
   const [recoveries, setRecoveries] = useState<RecordingRecovery[]>([])
   const [recoveryBusy, setRecoveryBusy] = useState(false)
   const [recoveryMessage, setRecoveryMessage] = useState<RecoveryMessageState | null>(null)
@@ -736,28 +739,69 @@ function App() {
     return copy.statusChips[state] ?? copy.statusChips.idle
   }, [copy, state])
 
+  const currentRecordingProfile = () => ({
+    quality: recordingQuality,
+    fps: recordingFPS,
+    captureCursor,
+    countdownSeconds,
+  })
+
+  const buildAudioOnlyRequest = (): AudioOnlyRecordingRequest => ({
+    recording: currentRecordingProfile(),
+    systemAudio,
+    systemAudioDeviceId: selectedSystemAudio || undefined,
+    microphone,
+    microphoneDeviceId: selectedMic || undefined,
+    noiseSuppression,
+  })
+
+  const buildVideoRequest = (): MockRecordingRequest => ({
+    source: selectedSource,
+    recording: currentRecordingProfile(),
+    systemAudio,
+    systemAudioDeviceId: selectedSystemAudio || undefined,
+    microphone,
+    microphoneDeviceId: selectedMic || undefined,
+    noiseSuppression,
+    camera,
+    cameraDeviceId: selectedCamera,
+    cameraDeviceNativeId: selectedCameraDevice?.nativeId,
+    pipPreset,
+    pip: currentPipConfig,
+  })
+
+  const runCurrentPreflight = async () => {
+    if (isRecording || preflightBusy) return null
+    setPreflightBusy(true)
+    try {
+      const preflight = recordingMode === 'audio'
+        ? await preflightAudioOnlyRecording(buildAudioOnlyRequest())
+        : await preflightRecording(buildVideoRequest())
+      setLastPreflight(preflight)
+      setLastBackend(preflight.backend || lastBackend)
+      if (preflight.status === 'blocked') {
+        setLastStatusMessage({key: 'preflightBlocked'})
+      }
+      return preflight
+    } catch (error) {
+      console.error('Failed to run preflight:', error)
+      setLastStatusMessage({key: 'failedToStart'})
+      return null
+    } finally {
+      setPreflightBusy(false)
+    }
+  }
+
   const beginRecording = async () => {
     setActivePanel(null)
     setElapsed(0)
     setState('preparing')
     try {
-      const recording = {
-        quality: recordingQuality,
-        fps: recordingFPS,
-        captureCursor,
-        countdownSeconds,
-      }
       if (recordingMode === 'audio') {
-        const request = {
-          recording,
-          systemAudio,
-          systemAudioDeviceId: selectedSystemAudio || undefined,
-          microphone,
-          microphoneDeviceId: selectedMic || undefined,
-          noiseSuppression,
-        }
+        const request = buildAudioOnlyRequest()
         const preflight = await preflightAudioOnlyRecording(request)
         setLastPreflight(preflight)
+        setLastBackend(preflight.backend || lastBackend)
         if (preflight.status === 'blocked') {
           setState('failed')
           setLastStatusMessage({key: 'preflightBlocked'})
@@ -773,29 +817,10 @@ function App() {
         return
       }
 
-      const request = {
-        source: selectedSource,
-        recording,
-        systemAudio,
-        systemAudioDeviceId: selectedSystemAudio || undefined,
-        microphone,
-        microphoneDeviceId: selectedMic || undefined,
-        noiseSuppression,
-        camera,
-        cameraDeviceId: selectedCamera,
-        cameraDeviceNativeId: selectedCameraDevice?.nativeId,
-        pipPreset,
-        pip: {
-          preset: pipPreset,
-          shape: pipShape,
-          mirror: pipMirror,
-          position: pipPosition,
-          scale: pipScale,
-          edgeFeather: pipEdgeFeather,
-        },
-      }
+      const request = buildVideoRequest()
       const preflight = await preflightRecording(request)
       setLastPreflight(preflight)
+      setLastBackend(preflight.backend || lastBackend)
       if (preflight.status === 'blocked') {
         setState('failed')
         setLastStatusMessage({key: 'preflightBlocked'})
@@ -1090,6 +1115,9 @@ function App() {
           status={lastPreflight ? preflightStatusForBadge(lastPreflight.status) : undefined}
           statusLabel={lastPreflight ? copy.capabilityStatusLabels[preflightStatusForBadge(lastPreflight.status)] : undefined}
           detail={lastPreflight ? preflightDetail(lastPreflight, copy) : copy.settings.preflightPendingDetail}
+          actionLabel={preflightBusy ? copy.settings.preflightRunning : (lastPreflight ? copy.settings.preflightRerun : copy.settings.preflightAction)}
+          actionDisabled={preflightBusy || isRecording}
+          onAction={() => void runCurrentPreflight()}
         />
         <SettingLine
           title={copy.settings.recordingPackage}

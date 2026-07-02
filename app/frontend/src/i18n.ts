@@ -109,6 +109,9 @@ export type RecorderCopy = {
     recordingBackend: string
     recordingBackendDetail: string
     preflight: string
+    preflightAction: string
+    preflightRerun: string
+    preflightRunning: string
     preflightPendingDetail: string
     recordingPackage: string
     openPackage: string
@@ -330,9 +333,12 @@ const zhCN: RecorderCopy = {
     settingsFile: '设置文件',
     language: '语言',
     recordingBackend: '录制后端',
-    recordingBackendDetail: '真实采集开始前会在这里显示原生后端 ID；排期中的原生后端仍会被预检拦截。',
-    preflight: '开始预检',
-    preflightPendingDetail: '下一次开始录制会检查来源、媒体设备、后端能力、存储状态以及 mock/native 状态。',
+    recordingBackendDetail: '当前会使用这里显示的原生后端进行真实采集；开始录制前仍会执行预检，阻塞不可用的来源、媒体设备或存储状态。',
+    preflight: '预检',
+    preflightAction: '开始预检',
+    preflightRerun: '重新预检',
+    preflightRunning: '预检中',
+    preflightPendingDetail: '点击开始预检会立即检查来源、媒体设备、后端能力、存储状态以及当前录制模式。',
     recordingPackage: '录制包',
     openPackage: '打开包',
     noRecordingPackage: '暂无真实录制包',
@@ -682,9 +688,12 @@ const en: RecorderCopy = {
     settingsFile: 'Settings',
     language: 'Language',
     recordingBackend: 'Recording backend',
-    recordingBackendDetail: 'Native backend IDs are visible here before real capture starts; queued native backends are still blocked by preflight.',
+    recordingBackendDetail: 'Real capture will use the native backend shown here; preflight still blocks unavailable sources, media devices, or storage before recording starts.',
     preflight: 'Preflight',
-    preflightPendingDetail: 'The next start action will check source, media devices, backend capability, storage, and mock/native status.',
+    preflightAction: 'Run preflight',
+    preflightRerun: 'Run again',
+    preflightRunning: 'Checking',
+    preflightPendingDetail: 'Run preflight now to check the source, media devices, backend capability, storage, and current recording mode.',
     recordingPackage: 'Recording package',
     openPackage: 'Open package',
     noRecordingPackage: 'No real package yet',
