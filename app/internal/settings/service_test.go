@@ -119,7 +119,7 @@ func TestSaveAndLoadSettings(t *testing.T) {
 	if loaded.Camera.PIPPreset != "free" || loaded.Camera.PIP.Shape != pip.ShapeSquare || loaded.Camera.PIP.Mirror {
 		t.Fatalf("pip settings were not persisted: %#v", loaded.Camera)
 	}
-	if loaded.Camera.PIP.Position.X != 0.25 || loaded.Camera.PIP.Position.Y != 0.75 || loaded.Camera.PIP.Scale != 0.28 || loaded.Camera.PIP.EdgeFeather != 0.22 {
+	if loaded.Camera.PIP.Position.X != 0.25 || loaded.Camera.PIP.Position.Y != 0.75 || loaded.Camera.PIP.Scale != pip.MaximumScale || loaded.Camera.PIP.EdgeFeather != 0.22 {
 		t.Fatalf("pip layout settings were not persisted: %#v", loaded.Camera.PIP)
 	}
 }

@@ -66,9 +66,9 @@ const sourceIcon = {
 const pipPresetOptions: PIPPreset[] = ['bottom-right', 'bottom-left', 'free']
 const allPipPresetOptions: PIPPreset[] = [...pipPresetOptions, 'off']
 const pipShapeOptions: PIPShape[] = ['circle', 'square']
-const pipMinimumScale = 0.08
-const pipMaximumScale = 0.32
-const pipDefaultScale = pipMinimumScale
+const pipMaximumScale = 0.08
+const pipMinimumScale = pipMaximumScale * 0.2
+const pipDefaultScale = pipMaximumScale
 const pipMinimumDisplayPercent = 20
 const pipMaximumDisplayPercent = 100
 
@@ -273,6 +273,7 @@ type ApplySettingsOptions = {
   preserveAudioSelection?: boolean
   preserveCameraEnabled?: boolean
   preserveCameraSelection?: boolean
+  preservePipConfig?: boolean
 }
 
 function App() {
@@ -357,11 +358,14 @@ function App() {
   const countdownTimerRef = useRef<number | null>(null)
   const countdownTokenRef = useRef(0)
   const cameraPreviewGenerationRef = useRef(0)
+  const localCameraIntentUntilRef = useRef(0)
+  const localPipIntentUntilRef = useRef(0)
   const selectedMicRef = useRef(selectedMic)
   const systemAudioRef = useRef(systemAudio)
   const microphoneRef = useRef(microphone)
   const noiseSuppressionRef = useRef(noiseSuppression)
   const cameraRef = useRef(camera)
+  const currentSettingsRef = useRef<AppSettings | null>(null)
   const persistedSettingsRef = useRef<AppSettings | null>(null)
   const rnnoiseActive = microphone && noiseSuppression
 
@@ -488,6 +492,11 @@ function App() {
     nativeId: selectedCameraDevice?.nativeId,
     name: pipCameraLabel,
   }), [pipCameraLabel, selectedCamera, selectedCameraDevice?.id, selectedCameraDevice?.nativeId])
+
+  useEffect(() => {
+    currentSettingsRef.current = currentSettings
+  }, [currentSettings])
+
   const selectedMicrophoneDevice = useMemo(
     () => availableMicrophones.find((device) => device.id === selectedMic),
     [availableMicrophones, selectedMic],
@@ -553,25 +562,89 @@ function App() {
     cameraPreviewGenerationRef.current += 1
     void hidePipOverlay()
   }
-  const setCameraEnabled = (enabled: boolean) => {
+  const applyLocalPipConfigState = (config: PIPConfig) => {
+    const nextConfig = normalizePipConfig(config, config.preset)
+    setPipPreset(nextConfig.preset)
+    setPipShape(nextConfig.shape)
+    setPipMirror(nextConfig.mirror)
+    setPipPosition(nextConfig.position)
+    setPipScale(nextConfig.scale)
+    setPipEdgeFeather(nextConfig.edgeFeather)
+  }
+  const persistCameraSettings = (enabled: boolean, pipConfig: PIPConfig, deviceId = selectedCamera) => {
+    const normalizedPip = enabled
+      ? ensureVisiblePipConfig(pipConfig)
+      : normalizePipConfig({...pipConfig, preset: 'off'}, 'off')
+    const baseSettings = currentSettingsRef.current ?? currentSettings
+    const nextSettings: AppSettings = {
+      ...baseSettings,
+      camera: {
+        ...baseSettings.camera,
+        enabled,
+        deviceId,
+        pipPreset: normalizedPip.preset,
+        pip: normalizedPip,
+      },
+    }
+    currentSettingsRef.current = nextSettings
+    void saveSettings(nextSettings)
+      .then((saved) => {
+        persistedSettingsRef.current = saved
+      })
+      .catch((error) => console.error('Failed to persist camera settings:', error))
+  }
+  const commitPipConfigFromPanel = (patch: Partial<PIPConfig>) => {
+    if (!cameraRef.current || !hasUsableCamera || recordingMode !== 'video') return
+    const nextConfig = ensureVisiblePipConfig(normalizePipConfig({
+      ...currentPipConfig,
+      ...patch,
+      position: patch.position ?? currentPipConfig.position,
+    }, (patch.preset as PIPPreset | undefined) ?? currentPipConfig.preset))
+    markLocalPipIntent()
+    applyLocalPipConfigState(nextConfig)
+    void updatePipOverlay(nextConfig, 'edit', pipCameraTarget)
+      .then((state) => {
+        if (!currentSettingsRef.current) return
+        const nextSettings: AppSettings = {
+          ...currentSettingsRef.current,
+          camera: {
+            ...currentSettingsRef.current.camera,
+            enabled: true,
+            pipPreset: state.config.preset,
+            pip: state.config,
+          },
+        }
+        currentSettingsRef.current = nextSettings
+        persistedSettingsRef.current = nextSettings
+      })
+      .catch((error) => {
+        console.info('PIP panel update failed:', error)
+        persistCameraSettings(true, nextConfig)
+      })
+  }
+  const setCameraEnabled = (enabled: boolean, deviceId = selectedCamera) => {
     const nextEnabled = enabled && hasUsableCamera
+    markLocalCameraIntent()
+    if (!nextEnabled) markLocalPipIntent()
+    const nextPipConfig = nextEnabled
+      ? ensureVisiblePipConfig(currentPipConfig.preset === 'off'
+          ? normalizePipConfig({...currentPipConfig, preset: 'bottom-right', position: defaultPipPosition('bottom-right')}, 'bottom-right')
+          : currentPipConfig)
+      : normalizePipConfig({...currentPipConfig, preset: 'off'}, 'off')
     void logClientEvent('camera', 'toggle', {
       requested: enabled,
       enabled: nextEnabled,
       hasUsableCamera,
-      selectedCamera,
+      selectedCamera: deviceId,
       selectedCameraName: selectedCameraDevice?.name ?? '',
     })
     cameraPreviewGenerationRef.current += 1
     cameraRef.current = nextEnabled
     setCamera(nextEnabled)
+    applyLocalPipConfigState(nextPipConfig)
+    persistCameraSettings(nextEnabled, nextPipConfig, deviceId)
     if (!nextEnabled) {
-      setPipPreset('off')
       void hidePipOverlay()
-    }
-    if (nextEnabled && pipPreset === 'off') {
-      setPipPreset('bottom-right')
-      setPipPosition(defaultPipPosition('bottom-right'))
     }
   }
   const applyRecordingStatus = (update: RecordingStatusUpdate) => {
@@ -589,31 +662,49 @@ function App() {
     if (backend) setLastBackend(backend)
     if (update.message) setLastStatusMessage(statusMessageFromBackend(update.message))
   }
+  const markLocalCameraIntent = () => {
+    localCameraIntentUntilRef.current = Date.now() + 5000
+  }
+  const markLocalPipIntent = () => {
+    localPipIntentUntilRef.current = Date.now() + 5000
+  }
+  const hasLocalCameraIntent = () => Date.now() < localCameraIntentUntilRef.current
+  const hasLocalPipIntent = () => Date.now() < localPipIntentUntilRef.current
   const applySettingsState = (nextSettings: AppSettings, nextMedia?: MediaInventory, nextSources?: CaptureSource[], options: ApplySettingsOptions = {}) => {
-    persistedSettingsRef.current = nextSettings
+    const effectiveSettings = options.preservePipConfig && currentSettingsRef.current
+      ? {
+          ...nextSettings,
+          camera: {
+            ...nextSettings.camera,
+            pipPreset: currentSettingsRef.current.camera.pipPreset,
+            pip: currentSettingsRef.current.camera.pip,
+          },
+        }
+      : nextSettings
+    persistedSettingsRef.current = effectiveSettings
     const systemAudioList = nextMedia?.systemAudio
     const microphoneList = nextMedia?.microphones
     const cameraList = nextMedia?.cameras
-    setLocale(normalizeLocale(nextSettings.locale))
-    setRecordingQuality(normalizeRecordingQuality(nextSettings.recording.quality))
-    setRecordingFPS(fpsOptions.includes(nextSettings.recording.fps) ? nextSettings.recording.fps : 30)
-    setCaptureCursor(nextSettings.recording.captureCursor)
-    setCountdownSeconds(countdownOptions.includes(nextSettings.recording.countdownSeconds) ? nextSettings.recording.countdownSeconds : 0)
+    setLocale(normalizeLocale(effectiveSettings.locale))
+    setRecordingQuality(normalizeRecordingQuality(effectiveSettings.recording.quality))
+    setRecordingFPS(fpsOptions.includes(effectiveSettings.recording.fps) ? effectiveSettings.recording.fps : 30)
+    setCaptureCursor(effectiveSettings.recording.captureCursor)
+    setCountdownSeconds(countdownOptions.includes(effectiveSettings.recording.countdownSeconds) ? effectiveSettings.recording.countdownSeconds : 0)
     const nextHasAvailableMicrophone = !microphoneList || microphoneList.some((device) => device.available !== false)
     const nextSystemAudioEnabled = options.preserveAudioEnabled
       ? systemAudioRef.current
-      : nextSettings.audio.system
+      : effectiveSettings.audio.system
     const nextMicrophoneEnabled = options.preserveAudioEnabled
       ? microphoneRef.current && nextHasAvailableMicrophone
-      : nextSettings.audio.microphone && nextHasAvailableMicrophone
+      : effectiveSettings.audio.microphone && nextHasAvailableMicrophone
     const nextNoiseSuppressionEnabled = options.preserveAudioEnabled
       ? noiseSuppressionRef.current && nextMicrophoneEnabled
-      : nextSettings.audio.microphone && nextHasAvailableMicrophone && nextSettings.audio.noiseSuppression
-    const nextCameraDevice = selectPreferredCameraDevice(cameraList, nextSettings.camera.deviceId)
+      : effectiveSettings.audio.microphone && nextHasAvailableMicrophone && effectiveSettings.audio.noiseSuppression
+    const nextCameraDevice = selectPreferredCameraDevice(cameraList, effectiveSettings.camera.deviceId)
     const nextHasUsableCamera = !cameraList || Boolean(nextCameraDevice)
     const nextCameraEnabled = options.preserveCameraEnabled
       ? cameraRef.current
-      : nextSettings.camera.enabled && nextHasUsableCamera
+      : effectiveSettings.camera.enabled && nextHasUsableCamera
     systemAudioRef.current = nextSystemAudioEnabled
     microphoneRef.current = nextMicrophoneEnabled
     noiseSuppressionRef.current = nextNoiseSuppressionEnabled
@@ -623,8 +714,8 @@ function App() {
     cameraRef.current = nextCameraEnabled
     setCamera(nextCameraEnabled)
     const nextPip = nextCameraEnabled
-      ? ensureVisiblePipConfig(normalizePipConfig(nextSettings.camera.pip, normalizePipPreset(nextSettings.camera.pipPreset)))
-      : normalizePipConfig(nextSettings.camera.pip, normalizePipPreset(nextSettings.camera.pipPreset))
+      ? ensureVisiblePipConfig(normalizePipConfig(effectiveSettings.camera.pip, normalizePipPreset(effectiveSettings.camera.pipPreset)))
+      : normalizePipConfig(effectiveSettings.camera.pip, normalizePipPreset(effectiveSettings.camera.pipPreset))
     setPipPreset(nextPip.preset)
     setPipShape(nextPip.shape)
     setPipMirror(nextPip.mirror)
@@ -636,13 +727,13 @@ function App() {
     if (microphoneList) setAvailableMicrophones(microphoneList)
     if (cameraList) setAvailableCameras(cameraList)
     if (!options.preserveAudioSelection) {
-      if (nextSettings.audio.systemDeviceId && (!systemAudioList || systemAudioList.some((device) => device.id === nextSettings.audio.systemDeviceId))) {
-        setSelectedSystemAudio(nextSettings.audio.systemDeviceId)
+      if (effectiveSettings.audio.systemDeviceId && (!systemAudioList || systemAudioList.some((device) => device.id === effectiveSettings.audio.systemDeviceId))) {
+        setSelectedSystemAudio(effectiveSettings.audio.systemDeviceId)
       } else if (systemAudioList?.[0]) {
         setSelectedSystemAudio(systemAudioList[0].id)
       }
-      if (nextSettings.audio.microphoneDeviceId && (!microphoneList || microphoneList.some((device) => device.id === nextSettings.audio.microphoneDeviceId))) {
-        setSelectedMic(nextSettings.audio.microphoneDeviceId)
+      if (effectiveSettings.audio.microphoneDeviceId && (!microphoneList || microphoneList.some((device) => device.id === effectiveSettings.audio.microphoneDeviceId))) {
+        setSelectedMic(effectiveSettings.audio.microphoneDeviceId)
       } else if (microphoneList?.[0]) {
         setSelectedMic(microphoneList[0].id)
       } else if (microphoneList) {
@@ -651,7 +742,7 @@ function App() {
     }
     if (!options.preserveCameraSelection) {
       if (!cameraList) {
-        if (nextSettings.camera.deviceId) setSelectedCamera(nextSettings.camera.deviceId)
+        if (effectiveSettings.camera.deviceId) setSelectedCamera(effectiveSettings.camera.deviceId)
       } else if (nextCameraDevice) {
         setSelectedCamera(nextCameraDevice.id)
       } else {
@@ -659,7 +750,7 @@ function App() {
       }
     }
     if (nextSources) {
-      setSelectedSource(selectVisibleInitialSource(nextSources, nextSettings.source.lastSourceId, nextSettings.source.lastSourceType))
+      setSelectedSource(selectVisibleInitialSource(nextSources, effectiveSettings.source.lastSourceId, effectiveSettings.source.lastSourceType))
     }
   }
 
@@ -927,16 +1018,24 @@ function App() {
 
   useEffect(() => subscribeSettingsChanged((settings) => {
     const incomingCameraOff = !settings.camera.enabled
+    const preserveCameraEnabled = !isSettingsWindow && hasLocalCameraIntent()
+    const preservePipConfig = !isSettingsWindow && hasLocalPipIntent()
     void logClientEvent('settings', 'changed', {
       window: isSettingsWindow ? 'settings' : 'recorder',
       cameraEnabled: settings.camera.enabled,
       currentCamera: cameraRef.current,
       pipPreset: settings.camera.pipPreset,
+      preserveCameraEnabled,
+      preservePipConfig,
     })
-    if (incomingCameraOff && cameraRef.current) {
+    if (incomingCameraOff && cameraRef.current && !preserveCameraEnabled) {
       stopCameraPreview('settings-camera-off')
     }
-    applySettingsState(settings)
+    applySettingsState(settings, undefined, undefined, {
+      preserveCameraEnabled,
+      preserveCameraSelection: preserveCameraEnabled,
+      preservePipConfig,
+    })
   }), [isSettingsWindow])
 
   useEffect(() => subscribeRegionSelection((result) => {
@@ -1856,10 +1955,12 @@ function App() {
                   disabled={recordingConfigLocked || !hasUsableCamera}
                   onChange={(value) => {
                     const enabled = value && hasUsableCamera
+                    let nextCameraId = selectedCamera
                     if (enabled && !selectedCameraUsable && fallbackUsableCameraDevice) {
-                      setSelectedCamera(fallbackUsableCameraDevice.id)
+                      nextCameraId = fallbackUsableCameraDevice.id
+                      setSelectedCamera(nextCameraId)
                     }
-                    setCameraEnabled(enabled)
+                    setCameraEnabled(enabled, nextCameraId)
                   }}
                 />
                 <label className="field-label" htmlFor="camera-device">{copy.panels.cameraDevice}</label>
@@ -1881,8 +1982,10 @@ function App() {
                   options={pipPresetOptions.map((preset) => ({value: preset, label: copy.pipPresetLabels[preset]}))}
                   onChange={(value) => {
                     const nextPreset = value as PIPPreset
-                    setPipPreset(nextPreset)
-                    if (nextPreset !== 'free') setPipPosition(defaultPipPosition(nextPreset))
+                    commitPipConfigFromPanel({
+                      preset: nextPreset,
+                      position: nextPreset !== 'free' ? defaultPipPosition(nextPreset) : currentPipConfig.position,
+                    })
                   }}
                 />
                 <span className="field-label">{copy.panels.pipShape}</span>
@@ -1895,7 +1998,7 @@ function App() {
                         type="button"
                         className={pipShape === shape ? 'selected' : ''}
                         disabled={recordingConfigLocked || !camera || !hasUsableCamera}
-                        onClick={() => setPipShape(shape)}
+                        onClick={() => commitPipConfigFromPanel({shape})}
                       >
                         <ShapeIcon size={15} />
                         <span>{copy.pipShapeLabels[shape]}</span>
@@ -1903,7 +2006,7 @@ function App() {
                     )
                   })}
                 </div>
-                <SwitchRow label={copy.panels.pipMirror} checked={pipMirror} disabled={recordingConfigLocked || !camera || !hasUsableCamera} onChange={setPipMirror} />
+                <SwitchRow label={copy.panels.pipMirror} checked={pipMirror} disabled={recordingConfigLocked || !camera || !hasUsableCamera} onChange={(value) => commitPipConfigFromPanel({mirror: value})} />
                 <label className="field-label" htmlFor="pip-size">{copy.panels.pipSize}</label>
                 <div className="pip-slider-row">
                   <input
@@ -1911,10 +2014,10 @@ function App() {
                     type="range"
                     min={pipMinimumScale}
                     max={pipMaximumScale}
-                    step="0.01"
+                    step="0.001"
                     value={pipScale}
                     disabled={recordingConfigLocked || !camera || !hasUsableCamera}
-                    onChange={(event) => setPipScale(Number(event.currentTarget.value))}
+                    onChange={(event) => commitPipConfigFromPanel({scale: Number(event.currentTarget.value)})}
                   />
                   <b>{formatPipScalePercent(pipScale)}</b>
                 </div>
@@ -1928,7 +2031,7 @@ function App() {
                     step="0.01"
                     value={pipEdgeFeather}
                     disabled={recordingConfigLocked || !camera || !hasUsableCamera}
-                    onChange={(event) => setPipEdgeFeather(Number(event.currentTarget.value))}
+                    onChange={(event) => commitPipConfigFromPanel({edgeFeather: Number(event.currentTarget.value)})}
                   />
                   <b>{Math.round(pipEdgeFeather * 100)}%</b>
                 </div>
@@ -2028,7 +2131,7 @@ function ScreenIndicatorWindow() {
 type PIPEditAction = 'move' | 'n' | 'e' | 's' | 'w' | 'ne' | 'nw' | 'se' | 'sw'
 
 const pipResizeActions: PIPEditAction[] = ['n', 'e', 's', 'w', 'ne', 'nw', 'se', 'sw']
-const pipMinimumContentSize = 72
+const pipMinimumContentSize = 24
 
 type PIPOverlayWindowGlobal = Window & {
   __RF_PIP_OVERLAY__?: PIPOverlayState
@@ -2560,7 +2663,9 @@ function pipCanvasMargin(bounds: PIPOverlayState['overlayBounds']) {
 
 function pipMaxContentSize(state: PIPOverlayState) {
   const margin = pipCanvasMargin(state.overlayBounds)
-  return Math.max(pipMinimumContentSize, Math.min(state.overlayBounds.width, state.overlayBounds.height) - margin * 2)
+  const canvasMax = Math.min(state.overlayBounds.width, state.overlayBounds.height) - margin * 2
+  const scaleMax = Math.round(state.overlayBounds.width * pipMaximumScale)
+  return Math.max(pipMinimumContentSize, Math.min(canvasMax, scaleMax))
 }
 
 function resizePipRect(state: PIPOverlayState, content: {x: number; y: number; width: number; height: number}, action: PIPEditAction, dx: number, dy: number) {

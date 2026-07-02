@@ -110,8 +110,10 @@ func TestPlaceFreeConfig(t *testing.T) {
 	if placement.Shape != ShapeSquare || !placement.Mirror || placement.EdgeFeather != 0.2 {
 		t.Fatalf("placement metadata = %#v, want square mirrored with edge feather", placement)
 	}
-	if placement.Rect.Width != 480 || placement.Rect.Height != 480 {
-		t.Fatalf("rect size = %#v, want 480 square", placement.Rect)
+	canvasWidth := 1920
+	wantSize := int(float64(canvasWidth) * MaximumScale)
+	if placement.Rect.Width != wantSize || placement.Rect.Height != wantSize {
+		t.Fatalf("rect size = %#v, want %d square", placement.Rect, wantSize)
 	}
 	if placement.Rect.X <= 0 || placement.Rect.Y <= 0 || placement.Rect.X+placement.Rect.Width >= 1920 || placement.Rect.Y+placement.Rect.Height >= 1080 {
 		t.Fatalf("free placement should remain inside canvas: %#v", placement.Rect)

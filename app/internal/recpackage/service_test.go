@@ -231,7 +231,7 @@ func TestCreateNativeInitializesWritePlanWithoutCreatingMedia(t *testing.T) {
 	if manifest.Camera.PIPPreset != "free" || manifest.Camera.PIP.Preset != pip.PresetFree {
 		t.Fatalf("camera pip preset = %q/%q, want free", manifest.Camera.PIPPreset, manifest.Camera.PIP.Preset)
 	}
-	if manifest.Camera.PIP.Shape != pip.ShapeSquare || manifest.Camera.PIP.Mirror || manifest.Camera.PIP.Scale != 0.3 || manifest.Camera.PIP.EdgeFeather != 0.2 {
+	if manifest.Camera.PIP.Shape != pip.ShapeSquare || manifest.Camera.PIP.Mirror || manifest.Camera.PIP.Scale != pip.MaximumScale || manifest.Camera.PIP.EdgeFeather != 0.2 {
 		t.Fatalf("camera pip config = %#v, want square non-mirrored custom config", manifest.Camera.PIP)
 	}
 }
@@ -760,7 +760,7 @@ func TestPatchCameraPIPUpdatesManifest(t *testing.T) {
 	if manifest.Camera.PIP.Shape != pip.ShapeSquare || manifest.Camera.PIP.Mirror {
 		t.Fatalf("patched pip shape/mirror = %#v, want square non-mirrored", manifest.Camera.PIP)
 	}
-	if manifest.Camera.PIP.Position.X != 0.36 || manifest.Camera.PIP.Position.Y != 0.48 || manifest.Camera.PIP.Scale != 0.31 || manifest.Camera.PIP.EdgeFeather != 0.2 {
+	if manifest.Camera.PIP.Position.X != 0.36 || manifest.Camera.PIP.Position.Y != 0.48 || manifest.Camera.PIP.Scale != pip.MaximumScale || manifest.Camera.PIP.EdgeFeather != 0.2 {
 		t.Fatalf("patched pip layout = %#v, want requested layout", manifest.Camera.PIP)
 	}
 }

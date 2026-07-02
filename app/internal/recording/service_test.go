@@ -186,7 +186,7 @@ func TestPatchActiveCameraPIPUpdatesRecordingManifest(t *testing.T) {
 	if manifest.Camera.PIP.Shape != pip.ShapeSquare || manifest.Camera.PIP.Mirror {
 		t.Fatalf("manifest pip shape/mirror = %#v, want square non-mirrored", manifest.Camera.PIP)
 	}
-	if manifest.Camera.PIP.Position.X != 0.25 || manifest.Camera.PIP.Position.Y != 0.6 || manifest.Camera.PIP.Scale != 0.32 || manifest.Camera.PIP.EdgeFeather != 0.22 {
+	if manifest.Camera.PIP.Position.X != 0.25 || manifest.Camera.PIP.Position.Y != 0.6 || manifest.Camera.PIP.Scale != pip.MaximumScale || manifest.Camera.PIP.EdgeFeather != 0.22 {
 		t.Fatalf("manifest pip layout = %#v, want patched config", manifest.Camera.PIP)
 	}
 }

@@ -1211,7 +1211,7 @@ function fromBoundPipConfig(config: Partial<PIPConfig> | undefined, fallbackPres
       x: normalizedUnit(config?.position?.x ?? (preset === 'bottom-left' ? 0 : 1)),
       y: normalizedUnit(config?.position?.y ?? 1),
     },
-    scale: normalizedRange(config?.scale, 0.08, 0.08, 0.32),
+    scale: normalizedRange(config?.scale, 0.08, 0.016, 0.08),
     edgeFeather: normalizedRange(config?.edgeFeather, 0.16, 0.02, 0.42),
   }
 }
@@ -1275,7 +1275,7 @@ function browserPipOverlayState(config: PIPConfig, mode: PIPOverlayMode, camera:
   const target = normalizePipOverlayCamera(camera)
   const overlayBounds = {x: 0, y: 0, width: Math.max(320, window.innerWidth || 1280), height: Math.max(240, window.innerHeight || 720)}
   const normalized = fromBoundPipConfig(config, config.preset)
-  const size = Math.round(Math.max(72, Math.min(overlayBounds.width, overlayBounds.height) * normalized.scale))
+  const size = Math.round(Math.max(24, Math.min(overlayBounds.width, overlayBounds.height) * normalized.scale))
   const contentBounds = {x: 24, y: 24, width: size, height: size}
   return {
     config: normalized,

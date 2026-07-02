@@ -79,7 +79,7 @@ func TestCreateNativeWritePlanMapsNormalizedStartRequest(t *testing.T) {
 	if manifest.Camera.DeviceID != defaultCameraID || manifest.Camera.PIPPreset != "free" {
 		t.Fatalf("camera = %#v, want default camera free layout", manifest.Camera)
 	}
-	if manifest.Camera.PIP.Shape != pip.ShapeSquare || manifest.Camera.PIP.Mirror || manifest.Camera.PIP.Scale != 0.32 || manifest.Camera.PIP.EdgeFeather != 0.18 {
+	if manifest.Camera.PIP.Shape != pip.ShapeSquare || manifest.Camera.PIP.Mirror || manifest.Camera.PIP.Scale != pip.MaximumScale || manifest.Camera.PIP.EdgeFeather != 0.18 {
 		t.Fatalf("camera pip = %#v, want custom square layout", manifest.Camera.PIP)
 	}
 	if manifest.Diagnostics.Mock || manifest.Diagnostics.Sync != nil {

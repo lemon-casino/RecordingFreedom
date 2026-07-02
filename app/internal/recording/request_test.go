@@ -77,7 +77,7 @@ func TestNormalizeStartRequestPreservesCustomPIPConfig(t *testing.T) {
 	if got.Camera.PIP.Shape != pip.ShapeSquare || got.Camera.PIP.Mirror {
 		t.Fatalf("pip config = %#v, want square and non-mirrored", got.Camera.PIP)
 	}
-	if got.Camera.PIP.Position.X != 0.3 || got.Camera.PIP.Position.Y != 0.6 || got.Camera.PIP.Scale != 0.3 || got.Camera.PIP.EdgeFeather != 0.24 {
+	if got.Camera.PIP.Position.X != 0.3 || got.Camera.PIP.Position.Y != 0.6 || got.Camera.PIP.Scale != pip.MaximumScale || got.Camera.PIP.EdgeFeather != 0.24 {
 		t.Fatalf("pip layout = %#v, want preserved custom layout", got.Camera.PIP)
 	}
 }
