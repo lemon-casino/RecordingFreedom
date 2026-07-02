@@ -313,6 +313,77 @@ func TestEnrichRecordingCameraRequestUsesAvailableNativeCamera(t *testing.T) {
 	}
 }
 
+func TestEnrichRecordingCameraRequestSkipsUnavailableDefaultCamera(t *testing.T) {
+	req := enrichRecordingCameraRequest(recording.StartRequest{
+		SourceID:   "screen:primary",
+		SourceType: recording.SourceScreen,
+		Camera: recording.CameraRequest{
+			Enabled:   true,
+			DeviceID:  "camera:default",
+			PIPPreset: "bottom-right",
+		},
+	}, devices.MediaInventory{
+		Cameras: []devices.MediaDevice{
+			{
+				ID:                "camera:default",
+				Type:              devices.DeviceCamera,
+				Name:              "Default Camera",
+				NativeID:          "default",
+				IsDefault:         true,
+				Available:         false,
+				SidecarEligible:   true,
+				UnavailableReason: "DirectShow returned no default camera",
+			},
+			{
+				ID:              "camera:dshow:usb-camera",
+				Type:            devices.DeviceCamera,
+				Name:            "USB Camera",
+				NativeID:        "USB Camera",
+				Available:       true,
+				SidecarEligible: true,
+			},
+		},
+	})
+	if req.Camera.DeviceID != "camera:dshow:usb-camera" || req.Camera.DeviceNativeID != "USB Camera" {
+		t.Fatalf("enriched camera = %#v, want fallback to available sidecar camera", req.Camera)
+	}
+}
+
+func TestEnrichRecordingCameraRequestSkipsStaleUnavailableCamera(t *testing.T) {
+	req := enrichRecordingCameraRequest(recording.StartRequest{
+		SourceID:   "screen:primary",
+		SourceType: recording.SourceScreen,
+		Camera: recording.CameraRequest{
+			Enabled:   true,
+			DeviceID:  "camera:dshow:old-camera",
+			PIPPreset: "bottom-right",
+		},
+	}, devices.MediaInventory{
+		Cameras: []devices.MediaDevice{
+			{
+				ID:                "camera:dshow:old-camera",
+				Type:              devices.DeviceCamera,
+				Name:              "Old Camera",
+				NativeID:          "Old Camera",
+				Available:         false,
+				SidecarEligible:   true,
+				UnavailableReason: "camera is no longer connected",
+			},
+			{
+				ID:              "camera:dshow:integrated-camera",
+				Type:            devices.DeviceCamera,
+				Name:            "Integrated Camera",
+				NativeID:        "Integrated Camera",
+				Available:       true,
+				SidecarEligible: true,
+			},
+		},
+	})
+	if req.Camera.DeviceID != "camera:dshow:integrated-camera" || req.Camera.DeviceNativeID != "Integrated Camera" {
+		t.Fatalf("enriched camera = %#v, want stale camera replaced by available sidecar camera", req.Camera)
+	}
+}
+
 func TestStartAudioOnlyRejectsBlockedPreflightBeforeCreatingPackage(t *testing.T) {
 	t.Setenv(appdata.EnvDataDir, "")
 	root := t.TempDir()

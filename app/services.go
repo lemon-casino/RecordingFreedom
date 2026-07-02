@@ -494,10 +494,10 @@ func enrichRecordingCameraRequest(req recording.StartRequest, media devices.Medi
 			break
 		}
 	}
-	if selected.ID == "" && deviceID == "camera:default" {
-		for _, camera := range media.Cameras {
-			if camera.Available && camera.SidecarEligible {
-				selected = camera
+	if !usableCameraSidecarDevice(selected) {
+		for _, candidate := range media.Cameras {
+			if usableCameraSidecarDevice(candidate) {
+				selected = candidate
 				break
 			}
 		}
@@ -508,6 +508,13 @@ func enrichRecordingCameraRequest(req recording.StartRequest, media devices.Medi
 	req.Camera.DeviceID = selected.ID
 	req.Camera.DeviceNativeID = selected.NativeID
 	return req
+}
+
+func usableCameraSidecarDevice(camera devices.MediaDevice) bool {
+	return camera.ID != "" &&
+		camera.Available &&
+		camera.SidecarEligible &&
+		strings.TrimSpace(camera.NativeID) != ""
 }
 
 func (s *RecordingFreedomService) blockingAudioOnlyPreflight(req recording.AudioOnlyRequest) (preflight.Summary, bool) {

@@ -375,6 +375,10 @@ function App() {
     () => availableMicrophones.some((device) => device.available !== false),
     [availableMicrophones],
   )
+  const hasUsableCamera = useMemo(
+    () => availableCameras.some(isUsableCameraDevice),
+    [availableCameras],
+  )
   const micMonitorStatusText = micMonitorError
     ? copy.panels.microphoneLevelError
     : !microphone
@@ -426,9 +430,11 @@ function App() {
     setCountdownSeconds(countdownOptions.includes(nextSettings.recording.countdownSeconds) ? nextSettings.recording.countdownSeconds : 0)
     setSystemAudio(nextSettings.audio.system)
     const nextHasAvailableMicrophone = !microphoneList || microphoneList.some((device) => device.available !== false)
+    const nextCameraDevice = selectPreferredCameraDevice(cameraList, nextSettings.camera.deviceId)
+    const nextHasUsableCamera = !cameraList || Boolean(nextCameraDevice)
     setMicrophone(nextSettings.audio.microphone && nextHasAvailableMicrophone)
     setNoiseSuppression(nextSettings.audio.microphone && nextHasAvailableMicrophone && nextSettings.audio.noiseSuppression)
-    setCamera(nextSettings.camera.enabled)
+    setCamera(nextSettings.camera.enabled && nextHasUsableCamera)
     const nextPip = normalizePipConfig(nextSettings.camera.pip, normalizePipPreset(nextSettings.camera.pipPreset))
     setPipPreset(nextPip.preset)
     setPipShape(nextPip.shape)
@@ -452,10 +458,12 @@ function App() {
     } else if (microphoneList) {
       setSelectedMic('')
     }
-    if (nextSettings.camera.deviceId && (!cameraList || cameraList.some((device) => device.id === nextSettings.camera.deviceId))) {
-      setSelectedCamera(nextSettings.camera.deviceId)
-    } else if (cameraList?.[0]) {
-      setSelectedCamera(cameraList[0].id)
+    if (!cameraList) {
+      if (nextSettings.camera.deviceId) setSelectedCamera(nextSettings.camera.deviceId)
+    } else if (nextCameraDevice) {
+      setSelectedCamera(nextCameraDevice.id)
+    } else {
+      setSelectedCamera(cameraList[0]?.id ?? '')
     }
     if (nextSources) {
       setSelectedSource(selectVisibleInitialSource(nextSources, nextSettings.source.lastSourceId, nextSettings.source.lastSourceType))
@@ -1108,7 +1116,7 @@ function App() {
               type="button"
               aria-label={copy.aria.openCameraSettings}
               title={copy.panels.cameraSidecar}
-              disabled={recordingConfigLocked || recordingMode === 'audio'}
+              disabled={recordingConfigLocked || recordingMode === 'audio' || !hasUsableCamera}
               onClick={() => togglePanel('camera')}
             >
               <Camera size={18} />
@@ -1358,20 +1366,20 @@ function App() {
 
             {activePanel === 'camera' && (
               <div className="menu-stack">
-                <SwitchRow label={copy.panels.cameraSidecar} checked={camera} disabled={recordingConfigLocked} onChange={setCamera} />
+                <SwitchRow label={copy.panels.cameraSidecar} checked={camera && hasUsableCamera} disabled={recordingConfigLocked || !hasUsableCamera} onChange={setCamera} />
                 <label className="field-label" htmlFor="camera-device">{copy.panels.cameraDevice}</label>
                 <SelectMenu
                   id="camera-device"
                   value={selectedCamera}
-                  disabled={recordingConfigLocked}
-                  options={availableCameras.map((device) => ({value: device.id, label: mediaDeviceName(device, copy), disabled: device.available === false}))}
+                  disabled={recordingConfigLocked || !hasUsableCamera}
+                  options={availableCameras.map((device) => ({value: device.id, label: mediaDeviceName(device, copy), disabled: !isUsableCameraDevice(device)}))}
                   onChange={setSelectedCamera}
                 />
                 <label className="field-label" htmlFor="pip-preset">{copy.panels.pipPreset}</label>
                 <SelectMenu
                   id="pip-preset"
                   value={pipPreset}
-                  disabled={recordingConfigLocked}
+                  disabled={recordingConfigLocked || !hasUsableCamera}
                   options={pipPresetOptions.map((preset) => ({value: preset, label: copy.pipPresetLabels[preset]}))}
                   onChange={(value) => {
                     const nextPreset = value as PIPPreset
@@ -1388,7 +1396,7 @@ function App() {
                         key={shape}
                         type="button"
                         className={pipShape === shape ? 'selected' : ''}
-                        disabled={recordingConfigLocked}
+                        disabled={recordingConfigLocked || !hasUsableCamera}
                         onClick={() => setPipShape(shape)}
                       >
                         <ShapeIcon size={15} />
@@ -1397,7 +1405,7 @@ function App() {
                     )
                   })}
                 </div>
-                <SwitchRow label={copy.panels.pipMirror} checked={pipMirror} disabled={recordingConfigLocked} onChange={setPipMirror} />
+                <SwitchRow label={copy.panels.pipMirror} checked={pipMirror} disabled={recordingConfigLocked || !hasUsableCamera} onChange={setPipMirror} />
                 <label className="field-label" htmlFor="pip-size">{copy.panels.pipSize}</label>
                 <div className="pip-slider-row">
                   <input
@@ -1407,7 +1415,7 @@ function App() {
                     max="0.42"
                     step="0.01"
                     value={pipScale}
-                    disabled={recordingConfigLocked}
+                    disabled={recordingConfigLocked || !hasUsableCamera}
                     onChange={(event) => setPipScale(Number(event.currentTarget.value))}
                   />
                   <b>{Math.round(pipScale * 100)}%</b>
@@ -1421,7 +1429,7 @@ function App() {
                     max="0.42"
                     step="0.01"
                     value={pipEdgeFeather}
-                    disabled={recordingConfigLocked}
+                    disabled={recordingConfigLocked || !hasUsableCamera}
                     onChange={(event) => setPipEdgeFeather(Number(event.currentTarget.value))}
                   />
                   <b>{Math.round(pipEdgeFeather * 100)}%</b>
@@ -1439,7 +1447,7 @@ function App() {
                 <button
                   type="button"
                   className="pip-edit-button"
-                  disabled={recordingConfigLocked || !camera}
+                  disabled={recordingConfigLocked || !camera || !hasUsableCamera}
                   onClick={() => void openPipEditor()}
                 >
                   <Maximize2 size={16} />
@@ -2464,6 +2472,17 @@ function audioOnlySourceMeta(systemAudio: boolean, microphone: boolean, copy: Re
 
 function mediaDeviceName(device: MediaDevice, copy: RecorderCopy) {
   return copy.mediaDeviceNames[device.id] ?? device.name
+}
+
+function selectPreferredCameraDevice(devices: MediaDevice[] | undefined, preferredId?: string): MediaDevice | undefined {
+  if (!devices || devices.length === 0) return undefined
+  const preferred = preferredId ? devices.find((device) => device.id === preferredId) : undefined
+  if (preferred && isUsableCameraDevice(preferred)) return preferred
+  return devices.find(isUsableCameraDevice)
+}
+
+function isUsableCameraDevice(device: MediaDevice): boolean {
+  return device.available !== false && device.sidecarEligible !== false && Boolean(device.nativeId?.trim())
 }
 
 function screenIndex(source: CaptureSource) {
