@@ -180,7 +180,11 @@ func (s *RecordingFreedomService) applyPIPOverlayState(state PIPOverlayState) {
 	s.pipOverlay.SetAlwaysOnTop(true)
 	s.pipOverlay.Show()
 	s.pipOverlay.SetBounds(windowBounds)
-	state.CaptureExcluded = setWindowCaptureExcluded(s.pipOverlay, true)
+	// FFmpeg desktop capture on Windows records content-protected transparent windows
+	// as a black rectangle. Keep the PIP preview visible and transparent while the
+	// export compositor uses the webcam sidecar for the final clean overlay.
+	_ = setWindowCaptureExcluded(s.pipOverlay, false)
+	state.CaptureExcluded = false
 	s.broadcastPIPOverlayState(state)
 	go s.rebroadcastPIPOverlayState(state)
 }

@@ -1,6 +1,8 @@
 :root {
   color-scheme: dark;
   font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  font-size: 13px;
+  line-height: 1.35;
   font-synthesis: none;
   text-rendering: geometricPrecision;
   --bg: #0b0f13;
@@ -73,6 +75,14 @@ button,
 select,
 input {
   font: inherit;
+}
+
+strong,
+small,
+span,
+button,
+input {
+  min-width: 0;
 }
 
 button:not(:disabled),
@@ -236,11 +246,13 @@ select:disabled {
 
 .source-text strong {
   font-size: 12px;
+  line-height: 1.15;
   font-weight: 700;
 }
 
 .source-text small {
   font-size: 10px;
+  line-height: 1.15;
   color: var(--muted);
 }
 
@@ -560,6 +572,7 @@ body.rf-recorder-window .select-menu-list {
   background: transparent;
   color: var(--text);
   text-align: left;
+  line-height: 1.25;
 }
 
 .menu-row:hover,
@@ -593,6 +606,7 @@ body.rf-recorder-window .select-menu-list {
 .menu-row small {
   color: var(--muted);
   font-size: 11px;
+  line-height: 1.25;
 }
 
 .row-action-label {
@@ -795,13 +809,15 @@ select {
   background: transparent;
   color: var(--text);
   text-align: left;
+  line-height: 1.25;
 }
 
 .select-menu-option span {
   min-width: 0;
   overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  overflow-wrap: anywhere;
+  text-overflow: clip;
+  white-space: normal;
 }
 
 .select-menu-option:hover,
@@ -868,8 +884,9 @@ input {
 .meter-status span {
   min-width: 0;
   overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  overflow-wrap: anywhere;
+  text-overflow: clip;
+  white-space: normal;
 }
 
 .meter-status b {
@@ -962,7 +979,8 @@ input {
   border-radius: 24px;
   background: var(--panel-strong);
   box-shadow: var(--shadow-panel);
-  overflow: auto;
+  overflow-x: hidden;
+  overflow-y: auto;
   --wails-draggable: no-drag;
 }
 
@@ -1031,12 +1049,14 @@ input {
 .settings-list {
   display: grid;
   gap: 8px;
+  min-width: 0;
   margin-top: 16px;
 }
 
 .setting-line {
   display: grid;
   gap: 4px;
+  min-width: 0;
   padding: 12px;
   border: 1px solid var(--line);
   border-radius: 16px;
@@ -1057,8 +1077,12 @@ input {
 }
 
 .setting-line span {
+  min-width: 0;
   color: var(--muted);
-  font-size: 12px;
+  font-size: 11px;
+  font-weight: 800;
+  line-height: 1.25;
+  overflow-wrap: anywhere;
 }
 
 .setting-value {
@@ -1067,19 +1091,24 @@ input {
   justify-content: space-between;
   gap: 10px;
   min-width: 0;
+  flex-wrap: wrap;
 }
 
 .setting-line strong {
   min-width: 0;
   flex: 1;
   overflow-wrap: anywhere;
-  font-size: 13px;
+  word-break: break-word;
+  font-size: 12px;
+  line-height: 1.35;
 }
 
 .setting-line small {
   color: var(--quiet);
-  font-size: 11px;
-  line-height: 1.35;
+  font-size: 10.5px;
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+  word-break: break-word;
 }
 
 .setting-control {
@@ -1094,13 +1123,15 @@ input {
 
 .setting-input-row {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-columns: minmax(0, 1fr) minmax(72px, auto);
   gap: 8px;
   align-items: center;
+  min-width: 0;
 }
 
 .setting-control-input {
   width: 100%;
+  min-width: 0;
   height: 36px;
   padding: 0 12px;
   border: 1px solid var(--line);
@@ -1116,6 +1147,7 @@ input {
 
 .status-badge {
   display: inline-grid;
+  flex: 0 0 auto;
   min-width: 74px;
   height: 24px;
   place-items: center;
@@ -1131,6 +1163,7 @@ input {
 
 .setting-action {
   display: inline-grid;
+  flex: 0 0 auto;
   min-width: 78px;
   height: 28px;
   place-items: center;
@@ -1739,6 +1772,12 @@ input {
 .pip-overlay-tools button.selected {
   background: rgba(17, 183, 167, 0.22);
   color: #d7fffb;
+}
+
+.pip-overlay-shell.recording .pip-drag-anchor,
+.pip-overlay-shell.recording .pip-overlay-tools,
+.pip-overlay-shell.recording .pip-resize-handle {
+  display: none;
 }
 
 .pip-resize-handle {

@@ -455,7 +455,7 @@ export const defaultSettings: AppSettings = {
       shape: 'circle',
       mirror: true,
       position: {x: 1, y: 1},
-      scale: 0.12,
+      scale: 0.08,
       edgeFeather: 0.16,
     },
   },

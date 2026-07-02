@@ -66,6 +66,7 @@ const sourceIcon = {
 const pipPresetOptions: PIPPreset[] = ['bottom-right', 'bottom-left', 'free']
 const allPipPresetOptions: PIPPreset[] = [...pipPresetOptions, 'off']
 const pipShapeOptions: PIPShape[] = ['circle', 'square']
+const pipBaseScale = 0.08
 
 const recordingQualityOptions: RecordingQuality[] = ['standard', 'balanced', 'high']
 const fpsOptions = [24, 30, 60]
@@ -90,6 +91,10 @@ function clampNumber(value: number, min: number, max: number) {
   return Math.min(max, Math.max(min, value))
 }
 
+function formatPipScalePercent(scale: number) {
+  return `${Math.round((clampNumber(scale, 0.08, 0.32) / pipBaseScale) * 100)}%`
+}
+
 function normalizePipConfig(value: Partial<PIPConfig> | undefined, fallbackPreset: PIPPreset): PIPConfig {
   const preset = normalizePipPreset((value?.preset as PIPPreset | undefined) ?? fallbackPreset)
   const fallbackPosition = defaultPipPosition(preset)
@@ -101,7 +106,7 @@ function normalizePipConfig(value: Partial<PIPConfig> | undefined, fallbackPrese
       x: clampNumber(value?.position?.x ?? fallbackPosition.x, 0, 1),
       y: clampNumber(value?.position?.y ?? fallbackPosition.y, 0, 1),
     },
-    scale: clampNumber(value?.scale ?? 0.12, 0.08, 0.32),
+    scale: clampNumber(value?.scale ?? pipBaseScale, 0.08, 0.32),
     edgeFeather: clampNumber(value?.edgeFeather ?? 0.16, 0.02, 0.42),
   }
 }
@@ -227,6 +232,8 @@ type SourceSelectionMessageState = {
 }
 
 type ApplySettingsOptions = {
+  preserveAudioEnabled?: boolean
+  preserveAudioSelection?: boolean
   preserveCameraEnabled?: boolean
   preserveCameraSelection?: boolean
 }
@@ -279,7 +286,7 @@ function App() {
   const [pipShape, setPipShape] = useState<PIPShape>('circle')
   const [pipMirror, setPipMirror] = useState(true)
   const [pipPosition, setPipPosition] = useState(defaultPipPosition('bottom-right'))
-  const [pipScale, setPipScale] = useState(0.12)
+  const [pipScale, setPipScale] = useState(pipBaseScale)
   const [pipEdgeFeather, setPipEdgeFeather] = useState(0.16)
   const [locale, setLocale] = useState<LocaleCode>('zh-CN')
   const [lastPackage, setLastPackage] = useState<string>(previewPackagePath)
@@ -306,6 +313,9 @@ function App() {
   const settingsPanelRef = useRef<HTMLElement | null>(null)
   const closePromptRef = useRef<HTMLElement | null>(null)
   const selectedMicRef = useRef(selectedMic)
+  const systemAudioRef = useRef(systemAudio)
+  const microphoneRef = useRef(microphone)
+  const noiseSuppressionRef = useRef(noiseSuppression)
   const cameraRef = useRef(camera)
   const rnnoiseActive = microphone && noiseSuppression
 
@@ -480,15 +490,27 @@ function App() {
     setRecordingFPS(fpsOptions.includes(nextSettings.recording.fps) ? nextSettings.recording.fps : 30)
     setCaptureCursor(nextSettings.recording.captureCursor)
     setCountdownSeconds(countdownOptions.includes(nextSettings.recording.countdownSeconds) ? nextSettings.recording.countdownSeconds : 0)
-    setSystemAudio(nextSettings.audio.system)
     const nextHasAvailableMicrophone = !microphoneList || microphoneList.some((device) => device.available !== false)
+    const nextSystemAudioEnabled = options.preserveAudioEnabled
+      ? systemAudioRef.current
+      : nextSettings.audio.system
+    const nextMicrophoneEnabled = options.preserveAudioEnabled
+      ? microphoneRef.current && nextHasAvailableMicrophone
+      : nextSettings.audio.microphone && nextHasAvailableMicrophone
+    const nextNoiseSuppressionEnabled = options.preserveAudioEnabled
+      ? noiseSuppressionRef.current && nextMicrophoneEnabled
+      : nextSettings.audio.microphone && nextHasAvailableMicrophone && nextSettings.audio.noiseSuppression
     const nextCameraDevice = selectPreferredCameraDevice(cameraList, nextSettings.camera.deviceId)
     const nextHasUsableCamera = !cameraList || Boolean(nextCameraDevice)
     const nextCameraEnabled = options.preserveCameraEnabled
       ? cameraRef.current
       : nextSettings.camera.enabled && nextHasUsableCamera
-    setMicrophone(nextSettings.audio.microphone && nextHasAvailableMicrophone)
-    setNoiseSuppression(nextSettings.audio.microphone && nextHasAvailableMicrophone && nextSettings.audio.noiseSuppression)
+    systemAudioRef.current = nextSystemAudioEnabled
+    microphoneRef.current = nextMicrophoneEnabled
+    noiseSuppressionRef.current = nextNoiseSuppressionEnabled
+    setSystemAudio(nextSystemAudioEnabled)
+    setMicrophone(nextMicrophoneEnabled)
+    setNoiseSuppression(nextNoiseSuppressionEnabled)
     cameraRef.current = nextCameraEnabled
     setCamera(nextCameraEnabled)
     const nextPip = nextCameraEnabled
@@ -504,17 +526,19 @@ function App() {
     if (systemAudioList) setAvailableSystemAudio(systemAudioList)
     if (microphoneList) setAvailableMicrophones(microphoneList)
     if (cameraList) setAvailableCameras(cameraList)
-    if (nextSettings.audio.systemDeviceId && (!systemAudioList || systemAudioList.some((device) => device.id === nextSettings.audio.systemDeviceId))) {
-      setSelectedSystemAudio(nextSettings.audio.systemDeviceId)
-    } else if (systemAudioList?.[0]) {
-      setSelectedSystemAudio(systemAudioList[0].id)
-    }
-    if (nextSettings.audio.microphoneDeviceId && (!microphoneList || microphoneList.some((device) => device.id === nextSettings.audio.microphoneDeviceId))) {
-      setSelectedMic(nextSettings.audio.microphoneDeviceId)
-    } else if (microphoneList?.[0]) {
-      setSelectedMic(microphoneList[0].id)
-    } else if (microphoneList) {
-      setSelectedMic('')
+    if (!options.preserveAudioSelection) {
+      if (nextSettings.audio.systemDeviceId && (!systemAudioList || systemAudioList.some((device) => device.id === nextSettings.audio.systemDeviceId))) {
+        setSelectedSystemAudio(nextSettings.audio.systemDeviceId)
+      } else if (systemAudioList?.[0]) {
+        setSelectedSystemAudio(systemAudioList[0].id)
+      }
+      if (nextSettings.audio.microphoneDeviceId && (!microphoneList || microphoneList.some((device) => device.id === nextSettings.audio.microphoneDeviceId))) {
+        setSelectedMic(nextSettings.audio.microphoneDeviceId)
+      } else if (microphoneList?.[0]) {
+        setSelectedMic(microphoneList[0].id)
+      } else if (microphoneList) {
+        setSelectedMic('')
+      }
     }
     if (!options.preserveCameraSelection) {
       if (!cameraList) {
@@ -545,6 +569,18 @@ function App() {
   useEffect(() => {
     selectedMicRef.current = selectedMic
   }, [selectedMic])
+
+  useEffect(() => {
+    systemAudioRef.current = systemAudio
+  }, [systemAudio])
+
+  useEffect(() => {
+    microphoneRef.current = microphone
+  }, [microphone])
+
+  useEffect(() => {
+    noiseSuppressionRef.current = noiseSuppression
+  }, [noiseSuppression])
 
   useEffect(() => {
     cameraRef.current = camera
@@ -740,6 +776,8 @@ function App() {
 
   useEffect(() => subscribeSettingsChanged((settings) => {
     applySettingsState(settings, undefined, undefined, {
+      preserveAudioEnabled: true,
+      preserveAudioSelection: true,
       preserveCameraEnabled: true,
       preserveCameraSelection: true,
     })
@@ -868,7 +906,6 @@ function App() {
         setLastStatusMessage({key: 'preflightBlocked'})
         return
       }
-      await hidePipOverlay()
       const session = await startRecording(request)
       applyRecordingStatus({
         status: session.status ?? 'recording',
@@ -1247,7 +1284,7 @@ function App() {
             detail={capabilityDetail(capability, copy)}
           />
         ))}
-        <SettingLine title={copy.settings.release} value="GitHub Actions macOS, Windows, Linux" />
+        <SettingLine title={copy.settings.release} value="GitHub Actions Windows portable" />
       </div>
     </section>
   )
@@ -1627,7 +1664,7 @@ function App() {
                     disabled={recordingConfigLocked || !camera || !hasUsableCamera}
                     onChange={(event) => setPipScale(Number(event.currentTarget.value))}
                   />
-                  <b>{Math.round(pipScale * 100)}%</b>
+                  <b>{formatPipScalePercent(pipScale)}</b>
                 </div>
                 <label className="field-label" htmlFor="pip-edge">{copy.panels.pipEdge}</label>
                 <div className="pip-slider-row">
@@ -1871,7 +1908,7 @@ function PIPOverlayWindow() {
       stopActivePipCameraStream()
       setCameraReady(false)
     }
-  }, [overlayState?.camera?.deviceId, overlayState?.camera?.name, overlayState?.camera?.nativeId, overlayState?.cameraName, overlayState?.config.preset, overlayState?.mode])
+  }, [overlayState?.camera?.deviceId, overlayState?.camera?.name, overlayState?.camera?.nativeId, overlayState?.cameraName, overlayState?.config.preset])
 
   useEffect(() => () => {
     if (previewFrameRef.current !== null) {
@@ -2000,8 +2037,8 @@ function PIPOverlayWindow() {
         <div className="pip-live-frame" style={frameStyle}>
           <div className={`pip-live-media ${overlayState.config.shape} ${overlayState.config.mirror ? 'mirrored' : ''}`}>
             <video ref={videoRef} autoPlay muted playsInline className={cameraReady ? 'ready' : ''} />
-            {!cameraReady && (
-              <div className={`pip-camera-placeholder ${overlayState.mode === 'recording' ? 'recording' : cameraError ? 'error' : 'pending'}`}>
+            {!cameraReady && overlayState.mode !== 'recording' && (
+              <div className={`pip-camera-placeholder ${cameraError ? 'error' : 'pending'}`}>
                 <Camera size={24} />
                 <strong>{cameraPlaceholderTitle}</strong>
                 <span>{cameraPlaceholderDetail}</span>

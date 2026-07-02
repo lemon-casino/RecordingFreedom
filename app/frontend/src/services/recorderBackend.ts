@@ -1021,7 +1021,7 @@ function fromBoundPipConfig(config: Partial<PIPConfig> | undefined, fallbackPres
       x: normalizedUnit(config?.position?.x ?? (preset === 'bottom-left' ? 0 : 1)),
       y: normalizedUnit(config?.position?.y ?? 1),
     },
-    scale: normalizedRange(config?.scale, 0.12, 0.08, 0.32),
+    scale: normalizedRange(config?.scale, 0.08, 0.08, 0.32),
     edgeFeather: normalizedRange(config?.edgeFeather, 0.16, 0.02, 0.42),
   }
 }
