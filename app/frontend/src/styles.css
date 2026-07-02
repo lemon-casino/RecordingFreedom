@@ -101,7 +101,7 @@ input:disabled,
   display: grid;
   height: 100%;
   place-items: start center;
-  padding: 10px 24px 0;
+  padding: 8px 18px 0;
   background: transparent;
   --wails-draggable: drag;
 }
@@ -111,17 +111,17 @@ input:disabled,
   display: grid;
   justify-items: center;
   gap: 10px;
-  width: min(944px, 100%);
+  width: min(724px, 100%);
   --wails-draggable: drag;
 }
 
 .capsule {
   display: flex;
   align-items: center;
-  gap: 8px;
-  width: min(912px, 100%);
-  min-height: 72px;
-  padding: 10px;
+  gap: 6px;
+  width: min(704px, 100%);
+  min-height: 64px;
+  padding: 8px;
   border: 1px solid var(--line);
   border-radius: var(--radius-pill);
   background: linear-gradient(180deg, rgba(25, 31, 38, 0.94), rgba(13, 17, 22, 0.92));
@@ -157,8 +157,8 @@ input:disabled,
 
 .grabber {
   display: grid;
-  width: 28px;
-  height: 46px;
+  width: 20px;
+  height: 42px;
   place-items: center;
   border: 0;
   border-radius: var(--radius-pill);
@@ -183,11 +183,11 @@ input:disabled,
 .source-pill {
   display: flex;
   align-items: center;
-  gap: 10px;
-  width: 220px;
-  min-width: 220px;
-  height: 52px;
-  padding: 0 14px;
+  gap: 8px;
+  width: 184px;
+  min-width: 184px;
+  height: 48px;
+  padding: 0 12px;
   border: 1px solid var(--line);
   border-radius: var(--radius-pill);
   background: rgba(255, 255, 255, 0.055);
@@ -235,20 +235,20 @@ select:disabled {
 }
 
 .source-text strong {
-  font-size: 13px;
+  font-size: 12px;
   font-weight: 700;
 }
 
 .source-text small {
-  font-size: 11px;
+  font-size: 10px;
   color: var(--muted);
 }
 
 .control-group {
   display: flex;
-  gap: 6px;
-  height: 52px;
-  padding: 5px;
+  gap: 4px;
+  height: 48px;
+  padding: 4px;
   border: 1px solid var(--line);
   border-radius: var(--radius-pill);
   background: rgba(255, 255, 255, 0.04);
@@ -265,8 +265,8 @@ select:disabled {
 }
 
 .icon-button {
-  width: 42px;
-  height: 42px;
+  width: 38px;
+  height: 38px;
   border-radius: var(--radius-pill);
   background: rgba(255, 255, 255, 0.035);
 }
@@ -308,9 +308,9 @@ select:disabled {
 }
 
 .record-button {
-  width: 54px;
-  min-width: 54px;
-  height: 54px;
+  width: 50px;
+  min-width: 50px;
+  height: 50px;
   border-radius: var(--radius-pill);
   background: var(--red-soft);
   color: #ffdfdc;
@@ -339,11 +339,11 @@ select:disabled {
 .time-chip {
   display: flex;
   align-items: center;
-  gap: 8px;
-  width: 138px;
-  min-width: 138px;
-  height: 42px;
-  padding: 0 12px;
+  gap: 6px;
+  width: 122px;
+  min-width: 122px;
+  height: 38px;
+  padding: 0 10px;
   border: 1px solid var(--line);
   border-radius: var(--radius-pill);
   background: rgba(255, 255, 255, 0.045);
@@ -352,9 +352,9 @@ select:disabled {
 }
 
 .time-chip strong {
-  min-width: 42px;
+  min-width: 38px;
   color: var(--text);
-  font-size: 11px;
+  font-size: 10px;
 }
 
 .time-chip span:last-child {
@@ -411,12 +411,12 @@ body.rf-recorder-window .select-menu-list {
 
 .popover.panel-audio,
 .popover.panel-camera {
-  left: 86px;
-  width: 430px;
+  left: 68px;
+  width: 400px;
 }
 
 .popover.panel-source {
-  width: 380px;
+  width: 360px;
 }
 
 .menu-grid,
@@ -956,7 +956,7 @@ input {
 }
 
 .settings-panel {
-  width: 380px;
+  width: 360px;
   padding: 16px;
   border: 1px solid var(--line);
   border-radius: 24px;
@@ -989,11 +989,11 @@ input {
 
 .settings-sheet {
   position: absolute;
-  top: 88px;
-  right: 24px;
+  top: 78px;
+  right: 18px;
   z-index: 7;
-  max-width: min(420px, calc(100vw - 48px));
-  max-height: calc(100vh - 106px);
+  max-width: min(390px, calc(100vw - 36px));
+  max-height: calc(100vh - 94px);
 }
 
 .settings-window-panel {
@@ -1614,7 +1614,7 @@ input {
 .pip-live-media video {
   width: 100%;
   height: 100%;
-  object-fit: contain;
+  object-fit: cover;
   opacity: 0;
   transition: opacity 180ms ease;
 }

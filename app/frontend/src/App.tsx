@@ -101,7 +101,7 @@ function normalizePipConfig(value: Partial<PIPConfig> | undefined, fallbackPrese
       x: clampNumber(value?.position?.x ?? fallbackPosition.x, 0, 1),
       y: clampNumber(value?.position?.y ?? fallbackPosition.y, 0, 1),
     },
-    scale: clampNumber(value?.scale ?? 0.2, 0.1, 0.42),
+    scale: clampNumber(value?.scale ?? 0.12, 0.08, 0.32),
     edgeFeather: clampNumber(value?.edgeFeather ?? 0.16, 0.02, 0.42),
   }
 }
@@ -279,7 +279,7 @@ function App() {
   const [pipShape, setPipShape] = useState<PIPShape>('circle')
   const [pipMirror, setPipMirror] = useState(true)
   const [pipPosition, setPipPosition] = useState(defaultPipPosition('bottom-right'))
-  const [pipScale, setPipScale] = useState(0.2)
+  const [pipScale, setPipScale] = useState(0.12)
   const [pipEdgeFeather, setPipEdgeFeather] = useState(0.16)
   const [locale, setLocale] = useState<LocaleCode>('zh-CN')
   const [lastPackage, setLastPackage] = useState<string>(previewPackagePath)
@@ -319,16 +319,16 @@ function App() {
   const recordingConfigLocked = isRecording
   const capsuleExpanded = activePanel !== null || settingsOpen || closePromptOpen
   const capsuleExpandedHeight = settingsOpen
-    ? 590
+    ? 560
     : closePromptOpen
-      ? 330
+      ? 300
       : activePanel === 'audio'
-        ? 520
+        ? 500
       : activePanel === 'camera'
-          ? 640
+          ? 570
           : activePanel === 'language'
-            ? 300
-            : 520
+            ? 280
+            : 500
   const SourceIcon = recordingMode === 'audio' ? Volume2 : sourceIcon[selectedSource.type]
   const sourceTitle = recordingMode === 'audio' ? copy.recordingModes.audio : sourceTypeLabel(selectedSource, copy)
   const sourceSubtitle = recordingMode === 'audio' ? audioOnlySourceMeta(systemAudio, microphone, copy) : sourceName(selectedSource, copy)
@@ -1620,8 +1620,8 @@ function App() {
                   <input
                     id="pip-size"
                     type="range"
-                    min="0.1"
-                    max="0.42"
+                    min="0.08"
+                    max="0.32"
                     step="0.01"
                     value={pipScale}
                     disabled={recordingConfigLocked || !camera || !hasUsableCamera}
@@ -1739,7 +1739,7 @@ function ScreenIndicatorWindow() {
 type PIPEditAction = 'move' | 'n' | 'e' | 's' | 'w' | 'ne' | 'nw' | 'se' | 'sw'
 
 const pipResizeActions: PIPEditAction[] = ['n', 'e', 's', 'w', 'ne', 'nw', 'se', 'sw']
-const pipMinimumContentSize = 96
+const pipMinimumContentSize = 72
 
 type PIPOverlayWindowGlobal = Window & {
   __RF_PIP_OVERLAY__?: PIPOverlayState
@@ -1823,11 +1823,6 @@ function PIPOverlayWindow() {
       setCameraError(null)
       return
     }
-    if (overlayState.mode === 'recording') {
-      cancelPipCameraStream()
-      setCameraError(null)
-      return
-    }
     if (!navigator.mediaDevices?.getUserMedia) {
       cancelPipCameraStream()
       setCameraReady(false)
@@ -1841,14 +1836,25 @@ function PIPOverlayWindow() {
     stopActivePipCameraStream()
     setCameraReady(false)
     setCameraError(null)
-    void openPipCameraStream(cameraTarget).then((nextStream) => {
+    void openPipCameraStream(cameraTarget).then(async (nextStream) => {
       if (cancelled || cameraRequestTokenRef.current !== requestToken) {
         stopMediaStream(nextStream)
         return
       }
       activeCameraStreamRef.current = nextStream
-      if (videoRef.current) {
-        videoRef.current.srcObject = nextStream
+      const video = videoRef.current
+      if (video) {
+        video.srcObject = nextStream
+        try {
+          await video.play()
+        } catch (error) {
+          console.info('PIP preview video play was deferred:', error)
+        }
+      }
+      if (cancelled || cameraRequestTokenRef.current !== requestToken) {
+        if (activeCameraStreamRef.current === nextStream) activeCameraStreamRef.current = null
+        stopMediaStream(nextStream)
+        return
       }
       setCameraReady(true)
       setCameraError(null)

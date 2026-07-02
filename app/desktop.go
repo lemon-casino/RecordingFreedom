@@ -9,9 +9,9 @@ import (
 )
 
 const (
-	capsuleWindowWidth           = 960
-	capsuleWindowCollapsedHeight = 112
-	capsuleWindowExpandedHeight  = 640
+	capsuleWindowWidth           = 760
+	capsuleWindowCollapsedHeight = 96
+	capsuleWindowExpandedHeight  = 600
 )
 
 func createCapsuleWindow(app *application.App) *application.WebviewWindow {

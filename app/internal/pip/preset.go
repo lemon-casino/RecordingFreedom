@@ -15,10 +15,11 @@ const (
 	ShapeCircle        Shape = "circle"
 	ShapeSquare        Shape = "square"
 	DefaultShape       Shape = ShapeCircle
-	DefaultScale             = 0.2
+	DefaultScale             = 0.12
 	DefaultEdgeFeather       = 0.16
-	MinimumScale             = 0.1
-	MaximumScale             = 0.42
+	MinimumScale             = 0.08
+	MaximumScale             = 0.32
+	MinimumPixelSize         = 72
 	MaximumEdgeFeather       = 0.42
 )
 
@@ -184,7 +185,7 @@ func Place(config Config, canvas Size) (Placement, error) {
 	}
 
 	margin := maxInt(16, canvas.Width/40)
-	size := clampInt(int(float64(canvas.Width)*config.Scale), 96, maxInt(1, minInt(canvas.Width, canvas.Height)-(margin*2)))
+	size := clampInt(int(float64(canvas.Width)*config.Scale), MinimumPixelSize, maxInt(1, minInt(canvas.Width, canvas.Height)-(margin*2)))
 	x := canvas.Width - size - margin
 	if config.Preset == PresetBottomLeft {
 		x = margin

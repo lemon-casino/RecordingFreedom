@@ -19,6 +19,7 @@ const (
 	EnvFFmpegPath             = "RECORDINGFREEDOM_FFMPEG_PATH"
 	ffmpegStopTimeout         = 10 * time.Second
 	ffmpegFinalizeTimeout     = 30 * time.Second
+	ffmpegVerifyTimeout       = 15 * time.Second
 	ffmpegSegmentDirectory    = "cache"
 	ffmpegVideoSegmentSubdir  = "ffmpeg-video"
 	ffmpegSegmentListFileName = "segments.txt"
@@ -251,6 +252,8 @@ func (s *ffmpegDesktopSession) Stop() error {
 		errs = append(errs, errors.New("FFmpeg desktop capture wrote no segments"))
 	} else if err := s.finalizeLocked(); err != nil {
 		errs = append(errs, err)
+	} else if err := s.verifyOutputLocked(); err != nil {
+		errs = append(errs, err)
 	}
 	s.patchDiagnosticsLocked()
 	if strings.TrimSpace(s.config.DiagnosticsPath) != "" {
@@ -398,13 +401,13 @@ func (s *ffmpegDesktopSession) finalizeLocked() error {
 	}
 	if len(s.segments) == 1 {
 		if err := os.Rename(s.segments[0].Path, s.config.OutputPath); err == nil {
-			s.diagnostics.Messages = append(s.diagnostics.Messages, "Single FFmpeg segment moved to screen.mp4.")
+			s.diagnostics.Messages = append(s.diagnostics.Messages, fmt.Sprintf("Single FFmpeg segment moved to %s.", filepath.Base(s.config.OutputPath)))
 			return nil
 		}
 		if err := copyFile(s.segments[0].Path, s.config.OutputPath); err != nil {
 			return err
 		}
-		s.diagnostics.Messages = append(s.diagnostics.Messages, "Single FFmpeg segment copied to screen.mp4.")
+		s.diagnostics.Messages = append(s.diagnostics.Messages, fmt.Sprintf("Single FFmpeg segment copied to %s.", filepath.Base(s.config.OutputPath)))
 		return nil
 	}
 
@@ -431,7 +434,30 @@ func (s *ffmpegDesktopSession) finalizeLocked() error {
 	if err := cmd.Run(); err != nil {
 		return fmt.Errorf("FFmpeg concat finalize failed: %w%s", err, stderrSuffix(stderr))
 	}
-	s.diagnostics.Messages = append(s.diagnostics.Messages, fmt.Sprintf("Merged %d FFmpeg segments into screen.mp4.", len(s.segments)))
+	s.diagnostics.Messages = append(s.diagnostics.Messages, fmt.Sprintf("Merged %d FFmpeg segments into %s.", len(s.segments), filepath.Base(s.config.OutputPath)))
+	return nil
+}
+
+func (s *ffmpegDesktopSession) verifyOutputLocked() error {
+	ctx, cancel := context.WithTimeout(context.Background(), ffmpegVerifyTimeout)
+	defer cancel()
+	args := []string{
+		"-hide_banner", "-v", "error",
+		"-i", s.config.OutputPath,
+		"-map", "0:v:0",
+		"-frames:v", "1",
+		"-f", "null",
+		"-",
+	}
+	cmd := exec.CommandContext(ctx, s.ffmpeg, args...)
+	configureBackgroundCommand(cmd)
+	stderr := &bytes.Buffer{}
+	cmd.Stdout = io.Discard
+	cmd.Stderr = stderr
+	if err := cmd.Run(); err != nil {
+		return fmt.Errorf("verify FFmpeg output video track: %w%s", err, stderrSuffix(stderr))
+	}
+	s.diagnostics.Messages = append(s.diagnostics.Messages, "Verified FFmpeg output video track.")
 	return nil
 }
 
@@ -474,7 +500,37 @@ func (s *ffmpegDesktopSession) patchDiagnosticsLocked() {
 }
 
 func (s *ffmpegDesktopSession) segmentDir() string {
-	return filepath.Join(filepath.Dir(s.config.OutputPath), ffmpegSegmentDirectory, ffmpegVideoSegmentSubdir)
+	return filepath.Join(filepath.Dir(s.config.OutputPath), ffmpegSegmentDirectory, ffmpegVideoSegmentSubdir, ffmpegSegmentOutputSubdir(s.config.OutputPath))
+}
+
+func ffmpegSegmentOutputSubdir(outputPath string) string {
+	name := strings.TrimSuffix(filepath.Base(outputPath), filepath.Ext(outputPath))
+	name = strings.TrimSpace(name)
+	if name == "" {
+		name = "capture"
+	}
+	var builder strings.Builder
+	lastDash := false
+	for _, value := range strings.ToLower(name) {
+		switch {
+		case value >= 'a' && value <= 'z', value >= '0' && value <= '9':
+			builder.WriteRune(value)
+			lastDash = false
+		case value == '-' || value == '_':
+			builder.WriteRune(value)
+			lastDash = value == '-'
+		default:
+			if !lastDash {
+				builder.WriteByte('-')
+				lastDash = true
+			}
+		}
+	}
+	cleaned := strings.Trim(builder.String(), "-_")
+	if cleaned == "" {
+		return "capture"
+	}
+	return cleaned
 }
 
 func estimatedFrames(duration time.Duration, fps int) int64 {

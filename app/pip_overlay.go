@@ -141,7 +141,7 @@ func (s *RecordingFreedomService) pipOverlayState(config pip.Config, mode string
 	}
 	size := placement.Rect.Width
 	if size <= 0 {
-		size = 96
+		size = pip.MinimumPixelSize
 	}
 	windowBounds := application.Rect{
 		X:      overlayBounds.X + placement.Rect.X - pipOverlayPadding,

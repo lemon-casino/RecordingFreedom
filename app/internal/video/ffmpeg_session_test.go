@@ -1,6 +1,7 @@
 package video
 
 import (
+	"path/filepath"
 	"slices"
 	"testing"
 )
@@ -25,5 +26,20 @@ func TestFFmpegEncodingArgsPadOddDesktopDimensions(t *testing.T) {
 	args := session.encodingArgs("screen.mp4")
 	if !slices.Contains(args, "-vf") || !slices.Contains(args, "pad=ceil(iw/2)*2:ceil(ih/2)*2") {
 		t.Fatalf("encoding args = %#v, want even-dimension padding filter", args)
+	}
+}
+
+func TestFFmpegSegmentDirIsUniquePerOutputFile(t *testing.T) {
+	root := t.TempDir()
+	screen := &ffmpegDesktopSession{config: CaptureConfig{OutputPath: filepath.Join(root, "screen.mp4")}}
+	webcam := &ffmpegDesktopSession{config: CaptureConfig{OutputPath: filepath.Join(root, "webcam.mp4")}}
+	if screen.segmentDir() == webcam.segmentDir() {
+		t.Fatalf("screen and webcam segment dirs both = %q, want isolated writers", screen.segmentDir())
+	}
+	if got := filepath.Base(screen.segmentDir()); got != "screen" {
+		t.Fatalf("screen segment dir leaf = %q, want screen", got)
+	}
+	if got := filepath.Base(webcam.segmentDir()); got != "webcam" {
+		t.Fatalf("webcam segment dir leaf = %q, want webcam", got)
 	}
 }

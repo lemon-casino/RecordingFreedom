@@ -110,9 +110,9 @@ export type CapsuleWindowHitRegion = {
 }
 
 const browserSettingsKey = 'recordingfreedom.settings.v1'
-const capsuleWindowWidth = 960
-const capsuleWindowCollapsedHeight = 112
-const capsuleWindowExpandedHeight = 640
+const capsuleWindowWidth = 760
+const capsuleWindowCollapsedHeight = 96
+const capsuleWindowExpandedHeight = 600
 
 export async function setCapsuleWindowHitRegions(req: {
   enabled: boolean
@@ -1021,7 +1021,7 @@ function fromBoundPipConfig(config: Partial<PIPConfig> | undefined, fallbackPres
       x: normalizedUnit(config?.position?.x ?? (preset === 'bottom-left' ? 0 : 1)),
       y: normalizedUnit(config?.position?.y ?? 1),
     },
-    scale: normalizedRange(config?.scale, 0.2, 0.1, 0.42),
+    scale: normalizedRange(config?.scale, 0.12, 0.08, 0.32),
     edgeFeather: normalizedRange(config?.edgeFeather, 0.16, 0.02, 0.42),
   }
 }
@@ -1085,7 +1085,7 @@ function browserPipOverlayState(config: PIPConfig, mode: PIPOverlayMode, camera:
   const target = normalizePipOverlayCamera(camera)
   const overlayBounds = {x: 0, y: 0, width: Math.max(320, window.innerWidth || 1280), height: Math.max(240, window.innerHeight || 720)}
   const normalized = fromBoundPipConfig(config, config.preset)
-  const size = Math.round(Math.max(96, Math.min(overlayBounds.width, overlayBounds.height) * normalized.scale))
+  const size = Math.round(Math.max(72, Math.min(overlayBounds.width, overlayBounds.height) * normalized.scale))
   const contentBounds = {x: 24, y: 24, width: size, height: size}
   return {
     config: normalized,
