@@ -98,10 +98,6 @@ jobs:
         include:
           - name: windows-x64
             os: windows-latest
-          - name: macos-arm64
-            os: macos-15
-          - name: linux-x64
-            os: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
 
@@ -116,18 +112,7 @@ jobs:
           cache: npm
           cache-dependency-path: ${{ env.APP_DIR }}/frontend/package-lock.json
 
-      - name: Install Linux Wails build dependencies
-        if: runner.os == 'Linux'
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y --no-install-recommends \
-            build-essential \
-            pkg-config \
-            libgtk-3-dev \
-            libwebkit2gtk-4.1-dev
-
       - name: Enable Windows cgo toolchain
-        if: runner.os == 'Windows'
         shell: pwsh
         run: |
           if (!(Test-Path "C:\msys64\usr\bin\bash.exe")) {
@@ -140,11 +125,7 @@ jobs:
         working-directory: ${{ env.APP_DIR }}
         shell: bash
         run: |
-          if [ "${{ runner.os }}" = "Linux" ]; then
-            go install -tags gtk3 github.com/wailsapp/wails/v3/cmd/wails3@${WAILS_VERSION}
-          else
-            go install github.com/wailsapp/wails/v3/cmd/wails3@${WAILS_VERSION}
-          fi
+          go install github.com/wailsapp/wails/v3/cmd/wails3@${WAILS_VERSION}
           echo "$(go env GOPATH)/bin" >> "$GITHUB_PATH"
 
       - name: Install frontend dependencies
@@ -152,24 +133,15 @@ jobs:
         run: npm ci
 
       - name: Prepare Windows FFmpeg tool
-        if: runner.os == 'Windows'
         shell: pwsh
         run: ./scripts/ensure-windows-ffmpeg.ps1
 
       - name: Build app
         working-directory: ${{ env.APP_DIR }}
         shell: bash
-        run: |
-          if [ "${{ runner.os }}" = "Windows" ]; then
-            CGO_ENABLED=1 wails3 task windows:build EXTRA_TAGS="${RNNOISE_TAG}" CGO_ENABLED=1
-          elif [ "${{ runner.os }}" = "Linux" ]; then
-            CGO_ENABLED=1 wails3 build -tags "gtk3,${RNNOISE_TAG}"
-          else
-            CGO_ENABLED=1 wails3 build -tags "${RNNOISE_TAG}"
-          fi
+        run: CGO_ENABLED=1 wails3 task windows:build EXTRA_TAGS="${RNNOISE_TAG}" CGO_ENABLED=1
 
       - name: Build Windows portable smoke tools
-        if: runner.os == 'Windows'
         working-directory: ${{ env.APP_DIR }}
         shell: pwsh
         env:
@@ -183,39 +155,27 @@ jobs:
       - name: Run desktop dependency doctor
         working-directory: ${{ env.APP_DIR }}
         shell: bash
-        run: |
-          if [ "${{ runner.os }}" = "Windows" ]; then
-            CGO_ENABLED=1 go run -tags "${RNNOISE_TAG}" ./cmd/desktop-doctor -require-video -require-rnnoise
-          elif [ "${{ runner.os }}" = "Linux" ]; then
-            CGO_ENABLED=1 go run -tags "gtk3 ${RNNOISE_TAG}" ./cmd/desktop-doctor -require-rnnoise
-          else
-            CGO_ENABLED=1 go run -tags "${RNNOISE_TAG}" ./cmd/desktop-doctor -require-rnnoise
-          fi
+        run: CGO_ENABLED=1 go run -tags "${RNNOISE_TAG}" ./cmd/desktop-doctor -require-video -require-rnnoise
 
       - name: Stage release artifact
         shell: bash
         run: |
           set -euo pipefail
           mkdir -p release-out
-          if [ "${{ runner.os }}" = "Windows" ]; then
-            portable_dir="release-out/RecordingFreedom-${{ matrix.name }}-${{ github.ref_name }}"
-            mkdir -p "${portable_dir}/tools"
-            cp "${APP_DIR}/bin/recordingfreedom.exe" "${portable_dir}/recordingfreedom.exe"
-            cp "${APP_DIR}/tools/ffmpeg.exe" "${portable_dir}/tools/ffmpeg.exe"
-            if [ -f "${APP_DIR}/tools/ffprobe.exe" ]; then
-              cp "${APP_DIR}/tools/ffprobe.exe" "${portable_dir}/tools/ffprobe.exe"
-            fi
-            cp "${APP_DIR}/tools/THIRD_PARTY_FFMPEG.txt" "${portable_dir}/tools/THIRD_PARTY_FFMPEG.txt"
-            cp "${APP_DIR}/bin/desktop-doctor.exe" "${portable_dir}/tools/desktop-doctor.exe"
-            cp "${APP_DIR}/bin/video-smoke.exe" "${portable_dir}/tools/video-smoke.exe"
-            cp "${APP_DIR}/bin/audio-smoke.exe" "${portable_dir}/tools/audio-smoke.exe"
-            cp "scripts/run-windows-portable-smoke.ps1" "${portable_dir}/tools/run-windows-portable-smoke.ps1"
-            powershell -NoProfile -Command "Compress-Archive -Path '${portable_dir}/*' -DestinationPath 'release-out/RecordingFreedom-${{ matrix.name }}-${{ github.ref_name }}-portable.zip' -Force"
-            rm -rf "${portable_dir}"
-          else
-            cp "${APP_DIR}/bin/recordingfreedom" "release-out/RecordingFreedom-${{ matrix.name }}-${{ github.ref_name }}"
-            chmod +x "release-out/RecordingFreedom-${{ matrix.name }}-${{ github.ref_name }}"
+          portable_dir="release-out/RecordingFreedom-${{ matrix.name }}-${{ github.ref_name }}"
+          mkdir -p "${portable_dir}/tools"
+          cp "${APP_DIR}/bin/recordingfreedom.exe" "${portable_dir}/recordingfreedom.exe"
+          cp "${APP_DIR}/tools/ffmpeg.exe" "${portable_dir}/tools/ffmpeg.exe"
+          if [ -f "${APP_DIR}/tools/ffprobe.exe" ]; then
+            cp "${APP_DIR}/tools/ffprobe.exe" "${portable_dir}/tools/ffprobe.exe"
           fi
+          cp "${APP_DIR}/tools/THIRD_PARTY_FFMPEG.txt" "${portable_dir}/tools/THIRD_PARTY_FFMPEG.txt"
+          cp "${APP_DIR}/bin/desktop-doctor.exe" "${portable_dir}/tools/desktop-doctor.exe"
+          cp "${APP_DIR}/bin/video-smoke.exe" "${portable_dir}/tools/video-smoke.exe"
+          cp "${APP_DIR}/bin/audio-smoke.exe" "${portable_dir}/tools/audio-smoke.exe"
+          cp "scripts/run-windows-portable-smoke.ps1" "${portable_dir}/tools/run-windows-portable-smoke.ps1"
+          powershell -NoProfile -Command "Compress-Archive -Path '${portable_dir}/*' -DestinationPath 'release-out/RecordingFreedom-${{ matrix.name }}-${{ github.ref_name }}-portable.zip' -Force"
+          rm -rf "${portable_dir}"
           artifact_count="$(find release-out -maxdepth 1 -type f ! -name "SHA256SUMS-*" | wc -l | tr -d ' ')"
           if [ "${artifact_count}" -eq 0 ]; then
             echo "No release artifact was staged." >&2
@@ -234,7 +194,6 @@ jobs:
           )
 
       - name: Verify Windows portable artifact
-        if: runner.os == 'Windows'
         shell: pwsh
         run: ./scripts/verify-windows-portable.ps1 -ZipPath "release-out/RecordingFreedom-${{ matrix.name }}-${{ github.ref_name }}-portable.zip"
 
@@ -286,11 +245,11 @@ jobs:
           - Windows clean-machine portable smoke entrypoint at tools/run-windows-portable-smoke.ps1.
           - RNNoise native DSP is compiled into release artifacts with the rnnoise_native cgo build tag; desktop-doctor -require-rnnoise is a release build gate.
           - Camera sidecar and PIP contract: structured camera.pip settings/manifest/export plan, transparent draggable/resizable PIP overlay, WebView camera preview best-effort device matching, Windows DirectShow / macOS AVFoundation / Linux v4l2 FFmpeg sidecar writer paths, Wails ExportRecordingPackage(), cmd/pip-export-smoke, and FFmpeg PIP export that verifies the final MP4 by decoding one video frame before installing it.
-          - Windows, macOS, and Linux Wails build artifacts.
+          - Windows Wails portable artifact only. macOS and Linux artifact production is temporarily disabled in GitHub Actions until their smoke/release gates are ready to run again.
 
           Not included yet:
           - End-to-end verified native recording on every desktop platform. macOS ScreenCaptureKit display/window/single-display region capture is wired in code but still needs real-device smoke validation; Windows portable artifacts include the clean-machine smoke runner but still need the downloaded artifact to be executed on a target desktop; PipeWire media writer is not complete.
-          - Cross-platform long-recording audio sync validation. Windows local smoke has passed 1 minute, 5 minute, and 20 minute recording with stop-time mux into screen.mp4; macOS system audio is wired through ScreenCaptureKit mux and still needs real-device smoke; Linux audio capture is queued.
+          - Cross-platform long-recording audio sync validation. Windows local smoke has passed 1 minute, 5 minute, and 20 minute recording with stop-time mux into screen.mp4; macOS system audio is wired through ScreenCaptureKit mux and still needs real-device smoke before macOS artifacts are re-enabled; Linux audio capture is queued before Linux artifacts are re-enabled.
           - Cross-platform real-camera acceptance. The sidecar/PIP code path is implemented, but real device smoke is still required for preview matching, Windows/macOS/Linux camera sidecar recording, screen + camera + audio combinations, pause/resume timing, and long-recording sync.
           - Signed installers, notarization, or Linux packages.
           NOTES

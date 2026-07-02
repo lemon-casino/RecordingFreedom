@@ -27,33 +27,28 @@ https://github.com/lemon-casino/RecordingFreedom.git
 当前已落地 jobs：
 
 - `validate`：安装 Go、Node、Linux Wails 依赖和 Wails v3 CLI，生成 bindings，校验 `frontend/bindings` 无未提交差异，运行前端 build、`go test ./...`、RNNoise native DSP + recording runtime 定向测试、`go run ./cmd/preview-smoke`、`go run ./cmd/release-config-check`，并用 `CGO_ENABLED=1 go run -tags "gtk3 rnnoise_native" ./cmd/desktop-doctor -require-rnnoise` 阻断不能创建 RNNoise native suppressor 的构建。
-- `macos-native-contract`：在 `macos-15` 且 `CGO_ENABLED=1` 下验证 CoreGraphics source enumeration 与 `CaptureService` capability 合同。
-- `wails-build`：在 `windows-latest`、`macos-15`、`ubuntu-latest` 上运行带 `rnnoise_native` 的 Wails 构建；Linux 同时带 `gtk3` 标签。Windows runner 会显式准备 MinGW GCC 供 cgo 编译 RNNoise。构建后每个平台都运行 `desktop-doctor -require-rnnoise`；Windows 还会运行 `-require-video` 和 portable zip 验证。
+- `windows-build`：当前只在 `windows-latest` 上运行带 `rnnoise_native` 的 Wails 构建。Windows runner 会显式准备 MinGW GCC 供 cgo 编译 RNNoise，构建后运行 `desktop-doctor -require-video -require-rnnoise`，并打包 portable smoke tools。macOS/Linux Wails build 暂时关闭，等对应 smoke/release gates 稳定后再恢复。
 
 ## 当前 Release 工作流
 
-`release.yml` 由 `v*` tag 触发。当前发布的是用于查验已完成功能和全平台编译的 preview build，不是正式签名安装包。
+`release.yml` 由 `v*` tag 触发。当前发布的是用于查验已完成功能的 preview build，不是正式签名安装包；macOS/Linux artifact 制作暂时关闭，当前 Actions 只发布 Windows portable zip。
 
 发布前门禁：
 
 - `Release Gate`：生成 bindings 并校验无差异，运行前端 build、`go test ./...`、RNNoise native DSP + recording runtime 定向测试、`go run ./cmd/preview-smoke`，并运行带 `rnnoise_native` 的 `desktop-doctor -require-rnnoise`。从当前 preview 开始，发布 artifact 默认启用 RNNoise native DSP，不能再发布“按钮存在但二进制没有真降噪”的验收包。
-- 三平台 build 只有在 `Release Gate` 通过后才会启动。
+- Windows build 只有在 `Release Gate` 通过后才会启动。
 
 平台 runner：
 
-- macOS: `macos-15`，构建 arm64，后续增加 universal。
+- macOS: artifact 制作暂时关闭；恢复时使用 `macos-15` 构建 arm64，后续增加 universal。
 - Windows: `windows-latest`，先构建 x64。
-- Linux: `ubuntu-latest`，先构建未打包二进制，标注 experimental。
+- Linux: artifact 制作暂时关闭；恢复时使用 `ubuntu-latest`，先构建未打包二进制，标注 experimental。
 
 当前 preview artifact 命名：
 
 ```text
 RecordingFreedom-windows-x64-vX.Y.Z-portable.zip
-RecordingFreedom-macos-arm64-vX.Y.Z
-RecordingFreedom-linux-x64-vX.Y.Z
 SHA256SUMS-windows-x64.txt
-SHA256SUMS-macos-arm64.txt
-SHA256SUMS-linux-x64.txt
 ```
 
 正式安装包命名仍按后续门禁推进，目标为 `.dmg`、Windows installer/portable zip、Linux AppImage/deb/rpm。
@@ -69,14 +64,14 @@ git tag v0.1.0-preview.N
 git push origin v0.1.0-preview.N
 ```
 
-GitHub Actions 会自动运行 `release.yml`，通过后生成 GitHub prerelease 和三平台 preview artifacts。这个版本可用于检查：
+GitHub Actions 会自动运行 `release.yml`，通过后生成 GitHub prerelease 和 Windows preview artifact。这个版本可用于检查：
 
 - 胶囊 UI shell、托盘和独立设置窗口是否可启动。
 - 语言切换是否在简体中文和 English 间全局生效。
 - 设置、存储目录、预检、恢复扫描和能力矩阵是否能显示。
 - mock `.rfrec` 录制包是否仍写入应用内部 `data/video`。
 - 无 GUI preview smoke 是否能完成设置持久化、storage health、预检、mock 开始/暂停/继续/结束、manifest ready 校验和恢复扫描。
-- Windows、macOS、Linux 三个平台是否能完成 Wails 构建。
+- Windows 是否能完成 Wails 构建；macOS/Linux 构建当前暂时关闭，不作为本轮 Actions 验收项。
 - 发布二进制是否通过 `desktop-doctor -require-rnnoise`，确认 RNNoise native DSP 已真实编入 artifact。
 - Windows portable zip 是否通过 `scripts/verify-windows-portable.ps1`：包含 `recordingfreedom.exe`、`tools/ffmpeg.exe`、`tools/ffprobe.exe`、`tools/THIRD_PARTY_FFMPEG.txt`、`tools/desktop-doctor.exe`、`tools/video-smoke.exe`、`tools/audio-smoke.exe` 和 `tools/run-windows-portable-smoke.ps1`，并能在 Windows runner 上执行 FFmpeg/FFprobe；校验脚本还会解析 portable 内的 smoke runner，并检查它覆盖 doctor、video-smoke、audio-smoke、FFmpeg 环境变量、区域/窗口/系统声音/麦克风/RNNoise 关键入口。
 - 已发布的 Windows preview asset 可用 `scripts/verify-windows-preview-release.ps1` 下载复验：脚本会从 GitHub Release 下载 Windows portable zip 和 `SHA256SUMS-windows-x64*.txt`，校验 SHA256，再调用 `scripts/verify-windows-portable.ps1` 检查 portable zip 内容、x64 PE 头、`recordingfreedom.exe` GUI subsystem、FFmpeg/FFprobe 依赖。
