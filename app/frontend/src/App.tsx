@@ -2319,7 +2319,9 @@ function PIPOverlayWindow() {
         video.srcObject = nextStream
         try {
           await video.play()
+          logPipCameraEvent('video-play-ready', {requestToken, mode: overlayState.mode})
         } catch (error) {
+          logPipCameraEvent('video-play-deferred', {requestToken, mode: overlayState.mode, error: readableError(error)})
           console.info('PIP preview video play was deferred:', error)
         }
       }
@@ -2480,8 +2482,8 @@ function PIPOverlayWindow() {
         <div className="pip-live-frame" style={frameStyle}>
           <div className={`pip-live-media ${overlayState.config.shape} ${overlayState.config.mirror ? 'mirrored' : ''}`}>
             <video ref={videoRef} autoPlay muted playsInline className={cameraReady ? 'ready' : ''} />
-            {!cameraReady && overlayState.mode !== 'recording' && (
-              <div className={`pip-camera-placeholder ${cameraError ? 'error' : 'pending'}`}>
+            {!cameraReady && (
+              <div className={`pip-camera-placeholder ${overlayState.mode} ${cameraError ? 'error' : 'pending'}`}>
                 <Camera size={24} />
                 <strong>{cameraPlaceholderTitle}</strong>
                 <span>{cameraPlaceholderDetail}</span>

@@ -152,7 +152,11 @@ func TestWindowsFFmpegInputArgsUsesDDAGrabForDisplayBoundRegion(t *testing.T) {
 	}
 }
 
-func TestWindowsFFmpegInputArgsUsesSingleDesktopInputForAllScreensCursorCapture(t *testing.T) {
+func TestWindowsFFmpegInputArgsUsesStableOverlayForAllScreensCursorCapture(t *testing.T) {
+	withWindowsMonitorBounds(t, []windowsMonitorBounds{
+		{Index: 1, X: -1920, Y: 0, Width: 1920, Height: 1080},
+		{Index: 2, X: 0, Y: 0, Width: 2560, Height: 1440},
+	})
 	input, err := windowsFFmpegInputArgs(windowsGraphicsCaptureTarget{Kind: windowsTargetAllScreens, ScreenID: "virtual-desktop"})(CaptureConfig{
 		SourceGeometry: &SourceGeometry{X: -1920, Y: 0, Width: 4480, Height: 1440},
 		Profile: recordingprofile.Profile{
@@ -164,23 +168,39 @@ func TestWindowsFFmpegInputArgsUsesSingleDesktopInputForAllScreensCursorCapture(
 	if err != nil {
 		t.Fatalf("windowsFFmpegInputArgs() error = %v", err)
 	}
-	if input.Engine != "windows-gdi" || input.VideoPreFiltered {
-		t.Fatalf("input = %#v, want single windows-gdi desktop input", input)
+	if input.Engine != "windows-dda" || !input.VideoPreFiltered {
+		t.Fatalf("input = %#v, want prefiltered windows-dda input", input)
 	}
-	if got := flagValue(input.Args, "-offset_x"); got != "-1920" {
-		t.Fatalf("-offset_x = %q, want -1920 in args %v", got, input.Args)
+	graph := strings.Join(input.Args, " ")
+	if strings.Contains(graph, "draw_mouse=1") {
+		t.Fatalf("input args = %v, all-screens cursor capture must not use FFmpeg native draw_mouse=1", input.Args)
 	}
-	if got := flagValue(input.Args, "-video_size"); got != "4480x1440" {
-		t.Fatalf("-video_size = %q, want 4480x1440 in args %v", got, input.Args)
+	if !strings.Contains(graph, "draw_mouse=0") {
+		t.Fatalf("input args = %v, want native cursor drawing disabled", input.Args)
 	}
-	if got := flagValue(input.Args, "-draw_mouse"); got != "1" {
-		t.Fatalf("-draw_mouse = %q, want 1 in args %v", got, input.Args)
+	if !strings.Contains(graph, "xstack=inputs=2:layout=0_0|1920_0") {
+		t.Fatalf("filter graph = %q, want virtual desktop xstack layout", graph)
 	}
-	if input.Args[len(input.Args)-1] != "desktop" {
-		t.Fatalf("input args = %v, want desktop input", input.Args)
+	if !strings.Contains(strings.Join(input.Messages, " "), "stable app-controlled cursor overlay") {
+		t.Fatalf("messages = %v, want stable cursor overlay diagnostic", input.Messages)
 	}
-	if !strings.Contains(strings.Join(input.Messages, " "), "avoid multi-output cursor flicker") {
-		t.Fatalf("messages = %v, want all-screens cursor flicker diagnostic", input.Messages)
+}
+
+func TestWindowsAllScreensCursorCaptureRequiresStableOverlay(t *testing.T) {
+	if !windowsRequiresStableCursorOverlay(CaptureConfig{
+		Profile: recordingprofile.Profile{FPS: 30, CaptureCursor: true},
+	}, windowsGraphicsCaptureTarget{Kind: windowsTargetAllScreens}) {
+		t.Fatal("all-screens cursor capture should require the stable cursor overlay")
+	}
+	if windowsRequiresStableCursorOverlay(CaptureConfig{
+		Profile: recordingprofile.Profile{FPS: 30, CaptureCursor: false},
+	}, windowsGraphicsCaptureTarget{Kind: windowsTargetAllScreens}) {
+		t.Fatal("all-screens capture without cursor should not require the stable cursor overlay")
+	}
+	if windowsRequiresStableCursorOverlay(CaptureConfig{
+		Profile: recordingprofile.Profile{FPS: 30, CaptureCursor: true},
+	}, windowsGraphicsCaptureTarget{Kind: windowsTargetScreen}) {
+		t.Fatal("single-screen cursor capture should keep the existing native cursor path")
 	}
 }
 
@@ -206,8 +226,19 @@ func TestWindowsDDAGrabAllScreensBuildsStackedFilter(t *testing.T) {
 		t.Fatalf("filter graph = %q, want virtual desktop xstack layout", graph)
 	}
 	if !strings.Contains(graph, "draw_mouse=1") {
-		t.Fatalf("filter graph = %q, want cursor capture in each DDA input", graph)
+		t.Fatalf("filter graph = %q, direct DDA builder should preserve the requested cursor mode", graph)
 	}
+}
+
+func withWindowsMonitorBounds(t *testing.T, monitors []windowsMonitorBounds) {
+	t.Helper()
+	previous := windowsMonitorBoundsProvider
+	windowsMonitorBoundsProvider = func() []windowsMonitorBounds {
+		return monitors
+	}
+	t.Cleanup(func() {
+		windowsMonitorBoundsProvider = previous
+	})
 }
 
 func flagValue(args []string, flag string) string {

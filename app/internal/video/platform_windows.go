@@ -68,6 +68,7 @@ type windowsGraphicsCaptureSession struct {
 	target      windowsGraphicsCaptureTarget
 	diagnostics Diagnostics
 	writer      *ffmpegDesktopSession
+	cursor      *windowsCursorOverlay
 
 	mu      sync.Mutex
 	started bool
@@ -88,12 +89,18 @@ func NewPlatformSession(config CaptureConfig) (Session, error) {
 		return nil, err
 	}
 	diagnostics := writer.Diagnostics()
+	var cursor *windowsCursorOverlay
+	if windowsRequiresStableCursorOverlay(config, target) {
+		cursor = newWindowsCursorOverlay(config.Profile.FPS)
+		diagnostics.Messages = append(diagnostics.Messages, "All-screens cursor capture will use the app-controlled stable cursor overlay; FFmpeg native cursor drawing is disabled for this recording.")
+	}
 	diagnostics.Messages = append(diagnostics.Messages, fmt.Sprintf("Windows desktop capture target resolved: %s", target))
 	return &windowsGraphicsCaptureSession{
 		config:      config,
 		target:      target,
 		diagnostics: diagnostics,
 		writer:      writer,
+		cursor:      cursor,
 	}, nil
 }
 
@@ -160,7 +167,13 @@ func (s *windowsGraphicsCaptureSession) Start(ctx context.Context) error {
 		s.diagnostics.Screen.Message = "Windows program capture is queued; select a locked window or screen source."
 		return fmt.Errorf("Windows program capture is queued for %s; select a locked window or screen source", s.target)
 	}
+	if err := s.startCursorOverlayLocked(); err != nil {
+		s.diagnostics.Screen.Enabled = false
+		s.diagnostics.Screen.Message = err.Error()
+		return err
+	}
 	if err := s.writer.Start(ctx); err != nil {
+		s.stopCursorOverlayLocked()
 		s.diagnostics = s.writer.Diagnostics()
 		return err
 	}
@@ -179,6 +192,7 @@ func (s *windowsGraphicsCaptureSession) Pause() error {
 		s.diagnostics = s.writer.Diagnostics()
 		return err
 	}
+	s.stopCursorOverlayLocked()
 	s.diagnostics = s.writer.Diagnostics()
 	return nil
 }
@@ -189,7 +203,13 @@ func (s *windowsGraphicsCaptureSession) Resume() error {
 	if s.writer == nil || !s.started || s.stopped {
 		return nil
 	}
+	if err := s.startCursorOverlayLocked(); err != nil {
+		s.diagnostics.Screen.Enabled = false
+		s.diagnostics.Screen.Message = err.Error()
+		return err
+	}
 	if err := s.writer.Resume(); err != nil {
+		s.stopCursorOverlayLocked()
 		s.diagnostics = s.writer.Diagnostics()
 		return err
 	}
@@ -207,6 +227,7 @@ func (s *windowsGraphicsCaptureSession) Stop() error {
 	if s.writer == nil {
 		return WriteDiagnostics(s.config.DiagnosticsPath, s.diagnostics)
 	}
+	s.stopCursorOverlayLocked()
 	err := s.writer.Stop()
 	s.diagnostics = s.writer.Diagnostics()
 	return err
@@ -221,6 +242,22 @@ func (s *windowsGraphicsCaptureSession) Diagnostics() Diagnostics {
 	return s.diagnostics
 }
 
+func (s *windowsGraphicsCaptureSession) startCursorOverlayLocked() error {
+	if s.cursor == nil {
+		return nil
+	}
+	if err := s.cursor.Start(); err != nil {
+		return fmt.Errorf("start stable all-screens cursor overlay: %w", err)
+	}
+	return nil
+}
+
+func (s *windowsGraphicsCaptureSession) stopCursorOverlayLocked() {
+	if s.cursor != nil {
+		_ = s.cursor.Stop()
+	}
+}
+
 func windowsFFmpegInputArgs(target windowsGraphicsCaptureTarget) ffmpegInputArgsBuilder {
 	return func(config CaptureConfig) (ffmpegInputSpec, error) {
 		config = NormalizeCaptureConfig(config)
@@ -231,13 +268,18 @@ func windowsFFmpegInputArgs(target windowsGraphicsCaptureTarget) ffmpegInputArgs
 			}
 			return windowsGDIGGrabInputSpec(config, target, "screen"), nil
 		case windowsTargetAllScreens:
-			if config.Profile.CaptureCursor {
-				return windowsGDIGGrabInputSpec(config, target, "all-screens virtual desktop cursor capture"), nil
-			}
-			if input, ok := windowsDDAGrabInputSpec(config, target); ok {
+			nativeCursorConfig := windowsWithoutNativeCursorDrawing(config)
+			if input, ok := windowsDDAGrabInputSpec(nativeCursorConfig, target); ok {
+				if config.Profile.CaptureCursor {
+					input = windowsInputWithStableCursorOverlay(input)
+				}
 				return input, nil
 			}
-			return windowsGDIGGrabInputSpec(config, target, "multi-display desktop fallback"), nil
+			input := windowsGDIGGrabInputSpec(nativeCursorConfig, target, "multi-display desktop fallback")
+			if config.Profile.CaptureCursor {
+				input = windowsInputWithStableCursorOverlay(input)
+			}
+			return input, nil
 		case windowsTargetRegion:
 			if config.SourceGeometry == nil || config.SourceGeometry.Width <= 0 || config.SourceGeometry.Height <= 0 {
 				return ffmpegInputSpec{}, fmt.Errorf("Windows FFmpeg region capture requires source geometry")
@@ -260,6 +302,16 @@ func windowsDDAGrabInputSpec(config CaptureConfig, target windowsGraphicsCapture
 	geometry := config.SourceGeometry
 	if geometry == nil || geometry.Width <= 0 || geometry.Height <= 0 {
 		return ffmpegInputSpec{}, false
+	}
+
+	if target.Kind == windowsTargetAllScreens {
+		monitors := windowsMonitorBoundsProvider()
+		if len(monitors) == 0 {
+			return ffmpegInputSpec{}, false
+		}
+		if len(monitors) > 1 {
+			return windowsDDAGrabAllScreensInputSpec(config, monitors), true
+		}
 	}
 
 	outputIndex, ok := windowsDDAGrabOutputIndex(config, target)
@@ -285,13 +337,6 @@ func windowsDDAGrabInputSpec(config CaptureConfig, target windowsGraphicsCapture
 			return ffmpegInputSpec{}, false
 		}
 	case windowsTargetAllScreens:
-		monitors := windowsMonitorBoundsList()
-		if len(monitors) == 0 {
-			return ffmpegInputSpec{}, false
-		}
-		if len(monitors) > 1 {
-			return windowsDDAGrabAllScreensInputSpec(config, monitors), true
-		}
 		offsetX = 0
 		offsetY = 0
 	default:
@@ -379,10 +424,28 @@ func windowsDDAGrabOutputIndex(config CaptureConfig, target windowsGraphicsCaptu
 			}
 		}
 	}
-	if target.Kind == windowsTargetAllScreens && len(windowsMonitorBoundsList()) == 1 {
+	if target.Kind == windowsTargetAllScreens && len(windowsMonitorBoundsProvider()) == 1 {
 		return 0, true
 	}
 	return 0, target.Kind == windowsTargetScreen
+}
+
+var windowsMonitorBoundsProvider = windowsMonitorBoundsList
+
+func windowsRequiresStableCursorOverlay(config CaptureConfig, target windowsGraphicsCaptureTarget) bool {
+	config = NormalizeCaptureConfig(config)
+	return target.Kind == windowsTargetAllScreens && config.Profile.CaptureCursor
+}
+
+func windowsWithoutNativeCursorDrawing(config CaptureConfig) CaptureConfig {
+	config = NormalizeCaptureConfig(config)
+	config.Profile.CaptureCursor = false
+	return config
+}
+
+func windowsInputWithStableCursorOverlay(input ffmpegInputSpec) ffmpegInputSpec {
+	input.Messages = append(input.Messages, "All-screens cursor recording uses a stable app-controlled cursor overlay; FFmpeg draw_mouse is disabled to avoid cursor flicker on mixed-resolution displays.")
+	return input
 }
 
 func windowsGDIGGrabInputSpec(config CaptureConfig, target windowsGraphicsCaptureTarget, label string) ffmpegInputSpec {
