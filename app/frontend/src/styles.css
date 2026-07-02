@@ -1628,8 +1628,8 @@ input {
 
 .pip-live-media.circle {
   border-radius: 50%;
-  -webkit-mask-image: radial-gradient(circle, #000 calc(70% - var(--pip-feather)), rgba(0, 0, 0, 0.82) 72%, transparent 100%);
-  mask-image: radial-gradient(circle, #000 calc(70% - var(--pip-feather)), rgba(0, 0, 0, 0.82) 72%, transparent 100%);
+  -webkit-mask-image: radial-gradient(circle closest-side at center, #000 calc(100% - var(--pip-feather)), transparent 100%);
+  mask-image: radial-gradient(circle closest-side at center, #000 calc(100% - var(--pip-feather)), transparent 100%);
 }
 
 .pip-live-media.square {
@@ -1894,8 +1894,7 @@ button:focus-visible,
 select:focus-visible,
 input:focus-visible,
 .switch-row:focus-within {
-  outline: 2px solid rgba(17, 183, 167, 0.72);
-  outline-offset: 3px;
+  outline: none;
 }
 
 button,

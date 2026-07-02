@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"runtime"
 	"strings"
 	"sync"
 	"time"
@@ -49,6 +48,8 @@ type rootPointer struct {
 	RootDir       string    `json:"rootDir"`
 	UpdatedAt     time.Time `json:"updatedAt"`
 }
+
+var executablePath = os.Executable
 
 func NewService(rootDir string) *Service {
 	return &Service{rootDir: rootDir}
@@ -267,25 +268,13 @@ func probeWritable(root string) error {
 }
 
 func defaultRootDir() string {
-	switch runtime.GOOS {
-	case "darwin":
-		if home, err := os.UserHomeDir(); err == nil && home != "" {
-			return filepath.Join(home, "Library", "Application Support", appName)
-		}
-	case "windows":
-		if appData := os.Getenv("APPDATA"); appData != "" {
-			return filepath.Join(appData, appName)
-		}
-	default:
-		if xdgDataHome := os.Getenv("XDG_DATA_HOME"); xdgDataHome != "" {
-			return filepath.Join(xdgDataHome, appName)
-		}
-		if home, err := os.UserHomeDir(); err == nil && home != "" {
-			return filepath.Join(home, ".local", "share", appName)
+	if executable, err := executablePath(); err == nil {
+		if dir := strings.TrimSpace(filepath.Dir(executable)); dir != "" && dir != "." {
+			return dir
 		}
 	}
-	if configDir, err := os.UserConfigDir(); err == nil && configDir != "" {
-		return filepath.Join(configDir, appName)
+	if workingDir, err := os.Getwd(); err == nil && strings.TrimSpace(workingDir) != "" {
+		return workingDir
 	}
 	return filepath.Join(".", appName)
 }

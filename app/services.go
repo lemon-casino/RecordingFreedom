@@ -335,21 +335,40 @@ func (s *RecordingFreedomService) GetSettings() (settings.Settings, error) {
 	return currentSettings, nil
 }
 
-var openPath = func(path string) error {
+var openPath = defaultOpenPath
+
+func defaultOpenPath(path string) error {
+	target := strings.TrimSpace(path)
+	if target == "" {
+		return errors.New("path is required")
+	}
+	absoluteTarget, err := filepath.Abs(target)
+	if err != nil {
+		return err
+	}
+	if _, err := os.Stat(absoluteTarget); err != nil {
+		return fmt.Errorf("cannot open %q: %w", absoluteTarget, err)
+	}
 	var command string
 	var args []string
 	switch runtime.GOOS {
 	case "darwin":
 		command = "open"
-		args = []string{path}
+		args = []string{absoluteTarget}
 	case "windows":
 		command = "explorer.exe"
-		args = []string{path}
+		args = []string{absoluteTarget}
 	default:
 		command = "xdg-open"
-		args = []string{path}
+		args = []string{absoluteTarget}
 	}
-	return exec.Command(command, args...).Start()
+	if err := exec.Command(command, args...).Start(); err != nil {
+		if runtime.GOOS == "windows" {
+			return exec.Command("rundll32.exe", "url.dll,FileProtocolHandler", absoluteTarget).Start()
+		}
+		return err
+	}
+	return nil
 }
 
 func (s *RecordingFreedomService) SaveSettings(next settings.Settings) (settings.Settings, error) {

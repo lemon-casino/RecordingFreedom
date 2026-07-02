@@ -1,6 +1,7 @@
 package appdata
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
 	"sync"
@@ -38,6 +39,49 @@ func TestEnvRootTakesPrecedence(t *testing.T) {
 	wantVideo := filepath.Join(root, "data", "video")
 	if info.VideoDir != wantVideo {
 		t.Fatalf("Info().VideoDir = %q, want %q", info.VideoDir, wantVideo)
+	}
+}
+
+func TestDefaultRootDirUsesExecutableDirectory(t *testing.T) {
+	exeDir := filepath.Join(t.TempDir(), "portable")
+	fakeExe := filepath.Join(exeDir, "recordingfreedom.exe")
+	originalExecutablePath := executablePath
+	executablePath = func() (string, error) {
+		return fakeExe, nil
+	}
+	t.Cleanup(func() {
+		executablePath = originalExecutablePath
+	})
+
+	if got := defaultRootDir(); got != exeDir {
+		t.Fatalf("defaultRootDir() = %q, want executable dir %q", got, exeDir)
+	}
+}
+
+func TestDefaultRootDirFallsBackToWorkingDirectory(t *testing.T) {
+	workingDir := t.TempDir()
+	originalExecutablePath := executablePath
+	executablePath = func() (string, error) {
+		return "", errors.New("no executable")
+	}
+	t.Cleanup(func() {
+		executablePath = originalExecutablePath
+	})
+	previous, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("Getwd() error = %v", err)
+	}
+	if err := os.Chdir(workingDir); err != nil {
+		t.Fatalf("Chdir() error = %v", err)
+	}
+	t.Cleanup(func() {
+		if err := os.Chdir(previous); err != nil {
+			t.Fatalf("restore Chdir() error = %v", err)
+		}
+	})
+
+	if got := defaultRootDir(); got != workingDir {
+		t.Fatalf("defaultRootDir() = %q, want working dir %q", got, workingDir)
 	}
 }
 

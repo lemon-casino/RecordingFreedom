@@ -120,6 +120,13 @@ func TestOpenVideoDirectoryUsesManagedDataVideo(t *testing.T) {
 	}
 }
 
+func TestDefaultOpenPathRejectsMissingPath(t *testing.T) {
+	missing := filepath.Join(t.TempDir(), "missing")
+	if err := defaultOpenPath(missing); err == nil {
+		t.Fatal("defaultOpenPath() accepted a missing path")
+	}
+}
+
 func TestOpenRecordingPackageUsesManagedPackageDir(t *testing.T) {
 	data := appdata.NewService(t.TempDir())
 	info, err := data.Info()

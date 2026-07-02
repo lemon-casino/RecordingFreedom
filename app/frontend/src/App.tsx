@@ -66,7 +66,11 @@ const sourceIcon = {
 const pipPresetOptions: PIPPreset[] = ['bottom-right', 'bottom-left', 'free']
 const allPipPresetOptions: PIPPreset[] = [...pipPresetOptions, 'off']
 const pipShapeOptions: PIPShape[] = ['circle', 'square']
-const pipBaseScale = 0.08
+const pipMinimumScale = 0.08
+const pipMaximumScale = 0.32
+const pipDefaultScale = pipMinimumScale
+const pipMinimumDisplayPercent = 20
+const pipMaximumDisplayPercent = 100
 
 const recordingQualityOptions: RecordingQuality[] = ['standard', 'balanced', 'high']
 const fpsOptions = [24, 30, 60]
@@ -92,7 +96,8 @@ function clampNumber(value: number, min: number, max: number) {
 }
 
 function formatPipScalePercent(scale: number) {
-  return `${Math.round((clampNumber(scale, 0.08, 0.32) / pipBaseScale) * 100)}%`
+  const normalized = (clampNumber(scale, pipMinimumScale, pipMaximumScale) - pipMinimumScale) / (pipMaximumScale - pipMinimumScale)
+  return `${Math.round(pipMinimumDisplayPercent + normalized * (pipMaximumDisplayPercent - pipMinimumDisplayPercent))}%`
 }
 
 function normalizePipConfig(value: Partial<PIPConfig> | undefined, fallbackPreset: PIPPreset): PIPConfig {
@@ -106,7 +111,7 @@ function normalizePipConfig(value: Partial<PIPConfig> | undefined, fallbackPrese
       x: clampNumber(value?.position?.x ?? fallbackPosition.x, 0, 1),
       y: clampNumber(value?.position?.y ?? fallbackPosition.y, 0, 1),
     },
-    scale: clampNumber(value?.scale ?? pipBaseScale, 0.08, 0.32),
+    scale: clampNumber(value?.scale ?? pipDefaultScale, pipMinimumScale, pipMaximumScale),
     edgeFeather: clampNumber(value?.edgeFeather ?? 0.16, 0.02, 0.42),
   }
 }
@@ -264,6 +269,7 @@ function App() {
   const [recordingMode, setRecordingMode] = useState<RecordingMode>('video')
   const [state, setState] = useState<RecordingState>('idle')
   const [elapsed, setElapsed] = useState(0)
+  const [countdownRemaining, setCountdownRemaining] = useState(0)
   const [recordingQuality, setRecordingQuality] = useState<RecordingQuality>('balanced')
   const [recordingFPS, setRecordingFPS] = useState(30)
   const [captureCursor, setCaptureCursor] = useState(true)
@@ -286,7 +292,7 @@ function App() {
   const [pipShape, setPipShape] = useState<PIPShape>('circle')
   const [pipMirror, setPipMirror] = useState(true)
   const [pipPosition, setPipPosition] = useState(defaultPipPosition('bottom-right'))
-  const [pipScale, setPipScale] = useState(pipBaseScale)
+  const [pipScale, setPipScale] = useState(pipDefaultScale)
   const [pipEdgeFeather, setPipEdgeFeather] = useState(0.16)
   const [locale, setLocale] = useState<LocaleCode>('zh-CN')
   const [lastPackage, setLastPackage] = useState<string>(previewPackagePath)
@@ -312,6 +318,8 @@ function App() {
   const popoverRef = useRef<HTMLDivElement | null>(null)
   const settingsPanelRef = useRef<HTMLElement | null>(null)
   const closePromptRef = useRef<HTMLElement | null>(null)
+  const countdownTimerRef = useRef<number | null>(null)
+  const countdownTokenRef = useRef(0)
   const selectedMicRef = useRef(selectedMic)
   const systemAudioRef = useRef(systemAudio)
   const microphoneRef = useRef(microphone)
@@ -476,6 +484,7 @@ function App() {
   }
   const applyRecordingStatus = (update: RecordingStatusUpdate) => {
     setState(update.status as RecordingState)
+    if (update.status !== 'preparing') setCountdownRemaining(0)
     if (update.session?.packagePath) setLastPackage(update.session.packagePath)
     const backend = update.session?.backend || update.backend
     if (backend) setLastBackend(backend)
@@ -772,6 +781,14 @@ function App() {
     return () => window.clearInterval(timer)
   }, [state])
 
+  useEffect(() => () => {
+    countdownTokenRef.current += 1
+    if (countdownTimerRef.current !== null) {
+      window.clearTimeout(countdownTimerRef.current)
+      countdownTimerRef.current = null
+    }
+  }, [])
+
   useEffect(() => subscribeRecordingStatus(applyRecordingStatus), [])
 
   useEffect(() => subscribeSettingsChanged((settings) => {
@@ -815,9 +832,45 @@ function App() {
     }
   }, [activePanel])
 
+  useEffect(() => {
+    if (isSettingsWindow || (!activePanel && !settingsOpen && !closePromptOpen)) return
+    const closeFloatingPanels = () => {
+      setActivePanel(null)
+      setSettingsOpen(false)
+      setClosePromptOpen(false)
+      void hideScreenIndicator()
+    }
+    const onPointerDown = (event: PointerEvent) => {
+      const target = event.target as Node | null
+      if (!target) return
+      if (
+        capsuleRef.current?.contains(target) ||
+        popoverRef.current?.contains(target) ||
+        settingsPanelRef.current?.contains(target) ||
+        closePromptRef.current?.contains(target)
+      ) {
+        return
+      }
+      closeFloatingPanels()
+    }
+    const onVisibilityChange = () => {
+      if (document.visibilityState !== 'visible') closeFloatingPanels()
+    }
+    document.addEventListener('pointerdown', onPointerDown, true)
+    document.addEventListener('visibilitychange', onVisibilityChange)
+    window.addEventListener('blur', closeFloatingPanels)
+    return () => {
+      document.removeEventListener('pointerdown', onPointerDown, true)
+      document.removeEventListener('visibilitychange', onVisibilityChange)
+      window.removeEventListener('blur', closeFloatingPanels)
+    }
+  }, [activePanel, closePromptOpen, isSettingsWindow, settingsOpen])
+
   const statusLabel = useMemo(() => {
     return copy.statusChips[state] ?? copy.statusChips.idle
   }, [copy, state])
+  const timeChipLabel = countdownRemaining > 0 && state === 'preparing' ? copy.settings.countdown : statusLabel
+  const timeChipValue = countdownRemaining > 0 && state === 'preparing' ? formatTime(countdownRemaining) : formatTime(elapsed)
 
   const currentRecordingProfile = () => ({
     quality: recordingQuality,
@@ -872,6 +925,38 @@ function App() {
     }
   }
 
+  const clearCountdownTimer = () => {
+    if (countdownTimerRef.current !== null) {
+      window.clearTimeout(countdownTimerRef.current)
+      countdownTimerRef.current = null
+    }
+  }
+
+  const cancelCountdown = () => {
+    countdownTokenRef.current += 1
+    clearCountdownTimer()
+    setCountdownRemaining(0)
+  }
+
+  const waitForCountdown = async (seconds: number) => {
+    const total = Math.max(0, Math.trunc(seconds))
+    cancelCountdown()
+    if (total <= 0) return
+    const token = countdownTokenRef.current + 1
+    countdownTokenRef.current = token
+    for (let remaining = total; remaining > 0; remaining -= 1) {
+      if (countdownTokenRef.current !== token) throw new Error('countdown cancelled')
+      setCountdownRemaining(remaining)
+      await new Promise<void>((resolve) => {
+        countdownTimerRef.current = window.setTimeout(resolve, 1000)
+      })
+      countdownTimerRef.current = null
+    }
+    if (countdownTokenRef.current === token) {
+      setCountdownRemaining(0)
+    }
+  }
+
   const beginRecording = async () => {
     setActivePanel(null)
     setElapsed(0)
@@ -884,9 +969,11 @@ function App() {
         setLastBackend(preflight.backend || lastBackend)
         if (preflight.status === 'blocked') {
           setState('failed')
+          setCountdownRemaining(0)
           setLastStatusMessage({key: 'preflightBlocked'})
           return
         }
+        await waitForCountdown(request.recording.countdownSeconds)
         const session = await startAudioOnlyRecording(request)
         applyRecordingStatus({
           status: session.status ?? 'recording',
@@ -903,9 +990,11 @@ function App() {
       setLastBackend(preflight.backend || lastBackend)
       if (preflight.status === 'blocked') {
         setState('failed')
+        setCountdownRemaining(0)
         setLastStatusMessage({key: 'preflightBlocked'})
         return
       }
+      await waitForCountdown(request.recording.countdownSeconds)
       const session = await startRecording(request)
       applyRecordingStatus({
         status: session.status ?? 'recording',
@@ -916,11 +1005,13 @@ function App() {
     } catch (error) {
       console.error('Failed to start recording:', error)
       setLastStatusMessage({key: 'failedToStart'})
+      setCountdownRemaining(0)
       setState('failed')
     }
   }
 
   const finishRecording = async () => {
+    cancelCountdown()
     setState('stopping')
     setLastStatusMessage({key: 'finalizing'})
     try {
@@ -1061,12 +1152,14 @@ function App() {
   }
 
   const openRecordingsDirectory = async () => {
+    setStorageMessage(null)
     try {
       const info = await openVideoDirectory()
       setAppData(info)
       setStorageRootDraft(info.rootDir)
     } catch (error) {
       console.error('Failed to open recordings directory:', error)
+      setStorageMessage({key: 'failed'})
     }
   }
 
@@ -1202,7 +1295,7 @@ function App() {
           value={storageRootDraft}
           detail={storageText || copy.settings.dataRootDetail}
           actionLabel={storageBusy ? copy.common.applying : copy.common.apply}
-          actionDisabled={storageBusy || storageRootDraft.trim() === '' || storageRootDraft.trim() === appData.rootDir}
+          actionDisabled={storageBusy || isRecording || storageRootDraft.trim() === '' || storageRootDraft.trim() === appData.rootDir}
           onChange={setStorageRootDraft}
           onAction={() => void applyDataRoot()}
         />
@@ -1361,8 +1454,8 @@ function App() {
 
           <div className="time-chip" aria-live="polite">
             <span className={`status-dot ${state}`} />
-            <strong>{statusLabel}</strong>
-            <span>{formatTime(elapsed)}</span>
+            <strong>{timeChipLabel}</strong>
+            <span>{timeChipValue}</span>
           </div>
 
           <button
@@ -1657,8 +1750,8 @@ function App() {
                   <input
                     id="pip-size"
                     type="range"
-                    min="0.08"
-                    max="0.32"
+                    min={pipMinimumScale}
+                    max={pipMaximumScale}
                     step="0.01"
                     value={pipScale}
                     disabled={recordingConfigLocked || !camera || !hasUsableCamera}
@@ -1848,7 +1941,10 @@ function PIPOverlayWindow() {
   useEffect(() => {
     const onState = (event: Event) => {
       const next = (event as CustomEvent<PIPOverlayState>).detail
-      if (next) setOverlayState(next)
+      if (next) {
+        overlayStateRef.current = next
+        setOverlayState(next)
+      }
     }
     window.addEventListener('rf-pip-overlay', onState)
     return () => window.removeEventListener('rf-pip-overlay', onState)
@@ -1925,6 +2021,7 @@ function PIPOverlayWindow() {
     const nextState = commit
       ? await updatePipOverlay(nextConfig, mode, cameraTarget)
       : await showPipOverlay(nextConfig, mode, cameraTarget)
+    overlayStateRef.current = nextState
     setOverlayState(nextState)
   }
 
@@ -1987,13 +2084,15 @@ function PIPOverlayWindow() {
   }
 
   const updateShape = (shape: PIPShape) => {
-    if (!overlayState) return
-    void commitConfig({...overlayState.config, shape})
+    const state = overlayStateRef.current
+    if (!state) return
+    void commitConfig({...state.config, shape})
   }
 
   const toggleMirror = () => {
-    if (!overlayState) return
-    void commitConfig({...overlayState.config, mirror: !overlayState.config.mirror})
+    const state = overlayStateRef.current
+    if (!state) return
+    void commitConfig({...state.config, mirror: !state.config.mirror})
   }
 
   const closePip = () => {
@@ -2577,21 +2676,29 @@ function SelectMenu({
 
   useEffect(() => {
     if (!open) return
+    const close = () => setOpen(false)
     const onPointerDown = (event: PointerEvent) => {
       if (!rootRef.current?.contains(event.target as Node)) {
-        setOpen(false)
+        close()
       }
     }
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key === 'Escape') {
-        setOpen(false)
+        close()
       }
+    }
+    const onVisibilityChange = () => {
+      if (document.visibilityState !== 'visible') close()
     }
     document.addEventListener('pointerdown', onPointerDown)
     document.addEventListener('keydown', onKeyDown)
+    document.addEventListener('visibilitychange', onVisibilityChange)
+    window.addEventListener('blur', close)
     return () => {
       document.removeEventListener('pointerdown', onPointerDown)
       document.removeEventListener('keydown', onKeyDown)
+      document.removeEventListener('visibilitychange', onVisibilityChange)
+      window.removeEventListener('blur', close)
     }
   }, [open])
 
