@@ -197,12 +197,12 @@ macOS：
 
 Windows：
 
-- 默认视频录制使用 `ffmpeg-desktop-capture`，通过 FFmpeg `gdigrab` 录制 screen/all-screen/region/locked-window，并写入包内 `screen.mp4`。`windows-graphics-capture` 作为兼容 alias 保留，后续可替换为原生 WGC/Media Foundation writer。
+- 默认视频录制使用 `ffmpeg-desktop-capture`，屏幕、绑定到单显示器的区域和多屏“全部屏幕”优先通过 FFmpeg `ddagrab` / Windows Desktop Duplication API 录制并保留鼠标；锁定窗口仍通过 FFmpeg `gdigrab hwnd=` 写入包内 `screen.mp4`。`windows-graphics-capture` 作为兼容 alias 保留，后续可替换为原生 WGC/Media Foundation writer。
 - 系统声音使用 WASAPI loopback。
 - 麦克风使用 WASAPI capture。
 - 当前已通过 MMDevice API 枚举 Windows WASAPI render/capture endpoint，并保留 `system-audio:default` / `microphone:default` 作为稳定默认设备 ID；真实 endpoint id 写入 `NativeID`。
 - 当前已新增纯 Go WASAPI capture source：麦克风流会 downmix/resample 为 `48kHz / mono`，系统声音 loopback source 已在有活动系统播放时写入真实样本。Windows 录屏 runtime 会在 FFmpeg 视频旁启动 WASAPI sidecar 写盘，停止阶段再 mux 到主 `screen.mp4`，manifest 将成功 mux 的系统声音和麦克风标记为 `muxed`；长录同步、live PCM pipe、Linux PipeWire 和三平台真机 smoke 仍是后续工作。
-- 当前 Windows `internal/video` 已接入 FFmpeg 分段 writer：`screen:<display-token>` 和 `all-screens:virtual-desktop` 录 desktop，`region:custom` 使用 `offset_x/offset_y/video_size` 裁剪虚拟桌面，`window:<HWND hex>` 使用 `hwnd=` 锁定窗口。pause 会关闭当前 segment，resume 新开 segment，stop 使用 FFmpeg concat 合并为 `screen.mp4`。缺少 `ffmpeg` 时 capability 为 blocked，并写 failed diagnostics，不写假媒体或 ready manifest。
+- 当前 Windows `internal/video` 已接入 FFmpeg 自动分段 writer：`screen:<display-token>` 和单显示器 `region:custom` 使用 `ddagrab`，多屏 `all-screens:virtual-desktop` 使用多路 `ddagrab + xstack` 合成，避免 `gdigrab -draw_mouse 1` 的 GDI 光标重绘闪烁；`window:<HWND hex>` 使用 `hwnd=` 锁定窗口。录制中默认每 60 秒写一个 segment，pause 会关闭当前 segment，resume 新开 segment，stop 使用 FFmpeg concat 合并为 `screen.mp4`。缺少 `ffmpeg` 时 capability 为 blocked，并写 failed diagnostics，不写假媒体或 ready manifest。
 - 摄像头 sidecar 当前使用 FFmpeg DirectShow writer：`DeviceService` 解析稳定 `camera:dshow:*` ID 和 DirectShow 原生设备名，`RecordingFreedomService` 在预检和启动前补齐 `deviceNativeId`，runtime 与屏幕/音频一起 pause/resume/stop，最终写入包内 `webcam.mp4`。PIP preset 只作为后续预览/导出布局，不阻断 sidecar 录制。
 - 编码优先 Media Foundation H.264/AAC，后续导出可接 FFmpeg。
 
@@ -224,7 +224,7 @@ Linux：
 
 程序录制默认选择该程序的主窗口；如果平台支持更强的 app capture，再在后端升级，不改变前端接口。
 
-当前 `DeviceService` 已把单个显示器的虚拟桌面坐标带到前端，并暴露 `all-screens:virtual-desktop` 与 `region:custom` 源。区域十字框选 overlay 已落地：前端可拖拽红框选择范围，后端会把选择结果写入 `source.geometry`。同一份 geometry 已进入 `video.CaptureConfig` 和 `video-diagnostics.json` 的 source 节点。macOS 单显示器区域已经接入 ScreenCaptureKit `sourceRect` crop writer：区域必须落在一块显示器内，并携带该显示器 `NativeID`；Objective-C 原生层会在创建 `SCStreamConfiguration` 前用 `CGDisplayBounds` 把虚拟桌面逻辑坐标转换成该显示器本地 `sourceRect`。Windows 区域 crop 已接入 FFmpeg `gdigrab` 的 `offset_x/offset_y/video_size`，框选结果会转换为物理像素矩形后交给 writer。跨显示器区域的 macOS 多屏合成、Linux 区域 crop 和 macOS/Linux `all-screens` 多屏幕合成在真实 writer 完成前仍必须保持 queued/blocked，不能假装可录制。
+当前 `DeviceService` 已把单个显示器的虚拟桌面坐标带到前端，并暴露 `all-screens:virtual-desktop` 与 `region:custom` 源。区域十字框选 overlay 已落地：前端可拖拽红框选择范围，后端会把选择结果写入 `source.geometry`。同一份 geometry 已进入 `video.CaptureConfig` 和 `video-diagnostics.json` 的 source 节点。macOS 单显示器区域已经接入 ScreenCaptureKit `sourceRect` crop writer：区域必须落在一块显示器内，并携带该显示器 `NativeID`；Objective-C 原生层会在创建 `SCStreamConfiguration` 前用 `CGDisplayBounds` 把虚拟桌面逻辑坐标转换成该显示器本地 `sourceRect`。Windows 单显示器区域 crop 已接入 FFmpeg `ddagrab`，框选结果会转换为物理像素矩形后按显示器本地 offset 交给 writer。跨显示器区域的 macOS 多屏合成、Linux 区域 crop 和 macOS/Linux `all-screens` 多屏幕合成在真实 writer 完成前仍必须保持 queued/blocked，不能假装可录制。
 
 `RecordingFreedomService.StartRecording()` 和 `RecordingFreedomService.StartAudioOnlyRecording()` 必须执行与 UI 相同的 preflight 门禁；当来源不存在、来源处于 queued、平台 writer capability queued/blocked、存储不可写或音频/摄像头能力 blocked 时，服务入口必须直接返回错误，不允许进入 recorder backend，也不允许创建 `.rfrec` 包。前端按钮的 preflight 只是用户体验层，不能作为唯一防线。
 
@@ -237,7 +237,7 @@ Linux：
 - 松开鼠标后将当前矩形写入 `source.geometry` 并回到胶囊；小于最小尺寸的矩形应被拒绝。
 - overlay 必须支持 `Esc` 取消，不得创建录制包。
 - 多显示器坐标以虚拟桌面为基准，允许区域跨屏；后端如果暂不支持跨屏区域，必须在 preflight 阻止并提示原因。
-- 当前实现已经完成 overlay 窗口、十字光标、拖拽选框、最小尺寸拒绝、`Esc` 取消和 `capture.region.selected` 事件；框选成功前不会把占位 `region:custom` 切成当前录制源。macOS 单显示器区域会绑定到对应 `cgdisplay:<id>` 并交给 ScreenCaptureKit crop writer；Windows 区域会使用物理像素矩形交给 FFmpeg `gdigrab` crop writer。下一步是补 Linux PipeWire region crop，以及 macOS/Linux 跨显示器区域的多屏合成 writer。
+- 当前实现已经完成 overlay 窗口、十字光标、拖拽选框、最小尺寸拒绝、`Esc` 取消和 `capture.region.selected` 事件；框选成功前不会把占位 `region:custom` 切成当前录制源。macOS 单显示器区域会绑定到对应 `cgdisplay:<id>` 并交给 ScreenCaptureKit crop writer；Windows 单显示器区域会使用物理像素矩形交给 FFmpeg `ddagrab` crop writer。下一步是补 Linux PipeWire region crop，以及 macOS/Linux 跨显示器区域的多屏合成 writer。
 
 锁定窗口录制验收：
 

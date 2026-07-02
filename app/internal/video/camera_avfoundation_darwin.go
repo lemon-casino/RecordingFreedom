@@ -41,15 +41,18 @@ func NewPlatformCameraSession(config CameraCaptureConfig) (CameraSession, error)
 
 func avFoundationCameraInputArgs(camera CameraCaptureConfig) ffmpegInputArgsBuilder {
 	camera = NormalizeCameraCaptureConfig(camera)
-	return func(config CaptureConfig) ([]string, error) {
+	return func(config CaptureConfig) (ffmpegInputSpec, error) {
 		if camera.DeviceNativeID == "" {
-			return nil, errors.New("AVFoundation camera native device id is required")
+			return ffmpegInputSpec{}, errors.New("AVFoundation camera native device id is required")
 		}
 		config = NormalizeCaptureConfig(config)
-		return []string{
-			"-f", "avfoundation",
-			"-framerate", fmt.Sprintf("%d", config.Profile.FPS),
-			"-i", avFoundationCameraInput(camera.DeviceNativeID),
+		return ffmpegInputSpec{
+			Args: []string{
+				"-f", "avfoundation",
+				"-framerate", fmt.Sprintf("%d", config.Profile.FPS),
+				"-i", avFoundationCameraInput(camera.DeviceNativeID),
+			},
+			Engine: "avfoundation-camera",
 		}, nil
 	}
 }

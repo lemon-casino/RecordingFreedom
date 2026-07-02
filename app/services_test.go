@@ -9,6 +9,7 @@ import (
 	"github.com/lemon-casino/RecordingFreedom/app/internal/appdata"
 	"github.com/lemon-casino/RecordingFreedom/app/internal/capture"
 	"github.com/lemon-casino/RecordingFreedom/app/internal/devices"
+	"github.com/lemon-casino/RecordingFreedom/app/internal/pip"
 	"github.com/lemon-casino/RecordingFreedom/app/internal/preflight"
 	"github.com/lemon-casino/RecordingFreedom/app/internal/recording"
 	"github.com/lemon-casino/RecordingFreedom/app/internal/recpackage"
@@ -388,6 +389,38 @@ func TestEnrichRecordingCameraRequestSkipsStaleUnavailableCamera(t *testing.T) {
 	})
 	if req.Camera.DeviceID != "camera:dshow:integrated-camera" || req.Camera.DeviceNativeID != "Integrated Camera" {
 		t.Fatalf("enriched camera = %#v, want stale camera replaced by available sidecar camera", req.Camera)
+	}
+}
+
+func TestPersistCameraPIPConfigOffDisablesCamera(t *testing.T) {
+	data := appdata.NewService(t.TempDir())
+	service := &RecordingFreedomService{
+		appData:  data,
+		settings: settings.NewService(data),
+	}
+	current, err := service.settings.Load()
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+	current.Camera.Enabled = true
+	current.Camera.PIPPreset = string(pip.PresetBottomRight)
+	current.Camera.PIP = pip.ConfigFromPreset(pip.PresetBottomRight)
+	if _, err := service.settings.Save(current); err != nil {
+		t.Fatalf("Save() error = %v", err)
+	}
+
+	if err := service.persistCameraPIPConfig(pip.OffConfig()); err != nil {
+		t.Fatalf("persistCameraPIPConfig(off) error = %v", err)
+	}
+	loaded, err := service.settings.Load()
+	if err != nil {
+		t.Fatalf("Load() after persist error = %v", err)
+	}
+	if loaded.Camera.Enabled {
+		t.Fatal("camera remained enabled after persisting PIP off")
+	}
+	if loaded.Camera.PIPPreset != string(pip.PresetOff) || loaded.Camera.PIP.Preset != pip.PresetOff {
+		t.Fatalf("camera pip = %q/%q, want off", loaded.Camera.PIPPreset, loaded.Camera.PIP.Preset)
 	}
 }
 

@@ -23,10 +23,34 @@ func TestFFmpegOutputDimensionsAreEven(t *testing.T) {
 
 func TestFFmpegEncodingArgsPadOddDesktopDimensions(t *testing.T) {
 	session := &ffmpegDesktopSession{}
-	args := session.encodingArgs("screen.mp4")
+	args := session.encodingArgs("screen.mp4", ffmpegInputSpec{})
 	if !slices.Contains(args, "-vf") || !slices.Contains(args, "pad=ceil(iw/2)*2:ceil(ih/2)*2") {
 		t.Fatalf("encoding args = %#v, want even-dimension padding filter", args)
 	}
+}
+
+func TestFFmpegEncodingArgsUsesSegmentMuxer(t *testing.T) {
+	t.Setenv(EnvFFmpegSegmentSeconds, "12")
+	session := &ffmpegDesktopSession{}
+	args := session.encodingArgs("segment-%03d.mp4", ffmpegInputSpec{})
+	if ffmpegTestFlagValue(args, "-f") != "segment" {
+		t.Fatalf("-f = %q, want segment in args %v", ffmpegTestFlagValue(args, "-f"), args)
+	}
+	if ffmpegTestFlagValue(args, "-segment_time") != "12" {
+		t.Fatalf("-segment_time = %q, want 12 in args %v", ffmpegTestFlagValue(args, "-segment_time"), args)
+	}
+	if !slices.Contains(args, "-reset_timestamps") {
+		t.Fatalf("encoding args = %#v, want reset timestamps for concat-safe chunks", args)
+	}
+}
+
+func ffmpegTestFlagValue(args []string, flag string) string {
+	for index, value := range args {
+		if value == flag && index+1 < len(args) {
+			return args[index+1]
+		}
+	}
+	return ""
 }
 
 func TestFFmpegSegmentDirIsUniquePerOutputFile(t *testing.T) {

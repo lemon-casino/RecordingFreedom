@@ -40,15 +40,18 @@ func NewPlatformCameraSession(config CameraCaptureConfig) (CameraSession, error)
 
 func v4l2CameraInputArgs(camera CameraCaptureConfig) ffmpegInputArgsBuilder {
 	camera = NormalizeCameraCaptureConfig(camera)
-	return func(config CaptureConfig) ([]string, error) {
+	return func(config CaptureConfig) (ffmpegInputSpec, error) {
 		if camera.DeviceNativeID == "" {
-			return nil, errors.New("v4l2 camera device path is required")
+			return ffmpegInputSpec{}, errors.New("v4l2 camera device path is required")
 		}
 		config = NormalizeCaptureConfig(config)
-		return []string{
-			"-f", "v4l2",
-			"-framerate", fmt.Sprintf("%d", config.Profile.FPS),
-			"-i", camera.DeviceNativeID,
+		return ffmpegInputSpec{
+			Args: []string{
+				"-f", "v4l2",
+				"-framerate", fmt.Sprintf("%d", config.Profile.FPS),
+				"-i", camera.DeviceNativeID,
+			},
+			Engine: "v4l2-camera",
 		}, nil
 	}
 }

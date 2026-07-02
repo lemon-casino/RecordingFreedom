@@ -116,6 +116,15 @@ input:disabled,
   --wails-draggable: drag;
 }
 
+.rf-shell.drop-up {
+  place-items: end center;
+  padding: 0 18px 8px;
+}
+
+.rf-shell.drop-down {
+  place-items: start center;
+}
+
 .recorder-stage {
   position: relative;
   display: grid;
@@ -410,6 +419,21 @@ select:disabled {
   backdrop-filter: blur(24px) saturate(150%);
   --wails-draggable: no-drag;
   overflow: visible;
+}
+
+.popover.drop-up {
+  top: auto;
+  bottom: 86px;
+}
+
+.rf-shell.drop-up .settings-sheet {
+  top: auto;
+  bottom: 78px;
+}
+
+.rf-shell.drop-up .close-confirm-panel {
+  top: auto;
+  bottom: 88px;
 }
 
 body.rf-recorder-window .popover,
@@ -795,6 +819,11 @@ select {
   background: rgba(17, 22, 28, 0.98);
   box-shadow: var(--shadow-panel);
   backdrop-filter: blur(24px) saturate(150%);
+}
+
+.select-menu.drop-up .select-menu-list {
+  top: auto;
+  bottom: calc(100% + 6px);
 }
 
 .select-menu-option {

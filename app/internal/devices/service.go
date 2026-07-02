@@ -333,7 +333,7 @@ func platformBackendMessage(platform string) string {
 	case "darwin":
 		return "ScreenCaptureKit source enumeration is the next macOS backend milestone."
 	case "windows":
-		return "Windows source enumeration is implemented; FFmpeg desktop capture is used for screen, all-screen, region, and locked-window video when available."
+		return "Windows source enumeration is implemented; FFmpeg Desktop Duplication is used for screen, all-screen, and region video, with FFmpeg HWND capture reserved for locked windows."
 	case "linux":
 		return "XDG Desktop Portal and PipeWire source enumeration is the next Linux backend milestone."
 	default:

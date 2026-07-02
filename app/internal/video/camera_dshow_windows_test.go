@@ -16,10 +16,10 @@ func TestDirectShowCameraInputArgsUseNativeDeviceName(t *testing.T) {
 	if err != nil {
 		t.Fatalf("directShowCameraInputArgs() error = %v", err)
 	}
-	if !slices.Contains(args, "-f") || !slices.Contains(args, "dshow") {
+	if !slices.Contains(args.Args, "-f") || !slices.Contains(args.Args, "dshow") {
 		t.Fatalf("args = %#v, want DirectShow input", args)
 	}
-	if !slices.Contains(args, "video=Integrated Camera") {
+	if !slices.Contains(args.Args, "video=Integrated Camera") {
 		t.Fatalf("args = %#v, want native DirectShow camera name", args)
 	}
 }

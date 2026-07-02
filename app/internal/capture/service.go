@@ -35,9 +35,9 @@ func screenRecordingCapability(platform string) Capability {
 		return available("screen-recording", "Screen Recording", "ScreenCaptureKit", PermissionScreenRecording, "ScreenCaptureKit display capture is implemented; system-audio mux is wired in code and still needs real-device smoke validation.")
 	case "windows":
 		if path, ok, reason := video.FFmpegAvailability(); ok {
-			return available("screen-recording", "Screen Recording", "FFmpeg gdigrab", PermissionNotRequired, "FFmpeg gdigrab desktop writer is available at "+path+" and records screen/all-screen/region video to screen.mp4; enabled WASAPI audio is muxed into screen.mp4 at stop.")
+			return available("screen-recording", "Screen Recording", "FFmpeg ddagrab", PermissionNotRequired, "FFmpeg Desktop Duplication writer is available at "+path+" and records screen/all-screen/region video with stable cursor capture to screen.mp4; enabled WASAPI audio is muxed into screen.mp4 at stop.")
 		} else {
-			return blocked("screen-recording", "Screen Recording", "FFmpeg gdigrab", PermissionNotRequired, reason)
+			return blocked("screen-recording", "Screen Recording", "FFmpeg ddagrab", PermissionNotRequired, reason)
 		}
 	case "linux":
 		return queued("screen-recording", "Screen Recording", "XDG Desktop Portal + PipeWire", PermissionUnknown, "Linux capture backend is experimental and queued.")

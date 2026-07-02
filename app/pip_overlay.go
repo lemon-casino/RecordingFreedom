@@ -117,7 +117,9 @@ func (s *RecordingFreedomService) persistCameraPIPConfig(config pip.Config) erro
 	}
 	current.Camera.PIP = config
 	current.Camera.PIPPreset = string(config.Preset)
-	if config.Preset != pip.PresetOff {
+	if config.Preset == pip.PresetOff {
+		current.Camera.Enabled = false
+	} else {
 		current.Camera.Enabled = true
 	}
 	saved, err := s.settings.Save(current)

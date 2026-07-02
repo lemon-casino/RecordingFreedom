@@ -203,7 +203,7 @@ func ffmpegCheck(required bool, report *doctorReport) doctorCheck {
 			Label:    "FFmpeg Desktop Writer",
 			Status:   checkNotRequired,
 			Required: false,
-			Message:  "FFmpeg gdigrab is only required for the current Windows desktop writer",
+			Message:  "FFmpeg is only required for the current Windows desktop writer",
 		}
 	}
 	path, ok, reason := video.FFmpegAvailability()

@@ -40,16 +40,19 @@ func NewPlatformCameraSession(config CameraCaptureConfig) (CameraSession, error)
 
 func directShowCameraInputArgs(camera CameraCaptureConfig) ffmpegInputArgsBuilder {
 	camera = NormalizeCameraCaptureConfig(camera)
-	return func(config CaptureConfig) ([]string, error) {
+	return func(config CaptureConfig) (ffmpegInputSpec, error) {
 		if camera.DeviceNativeID == "" {
-			return nil, errors.New("DirectShow camera native device name is required")
+			return ffmpegInputSpec{}, errors.New("DirectShow camera native device name is required")
 		}
 		config = NormalizeCaptureConfig(config)
-		return []string{
-			"-rtbufsize", "256M",
-			"-f", "dshow",
-			"-framerate", fmt.Sprintf("%d", config.Profile.FPS),
-			"-i", "video=" + camera.DeviceNativeID,
+		return ffmpegInputSpec{
+			Args: []string{
+				"-rtbufsize", "256M",
+				"-f", "dshow",
+				"-framerate", fmt.Sprintf("%d", config.Profile.FPS),
+				"-i", "video=" + camera.DeviceNativeID,
+			},
+			Engine: "windows-dshow-camera",
 		}, nil
 	}
 }

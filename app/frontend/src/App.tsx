@@ -53,7 +53,7 @@ import {
   fallbackCapabilities,
   fallbackStorageStatus,
 } from './services/mockBackend'
-import {cancelRegionSelector, cancelSelectedRegion, completeRegionSelection, exportRecordingPackage, hidePipOverlay, hideRegionFrame, hideScreenIndicator, hideSettingsWindow, loadBootstrap, loadSettings, openRecordingPackage, openVideoDirectory, pauseRecording, preflightAudioOnlyRecording, preflightRecording, quitApplication, recoverRecordingPackage, resumeRecording, saveSettings, setCapsuleWindowExpanded, setCapsuleWindowHitRegions, setDataRoot, showPipOverlay, showRegionSelector, showScreenIndicator, startAudioOnlyRecording, startMicrophoneLevelMonitor, startRecording, stopMicrophoneLevelMonitor, stopRecording, subscribeAudioLevel, subscribeRecordingStatus, subscribeRegionSelection, subscribeSettingsChanged, updatePipOverlay, updateSelectedRegion, type AudioLevelUpdate, type CapsuleWindowHitRegion, type PIPOverlayCamera, type PIPOverlayState, type RecordingRecovery, type RecordingStatusUpdate, type RegionSelectionSession} from './services/recorderBackend'
+import {cancelRegionSelector, cancelSelectedRegion, completeRegionSelection, exportRecordingPackage, hidePipOverlay, hideRegionFrame, hideScreenIndicator, hideSettingsWindow, loadBootstrap, loadSettings, openRecordingPackage, openVideoDirectory, pauseRecording, preflightAudioOnlyRecording, preflightRecording, quitApplication, recoverRecordingPackage, resumeRecording, saveSettings, setCapsuleWindowExpanded, setCapsuleWindowHitRegions, setDataRoot, showPipOverlay, showRegionSelector, showScreenIndicator, startAudioOnlyRecording, startMicrophoneLevelMonitor, startRecording, stopMicrophoneLevelMonitor, stopRecording, subscribeAudioLevel, subscribeRecordingStatus, subscribeRegionSelection, subscribeSettingsChanged, updatePipOverlay, updateSelectedRegion, type AudioLevelUpdate, type CapsuleWindowExpandDirection, type CapsuleWindowHitRegion, type PIPOverlayCamera, type PIPOverlayState, type RecordingRecovery, type RecordingStatusUpdate, type RegionSelectionSession} from './services/recorderBackend'
 
 const sourceIcon = {
   screen: Monitor,
@@ -142,6 +142,12 @@ function joinDisplayPath(root: string, leaf: string) {
   if (!root || root === 'browser-preview') return leaf
   const separator = root.includes('\\') ? '\\' : '/'
   return `${root.replace(/[\\/]+$/, '')}${separator}${leaf}`
+}
+
+function eventPathContains(event: Event, element: Element | null) {
+  if (!element) return false
+  if (typeof event.composedPath === 'function' && event.composedPath().includes(element)) return true
+  return event.target instanceof Node && element.contains(event.target)
 }
 
 function packageDisplayName(packagePath: string) {
@@ -306,6 +312,7 @@ function App() {
   const [exportBusy, setExportBusy] = useState(false)
   const [exportMessage, setExportMessage] = useState<ExportMessageState | null>(null)
   const [settingsLoaded, setSettingsLoaded] = useState(false)
+  const [capsuleExpandDirection, setCapsuleExpandDirection] = useState<CapsuleWindowExpandDirection>('down')
   const [capabilities, setCapabilities] = useState<CaptureCapabilities>(fallbackCapabilities)
   const [appData, setAppData] = useState<AppDataInfo>(fallbackAppData)
   const [storageStatus, setStorageStatus] = useState<AppStorageStatus>(fallbackStorageStatus)
@@ -318,6 +325,7 @@ function App() {
   const popoverRef = useRef<HTMLDivElement | null>(null)
   const settingsPanelRef = useRef<HTMLElement | null>(null)
   const closePromptRef = useRef<HTMLElement | null>(null)
+  const floatingPointerInsideAtRef = useRef(0)
   const countdownTimerRef = useRef<number | null>(null)
   const countdownTokenRef = useRef(0)
   const selectedMicRef = useRef(selectedMic)
@@ -613,7 +621,8 @@ function App() {
 
   useEffect(() => {
     if (isSettingsWindow) return
-    void setCapsuleWindowExpanded(capsuleExpanded, capsuleExpandedHeight)
+    void setCapsuleWindowExpanded(capsuleExpanded, capsuleExpandedHeight, 'auto')
+      .then(setCapsuleExpandDirection)
   }, [capsuleExpanded, capsuleExpandedHeight, isSettingsWindow])
 
   useEffect(() => {
@@ -792,10 +801,11 @@ function App() {
   useEffect(() => subscribeRecordingStatus(applyRecordingStatus), [])
 
   useEffect(() => subscribeSettingsChanged((settings) => {
+    const incomingCameraOff = !settings.camera.enabled || settings.camera.pipPreset === 'off' || settings.camera.pip?.preset === 'off'
     applySettingsState(settings, undefined, undefined, {
       preserveAudioEnabled: true,
       preserveAudioSelection: true,
-      preserveCameraEnabled: true,
+      preserveCameraEnabled: !incomingCameraOff,
       preserveCameraSelection: true,
     })
   }), [])
@@ -841,28 +851,33 @@ function App() {
       void hideScreenIndicator()
     }
     const onPointerDown = (event: PointerEvent) => {
-      const target = event.target as Node | null
-      if (!target) return
       if (
-        capsuleRef.current?.contains(target) ||
-        popoverRef.current?.contains(target) ||
-        settingsPanelRef.current?.contains(target) ||
-        closePromptRef.current?.contains(target)
+        eventPathContains(event, capsuleRef.current) ||
+        eventPathContains(event, popoverRef.current) ||
+        eventPathContains(event, settingsPanelRef.current) ||
+        eventPathContains(event, closePromptRef.current)
       ) {
+        floatingPointerInsideAtRef.current = Date.now()
         return
       }
       closeFloatingPanels()
+    }
+    const onWindowBlur = () => {
+      window.setTimeout(() => {
+        if (Date.now() - floatingPointerInsideAtRef.current < 250) return
+        closeFloatingPanels()
+      }, 0)
     }
     const onVisibilityChange = () => {
       if (document.visibilityState !== 'visible') closeFloatingPanels()
     }
     document.addEventListener('pointerdown', onPointerDown, true)
     document.addEventListener('visibilitychange', onVisibilityChange)
-    window.addEventListener('blur', closeFloatingPanels)
+    window.addEventListener('blur', onWindowBlur)
     return () => {
       document.removeEventListener('pointerdown', onPointerDown, true)
       document.removeEventListener('visibilitychange', onVisibilityChange)
-      window.removeEventListener('blur', closeFloatingPanels)
+      window.removeEventListener('blur', onWindowBlur)
     }
   }, [activePanel, closePromptOpen, isSettingsWindow, settingsOpen])
 
@@ -1391,7 +1406,7 @@ function App() {
   }
 
   return (
-    <main ref={shellRef} className={`rf-shell ${capsuleExpanded ? 'is-expanded' : 'is-collapsed'}`} aria-label={copy.aria.recorderShell}>
+    <main ref={shellRef} className={`rf-shell ${capsuleExpanded ? 'is-expanded' : 'is-collapsed'} drop-${capsuleExpandDirection}`} aria-label={copy.aria.recorderShell}>
       <section className="recorder-stage" aria-label={copy.aria.recorderControls}>
         <div ref={capsuleRef} className={`capsule ${isRecording ? 'capsule-active' : ''}`}>
           <button
@@ -1502,7 +1517,7 @@ function App() {
         </div>
 
         {activePanel && (
-          <div ref={popoverRef} className={`popover panel-${activePanel}`} role="dialog" aria-label={copy.aria.menu(activePanel)}>
+          <div ref={popoverRef} className={`popover panel-${activePanel} drop-${capsuleExpandDirection}`} role="dialog" aria-label={copy.aria.menu(activePanel)}>
             {activePanel === 'source' && (
               <div className="menu-grid source-menu">
                 <div className="mode-toggle" role="group" aria-label={copy.aria.recordingMode}>
@@ -1892,20 +1907,33 @@ function PIPOverlayWindow() {
   const previewFrameRef = useRef<number | null>(null)
   const videoRef = useRef<HTMLVideoElement | null>(null)
   const activeCameraStreamRef = useRef<MediaStream | null>(null)
+  const cameraStreamsRef = useRef<Set<MediaStream>>(new Set())
   const cameraRequestTokenRef = useRef(0)
   const [cameraReady, setCameraReady] = useState(false)
   const [cameraError, setCameraError] = useState<string | null>(null)
   const [overlayLocale, setOverlayLocale] = useState<LocaleCode>(navigator.language.toLowerCase().startsWith('zh') ? 'zh-CN' : 'en')
   const copy = copyByLocale[overlayLocale]
 
-  const stopActivePipCameraStream = () => {
-    if (activeCameraStreamRef.current) {
-      stopMediaStream(activeCameraStreamRef.current)
-      activeCameraStreamRef.current = null
+  const trackPipCameraStream = (stream: MediaStream, requestToken: number, isCancelled: () => boolean) => {
+    cameraStreamsRef.current.add(stream)
+    if (isCancelled() || cameraRequestTokenRef.current !== requestToken) {
+      stopAndForgetPipCameraStream(stream)
     }
+  }
+
+  const stopAndForgetPipCameraStream = (stream: MediaStream) => {
+    cameraStreamsRef.current.delete(stream)
+    stopMediaStream(stream)
+  }
+
+  const stopActivePipCameraStream = () => {
     if (videoRef.current) {
       videoRef.current.srcObject = null
     }
+    activeCameraStreamRef.current = null
+    const streams = Array.from(cameraStreamsRef.current)
+    cameraStreamsRef.current.clear()
+    streams.forEach(stopMediaStream)
   }
 
   const cancelPipCameraStream = () => {
@@ -1969,9 +1997,9 @@ function PIPOverlayWindow() {
     stopActivePipCameraStream()
     setCameraReady(false)
     setCameraError(null)
-    void openPipCameraStream(cameraTarget).then(async (nextStream) => {
+    void openPipCameraStream(cameraTarget, (stream) => trackPipCameraStream(stream, requestToken, () => cancelled)).then(async (nextStream) => {
       if (cancelled || cameraRequestTokenRef.current !== requestToken) {
-        stopMediaStream(nextStream)
+        stopAndForgetPipCameraStream(nextStream)
         return
       }
       activeCameraStreamRef.current = nextStream
@@ -1986,7 +2014,7 @@ function PIPOverlayWindow() {
       }
       if (cancelled || cameraRequestTokenRef.current !== requestToken) {
         if (activeCameraStreamRef.current === nextStream) activeCameraStreamRef.current = null
-        stopMediaStream(nextStream)
+        stopAndForgetPipCameraStream(nextStream)
         return
       }
       setCameraReady(true)
@@ -2096,6 +2124,7 @@ function PIPOverlayWindow() {
   }
 
   const closePip = () => {
+    cancelPipCameraStream()
     if (!overlayState) {
       void hidePipOverlay()
       return
@@ -2177,7 +2206,7 @@ function PIPOverlayWindow() {
   )
 }
 
-async function openPipCameraStream(target?: PIPOverlayCamera): Promise<MediaStream> {
+async function openPipCameraStream(target?: PIPOverlayCamera, onStreamOpened: (stream: MediaStream) => void = () => undefined): Promise<MediaStream> {
   const videoConstraints = {
     width: {ideal: 1280},
     height: {ideal: 720},
@@ -2186,6 +2215,7 @@ async function openPipCameraStream(target?: PIPOverlayCamera): Promise<MediaStre
     video: videoConstraints,
     audio: false,
   })
+  onStreamOpened(defaultStream)
   const device = await selectPipPreviewDevice(target, defaultStream)
   if (!device?.deviceId) return defaultStream
   const currentDeviceId = defaultStream.getVideoTracks()[0]?.getSettings().deviceId
@@ -2198,6 +2228,7 @@ async function openPipCameraStream(target?: PIPOverlayCamera): Promise<MediaStre
       },
       audio: false,
     })
+    onStreamOpened(exactStream)
     stopMediaStream(defaultStream)
     return exactStream
   } catch (error) {
@@ -2671,16 +2702,29 @@ function SelectMenu({
   onChange: (value: string) => void
 }) {
   const [open, setOpen] = useState(false)
+  const [dropDirection, setDropDirection] = useState<'down' | 'up'>('down')
   const rootRef = useRef<HTMLDivElement | null>(null)
+  const pointerInsideAtRef = useRef(0)
   const selected = options.find((option) => option.value === value) ?? options.find((option) => !option.disabled) ?? options[0]
+  const updateDropDirection = () => {
+    const rect = rootRef.current?.getBoundingClientRect()
+    if (!rect) return
+    const estimatedMenuHeight = Math.min(220, Math.max(44, options.length * 44 + 12))
+    const spaceBelow = window.innerHeight - rect.bottom
+    const spaceAbove = rect.top
+    setDropDirection(spaceBelow < estimatedMenuHeight + 10 && spaceAbove > spaceBelow ? 'up' : 'down')
+  }
 
   useEffect(() => {
     if (!open) return
+    updateDropDirection()
     const close = () => setOpen(false)
     const onPointerDown = (event: PointerEvent) => {
-      if (!rootRef.current?.contains(event.target as Node)) {
-        close()
+      if (eventPathContains(event, rootRef.current)) {
+        pointerInsideAtRef.current = Date.now()
+        return
       }
+      close()
     }
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key === 'Escape') {
@@ -2690,24 +2734,38 @@ function SelectMenu({
     const onVisibilityChange = () => {
       if (document.visibilityState !== 'visible') close()
     }
-    document.addEventListener('pointerdown', onPointerDown)
+    const onWindowBlur = () => {
+      window.setTimeout(() => {
+        if (Date.now() - pointerInsideAtRef.current < 250) return
+        close()
+      }, 0)
+    }
+    document.addEventListener('pointerdown', onPointerDown, true)
     document.addEventListener('keydown', onKeyDown)
     document.addEventListener('visibilitychange', onVisibilityChange)
-    window.addEventListener('blur', close)
+    window.addEventListener('resize', updateDropDirection)
+    window.addEventListener('blur', onWindowBlur)
     return () => {
-      document.removeEventListener('pointerdown', onPointerDown)
+      document.removeEventListener('pointerdown', onPointerDown, true)
       document.removeEventListener('keydown', onKeyDown)
       document.removeEventListener('visibilitychange', onVisibilityChange)
-      window.removeEventListener('blur', close)
+      window.removeEventListener('resize', updateDropDirection)
+      window.removeEventListener('blur', onWindowBlur)
     }
-  }, [open])
+  }, [open, options.length])
 
   useEffect(() => {
     if (disabled) setOpen(false)
   }, [disabled])
 
   return (
-    <div ref={rootRef} className={`select-menu ${open ? 'open' : ''} ${disabled ? 'disabled' : ''} ${className}`}>
+    <div
+      ref={rootRef}
+      className={`select-menu ${open ? 'open' : ''} drop-${dropDirection} ${disabled ? 'disabled' : ''} ${className}`}
+      onPointerDownCapture={() => {
+        pointerInsideAtRef.current = Date.now()
+      }}
+    >
       <button
         id={id}
         type="button"
@@ -2715,7 +2773,10 @@ function SelectMenu({
         disabled={disabled || options.length === 0}
         aria-haspopup="listbox"
         aria-expanded={open}
-        onClick={() => setOpen((value) => !value)}
+        onClick={() => {
+          if (!open) updateDropDirection()
+          setOpen((value) => !value)
+        }}
       >
         <span>{selected?.label ?? ''}</span>
         <ChevronDown size={16} />

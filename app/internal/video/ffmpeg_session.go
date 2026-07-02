@@ -10,6 +10,8 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"slices"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -17,15 +19,27 @@ import (
 
 const (
 	EnvFFmpegPath             = "RECORDINGFREEDOM_FFMPEG_PATH"
+	EnvFFmpegSegmentSeconds   = "RECORDINGFREEDOM_FFMPEG_SEGMENT_SECONDS"
 	ffmpegStopTimeout         = 10 * time.Second
 	ffmpegFinalizeTimeout     = 30 * time.Second
 	ffmpegVerifyTimeout       = 15 * time.Second
+	ffmpegDefaultSegmentTime  = 60
+	ffmpegMinSegmentTime      = 5
+	ffmpegMaxSegmentTime      = 600
 	ffmpegSegmentDirectory    = "cache"
 	ffmpegVideoSegmentSubdir  = "ffmpeg-video"
 	ffmpegSegmentListFileName = "segments.txt"
 )
 
-type ffmpegInputArgsBuilder func(CaptureConfig) ([]string, error)
+type ffmpegInputArgsBuilder func(CaptureConfig) (ffmpegInputSpec, error)
+
+type ffmpegInputSpec struct {
+	Args             []string
+	VideoFilter      string
+	VideoPreFiltered bool
+	Engine           string
+	Messages         []string
+}
 
 type ffmpegDesktopSession struct {
 	config    CaptureConfig
@@ -39,6 +53,7 @@ type ffmpegDesktopSession struct {
 	started     bool
 	stopped     bool
 	totalActive time.Duration
+	nextGroup   int
 
 	mu sync.Mutex
 }
@@ -54,7 +69,8 @@ type ffmpegProcess struct {
 	cmd     *exec.Cmd
 	stdin   io.WriteCloser
 	stderr  *bytes.Buffer
-	path    string
+	pattern string
+	group   int
 	started time.Time
 }
 
@@ -282,10 +298,15 @@ func (s *ffmpegDesktopSession) startSegmentLocked(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	segmentPath := filepath.Join(s.segmentDir(), fmt.Sprintf("segment-%03d.mp4", len(s.segments)))
+	if len(input.Args) == 0 {
+		return errors.New("FFmpeg input args builder returned no input arguments")
+	}
+	group := s.nextGroup
+	s.nextGroup++
+	segmentPattern := s.segmentPattern(group)
 	args := []string{"-hide_banner", "-loglevel", "warning", "-y"}
-	args = append(args, input...)
-	args = append(args, s.encodingArgs(segmentPath)...)
+	args = append(args, input.Args...)
+	args = append(args, s.encodingArgs(segmentPattern, input)...)
 
 	cmd := exec.CommandContext(ctx, s.ffmpeg, args...)
 	configureBackgroundCommand(cmd)
@@ -304,23 +325,57 @@ func (s *ffmpegDesktopSession) startSegmentLocked(ctx context.Context) error {
 		cmd:     cmd,
 		stdin:   stdin,
 		stderr:  stderr,
-		path:    segmentPath,
+		pattern: segmentPattern,
+		group:   group,
 		started: time.Now(),
 	}
+	if input.Engine != "" {
+		s.diagnostics.Messages = append(s.diagnostics.Messages, fmt.Sprintf("FFmpeg input engine: %s.", input.Engine))
+	}
+	s.diagnostics.Messages = append(s.diagnostics.Messages, input.Messages...)
 	return nil
 }
 
-func (s *ffmpegDesktopSession) encodingArgs(outputPath string) []string {
-	return []string{
+func (s *ffmpegDesktopSession) encodingArgs(outputPattern string, input ffmpegInputSpec) []string {
+	videoFilter := strings.TrimSpace(input.VideoFilter)
+	if videoFilter == "" {
+		videoFilter = defaultFFmpegVideoFilter()
+	}
+	segmentSeconds := ffmpegSegmentSeconds()
+	args := []string{
 		"-an",
 		"-c:v", "libx264",
 		"-preset", "veryfast",
+		"-g", fmt.Sprintf("%d", ffmpegKeyframeInterval(s.config.Profile.FPS)),
+		"-keyint_min", fmt.Sprintf("%d", ffmpegKeyframeInterval(s.config.Profile.FPS)),
+		"-sc_threshold", "0",
 		"-crf", ffmpegCRF(s.config.Profile.Quality),
-		"-vf", "pad=ceil(iw/2)*2:ceil(ih/2)*2",
-		"-pix_fmt", "yuv420p",
-		"-movflags", "+faststart",
-		outputPath,
+		"-force_key_frames", fmt.Sprintf("expr:gte(t,n_forced*%d)", segmentSeconds),
 	}
+	if !input.VideoPreFiltered {
+		args = append(args, "-vf", videoFilter)
+	}
+	args = append(args,
+		"-pix_fmt", "yuv420p",
+		"-f", "segment",
+		"-segment_time", fmt.Sprintf("%d", segmentSeconds),
+		"-reset_timestamps", "1",
+		"-segment_format", "mp4",
+		"-segment_format_options", "movflags=+faststart",
+		outputPattern,
+	)
+	return args
+}
+
+func defaultFFmpegVideoFilter() string {
+	return "pad=ceil(iw/2)*2:ceil(ih/2)*2"
+}
+
+func ffmpegKeyframeInterval(fps int) int {
+	if fps <= 0 {
+		fps = 30
+	}
+	return fps * 2
 }
 
 func ffmpegCRF(quality string) string {
@@ -371,14 +426,9 @@ func (s *ffmpegDesktopSession) stopActiveSegmentLocked(reason string) error {
 	if duration > 0 {
 		s.totalActive += duration
 	}
-	info, statErr := os.Stat(active.path)
-	if statErr == nil && !info.IsDir() && info.Size() > 0 {
-		s.segments = append(s.segments, ffmpegSegment{
-			Path:    active.path,
-			Started: active.started,
-			Stopped: stopped,
-			Bytes:   info.Size(),
-		})
+	segments, statErr := s.collectProcessSegments(active, stopped)
+	if statErr == nil {
+		s.segments = append(s.segments, segments...)
 	}
 	if message := ffmpegStderrMessage(active.stderr); message != "" {
 		s.diagnostics.Messages = append(s.diagnostics.Messages, message)
@@ -389,10 +439,38 @@ func (s *ffmpegDesktopSession) stopActiveSegmentLocked(reason string) error {
 	if statErr != nil {
 		return fmt.Errorf("stat FFmpeg segment: %w", statErr)
 	}
-	if info == nil || info.IsDir() || info.Size() == 0 {
-		return fmt.Errorf("FFmpeg segment %q is empty", active.path)
+	if len(segments) == 0 {
+		return fmt.Errorf("FFmpeg segment group %q is empty", active.pattern)
 	}
 	return nil
+}
+
+func (s *ffmpegDesktopSession) collectProcessSegments(active *ffmpegProcess, stopped time.Time) ([]ffmpegSegment, error) {
+	matches, err := filepath.Glob(s.segmentGlob(active.group))
+	if err != nil {
+		return nil, err
+	}
+	slices.Sort(matches)
+	segments := make([]ffmpegSegment, 0, len(matches))
+	for _, path := range matches {
+		info, statErr := os.Stat(path)
+		if statErr != nil {
+			return nil, statErr
+		}
+		if info.IsDir() || info.Size() == 0 {
+			continue
+		}
+		segments = append(segments, ffmpegSegment{
+			Path:    path,
+			Started: active.started,
+			Stopped: stopped,
+			Bytes:   info.Size(),
+		})
+	}
+	if len(segments) == 0 {
+		return nil, os.ErrNotExist
+	}
+	return segments, nil
 }
 
 func (s *ffmpegDesktopSession) finalizeLocked() error {
@@ -501,6 +579,32 @@ func (s *ffmpegDesktopSession) patchDiagnosticsLocked() {
 
 func (s *ffmpegDesktopSession) segmentDir() string {
 	return filepath.Join(filepath.Dir(s.config.OutputPath), ffmpegSegmentDirectory, ffmpegVideoSegmentSubdir, ffmpegSegmentOutputSubdir(s.config.OutputPath))
+}
+
+func (s *ffmpegDesktopSession) segmentPattern(group int) string {
+	return filepath.Join(s.segmentDir(), fmt.Sprintf("segment-%03d-%%03d.mp4", group))
+}
+
+func (s *ffmpegDesktopSession) segmentGlob(group int) string {
+	return filepath.Join(s.segmentDir(), fmt.Sprintf("segment-%03d-*.mp4", group))
+}
+
+func ffmpegSegmentSeconds() int {
+	value := strings.TrimSpace(os.Getenv(EnvFFmpegSegmentSeconds))
+	if value == "" {
+		return ffmpegDefaultSegmentTime
+	}
+	parsed, err := strconv.Atoi(value)
+	if err != nil {
+		return ffmpegDefaultSegmentTime
+	}
+	if parsed < ffmpegMinSegmentTime {
+		return ffmpegMinSegmentTime
+	}
+	if parsed > ffmpegMaxSegmentTime {
+		return ffmpegMaxSegmentTime
+	}
+	return parsed
 }
 
 func ffmpegSegmentOutputSubdir(outputPath string) string {
