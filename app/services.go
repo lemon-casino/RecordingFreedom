@@ -62,6 +62,7 @@ type RecordingFreedomService struct {
 	screenIndicator   *application.WebviewWindow
 	pipOverlay        *application.WebviewWindow
 	trayLocale        func(settings.Locale)
+	capsuleHitRegions capsuleWindowHitRegions
 	regionMu          sync.Mutex
 	regionSession     *RegionSelectionSession
 	selectedRegionDIP application.Rect

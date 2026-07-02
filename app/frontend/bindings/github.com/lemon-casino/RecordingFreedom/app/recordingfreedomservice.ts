@@ -119,6 +119,10 @@ export function ScanRecordingPackages(): $CancellablePromise<recpackage$0.Recove
     return $Call.ByID(1742539791);
 }
 
+export function SetCapsuleWindowHitRegions(req: $models.CapsuleWindowHitRegionsRequest): $CancellablePromise<void> {
+    return $Call.ByID(3454285251, req);
+}
+
 export function SetDataRoot(rootDir: string): $CancellablePromise<appdata$0.Info> {
     return $Call.ByID(2213117442, rootDir);
 }

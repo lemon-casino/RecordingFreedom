@@ -45,6 +45,9 @@ func main() {
 			ApplicationShouldTerminateAfterLastWindowClosed: false,
 			ActivationPolicy: application.ActivationPolicyAccessory,
 		},
+		Windows: application.WindowsOptions{
+			WndProcInterceptor: recordingFreedom.capsuleWindowWndProcInterceptor,
+		},
 	})
 	recordingFreedom.setApp(app)
 

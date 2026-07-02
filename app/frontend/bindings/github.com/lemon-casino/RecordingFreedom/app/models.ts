@@ -50,6 +50,23 @@ export interface BootstrapState {
     "capabilities": capture$0.Capabilities;
 }
 
+export interface CapsuleWindowHitRegion {
+    "x": number;
+    "y": number;
+    "width": number;
+    "height": number;
+    "kind"?: string;
+    "radius"?: number;
+}
+
+export interface CapsuleWindowHitRegionsRequest {
+    "enabled": boolean;
+    "viewportWidth": number;
+    "viewportHeight": number;
+    "devicePixelRatio": number;
+    "regions": CapsuleWindowHitRegion[] | null;
+}
+
 export interface ExportRecordingRequest {
     "packageDir": string;
     "outputPath"?: string;

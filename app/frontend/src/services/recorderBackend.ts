@@ -2,6 +2,7 @@ import {Application, Events, Window as WailsWindow} from '@wailsio/runtime'
 import {RecordingFreedomService} from '../../bindings/github.com/lemon-casino/RecordingFreedom/app'
 import {
   type BootstrapState as BoundBootstrapState,
+  type CapsuleWindowHitRegionsRequest as BoundCapsuleWindowHitRegionsRequest,
   type ExportRecordingResult as BoundExportRecordingResult,
   type PIPOverlayRequest as BoundPIPOverlayRequest,
   type PIPOverlayState as BoundPIPOverlayState,
@@ -99,10 +100,33 @@ export type RecorderBootstrap = {
   capabilities: CaptureCapabilities
 }
 
+export type CapsuleWindowHitRegion = {
+  x: number
+  y: number
+  width: number
+  height: number
+  kind?: 'rect' | 'round-rect' | 'pill'
+  radius?: number
+}
+
 const browserSettingsKey = 'recordingfreedom.settings.v1'
 const capsuleWindowWidth = 960
 const capsuleWindowCollapsedHeight = 112
 const capsuleWindowExpandedHeight = 640
+
+export async function setCapsuleWindowHitRegions(req: {
+  enabled: boolean
+  viewportWidth: number
+  viewportHeight: number
+  devicePixelRatio: number
+  regions: CapsuleWindowHitRegion[]
+}): Promise<void> {
+  try {
+    await RecordingFreedomService.SetCapsuleWindowHitRegions(req as BoundCapsuleWindowHitRegionsRequest)
+  } catch (error) {
+    console.info('Using browser capsule hit-region fallback:', error)
+  }
+}
 
 export type RegionSelectionSession = {
   id: string

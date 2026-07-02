@@ -51,7 +51,7 @@ import {
   fallbackCapabilities,
   fallbackStorageStatus,
 } from './services/mockBackend'
-import {cancelRegionSelector, cancelSelectedRegion, completeRegionSelection, exportRecordingPackage, hidePipOverlay, hideRegionFrame, hideScreenIndicator, hideSettingsWindow, loadBootstrap, loadSettings, openRecordingPackage, openVideoDirectory, pauseRecording, preflightAudioOnlyRecording, preflightRecording, quitApplication, recoverRecordingPackage, resumeRecording, saveSettings, setCapsuleWindowExpanded, setDataRoot, showPipOverlay, showRegionSelector, showScreenIndicator, startAudioOnlyRecording, startMicrophoneLevelMonitor, startRecording, stopMicrophoneLevelMonitor, stopRecording, subscribeAudioLevel, subscribeRecordingStatus, subscribeRegionSelection, subscribeSettingsChanged, updatePipOverlay, updateSelectedRegion, type AudioLevelUpdate, type PIPOverlayCamera, type PIPOverlayState, type RecordingRecovery, type RecordingStatusUpdate, type RegionSelectionSession} from './services/recorderBackend'
+import {cancelRegionSelector, cancelSelectedRegion, completeRegionSelection, exportRecordingPackage, hidePipOverlay, hideRegionFrame, hideScreenIndicator, hideSettingsWindow, loadBootstrap, loadSettings, openRecordingPackage, openVideoDirectory, pauseRecording, preflightAudioOnlyRecording, preflightRecording, quitApplication, recoverRecordingPackage, resumeRecording, saveSettings, setCapsuleWindowExpanded, setCapsuleWindowHitRegions, setDataRoot, showPipOverlay, showRegionSelector, showScreenIndicator, startAudioOnlyRecording, startMicrophoneLevelMonitor, startRecording, stopMicrophoneLevelMonitor, stopRecording, subscribeAudioLevel, subscribeRecordingStatus, subscribeRegionSelection, subscribeSettingsChanged, updatePipOverlay, updateSelectedRegion, type AudioLevelUpdate, type CapsuleWindowHitRegion, type PIPOverlayCamera, type PIPOverlayState, type RecordingRecovery, type RecordingStatusUpdate, type RegionSelectionSession} from './services/recorderBackend'
 
 const sourceIcon = {
   screen: Monitor,
@@ -162,6 +162,24 @@ function normalizedClientRect(startX: number, startY: number, currentX: number, 
   return {x, y, width, height}
 }
 
+function elementHitRegion(
+  element: Element | null,
+  viewportWidth: number,
+  viewportHeight: number,
+  kind: CapsuleWindowHitRegion['kind'] = 'round-rect',
+  radius = 18,
+): CapsuleWindowHitRegion | null {
+  if (!element) return null
+  const rect = element.getBoundingClientRect()
+  if (rect.width <= 0 || rect.height <= 0) return null
+  const x = Math.max(0, Math.floor(rect.left))
+  const y = Math.max(0, Math.floor(rect.top))
+  const right = Math.min(viewportWidth, Math.ceil(rect.right))
+  const bottom = Math.min(viewportHeight, Math.ceil(rect.bottom))
+  if (right <= x || bottom <= y) return null
+  return {x, y, width: right - x, height: bottom - y, kind, radius}
+}
+
 function currentWindowRoute() {
   const hashRoute = window.location.hash.replace(/^#/, '')
   if (hashRoute.startsWith('/')) return hashRoute
@@ -264,6 +282,11 @@ function App() {
   const [storageBusy, setStorageBusy] = useState(false)
   const [storageMessage, setStorageMessage] = useState<StorageMessageState | null>(null)
   const [sourceSelectionMessage, setSourceSelectionMessage] = useState<SourceSelectionMessageState | null>(null)
+  const shellRef = useRef<HTMLElement | null>(null)
+  const capsuleRef = useRef<HTMLDivElement | null>(null)
+  const popoverRef = useRef<HTMLDivElement | null>(null)
+  const settingsPanelRef = useRef<HTMLElement | null>(null)
+  const closePromptRef = useRef<HTMLElement | null>(null)
   const selectedMicRef = useRef(selectedMic)
   const rnnoiseActive = microphone && noiseSuppression
 
@@ -513,6 +536,65 @@ function App() {
     if (isSettingsWindow) return
     void setCapsuleWindowExpanded(capsuleExpanded, capsuleExpandedHeight)
   }, [capsuleExpanded, capsuleExpandedHeight, isSettingsWindow])
+
+  useEffect(() => {
+    if (isSettingsWindow) return
+    let disposed = false
+    let frame = 0
+
+    const publish = () => {
+      if (disposed) return
+      const viewportWidth = window.innerWidth || document.documentElement.clientWidth || 0
+      const viewportHeight = window.innerHeight || document.documentElement.clientHeight || 0
+      const regions = [
+        elementHitRegion(capsuleRef.current, viewportWidth, viewportHeight, 'pill', 999),
+        elementHitRegion(popoverRef.current, viewportWidth, viewportHeight, 'round-rect', 22),
+        settingsOpen ? elementHitRegion(settingsPanelRef.current, viewportWidth, viewportHeight, 'round-rect', 24) : null,
+        closePromptOpen ? elementHitRegion(closePromptRef.current, viewportWidth, viewportHeight, 'round-rect', 22) : null,
+        ...Array.from(shellRef.current?.querySelectorAll('.select-menu-list') ?? [])
+          .map((element) => elementHitRegion(element, viewportWidth, viewportHeight, 'round-rect', 16)),
+      ].filter((region): region is CapsuleWindowHitRegion => region !== null)
+      void setCapsuleWindowHitRegions({
+        enabled: regions.length > 0,
+        viewportWidth,
+        viewportHeight,
+        devicePixelRatio: window.devicePixelRatio || 1,
+        regions,
+      })
+    }
+
+    const schedule = () => {
+      if (frame) window.cancelAnimationFrame(frame)
+      frame = window.requestAnimationFrame(publish)
+    }
+
+    publish()
+    schedule()
+    const resizeObserver = typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(schedule)
+    ;[
+      shellRef.current,
+      capsuleRef.current,
+      popoverRef.current,
+      settingsPanelRef.current,
+      closePromptRef.current,
+    ].forEach((element) => {
+      if (element) resizeObserver?.observe(element)
+    })
+    const shellElement = shellRef.current
+    const mutationObserver = typeof MutationObserver === 'undefined' || !shellElement
+      ? null
+      : new MutationObserver(schedule)
+    if (shellElement) mutationObserver?.observe(shellElement, {childList: true, subtree: true})
+    window.addEventListener('resize', schedule)
+
+    return () => {
+      disposed = true
+      if (frame) window.cancelAnimationFrame(frame)
+      resizeObserver?.disconnect()
+      mutationObserver?.disconnect()
+      window.removeEventListener('resize', schedule)
+    }
+  }, [activePanel, capsuleExpanded, capsuleExpandedHeight, closePromptOpen, isSettingsWindow, settingsOpen, sourcePickerView])
 
   useEffect(() => {
     if (recordingMode === 'audio' && activePanel === 'camera') {
@@ -957,7 +1039,7 @@ function App() {
   }
 
   const settingsPanel = (
-    <section className={`settings-panel ${isSettingsWindow ? 'settings-window-panel' : 'settings-sheet'}`} role="dialog" aria-modal={!isSettingsWindow} aria-label={copy.aria.settingsDialog}>
+    <section ref={settingsPanelRef} className={`settings-panel ${isSettingsWindow ? 'settings-window-panel' : 'settings-sheet'}`} role="dialog" aria-modal={!isSettingsWindow} aria-label={copy.aria.settingsDialog}>
       <div className="sheet-header">
         <div>
           <strong>RecordingFreedom</strong>
@@ -1078,9 +1160,9 @@ function App() {
   }
 
   return (
-    <main className={`rf-shell ${capsuleExpanded ? 'is-expanded' : 'is-collapsed'}`} aria-label={copy.aria.recorderShell}>
+    <main ref={shellRef} className={`rf-shell ${capsuleExpanded ? 'is-expanded' : 'is-collapsed'}`} aria-label={copy.aria.recorderShell}>
       <section className="recorder-stage" aria-label={copy.aria.recorderControls}>
-        <div className={`capsule ${isRecording ? 'capsule-active' : ''}`}>
+        <div ref={capsuleRef} className={`capsule ${isRecording ? 'capsule-active' : ''}`}>
           <button
             className="grabber"
             type="button"
@@ -1189,7 +1271,7 @@ function App() {
         </div>
 
         {activePanel && (
-          <div className={`popover panel-${activePanel}`} role="dialog" aria-label={copy.aria.menu(activePanel)}>
+          <div ref={popoverRef} className={`popover panel-${activePanel}`} role="dialog" aria-label={copy.aria.menu(activePanel)}>
             {activePanel === 'source' && (
               <div className="menu-grid source-menu">
                 <div className="mode-toggle" role="group" aria-label={copy.aria.recordingMode}>
@@ -1508,7 +1590,7 @@ function App() {
 
       {settingsOpen && settingsPanel}
       {closePromptOpen && (
-        <section className="close-confirm-panel" role="dialog" aria-modal="true" aria-label={isRecording ? copy.closeDialog.recordingTitle : copy.closeDialog.idleTitle}>
+        <section ref={closePromptRef} className="close-confirm-panel" role="dialog" aria-modal="true" aria-label={isRecording ? copy.closeDialog.recordingTitle : copy.closeDialog.idleTitle}>
           <div className="close-confirm-copy">
             <strong>{isRecording ? copy.closeDialog.recordingTitle : copy.closeDialog.idleTitle}</strong>
             <span>{isRecording ? copy.closeDialog.recordingMessage : copy.closeDialog.idleMessage}</span>

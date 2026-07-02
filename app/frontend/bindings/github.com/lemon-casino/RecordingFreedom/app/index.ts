@@ -9,6 +9,8 @@ export {
 export type {
     AudioLevelEvent,
     BootstrapState,
+    CapsuleWindowHitRegion,
+    CapsuleWindowHitRegionsRequest,
     ExportRecordingRequest,
     ExportRecordingResult,
     PIPCamera,
