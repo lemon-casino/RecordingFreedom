@@ -5,8 +5,21 @@ export type LocaleCode = 'zh-CN' | 'en'
 export type CaptureCapabilityStatus = 'available' | 'queued' | 'blocked' | 'unsupported'
 export type CaptureCapabilityPermission = 'not-required' | 'unknown' | 'screen-recording' | 'microphone' | 'camera'
 export type PIPPreset = 'off' | 'bottom-right' | 'bottom-left' | 'free'
+export type PIPShape = 'circle' | 'square'
 export type RecordingQuality = 'standard' | 'balanced' | 'high'
 export type RecordingPreflightStatus = 'ready' | 'warning' | 'blocked'
+
+export type PIPConfig = {
+  preset: PIPPreset
+  shape: PIPShape
+  mirror: boolean
+  position: {
+    x: number
+    y: number
+  }
+  scale: number
+  edgeFeather: number
+}
 
 export type RecordingProfile = {
   quality: RecordingQuality
@@ -124,6 +137,7 @@ export type AppSettings = {
     enabled: boolean
     deviceId?: string
     pipPreset: PIPPreset
+    pip: PIPConfig
   }
   window: {
     minimizeToTray: boolean
@@ -143,6 +157,7 @@ export type MockRecordingRequest = {
   cameraDeviceId?: string
   cameraDeviceNativeId?: string
   pipPreset: PIPPreset
+  pip: PIPConfig
 }
 
 export type AudioOnlyRecordingRequest = {
@@ -435,6 +450,14 @@ export const defaultSettings: AppSettings = {
     enabled: false,
     deviceId: 'camera:default',
     pipPreset: 'bottom-right',
+    pip: {
+      preset: 'bottom-right',
+      shape: 'circle',
+      mirror: true,
+      position: {x: 1, y: 1},
+      scale: 0.2,
+      edgeFeather: 0.16,
+    },
   },
   window: {
     minimizeToTray: true,
@@ -474,6 +497,7 @@ export function createMockRecordingPackage(request: MockRecordingRequest) {
         enabled: request.camera,
         deviceId: request.cameraDeviceId,
         pipPreset: request.camera ? request.pipPreset : 'off',
+        pip: request.camera ? request.pip : {...defaultSettings.camera.pip, preset: 'off'},
       },
       diagnostics: {
         mock: true,

@@ -13,6 +13,9 @@ import (
 	"github.com/lemon-casino/RecordingFreedom/app/internal/appdata"
 	"github.com/lemon-casino/RecordingFreedom/app/internal/capture"
 	"github.com/lemon-casino/RecordingFreedom/app/internal/devices"
+	"github.com/lemon-casino/RecordingFreedom/app/internal/exporter"
+	"github.com/lemon-casino/RecordingFreedom/app/internal/exportplan"
+	"github.com/lemon-casino/RecordingFreedom/app/internal/pip"
 	"github.com/lemon-casino/RecordingFreedom/app/internal/preflight"
 	"github.com/lemon-casino/RecordingFreedom/app/internal/recording"
 	"github.com/lemon-casino/RecordingFreedom/app/internal/recpackage"
@@ -32,6 +35,18 @@ type BootstrapState struct {
 	Capabilities capture.Capabilities         `json:"capabilities"`
 }
 
+type ExportRecordingRequest struct {
+	PackageDir   string `json:"packageDir"`
+	OutputPath   string `json:"outputPath,omitempty"`
+	CanvasWidth  int    `json:"canvasWidth,omitempty"`
+	CanvasHeight int    `json:"canvasHeight,omitempty"`
+}
+
+type ExportRecordingResult struct {
+	Plan   exportplan.Plan `json:"plan"`
+	Export exporter.Result `json:"export"`
+}
+
 type RecordingFreedomService struct {
 	appData   *appdata.Service
 	capture   *capture.Service
@@ -45,6 +60,7 @@ type RecordingFreedomService struct {
 	settingsWindow    *application.WebviewWindow
 	regionOverlay     *application.WebviewWindow
 	screenIndicator   *application.WebviewWindow
+	pipOverlay        *application.WebviewWindow
 	trayLocale        func(settings.Locale)
 	regionMu          sync.Mutex
 	regionSession     *RegionSelectionSession
@@ -85,6 +101,10 @@ func (s *RecordingFreedomService) setRegionOverlayWindow(window *application.Web
 
 func (s *RecordingFreedomService) setScreenIndicatorWindow(window *application.WebviewWindow) {
 	s.screenIndicator = window
+}
+
+func (s *RecordingFreedomService) setPIPOverlayWindow(window *application.WebviewWindow) {
+	s.pipOverlay = window
 }
 
 func (s *RecordingFreedomService) setTrayLocaleUpdater(update func(settings.Locale)) {
@@ -207,6 +227,39 @@ func (s *RecordingFreedomService) OpenRecordingPackage(packageDir string) (recpa
 		return recpackage.RecoverySummary{}, err
 	}
 	return summary, nil
+}
+
+func (s *RecordingFreedomService) ExportRecordingPackage(req ExportRecordingRequest) (ExportRecordingResult, error) {
+	if recorderIsActive(s.recorder.State()) {
+		return ExportRecordingResult{}, errors.New("cannot export a recording package while recording is active")
+	}
+	info, err := s.appData.Info()
+	if err != nil {
+		return ExportRecordingResult{}, err
+	}
+	packageDir, err := managedRecordingPackageDir(info.VideoDir, req.PackageDir)
+	if err != nil {
+		return ExportRecordingResult{}, err
+	}
+	outputPath := strings.TrimSpace(req.OutputPath)
+	if outputPath == "" {
+		outputPath = exportplan.DefaultOutputPath
+	}
+	plan, err := exportplan.NewService(nil).Plan(exportplan.Request{
+		VideoDir:    info.VideoDir,
+		PackageDir:  packageDir,
+		OutputPath:  outputPath,
+		Canvas:      pip.Size{Width: req.CanvasWidth, Height: req.CanvasHeight},
+		RequireSync: true,
+	})
+	if err != nil {
+		return ExportRecordingResult{}, err
+	}
+	result, err := exporter.NewService().Export(nil, plan, exporter.Options{})
+	if err != nil {
+		return ExportRecordingResult{}, err
+	}
+	return ExportRecordingResult{Plan: plan, Export: result}, nil
 }
 
 func managedRecordingPackageSummary(videoDir string, packageDir string) (recpackage.RecoverySummary, error) {
@@ -408,6 +461,7 @@ func (s *RecordingFreedomService) StartRecording(req recording.StartRequest) (re
 		return recording.Session{}, err
 	}
 	s.lockRegionFrameForRecording(req)
+	s.showRecordingPIPOverlay(req)
 	s.emitSessionStatus(session, "Recording started")
 	return session, nil
 }
@@ -548,6 +602,7 @@ func (s *RecordingFreedomService) StopRecording() (recording.Session, error) {
 		})
 		return session, err
 	}
+	_ = s.HidePIPOverlay()
 	s.emitSessionStatus(session, "Recording package ready")
 	return session, nil
 }

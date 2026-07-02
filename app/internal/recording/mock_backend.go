@@ -40,6 +40,7 @@ func (b *MockBackend) Start(_ context.Context, req BackendStartRequest) (Backend
 			Enabled:   req.StartRequest.Camera.Enabled,
 			DeviceID:  req.StartRequest.Camera.DeviceID,
 			PIPPreset: req.StartRequest.Camera.PIPPreset,
+			PIP:       req.StartRequest.Camera.PIP,
 		},
 	})
 	if err != nil {

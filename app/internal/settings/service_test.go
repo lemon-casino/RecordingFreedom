@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/lemon-casino/RecordingFreedom/app/internal/appdata"
+	"github.com/lemon-casino/RecordingFreedom/app/internal/pip"
 	"github.com/lemon-casino/RecordingFreedom/app/internal/recordingprofile"
 )
 
@@ -31,6 +32,9 @@ func TestLoadMissingSettingsReturnsDefaults(t *testing.T) {
 	}
 	if got.Recording != recordingprofile.Default() {
 		t.Fatalf("default recording profile = %#v, want %#v", got.Recording, recordingprofile.Default())
+	}
+	if got.Camera.PIP.Preset != pip.DefaultPreset || got.Camera.PIP.Shape != pip.DefaultShape || !got.Camera.PIP.Mirror {
+		t.Fatalf("default pip = %#v, want default preset/shape/mirror", got.Camera.PIP)
 	}
 	if got.Audio.SystemDeviceID != "system-audio:default" {
 		t.Fatalf("default system audio device = %q", got.Audio.SystemDeviceID)
@@ -71,7 +75,15 @@ func TestSaveAndLoadSettings(t *testing.T) {
 		Camera: CameraSettings{
 			Enabled:   true,
 			DeviceID:  "camera:default",
-			PIPPreset: "bottom-right",
+			PIPPreset: "free",
+			PIP: pip.Config{
+				Preset:      pip.PresetFree,
+				Shape:       pip.ShapeSquare,
+				Mirror:      false,
+				Position:    pip.Position{X: 0.25, Y: 0.75},
+				Scale:       0.28,
+				EdgeFeather: 0.22,
+			},
 		},
 		Window: WindowSettings{MinimizeToTray: true},
 	})
@@ -104,6 +116,12 @@ func TestSaveAndLoadSettings(t *testing.T) {
 	if !loaded.Camera.Enabled {
 		t.Fatal("camera setting was not persisted")
 	}
+	if loaded.Camera.PIPPreset != "free" || loaded.Camera.PIP.Shape != pip.ShapeSquare || loaded.Camera.PIP.Mirror {
+		t.Fatalf("pip settings were not persisted: %#v", loaded.Camera)
+	}
+	if loaded.Camera.PIP.Position.X != 0.25 || loaded.Camera.PIP.Position.Y != 0.75 || loaded.Camera.PIP.Scale != 0.28 || loaded.Camera.PIP.EdgeFeather != 0.22 {
+		t.Fatalf("pip layout settings were not persisted: %#v", loaded.Camera.PIP)
+	}
 }
 
 func TestSaveNormalizesInvalidSettings(t *testing.T) {
@@ -113,7 +131,7 @@ func TestSaveNormalizesInvalidSettings(t *testing.T) {
 		Locale:    Locale("fr"),
 		Recording: RecordingSettings{Quality: "cinema", FPS: 120, CountdownSeconds: -4},
 		Audio:     AudioSettings{MicrophoneGain: -2},
-		Camera:    CameraSettings{PIPPreset: "top-right"},
+		Camera:    CameraSettings{PIPPreset: "top-right", PIP: pip.Config{Shape: pip.Shape("triangle"), Scale: 3, EdgeFeather: 2}},
 	})
 	if err != nil {
 		t.Fatalf("Save() error = %v", err)
@@ -129,6 +147,9 @@ func TestSaveNormalizesInvalidSettings(t *testing.T) {
 	}
 	if saved.Camera.PIPPreset != "bottom-right" {
 		t.Fatalf("pip preset = %q, want bottom-right", saved.Camera.PIPPreset)
+	}
+	if saved.Camera.PIP.Shape != pip.DefaultShape || saved.Camera.PIP.Scale != pip.MaximumScale || saved.Camera.PIP.EdgeFeather != pip.MaximumEdgeFeather {
+		t.Fatalf("normalized pip = %#v, want default shape and clamped ratios", saved.Camera.PIP)
 	}
 }
 

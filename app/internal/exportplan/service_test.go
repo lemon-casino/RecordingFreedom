@@ -42,17 +42,39 @@ func TestPlanReadyPackageWithPIPAndSyncDiagnostics(t *testing.T) {
 	if plan.WebcamStartOffsetMs != 120 {
 		t.Fatalf("webcam offset = %d, want 120", plan.WebcamStartOffsetMs)
 	}
-	if plan.PIPPreset != string(pip.PresetBottomLeft) || !plan.PIPRect.Visible {
-		t.Fatalf("pip = preset:%q rect:%#v, want visible bottom-left", plan.PIPPreset, plan.PIPRect)
+	if plan.PIPPreset != string(pip.PresetFree) || !plan.PIPRect.Visible {
+		t.Fatalf("pip = preset:%q rect:%#v, want visible free layout", plan.PIPPreset, plan.PIPRect)
 	}
-	if plan.PIPRect.X >= 1920/2 {
-		t.Fatalf("pip rect = %#v, want left-side overlay", plan.PIPRect)
+	if plan.PIPConfig.Shape != pip.ShapeSquare || plan.PIPConfig.Mirror || plan.PIPConfig.EdgeFeather != 0.2 {
+		t.Fatalf("pip config = %#v, want square non-mirrored feathered layout", plan.PIPConfig)
+	}
+	if !plan.PIPLayout.Visible || plan.PIPLayout.Shape != pip.ShapeSquare || plan.PIPLayout.Mirror {
+		t.Fatalf("pip layout = %#v, want visible square non-mirrored layout", plan.PIPLayout)
+	}
+	if plan.PIPRect.X >= 1920/2 || plan.PIPRect.Y <= 1080/2 {
+		t.Fatalf("pip rect = %#v, want lower-left-ish free overlay", plan.PIPRect)
 	}
 	if plan.TimelineBase != recpackage.TimelineBaseMedia {
 		t.Fatalf("timeline base = %q, want media timestamp", plan.TimelineBase)
 	}
 	if len(plan.PauseSegments) != 1 || plan.PauseSegments[0].DurationMs != 250 {
 		t.Fatalf("pause segments = %#v, want one 250ms pause", plan.PauseSegments)
+	}
+}
+
+func TestPlanUsesManifestSourceGeometryAsPIPCanvasFallback(t *testing.T) {
+	videoDir := t.TempDir()
+	packageDir := createReadyPackage(t, videoDir, readyPackageOptions{Camera: true, SourceGeometry: true})
+
+	plan, err := NewService(nil).Plan(Request{
+		VideoDir:   videoDir,
+		PackageDir: packageDir,
+	})
+	if err != nil {
+		t.Fatalf("Plan() error = %v", err)
+	}
+	if !plan.PIPRect.Visible || plan.PIPRect.Width <= 0 || plan.PIPRect.X >= 1280 {
+		t.Fatalf("pip rect = %#v, want placement derived from manifest source geometry", plan.PIPRect)
 	}
 }
 
@@ -144,6 +166,7 @@ type readyPackageOptions struct {
 	Camera              bool
 	MissingWebcam       bool
 	EscapingDiagnostics bool
+	SourceGeometry      bool
 }
 
 func createReadyPackage(t *testing.T, videoDir string, opts readyPackageOptions) string {
@@ -159,7 +182,19 @@ func createReadyPackage(t *testing.T, videoDir string, opts readyPackageOptions)
 	camera := recpackage.ManifestCamera{PIPPreset: string(pip.PresetOff)}
 	webcamSync := recpackage.ManifestTrackDiagnostics{}
 	if opts.Camera {
-		camera = recpackage.ManifestCamera{Enabled: true, DeviceID: "camera:default", PIPPreset: string(pip.PresetBottomLeft)}
+		camera = recpackage.ManifestCamera{
+			Enabled:   true,
+			DeviceID:  "camera:default",
+			PIPPreset: string(pip.PresetBottomLeft),
+			PIP: pip.Config{
+				Preset:      pip.PresetFree,
+				Shape:       pip.ShapeSquare,
+				Mirror:      false,
+				Position:    pip.Position{X: 0.1, Y: 0.9},
+				Scale:       0.22,
+				EdgeFeather: 0.2,
+			},
+		}
 		media.WebcamVideoPath = "webcam.mov"
 		media.WebcamStartOffsetMs = 120
 		webcamSync = recpackage.ManifestTrackDiagnostics{
@@ -181,13 +216,17 @@ func createReadyPackage(t *testing.T, videoDir string, opts readyPackageOptions)
 	if opts.EscapingDiagnostics {
 		audioDiagnosticsPath = "../audio-diagnostics.json"
 	}
+	source := recpackage.ManifestSource{Type: "screen", ID: "screen:primary"}
+	if opts.SourceGeometry {
+		source.Geometry = &recpackage.ManifestSourceGeometry{Width: 1280, Height: 720}
+	}
 	manifest := recpackage.Manifest{
 		SchemaVersion: 1,
 		App:           recpackage.AppName,
 		CreatedAt:     time.Date(2026, 6, 30, 18, 0, 0, 0, time.UTC),
 		Status:        recpackage.StatusReady,
 		Media:         media,
-		Source:        recpackage.ManifestSource{Type: "screen", ID: "screen:primary"},
+		Source:        source,
 		Recording:     recordingprofile.Profile{Quality: recordingprofile.QualityHigh, FPS: 30, CaptureCursor: true},
 		Camera:        camera,
 		Diagnostics: recpackage.ManifestDiagnostics{

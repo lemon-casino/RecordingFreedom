@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/lemon-casino/RecordingFreedom/app/internal/appdata"
+	"github.com/lemon-casino/RecordingFreedom/app/internal/pip"
 	"github.com/lemon-casino/RecordingFreedom/app/internal/recpackage"
 )
 
@@ -65,6 +66,33 @@ func (s *Service) ActiveBackendID() string {
 		return s.session.Backend
 	}
 	return s.backend.ID()
+}
+
+func (s *Service) PatchActiveCameraPIP(config pip.Config) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	if s.session == nil {
+		return nil
+	}
+	if s.session.RecordingMode != recpackage.RecordingModeScreen {
+		return nil
+	}
+	if s.state != StateRecording && s.state != StatePaused && s.state != StatePreparing {
+		return nil
+	}
+	if s.session.Manifest == "" {
+		return nil
+	}
+	manifest, err := s.packages.ReadManifest(s.session.Manifest)
+	if err != nil {
+		return err
+	}
+	if !manifest.Camera.Enabled {
+		return nil
+	}
+	_, err = s.packages.PatchCameraPIP(s.session.Manifest, config)
+	return err
 }
 
 func (s *Service) ScanPackages() ([]recpackage.RecoverySummary, error) {

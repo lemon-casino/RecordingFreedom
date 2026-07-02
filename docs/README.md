@@ -22,6 +22,8 @@ RecordingFreedom 是一个全新的录制软件重构项目，目标技术栈为
    记录电脑端图标替换、多尺寸 PNG 重建、Wails `.ico/.icns` 生成和提交检查流程。
 9. [08-unfinished-task-plan-audio-first.md](08-unfinished-task-plan-audio-first.md)
    记录初版 preview 后未完成任务，并把真实音频采集与 RNNoise 降噪列为第一优先级。
+10. [09-camera-pip-plan.md](09-camera-pip-plan.md)
+   记录摄像头 sidecar 与画中画恢复开发后的需求、架构和验收计划。
 
 ## 当前硬性决策
 

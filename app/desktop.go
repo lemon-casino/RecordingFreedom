@@ -171,6 +171,49 @@ func createScreenIndicatorWindow(app *application.App) *application.WebviewWindo
 	return window
 }
 
+func createPIPOverlayWindow(app *application.App) *application.WebviewWindow {
+	window := app.Window.NewWithOptions(application.WebviewWindowOptions{
+		Name:             "pip-overlay",
+		Title:            "RecordingFreedom Camera PIP",
+		Width:            260,
+		Height:           260,
+		Frameless:        true,
+		AlwaysOnTop:      true,
+		DisableResize:    true,
+		Hidden:           true,
+		BackgroundType:   application.BackgroundTypeTransparent,
+		BackgroundColour: application.NewRGBA(0, 0, 0, 0),
+		Mac: application.MacWindow{
+			Backdrop: application.MacBackdropTransparent,
+			TitleBar: application.MacTitleBar{
+				AppearsTransparent: true,
+				Hide:               true,
+				HideTitle:          true,
+				FullSizeContent:    true,
+			},
+			CollectionBehavior: application.MacWindowCollectionBehaviorCanJoinAllSpaces |
+				application.MacWindowCollectionBehaviorFullScreenAuxiliary,
+			WindowLevel: application.MacWindowLevelFloating,
+		},
+		Windows: application.WindowsWindow{
+			HiddenOnTaskbar:                   true,
+			DisableFramelessWindowDecorations: true,
+		},
+		Linux: application.LinuxWindow{
+			Icon:                appIcon,
+			WindowIsTranslucent: true,
+		},
+		URL: "/#/pip-overlay",
+	})
+
+	window.RegisterHook(events.Common.WindowClosing, func(e *application.WindowEvent) {
+		window.Hide()
+		e.Cancel()
+	})
+
+	return window
+}
+
 type trayMenuCopy struct {
 	ShowRecorder string
 	ShowSettings string

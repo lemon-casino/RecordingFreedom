@@ -100,6 +100,7 @@ func Default() Settings {
 			Enabled:   false,
 			DeviceID:  "camera:default",
 			PIPPreset: string(pip.DefaultPreset),
+			PIP:       pip.DefaultConfig(),
 		},
 		Window: WindowSettings{
 			MinimizeToTray: true,
@@ -132,7 +133,8 @@ func normalize(value Settings) Settings {
 	if value.Camera.DeviceID == "" {
 		value.Camera.DeviceID = defaults.Camera.DeviceID
 	}
-	value.Camera.PIPPreset = string(pip.Normalize(value.Camera.PIPPreset))
+	value.Camera.PIP = pip.NormalizeConfigForPreset(value.Camera.PIPPreset, value.Camera.PIP)
+	value.Camera.PIPPreset = string(value.Camera.PIP.Preset)
 	return value
 }
 

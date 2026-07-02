@@ -290,6 +290,25 @@ func (s *Service) PatchSyncDiagnostics(manifestPath string, sync ManifestSyncDia
 	return s.WriteManifest(manifestPath, manifest)
 }
 
+func (s *Service) PatchCameraPIP(manifestPath string, config pip.Config) (Manifest, error) {
+	manifest, err := s.ReadManifest(manifestPath)
+	if err != nil {
+		return Manifest{}, err
+	}
+	if manifest.RecordingMode != RecordingModeScreen {
+		return Manifest{}, errors.New("camera PIP patch requires a screen recording package")
+	}
+	if !manifest.Camera.Enabled {
+		return Manifest{}, errors.New("cannot patch PIP for a recording without camera enabled")
+	}
+	manifest.Camera.PIP = pip.NormalizeConfigForPreset(manifest.Camera.PIPPreset, config)
+	manifest.Camera.PIPPreset = string(manifest.Camera.PIP.Preset)
+	if err := s.WriteManifest(manifestPath, manifest); err != nil {
+		return Manifest{}, err
+	}
+	return s.ReadManifest(manifestPath)
+}
+
 func (s *Service) PatchScreenAudioMuxed(manifestPath string, system bool, microphone bool) (Manifest, error) {
 	manifest, err := s.ReadManifest(manifestPath)
 	if err != nil {
@@ -605,13 +624,11 @@ func normalizeCamera(camera ManifestCamera) ManifestCamera {
 	if !camera.Enabled {
 		camera.DeviceID = ""
 		camera.PIPPreset = string(pip.PresetOff)
+		camera.PIP = pip.OffConfig()
 		return camera
 	}
-	if camera.PIPPreset == "" {
-		camera.PIPPreset = string(pip.DefaultPreset)
-	} else {
-		camera.PIPPreset = string(pip.Normalize(camera.PIPPreset))
-	}
+	camera.PIP = pip.NormalizeConfigForPreset(camera.PIPPreset, camera.PIP)
+	camera.PIPPreset = string(camera.PIP.Preset)
 	return camera
 }
 

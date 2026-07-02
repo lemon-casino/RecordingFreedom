@@ -4,6 +4,7 @@ import (
 	"time"
 
 	"github.com/lemon-casino/RecordingFreedom/app/internal/devices"
+	"github.com/lemon-casino/RecordingFreedom/app/internal/pip"
 	"github.com/lemon-casino/RecordingFreedom/app/internal/recordingprofile"
 )
 
@@ -39,10 +40,11 @@ type AudioRequest struct {
 }
 
 type CameraRequest struct {
-	Enabled        bool   `json:"enabled"`
-	DeviceID       string `json:"deviceId,omitempty"`
-	DeviceNativeID string `json:"deviceNativeId,omitempty"`
-	PIPPreset      string `json:"pipPreset"`
+	Enabled        bool       `json:"enabled"`
+	DeviceID       string     `json:"deviceId,omitempty"`
+	DeviceNativeID string     `json:"deviceNativeId,omitempty"`
+	PIPPreset      string     `json:"pipPreset"`
+	PIP            pip.Config `json:"pip"`
 }
 
 type SourceGeometry struct {

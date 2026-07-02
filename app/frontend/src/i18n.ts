@@ -3,6 +3,7 @@ import type {
   CaptureCapabilityStatus,
   CaptureSourceType,
   LocaleCode,
+  PIPShape,
   PIPPreset,
   RecordingMode,
   RecordingPreflightStatus,
@@ -113,6 +114,12 @@ export type RecorderCopy = {
     openPackage: string
     noRecordingPackage: string
     packageContentDetail: string
+    exportPackage: string
+    exporting: string
+    exportPackageValue: string
+    exportPackageDetail: string
+    exportReady: (path: string) => string
+    exportFailed: string
     quality: string
     qualityDetail: string
     fps: string
@@ -150,12 +157,26 @@ export type RecorderCopy = {
     cameraSidecar: string
     cameraDevice: string
     pipPreset: string
+    pipShape: string
+    pipMirror: string
+    pipSize: string
+    pipEdge: string
+    pipEdit: string
     pipPresetPreview: (label: string) => string
+  }
+  pipOverlay: {
+    label: string
+    move: string
+    resize: string
+    mirror: string
+    close: string
+    cameraUnavailable: string
   }
   statusChips: Record<RecordingState, string>
   statusMessages: Record<StatusMessageKey, string>
   recordingQualityLabels: Record<RecordingQuality, string>
   pipPresetLabels: Record<PIPPreset, string>
+  pipShapeLabels: Record<PIPShape, string>
   capabilityStatusLabels: Record<CaptureCapabilityStatus, string>
   capabilityPermissionLabels: Record<CaptureCapabilityPermission, string>
   capabilityLabels: Record<string, string>
@@ -312,6 +333,12 @@ const zhCN: RecorderCopy = {
     openPackage: '打开包',
     noRecordingPackage: '暂无真实录制包',
     packageContentDetail: '打开最近录制包目录，用于查看 manifest、媒体文件和诊断文件。',
+    exportPackage: '导出视频',
+    exporting: '导出中',
+    exportPackageValue: 'MP4 成品',
+    exportPackageDetail: '将最近录制包导出为 exports/recording.mp4；画中画会在导出阶段合成，原始 screen.mp4 保持干净。',
+    exportReady: (path) => `导出完成：${path}`,
+    exportFailed: '导出失败，请检查录制包和 FFmpeg。',
     quality: '画质',
     qualityDetail: '会写入 manifest，真实原生编码器落地后也会读取该配置。',
     fps: '帧率',
@@ -349,7 +376,20 @@ const zhCN: RecorderCopy = {
     cameraSidecar: '摄像头旁路',
     cameraDevice: '摄像头设备',
     pipPreset: '画中画位置',
+    pipShape: '画中画形状',
+    pipMirror: '镜像摄像头',
+    pipSize: '画中画大小',
+    pipEdge: '透明边缘',
+    pipEdit: '编辑画中画',
     pipPresetPreview: (label) => `画中画位置：${label}`,
+  },
+  pipOverlay: {
+    label: '摄像头画中画',
+    move: '移动画中画',
+    resize: '缩放画中画',
+    mirror: '镜像摄像头',
+    close: '关闭画中画',
+    cameraUnavailable: '摄像头预览不可用',
   },
   statusChips: {
     idle: '待机',
@@ -386,6 +426,10 @@ const zhCN: RecorderCopy = {
     'bottom-left': '左下角',
     free: '自由布局',
   },
+  pipShapeLabels: {
+    circle: '圆形',
+    square: '方形',
+  },
   capabilityStatusLabels: {
     available: '可用',
     queued: '排期中',
@@ -419,8 +463,8 @@ const zhCN: RecorderCopy = {
     'system-audio': '系统声音采集依赖平台能力，目前按平台后端逐步落地。',
     microphone: '麦克风采集使用平台原生输入链路；Windows 走 WASAPI，macOS 走 CoreAudio。',
     'microphone-enhancement': 'RNNoise 只处理麦克风 PCM；仅在带 rnnoise_native 的原生构建中可用。',
-    'camera-sidecar': '摄像头会作为独立旁路流录制；Windows 可通过 FFmpeg DirectShow 写入 webcam.mp4，其他平台继续按原生后端推进。',
-    'pip-export': '画中画导出会使用屏幕视频和摄像头旁路流进行合成。',
+    'camera-sidecar': '摄像头会作为独立旁路流录制；Windows 使用 FFmpeg DirectShow，macOS 使用 FFmpeg AVFoundation，Linux 使用 FFmpeg v4l2。',
+    'pip-export': '画中画导出会使用干净的屏幕视频和摄像头旁路流合成 exports/recording.mp4。',
     'package-recovery': '桌面运行时会扫描 data/video 下的 .rfrec 包并标记可恢复项。',
   },
   preflightLabels: {
@@ -465,10 +509,10 @@ const zhCN: RecorderCopy = {
     'microphone-rnnoise': '当前构建未启用 RNNoise 原生降噪。',
     'microphone-enhancement': '当前构建未启用 RNNoise 原生降噪。',
     'camera-device': '所选摄像头设备不可用。',
-    'camera-sidecar': '摄像头旁路采集需要当前平台提供真实 writer；Windows DirectShow 可用时会写入 webcam.mp4。',
+    'camera-sidecar': '摄像头旁路采集需要当前平台提供真实 writer，并写入包内 webcam.mp4 或 webcam.mov。',
     'camera-sidecar-device': '所选摄像头当前不满足旁路录制条件。',
     'camera-native-id': '所选摄像头缺少原生采集标识，无法交给平台 writer。',
-    'pip-export': '画中画合成导出仍在排期中。',
+    'pip-export': '画中画合成导出需要 FFmpeg，并会在导出阶段合成最终 MP4。',
     storage: '录制目录需要可写，并建议保留足够可用空间。',
     'mock-backend': '当前是可验证的界面录制包后端，不采集真实媒体。',
     'recording-backend': '将使用当前原生后端写入录制包。',
@@ -637,6 +681,12 @@ const en: RecorderCopy = {
     openPackage: 'Open package',
     noRecordingPackage: 'No real package yet',
     packageContentDetail: 'Open the latest recording package folder to inspect manifest, media, and diagnostics.',
+    exportPackage: 'Export video',
+    exporting: 'Exporting',
+    exportPackageValue: 'MP4 output',
+    exportPackageDetail: 'Export the latest package to exports/recording.mp4; PIP is composed during export and raw screen.mp4 stays clean.',
+    exportReady: (path) => `Export complete: ${path}`,
+    exportFailed: 'Export failed. Check the package and FFmpeg.',
     quality: 'Quality',
     qualityDetail: 'Saved to manifest and used by native encoders when real capture backends land.',
     fps: 'FPS',
@@ -674,7 +724,20 @@ const en: RecorderCopy = {
     cameraSidecar: 'Camera sidecar',
     cameraDevice: 'Camera device',
     pipPreset: 'PIP preset',
+    pipShape: 'PIP shape',
+    pipMirror: 'Mirror camera',
+    pipSize: 'PIP size',
+    pipEdge: 'Transparent edge',
+    pipEdit: 'Edit PIP',
     pipPresetPreview: (label) => `PIP preset: ${label}`,
+  },
+  pipOverlay: {
+    label: 'Camera picture-in-picture',
+    move: 'Move PIP',
+    resize: 'Resize PIP',
+    mirror: 'Mirror camera',
+    close: 'Close PIP',
+    cameraUnavailable: 'Camera preview unavailable',
   },
   statusChips: {
     idle: 'IDLE',
@@ -711,6 +774,10 @@ const en: RecorderCopy = {
     'bottom-left': 'Bottom left',
     free: 'Free layout',
   },
+  pipShapeLabels: {
+    circle: 'Circle',
+    square: 'Square',
+  },
   capabilityStatusLabels: {
     available: 'Ready',
     queued: 'Queued',
@@ -744,8 +811,8 @@ const en: RecorderCopy = {
     'system-audio': 'System audio capture is platform-specific and lands through each native backend.',
     microphone: 'Microphone capture uses the platform-native input chain: WASAPI on Windows and CoreAudio on macOS.',
     'microphone-enhancement': 'RNNoise processes microphone PCM only and is available only in native builds with rnnoise_native.',
-    'camera-sidecar': 'Camera sidecar capture is separate from the screen video stream; Windows writes webcam.mp4 through FFmpeg DirectShow when available.',
-    'pip-export': 'PIP composition will use the screen video plus camera sidecar during export.',
+    'camera-sidecar': 'Camera sidecar capture is separate from the screen video stream; Windows uses FFmpeg DirectShow, macOS uses FFmpeg AVFoundation, and Linux uses FFmpeg v4l2.',
+    'pip-export': 'PIP composition writes exports/recording.mp4 from the clean screen video plus camera sidecar.',
     'package-recovery': 'Desktop runtime scans .rfrec packages under app-managed data/video.',
   },
   preflightLabels: {
@@ -790,10 +857,10 @@ const en: RecorderCopy = {
     'microphone-rnnoise': 'This build does not enable native RNNoise suppression.',
     'microphone-enhancement': 'This build does not enable native RNNoise suppression.',
     'camera-device': 'The selected camera device is not available.',
-    'camera-sidecar': 'Camera sidecar capture requires a real platform writer; Windows DirectShow writes webcam.mp4 when FFmpeg is available.',
+    'camera-sidecar': 'Camera sidecar capture requires a real platform writer and writes package-local webcam.mp4 or webcam.mov.',
     'camera-sidecar-device': 'The selected camera is not sidecar eligible.',
     'camera-native-id': 'The selected camera does not expose the native capture id required by the platform writer.',
-    'pip-export': 'PIP composition export is still queued.',
+    'pip-export': 'PIP composition export requires FFmpeg and composes the final MP4 during export.',
     storage: 'The recording directory must be writable and should have enough free space.',
     'mock-backend': 'The current backend writes a verifiable UI package but does not capture real media.',
     'recording-backend': 'The current native backend will write the recording package.',

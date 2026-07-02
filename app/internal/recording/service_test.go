@@ -11,6 +11,7 @@ import (
 
 	"github.com/lemon-casino/RecordingFreedom/app/internal/appdata"
 	"github.com/lemon-casino/RecordingFreedom/app/internal/audio"
+	"github.com/lemon-casino/RecordingFreedom/app/internal/pip"
 	"github.com/lemon-casino/RecordingFreedom/app/internal/recordingprofile"
 	"github.com/lemon-casino/RecordingFreedom/app/internal/recpackage"
 )
@@ -145,6 +146,60 @@ func TestStartRecordingDelegatesToBackend(t *testing.T) {
 	}
 	if backend.paused != 1 || backend.resumed != 1 || backend.stopped != 1 {
 		t.Fatalf("backend controls = pause:%d resume:%d stop:%d, want 1 each", backend.paused, backend.resumed, backend.stopped)
+	}
+}
+
+func TestPatchActiveCameraPIPUpdatesRecordingManifest(t *testing.T) {
+	service := newMockRecordingService(t.TempDir())
+	session, err := service.StartMockRecording(StartRequest{
+		SourceID:   "screen:primary",
+		SourceType: SourceScreen,
+		Camera: CameraRequest{
+			Enabled:   true,
+			DeviceID:  "camera:default",
+			PIPPreset: string(pip.PresetBottomRight),
+		},
+	})
+	if err != nil {
+		t.Fatalf("StartMockRecording() error = %v", err)
+	}
+
+	next := pip.Config{
+		Preset:      pip.PresetFree,
+		Shape:       pip.ShapeSquare,
+		Mirror:      false,
+		Position:    pip.Position{X: 0.25, Y: 0.6},
+		Scale:       0.32,
+		EdgeFeather: 0.22,
+	}
+	if err := service.PatchActiveCameraPIP(next); err != nil {
+		t.Fatalf("PatchActiveCameraPIP() error = %v", err)
+	}
+
+	manifest, err := recpackage.NewService().ReadManifest(session.Manifest)
+	if err != nil {
+		t.Fatalf("ReadManifest() error = %v", err)
+	}
+	if manifest.Camera.PIPPreset != string(pip.PresetFree) || manifest.Camera.PIP.Preset != pip.PresetFree {
+		t.Fatalf("manifest pip preset = %q/%q, want free", manifest.Camera.PIPPreset, manifest.Camera.PIP.Preset)
+	}
+	if manifest.Camera.PIP.Shape != pip.ShapeSquare || manifest.Camera.PIP.Mirror {
+		t.Fatalf("manifest pip shape/mirror = %#v, want square non-mirrored", manifest.Camera.PIP)
+	}
+	if manifest.Camera.PIP.Position.X != 0.25 || manifest.Camera.PIP.Position.Y != 0.6 || manifest.Camera.PIP.Scale != 0.32 || manifest.Camera.PIP.EdgeFeather != 0.22 {
+		t.Fatalf("manifest pip layout = %#v, want patched config", manifest.Camera.PIP)
+	}
+}
+
+func TestPatchActiveCameraPIPIsNoopWithoutScreenCameraRecording(t *testing.T) {
+	service := newMockRecordingService(t.TempDir())
+	if err := service.PatchActiveCameraPIP(pip.Config{Preset: pip.PresetFree}); err != nil {
+		t.Fatalf("PatchActiveCameraPIP() with no session error = %v", err)
+	}
+	service.state = StateRecording
+	service.session = &Session{ID: "audio-session", RecordingMode: recpackage.RecordingModeAudio, Status: StateRecording}
+	if err := service.PatchActiveCameraPIP(pip.Config{Preset: pip.PresetFree}); err != nil {
+		t.Fatalf("PatchActiveCameraPIP() during audio-only error = %v", err)
 	}
 }
 

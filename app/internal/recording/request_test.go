@@ -2,7 +2,10 @@ package recording
 
 import "testing"
 
-import "github.com/lemon-casino/RecordingFreedom/app/internal/recordingprofile"
+import (
+	"github.com/lemon-casino/RecordingFreedom/app/internal/pip"
+	"github.com/lemon-casino/RecordingFreedom/app/internal/recordingprofile"
+)
 
 func TestNormalizeStartRequestDefaultsSelectedDevices(t *testing.T) {
 	got, err := NormalizeStartRequest(StartRequest{
@@ -42,6 +45,40 @@ func TestNormalizeStartRequestDefaultsSelectedDevices(t *testing.T) {
 	}
 	if got.Camera.PIPPreset != "bottom-right" {
 		t.Fatalf("pip preset = %q, want bottom-right", got.Camera.PIPPreset)
+	}
+	if got.Camera.PIP.Shape != pip.DefaultShape || !got.Camera.PIP.Mirror {
+		t.Fatalf("pip config = %#v, want default shape and mirror", got.Camera.PIP)
+	}
+}
+
+func TestNormalizeStartRequestPreservesCustomPIPConfig(t *testing.T) {
+	got, err := NormalizeStartRequest(StartRequest{
+		SourceID:   "screen:primary",
+		SourceType: SourceScreen,
+		Camera: CameraRequest{
+			Enabled:   true,
+			PIPPreset: "bottom-right",
+			PIP: pip.Config{
+				Preset:      pip.PresetFree,
+				Shape:       pip.ShapeSquare,
+				Mirror:      false,
+				Position:    pip.Position{X: 0.3, Y: 0.6},
+				Scale:       0.3,
+				EdgeFeather: 0.24,
+			},
+		},
+	})
+	if err != nil {
+		t.Fatalf("NormalizeStartRequest() error = %v", err)
+	}
+	if got.Camera.PIPPreset != "free" {
+		t.Fatalf("pip preset = %q, want free from custom pip config", got.Camera.PIPPreset)
+	}
+	if got.Camera.PIP.Shape != pip.ShapeSquare || got.Camera.PIP.Mirror {
+		t.Fatalf("pip config = %#v, want square and non-mirrored", got.Camera.PIP)
+	}
+	if got.Camera.PIP.Position.X != 0.3 || got.Camera.PIP.Position.Y != 0.6 || got.Camera.PIP.Scale != 0.3 || got.Camera.PIP.EdgeFeather != 0.24 {
+		t.Fatalf("pip layout = %#v, want preserved custom layout", got.Camera.PIP)
 	}
 }
 
@@ -109,7 +146,7 @@ func TestNormalizeStartRequestClearsDisabledStreams(t *testing.T) {
 	if got.Audio.MicrophoneID != "" || got.Audio.NoiseSuppression || got.Audio.MicrophoneGain != 0 {
 		t.Fatalf("disabled microphone was not cleared: %#v", got.Audio)
 	}
-	if got.Camera.DeviceID != "" || got.Camera.DeviceNativeID != "" || got.Camera.PIPPreset != "off" {
+	if got.Camera.DeviceID != "" || got.Camera.DeviceNativeID != "" || got.Camera.PIPPreset != "off" || got.Camera.PIP.Preset != pip.PresetOff {
 		t.Fatalf("disabled camera was not cleared: %#v", got.Camera)
 	}
 }

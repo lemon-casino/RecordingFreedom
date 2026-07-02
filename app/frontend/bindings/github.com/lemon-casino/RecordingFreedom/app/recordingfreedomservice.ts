@@ -47,12 +47,20 @@ export function CompleteRegionSelection(req: $models.RegionSelectionRequest): $C
     return $Call.ByID(1962254349, req);
 }
 
+export function ExportRecordingPackage(req: $models.ExportRecordingRequest): $CancellablePromise<$models.ExportRecordingResult> {
+    return $Call.ByID(2136941557, req);
+}
+
 export function GetCaptureCapabilities(): $CancellablePromise<capture$0.Capabilities> {
     return $Call.ByID(4009257246);
 }
 
 export function GetSettings(): $CancellablePromise<settings$0.Settings> {
     return $Call.ByID(1085525119);
+}
+
+export function HidePIPOverlay(): $CancellablePromise<void> {
+    return $Call.ByID(2267008089);
 }
 
 export function HideRegionFrame(): $CancellablePromise<void> {
@@ -115,6 +123,10 @@ export function SetDataRoot(rootDir: string): $CancellablePromise<appdata$0.Info
     return $Call.ByID(2213117442, rootDir);
 }
 
+export function ShowPIPOverlay(req: $models.PIPOverlayRequest): $CancellablePromise<$models.PIPOverlayState> {
+    return $Call.ByID(1812737360, req);
+}
+
 export function ShowRegionSelector(): $CancellablePromise<$models.RegionSelectionSession> {
     return $Call.ByID(2760023242);
 }
@@ -149,6 +161,10 @@ export function StopMicrophoneLevelMonitor(): $CancellablePromise<void> {
 
 export function StopRecording(): $CancellablePromise<recording$0.Session> {
     return $Call.ByID(4017105749);
+}
+
+export function UpdatePIPOverlay(req: $models.PIPOverlayRequest): $CancellablePromise<$models.PIPOverlayState> {
+    return $Call.ByID(1829978564, req);
 }
 
 export function UpdateSelectedRegion(req: $models.RegionSelectionRequest): $CancellablePromise<$models.RegionSelectionResult> {

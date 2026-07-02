@@ -12,6 +12,15 @@ import * as capture$0 from "./internal/capture/models.js";
 import * as devices$0 from "./internal/devices/models.js";
 // eslint-disable-next-line @typescript-eslint/ban-ts-comment
 // @ts-ignore: Unused imports
+import * as exporter$0 from "./internal/exporter/models.js";
+// eslint-disable-next-line @typescript-eslint/ban-ts-comment
+// @ts-ignore: Unused imports
+import * as exportplan$0 from "./internal/exportplan/models.js";
+// eslint-disable-next-line @typescript-eslint/ban-ts-comment
+// @ts-ignore: Unused imports
+import * as pip$0 from "./internal/pip/models.js";
+// eslint-disable-next-line @typescript-eslint/ban-ts-comment
+// @ts-ignore: Unused imports
 import * as recording$0 from "./internal/recording/models.js";
 // eslint-disable-next-line @typescript-eslint/ban-ts-comment
 // @ts-ignore: Unused imports
@@ -39,6 +48,43 @@ export interface BootstrapState {
     "recoveries": recpackage$0.RecoverySummary[] | null;
     "settings": settings$0.Settings;
     "capabilities": capture$0.Capabilities;
+}
+
+export interface ExportRecordingRequest {
+    "packageDir": string;
+    "outputPath"?: string;
+    "canvasWidth"?: number;
+    "canvasHeight"?: number;
+}
+
+export interface ExportRecordingResult {
+    "plan": exportplan$0.Plan;
+    "export": exporter$0.Result;
+}
+
+export interface PIPCamera {
+    "deviceId"?: string;
+    "nativeId"?: string;
+    "name"?: string;
+}
+
+export interface PIPOverlayRequest {
+    "config": pip$0.Config;
+    "mode"?: string;
+    "cameraName"?: string;
+    "camera"?: PIPCamera;
+}
+
+export interface PIPOverlayState {
+    "config": pip$0.Config;
+    "placement": pip$0.Placement;
+    "overlayBounds": RegionRect;
+    "windowBounds": RegionRect;
+    "contentBounds": RegionRect;
+    "mode": string;
+    "cameraName"?: string;
+    "camera"?: PIPCamera;
+    "captureExcluded": boolean;
 }
 
 export interface RegionRect {

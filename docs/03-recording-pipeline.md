@@ -352,26 +352,27 @@ audio-only 录制模式用于只录系统声音、麦克风或麦克风 + RNNois
 
 ## 后续画中画摄像头
 
-当前阶段摄像头 sidecar 和 PIP 暂停，不参与视频录制与语音/音频录制验收。下面合同只作为后续恢复开发时的长期方向保留。
+摄像头 sidecar 和 PIP 已恢复开发并形成第一条可验证闭环。当前已落地结构化 PIP 配置合同、透明置顶 PIP 编辑 overlay、WebView 预览与 sidecar 设备的最佳匹配逻辑、Windows DirectShow / macOS AVFoundation / Linux v4l2 的 FFmpeg sidecar writer，以及导出阶段的 FFmpeg PIP 合成器。跨平台真机 smoke、预览匹配实际效果、暂停片段精确同步和后续原生 writer 替换仍按后续任务推进。
 
 v1 录制阶段只保证 sidecar 和 offset。后续 PIP 功能分两步：
 
-1. 预览层：在 React/Canvas 中把 `webcam.*` 按 manifest 布局叠加显示。
-2. 导出层：使用原始 screen + webcam sidecar 重新合成 MP4。
+1. 预览层：录制时通过透明 `pip-overlay` 编辑布局；编辑器中再把 `webcam.*` 按 manifest 布局叠加显示。
+2. 导出层：使用原始 screen + webcam sidecar 重新合成 MP4；当前 `internal/exporter` 已实现 FFmpeg 合成，默认写入包内 `exports/recording.mp4`。
 
-当前已落地 `internal/pip` preset 合同：
+当前已落地 `internal/pip` 合同：
 
 - `off`、`bottom-right`、`bottom-left`、`free` 均为合法 preset。
-- `settings.json` 会持久化 PIP preset。
-- 开始录制请求会带上当前 PIP preset。
+- `camera.pip` 会记录 `preset`、`shape`、`mirror`、`position`、`scale` 和 `edgeFeather`。
+- `settings.json` 会持久化 PIP 配置。
+- 开始录制请求会带上当前 PIP 配置。
 - 摄像头关闭时 manifest 写 `off`。
-- `pip.Layout()` 为导出层提供确定性基础矩形，`free` 在自定义坐标落地前使用默认右下角布局。
+- `pip.Place()` 为导出层提供确定性 PIP rect、shape、mirror 和透明边缘参数。
 
 不要在原始录制阶段把摄像头烘焙进 `screen.mp4`，否则无法后期调整位置、形状和大小。
 
-## 导出计划
+## 导出计划与导出器
 
-当前已落地 `internal/exportplan` 合同。它不会执行真实导出，也不会假装已经完成 FFmpeg/原生合成；它只负责在导出前生成可验证计划：
+当前已落地 `internal/exportplan` 合同和 `internal/exporter` 执行器。`exportplan` 负责在导出前生成可验证计划，`exporter` 使用 FFmpeg 把干净的 `screen.mp4` 与 `webcam.*` sidecar 合成为最终 MP4：
 
 - 输入必须是当前 `data/video` 内部的 `*.rfrec` 包。
 - manifest 必须为 `ready`，并且默认不能是 mock 包。
@@ -379,6 +380,10 @@ v1 录制阶段只保证 sidecar 和 offset。后续 PIP 功能分两步：
 - screen media 必须存在且非 0 字节。
 - PIP 可见时，webcam sidecar 必须存在且非 0 字节，`webcamStartOffsetMs` 会进入导出计划。
 - `RequireSync` 模式要求 `diagnostics.sync` 存在，并拒绝 mock timeline。
-- 导出计划会带出 `timelineBase`、diagnostics 文件路径、pause segments 和 `pip.Rect`，供后续流式导出器消费。
+- 导出计划会带出 `timelineBase`、diagnostics 文件路径、pause segments 和 `pip.Rect`，供导出器消费。
+- 导出器支持圆形/方形、镜像、边缘羽化、位置、大小和 `webcamStartOffsetMs`，并拒绝把输出写回原始 `screen.mp4` 或 `webcam.*`。
+- 导出器会先写包内临时 MP4，确认文件非空并通过 FFmpeg 解码首个视频帧后，再原子安装到 `exports/recording.mp4`；失败时不会替换已有导出文件。
+- Wails 服务提供 `ExportRecordingPackage()`，设置面板可以对最近录制包导出 `exports/recording.mp4`。
+- `cmd/pip-export-smoke` 可直接对 `.rfrec` 包执行无 UI 导出验收。本机已用临时真实 MP4 素材跑通圆形镜像 PIP 合成。
 
-后续真实导出器必须按计划读取 screen/webcam/audio diagnostics，并以流式方式写出，不能把 30 分钟项目聚合成最终内存 Blob。
+后续导出增强必须继续按计划读取 screen/webcam/audio diagnostics，并以流式方式写出，不能把 30 分钟项目聚合成最终内存 Blob。下一步重点是暂停片段的精确时间线压缩、真实录制包导出 smoke、ffprobe 音轨/时长门禁和长时长同步回归。

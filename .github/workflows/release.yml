@@ -285,12 +285,13 @@ jobs:
           - Windows FFmpeg desktop video writer contract for screen/all-screen/region/locked-window capture; enabled WASAPI system audio and microphone tracks are muxed into the final screen.mp4 at stop, and the Windows preview artifact is staged as a portable zip with tools/ffmpeg.exe plus desktop-doctor/video-smoke/audio-smoke diagnostics.
           - Windows clean-machine portable smoke entrypoint at tools/run-windows-portable-smoke.ps1.
           - RNNoise native DSP is compiled into release artifacts with the rnnoise_native cgo build tag; desktop-doctor -require-rnnoise is a release build gate.
+          - Camera sidecar and PIP contract: structured camera.pip settings/manifest/export plan, transparent draggable/resizable PIP overlay, WebView camera preview best-effort device matching, Windows DirectShow / macOS AVFoundation / Linux v4l2 FFmpeg sidecar writer paths, Wails ExportRecordingPackage(), cmd/pip-export-smoke, and FFmpeg PIP export that verifies the final MP4 by decoding one video frame before installing it.
           - Windows, macOS, and Linux Wails build artifacts.
 
           Not included yet:
           - End-to-end verified native recording on every desktop platform. macOS ScreenCaptureKit display/window/single-display region capture is wired in code but still needs real-device smoke validation; Windows portable artifacts include the clean-machine smoke runner but still need the downloaded artifact to be executed on a target desktop; PipeWire media writer is not complete.
           - Cross-platform long-recording audio sync validation. Windows local smoke has passed 1 minute, 5 minute, and 20 minute recording with stop-time mux into screen.mp4; macOS system audio is wired through ScreenCaptureKit mux and still needs real-device smoke; Linux audio capture is queued.
-          - Camera sidecar capture and PIP export are paused until video recording and voice/audio recording are accepted.
+          - Cross-platform real-camera acceptance. The sidecar/PIP code path is implemented, but real device smoke is still required for preview matching, Windows/macOS/Linux camera sidecar recording, screen + camera + audio combinations, pause/resume timing, and long-recording sync.
           - Signed installers, notarization, or Linux packages.
           NOTES
 

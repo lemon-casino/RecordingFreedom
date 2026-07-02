@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/lemon-casino/RecordingFreedom/app/internal/pip"
 	"github.com/lemon-casino/RecordingFreedom/app/internal/recordingprofile"
 )
 
@@ -97,6 +98,9 @@ func TestCreateMockWritesRelativeManifestAndMarker(t *testing.T) {
 	if !manifest.Diagnostics.Sync.Webcam.Enabled {
 		t.Fatalf("webcam sync diagnostics = %#v, want enabled mock sidecar contract", manifest.Diagnostics.Sync.Webcam)
 	}
+	if manifest.Camera.PIP.Preset != pip.PresetBottomRight || manifest.Camera.PIP.Shape != pip.DefaultShape || !manifest.Camera.PIP.Mirror {
+		t.Fatalf("camera pip = %#v, want normalized default PIP config", manifest.Camera.PIP)
+	}
 }
 
 func TestPatchStatusWritesCompletedAt(t *testing.T) {
@@ -140,7 +144,19 @@ func TestCreateNativeInitializesWritePlanWithoutCreatingMedia(t *testing.T) {
 			MicrophoneDeviceID:         "microphone:default",
 			MicrophoneNoiseSuppression: NoiseSuppressionOn,
 		},
-		Camera: ManifestCamera{Enabled: true, DeviceID: "camera:default", PIPPreset: "bottom-left"},
+		Camera: ManifestCamera{
+			Enabled:   true,
+			DeviceID:  "camera:default",
+			PIPPreset: "bottom-left",
+			PIP: pip.Config{
+				Preset:      pip.PresetFree,
+				Shape:       pip.ShapeSquare,
+				Mirror:      false,
+				Position:    pip.Position{X: 0.2, Y: 0.7},
+				Scale:       0.3,
+				EdgeFeather: 0.2,
+			},
+		},
 	})
 	if err != nil {
 		t.Fatalf("CreateNative() error = %v", err)
@@ -212,8 +228,11 @@ func TestCreateNativeInitializesWritePlanWithoutCreatingMedia(t *testing.T) {
 	if manifest.Audio.MicrophoneNoiseSuppression != NoiseSuppressionOn || manifest.Audio.SampleRate != 48000 {
 		t.Fatalf("audio manifest = %#v, want RNNoise 48kHz contract", manifest.Audio)
 	}
-	if manifest.Camera.PIPPreset != "bottom-left" {
-		t.Fatalf("camera pip preset = %q, want bottom-left", manifest.Camera.PIPPreset)
+	if manifest.Camera.PIPPreset != "free" || manifest.Camera.PIP.Preset != pip.PresetFree {
+		t.Fatalf("camera pip preset = %q/%q, want free", manifest.Camera.PIPPreset, manifest.Camera.PIP.Preset)
+	}
+	if manifest.Camera.PIP.Shape != pip.ShapeSquare || manifest.Camera.PIP.Mirror || manifest.Camera.PIP.Scale != 0.3 || manifest.Camera.PIP.EdgeFeather != 0.2 {
+		t.Fatalf("camera pip config = %#v, want square non-mirrored custom config", manifest.Camera.PIP)
 	}
 }
 
@@ -707,6 +726,38 @@ func TestCreateMockNormalizesCameraPIPPreset(t *testing.T) {
 	}
 	if invalidManifest.Camera.PIPPreset != "bottom-right" {
 		t.Fatalf("invalid pip preset normalized to %q, want bottom-right", invalidManifest.Camera.PIPPreset)
+	}
+}
+
+func TestPatchCameraPIPUpdatesManifest(t *testing.T) {
+	service := NewService()
+	pkg, err := service.CreateMock(t.TempDir(), CreateMockRequest{
+		Source: ManifestSource{Type: "screen", ID: "screen:primary"},
+		Camera: ManifestCamera{Enabled: true, DeviceID: "camera:default", PIPPreset: "bottom-right"},
+	})
+	if err != nil {
+		t.Fatalf("CreateMock() error = %v", err)
+	}
+
+	manifest, err := service.PatchCameraPIP(pkg.ManifestPath, pip.Config{
+		Preset:      pip.PresetFree,
+		Shape:       pip.ShapeSquare,
+		Mirror:      false,
+		Position:    pip.Position{X: 0.36, Y: 0.48},
+		Scale:       0.31,
+		EdgeFeather: 0.2,
+	})
+	if err != nil {
+		t.Fatalf("PatchCameraPIP() error = %v", err)
+	}
+	if manifest.Camera.PIPPreset != string(pip.PresetFree) || manifest.Camera.PIP.Preset != pip.PresetFree {
+		t.Fatalf("patched pip preset = %q/%q, want free", manifest.Camera.PIPPreset, manifest.Camera.PIP.Preset)
+	}
+	if manifest.Camera.PIP.Shape != pip.ShapeSquare || manifest.Camera.PIP.Mirror {
+		t.Fatalf("patched pip shape/mirror = %#v, want square non-mirrored", manifest.Camera.PIP)
+	}
+	if manifest.Camera.PIP.Position.X != 0.36 || manifest.Camera.PIP.Position.Y != 0.48 || manifest.Camera.PIP.Scale != 0.31 || manifest.Camera.PIP.EdgeFeather != 0.2 {
+		t.Fatalf("patched pip layout = %#v, want requested layout", manifest.Camera.PIP)
 	}
 }
 

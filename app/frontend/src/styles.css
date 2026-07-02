@@ -64,6 +64,11 @@ body.rf-screen-indicator-window {
   user-select: none;
 }
 
+body.rf-pip-overlay-window {
+  background: transparent;
+  user-select: none;
+}
+
 button,
 select,
 input {
@@ -853,13 +858,99 @@ input {
   align-items: center;
   justify-content: center;
   gap: 10px;
-  min-height: 86px;
+  min-height: 96px;
   border: 1px solid rgba(17, 183, 167, 0.22);
   border-radius: 20px;
   background:
     linear-gradient(135deg, rgba(17, 183, 167, 0.12), transparent),
     rgba(255, 255, 255, 0.045);
   color: var(--muted);
+}
+
+.pip-preview-frame {
+  position: relative;
+  display: grid;
+  flex: 0 0 auto;
+  place-items: center;
+  max-width: 124px;
+  max-height: 124px;
+  min-width: 62px;
+  min-height: 62px;
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  background:
+    radial-gradient(circle at 50% 48%, rgba(17, 183, 167, 0.26), rgba(17, 183, 167, 0.08) 44%, transparent 74%),
+    linear-gradient(135deg, rgba(246, 248, 251, 0.14), rgba(246, 248, 251, 0.035));
+  color: #d7fffb;
+  box-shadow: inset 0 0 20px rgba(0, 0, 0, 0.24);
+  transition: border-radius 160ms ease, transform 160ms ease;
+}
+
+.pip-preview-frame::after {
+  position: absolute;
+  inset: 0;
+  border: 10px solid rgba(11, 15, 19, 0.16);
+  content: "";
+  pointer-events: none;
+}
+
+.pip-preview-frame.circle,
+.pip-preview-frame.circle::after {
+  border-radius: 50%;
+}
+
+.pip-preview-frame.square,
+.pip-preview-frame.square::after {
+  border-radius: 14px;
+}
+
+.pip-preview-frame.mirrored svg {
+  transform: scaleX(-1);
+}
+
+.pip-edit-button {
+  display: inline-flex;
+  width: 100%;
+  height: 40px;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  border: 1px solid rgba(17, 183, 167, 0.34);
+  border-radius: var(--radius-pill);
+  background: linear-gradient(180deg, rgba(17, 183, 167, 0.2), rgba(17, 183, 167, 0.1));
+  color: #d7fffb;
+  font-size: 12px;
+  font-weight: 900;
+  transition: border-color 160ms ease, background 160ms ease, opacity 160ms ease;
+}
+
+.pip-edit-button:hover:not(:disabled) {
+  border-color: rgba(17, 183, 167, 0.58);
+  background: linear-gradient(180deg, rgba(17, 183, 167, 0.26), rgba(17, 183, 167, 0.14));
+}
+
+.pip-edit-button:disabled {
+  opacity: 0.45;
+}
+
+.pip-slider-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 48px;
+  gap: 10px;
+  align-items: center;
+  padding: 0 10px;
+}
+
+.pip-slider-row input[type="range"] {
+  width: 100%;
+  accent-color: var(--teal);
+}
+
+.pip-slider-row b {
+  color: #d7fffb;
+  font-size: 11px;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
 }
 
 .storage-strip {
@@ -1495,6 +1586,251 @@ input {
   text-shadow:
     1px 0 0 rgba(17, 183, 167, 0.8),
     -1px 0 0 rgba(245, 158, 11, 0.75);
+}
+
+.pip-overlay-shell {
+  position: fixed;
+  inset: 0;
+  overflow: visible;
+  background: transparent;
+  color: #ffffff;
+  --wails-draggable: no-drag;
+}
+
+.pip-live-frame {
+  position: fixed;
+  min-width: 96px;
+  min-height: 96px;
+  overflow: visible;
+  background: transparent;
+}
+
+.pip-live-media {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.24);
+  background: transparent;
+  box-shadow:
+    0 16px 36px rgba(0, 0, 0, 0.26),
+    inset 0 0 0 1px rgba(0, 0, 0, 0.24);
+}
+
+.pip-live-media.circle {
+  border-radius: 50%;
+  -webkit-mask-image: radial-gradient(circle, #000 calc(70% - var(--pip-feather)), rgba(0, 0, 0, 0.82) 72%, transparent 100%);
+  mask-image: radial-gradient(circle, #000 calc(70% - var(--pip-feather)), rgba(0, 0, 0, 0.82) 72%, transparent 100%);
+}
+
+.pip-live-media.square {
+  border-radius: 20px;
+  -webkit-mask-image:
+    linear-gradient(to right, transparent 0, #000 var(--pip-feather), #000 calc(100% - var(--pip-feather)), transparent 100%),
+    linear-gradient(to bottom, transparent 0, #000 var(--pip-feather), #000 calc(100% - var(--pip-feather)), transparent 100%);
+  -webkit-mask-composite: source-in;
+  mask-image:
+    linear-gradient(to right, transparent 0, #000 var(--pip-feather), #000 calc(100% - var(--pip-feather)), transparent 100%),
+    linear-gradient(to bottom, transparent 0, #000 var(--pip-feather), #000 calc(100% - var(--pip-feather)), transparent 100%);
+  mask-composite: intersect;
+}
+
+.pip-live-media video {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  opacity: 0;
+  transition: opacity 180ms ease;
+}
+
+.pip-live-media video.ready {
+  opacity: 1;
+}
+
+.pip-live-media.mirrored video,
+.pip-live-media.mirrored .pip-camera-placeholder svg {
+  transform: scaleX(-1);
+}
+
+.pip-camera-placeholder {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  gap: 8px;
+  padding: 18px;
+  background:
+    radial-gradient(circle at 50% 38%, rgba(17, 183, 167, 0.34), transparent 46%),
+    linear-gradient(145deg, rgba(18, 23, 28, 0.9), rgba(7, 10, 13, 0.62));
+  color: #d7fffb;
+  text-align: center;
+}
+
+.pip-camera-placeholder span {
+  max-width: 86%;
+  overflow: hidden;
+  color: rgba(246, 248, 251, 0.82);
+  font-size: 11px;
+  font-weight: 800;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.pip-drag-anchor {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  z-index: 3;
+  display: grid;
+  width: 42px;
+  height: 42px;
+  place-items: center;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  border-radius: var(--radius-pill);
+  background: rgba(10, 14, 18, 0.48);
+  color: #ffffff;
+  cursor: move;
+  opacity: 0;
+  backdrop-filter: blur(12px);
+  transform: translate(-50%, -50%);
+  transition: opacity 140ms ease, background 140ms ease;
+}
+
+.pip-live-frame:hover .pip-drag-anchor,
+.pip-drag-anchor:focus-visible {
+  opacity: 1;
+}
+
+.pip-drag-anchor:hover {
+  background: rgba(17, 183, 167, 0.28);
+}
+
+.pip-overlay-tools {
+  position: absolute;
+  z-index: 4;
+  right: -10px;
+  bottom: -10px;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: var(--radius-pill);
+  background: rgba(11, 15, 19, 0.72);
+  backdrop-filter: blur(16px);
+}
+
+.pip-overlay-tools button {
+  display: grid;
+  width: 30px;
+  height: 30px;
+  place-items: center;
+  border: 0;
+  border-radius: var(--radius-pill);
+  background: transparent;
+  color: rgba(246, 248, 251, 0.74);
+}
+
+.pip-overlay-tools button:hover,
+.pip-overlay-tools button.selected {
+  background: rgba(17, 183, 167, 0.22);
+  color: #d7fffb;
+}
+
+.pip-resize-handle {
+  position: absolute;
+  z-index: 3;
+  border: 0;
+  background: transparent;
+}
+
+.pip-resize-handle::after {
+  position: absolute;
+  inset: 50% auto auto 50%;
+  width: 8px;
+  height: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.72);
+  border-radius: var(--radius-pill);
+  background: rgba(17, 183, 167, 0.74);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.28);
+  content: "";
+  opacity: 0;
+  transform: translate(-50%, -50%);
+  transition: opacity 140ms ease;
+}
+
+.pip-live-frame:hover .pip-resize-handle::after,
+.pip-resize-handle:focus-visible::after {
+  opacity: 1;
+}
+
+.pip-resize-handle.n,
+.pip-resize-handle.s {
+  left: 34px;
+  right: 34px;
+  height: 18px;
+  cursor: ns-resize;
+}
+
+.pip-resize-handle.n {
+  top: -9px;
+}
+
+.pip-resize-handle.s {
+  bottom: -9px;
+}
+
+.pip-resize-handle.e,
+.pip-resize-handle.w {
+  top: 34px;
+  bottom: 34px;
+  width: 18px;
+  cursor: ew-resize;
+}
+
+.pip-resize-handle.e {
+  right: -9px;
+}
+
+.pip-resize-handle.w {
+  left: -9px;
+}
+
+.pip-resize-handle.ne,
+.pip-resize-handle.nw,
+.pip-resize-handle.se,
+.pip-resize-handle.sw {
+  width: 34px;
+  height: 34px;
+}
+
+.pip-resize-handle.ne,
+.pip-resize-handle.sw {
+  cursor: nesw-resize;
+}
+
+.pip-resize-handle.nw,
+.pip-resize-handle.se {
+  cursor: nwse-resize;
+}
+
+.pip-resize-handle.ne {
+  top: -13px;
+  right: -13px;
+}
+
+.pip-resize-handle.nw {
+  top: -13px;
+  left: -13px;
+}
+
+.pip-resize-handle.se {
+  right: -13px;
+  bottom: -13px;
+}
+
+.pip-resize-handle.sw {
+  bottom: -13px;
+  left: -13px;
 }
 
 @keyframes region-shake {

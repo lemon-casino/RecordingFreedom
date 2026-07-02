@@ -9,6 +9,11 @@ export {
 export type {
     AudioLevelEvent,
     BootstrapState,
+    ExportRecordingRequest,
+    ExportRecordingResult,
+    PIPCamera,
+    PIPOverlayRequest,
+    PIPOverlayState,
     RegionRect,
     RegionSelectionRequest,
     RegionSelectionResult,

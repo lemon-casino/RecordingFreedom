@@ -24,7 +24,7 @@ func (s *Service) Capabilities() Capabilities {
 		Microphone:            microphoneCapability(runtime.GOOS),
 		MicrophoneEnhancement: microphoneEnhancementCapability(),
 		CameraSidecar:         cameraSidecarCapability(runtime.GOOS),
-		PIPExport:             queued("pip-export", "PIP Export", "export-compositor", PermissionNotRequired, "PIP export will compose screen video and webcam sidecar after native capture lands."),
+		PIPExport:             pipExportCapability(),
 		PackageRecovery:       available("package-recovery", "Recording Package Recovery", "recpackage", PermissionNotRequired, "Scans .rfrec packages and marks unfinished packages as recoverable."),
 	}
 }
@@ -112,7 +112,11 @@ func microphoneEnhancementCapability() Capability {
 func cameraSidecarCapability(platform string) Capability {
 	switch platform {
 	case "darwin":
-		return queued("camera-sidecar", "Camera Sidecar", "AVFoundation", PermissionCamera, "AVFoundation camera sidecar capture is queued.")
+		if path, ok, reason := video.FFmpegAvailability(); ok {
+			return available("camera-sidecar", "Camera Sidecar", "FFmpeg AVFoundation", PermissionCamera, "FFmpeg AVFoundation camera sidecar writer is available at "+path+" and records package-local webcam.mov.")
+		} else {
+			return blocked("camera-sidecar", "Camera Sidecar", "FFmpeg AVFoundation", PermissionCamera, reason)
+		}
 	case "windows":
 		if path, ok, reason := video.FFmpegAvailability(); ok {
 			return available("camera-sidecar", "Camera Sidecar", "FFmpeg DirectShow", PermissionNotRequired, "FFmpeg DirectShow camera sidecar writer is available at "+path+" and records package-local webcam.mp4.")
@@ -120,10 +124,22 @@ func cameraSidecarCapability(platform string) Capability {
 			return blocked("camera-sidecar", "Camera Sidecar", "FFmpeg DirectShow", PermissionNotRequired, reason)
 		}
 	case "linux":
-		return queued("camera-sidecar", "Camera Sidecar", "PipeWire", PermissionUnknown, "PipeWire camera sidecar capture is queued.")
+		if path, ok, reason := video.FFmpegAvailability(); ok {
+			return available("camera-sidecar", "Camera Sidecar", "FFmpeg v4l2", PermissionUnknown, "FFmpeg v4l2 camera sidecar writer is available at "+path+" and records package-local webcam.mov.")
+		} else {
+			return blocked("camera-sidecar", "Camera Sidecar", "FFmpeg v4l2", PermissionUnknown, reason)
+		}
 	default:
 		return unsupported("camera-sidecar", "Camera Sidecar", "unknown", "No camera sidecar backend is planned for this platform yet.")
 	}
+}
+
+func pipExportCapability() Capability {
+	path, ok, reason := video.FFmpegAvailability()
+	if ok {
+		return available("pip-export", "PIP Export", "FFmpeg export compositor", PermissionNotRequired, "FFmpeg export compositor is available at "+path+" and writes clean screen + webcam sidecar PIP exports under package exports/.")
+	}
+	return blocked("pip-export", "PIP Export", "FFmpeg export compositor", PermissionNotRequired, reason)
 }
 
 func available(id string, label string, backend string, permission Permission, reason string) Capability {

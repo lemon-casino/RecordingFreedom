@@ -2,7 +2,10 @@ package settings
 
 import "time"
 
-import "github.com/lemon-casino/RecordingFreedom/app/internal/recordingprofile"
+import (
+	"github.com/lemon-casino/RecordingFreedom/app/internal/pip"
+	"github.com/lemon-casino/RecordingFreedom/app/internal/recordingprofile"
+)
 
 const SchemaVersion = 1
 
@@ -46,9 +49,10 @@ type AudioSettings struct {
 }
 
 type CameraSettings struct {
-	Enabled   bool   `json:"enabled"`
-	DeviceID  string `json:"deviceId,omitempty"`
-	PIPPreset string `json:"pipPreset"`
+	Enabled   bool       `json:"enabled"`
+	DeviceID  string     `json:"deviceId,omitempty"`
+	PIPPreset string     `json:"pipPreset"`
+	PIP       pip.Config `json:"pip"`
 }
 
 type WindowSettings struct {

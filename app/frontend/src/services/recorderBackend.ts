@@ -2,6 +2,9 @@ import {Application, Events, Window as WailsWindow} from '@wailsio/runtime'
 import {RecordingFreedomService} from '../../bindings/github.com/lemon-casino/RecordingFreedom/app'
 import {
   type BootstrapState as BoundBootstrapState,
+  type ExportRecordingResult as BoundExportRecordingResult,
+  type PIPOverlayRequest as BoundPIPOverlayRequest,
+  type PIPOverlayState as BoundPIPOverlayState,
   type RegionSelectionRequest as BoundRegionSelectionRequest,
   type RegionSelectionResult as BoundRegionSelectionResult,
   type RegionSelectionSession as BoundRegionSelectionSession,
@@ -47,6 +50,7 @@ import {
   type MediaDevice,
   type MediaInventory,
   type MockRecordingRequest,
+  type PIPConfig,
   type RecordingPreflight,
 } from './mockBackend'
 
@@ -122,6 +126,43 @@ export type ScreenIndicatorResult = {
   label: string
   sourceBounds: {x: number; y: number; width: number; height: number}
   windowBounds: {x: number; y: number; width: number; height: number}
+}
+
+export type PIPOverlayMode = 'edit' | 'recording'
+
+export type PIPOverlayCamera = {
+  deviceId?: string
+  nativeId?: string
+  name?: string
+}
+
+export type PIPOverlayState = {
+  config: PIPConfig
+  placement: {
+    visible: boolean
+    rect: {x: number; y: number; width: number; height: number; visible?: boolean}
+    shape: PIPConfig['shape']
+    mirror: boolean
+    edgeFeather: number
+  }
+  overlayBounds: {x: number; y: number; width: number; height: number}
+  windowBounds: {x: number; y: number; width: number; height: number}
+  contentBounds: {x: number; y: number; width: number; height: number}
+  mode: PIPOverlayMode
+  cameraName?: string
+  camera?: PIPOverlayCamera
+  captureExcluded: boolean
+}
+
+export type RecordingExportResult = {
+  outputPath: string
+  bytes: number
+  screenInputPath: string
+  webcamInputPath?: string
+  pipVisible: boolean
+  ffmpegPath?: string
+  outputVerified: boolean
+  warnings: string[]
 }
 
 export async function setCapsuleWindowExpanded(expanded: boolean, expandedHeight = capsuleWindowExpandedHeight): Promise<void> {
@@ -307,6 +348,32 @@ export async function hideRegionFrame(): Promise<void> {
   }
 }
 
+export async function showPipOverlay(config: PIPConfig, mode: PIPOverlayMode = 'edit', camera: string | PIPOverlayCamera = ''): Promise<PIPOverlayState> {
+  try {
+    return fromBoundPipOverlayState(await RecordingFreedomService.ShowPIPOverlay(toBoundPipOverlayRequest(config, mode, camera)))
+  } catch (error) {
+    console.info('Using browser PIP overlay fallback:', error)
+    return browserPipOverlayState(config, mode, camera)
+  }
+}
+
+export async function updatePipOverlay(config: PIPConfig, mode: PIPOverlayMode = 'edit', camera: string | PIPOverlayCamera = ''): Promise<PIPOverlayState> {
+  try {
+    return fromBoundPipOverlayState(await RecordingFreedomService.UpdatePIPOverlay(toBoundPipOverlayRequest(config, mode, camera)))
+  } catch (error) {
+    console.info('Using browser PIP overlay update fallback:', error)
+    return browserPipOverlayState(config, mode, camera)
+  }
+}
+
+export async function hidePipOverlay(): Promise<void> {
+  try {
+    await RecordingFreedomService.HidePIPOverlay()
+  } catch (error) {
+    console.info('Using browser PIP overlay hide fallback:', error)
+  }
+}
+
 export async function showScreenIndicator(sourceId: string): Promise<ScreenIndicatorResult | null> {
   try {
     return fromBoundScreenIndicatorResult(await RecordingFreedomService.ShowScreenIndicator(toBoundScreenIndicatorRequest(sourceId)))
@@ -422,6 +489,15 @@ export async function openRecordingPackage(packagePath: string): Promise<Recordi
     return fromBoundRecovery(await RecordingFreedomService.OpenRecordingPackage(packagePath))
   } catch (error) {
     console.info('Desktop recording package open unavailable:', error)
+    throw error
+  }
+}
+
+export async function exportRecordingPackage(packagePath: string): Promise<RecordingExportResult> {
+  try {
+    return fromBoundExport(await RecordingFreedomService.ExportRecordingPackage({packageDir: packagePath}))
+  } catch (error) {
+    console.info('Desktop recording export unavailable:', error)
     throw error
   }
 }
@@ -644,6 +720,42 @@ function fromBoundScreenIndicatorResult(result: BoundScreenIndicatorResult): Scr
   }
 }
 
+function fromBoundPipOverlayState(state: BoundPIPOverlayState): PIPOverlayState {
+  const config = fromBoundPipConfig(state.config as Partial<PIPConfig>, (state.config?.preset as PIPConfig['preset'] | undefined) ?? 'bottom-right')
+  return {
+    config,
+    placement: {
+      visible: state.placement.visible,
+      rect: {
+        x: state.placement.rect.x,
+        y: state.placement.rect.y,
+        width: state.placement.rect.width,
+        height: state.placement.rect.height,
+        visible: state.placement.rect.visible,
+      },
+      shape: state.placement.shape as PIPConfig['shape'],
+      mirror: state.placement.mirror,
+      edgeFeather: state.placement.edgeFeather,
+    },
+    overlayBounds: fromBoundRegionRect(state.overlayBounds),
+    windowBounds: fromBoundRegionRect(state.windowBounds),
+    contentBounds: fromBoundRegionRect(state.contentBounds),
+    mode: state.mode === 'recording' ? 'recording' : 'edit',
+    cameraName: state.cameraName,
+    camera: fromBoundPipCamera(state.camera),
+    captureExcluded: state.captureExcluded,
+  }
+}
+
+function fromBoundPipCamera(camera: BoundPIPOverlayState['camera']): PIPOverlayCamera | undefined {
+  if (!camera) return undefined
+  return normalizePipOverlayCamera({
+    deviceId: camera.deviceId,
+    nativeId: camera.nativeId,
+    name: camera.name,
+  })
+}
+
 function fromBoundRegionRect(rect: {x: number; y: number; width: number; height: number}) {
   return {
     x: rect.x,
@@ -777,6 +889,7 @@ function fromBoundSettings(settings: BoundSettings): AppSettings {
       enabled: settings.camera.enabled,
       deviceId: settings.camera.deviceId,
       pipPreset: settings.camera.pipPreset as AppSettings['camera']['pipPreset'],
+      pip: fromBoundPipConfig((settings.camera as BoundSettings['camera'] & {pip?: PIPConfig}).pip, settings.camera.pipPreset as AppSettings['camera']['pipPreset']),
     },
     window: {
       minimizeToTray: settings.window.minimizeToTray,
@@ -814,6 +927,7 @@ function toBoundSettings(settings: AppSettings): BoundSettings {
       enabled: settings.camera.enabled,
       deviceId: settings.camera.deviceId,
       pipPreset: settings.camera.pipPreset,
+      pip: settings.camera.pip as unknown as BoundSettings['camera']['pip'],
     },
     window: {
       minimizeToTray: settings.window.minimizeToTray,
@@ -837,7 +951,12 @@ function loadBrowserSettings(): AppSettings {
       camera: {...defaultSettings.camera, ...parsed.camera},
       window: {...defaultSettings.window, ...parsed.window},
     }
-    return {...next, locale: normalizeLocale(next.locale)}
+    const camera = {
+      ...next.camera,
+      pip: fromBoundPipConfig(next.camera.pip, next.camera.pipPreset),
+    }
+    camera.pipPreset = camera.pip.preset
+    return {...next, camera, locale: normalizeLocale(next.locale)}
   } catch {
     return defaultSettings
   }
@@ -863,8 +982,28 @@ function toStartRequest(request: MockRecordingRequest): StartRequest {
       deviceId: request.cameraDeviceId,
       deviceNativeId: request.cameraDeviceNativeId,
       pipPreset: request.camera ? request.pipPreset : 'off',
+      pip: (request.camera ? request.pip : {...request.pip, preset: 'off'}) as unknown as StartRequest['camera']['pip'],
     },
   }
+}
+
+function fromBoundPipConfig(config: Partial<PIPConfig> | undefined, fallbackPreset: AppSettings['camera']['pipPreset']): PIPConfig {
+  const preset = normalizePipPreset(config?.preset ?? fallbackPreset)
+  return {
+    preset,
+    shape: config?.shape === 'square' ? 'square' : 'circle',
+    mirror: config?.mirror !== false,
+    position: {
+      x: normalizedUnit(config?.position?.x ?? (preset === 'bottom-left' ? 0 : 1)),
+      y: normalizedUnit(config?.position?.y ?? 1),
+    },
+    scale: normalizedRange(config?.scale, 0.2, 0.1, 0.42),
+    edgeFeather: normalizedRange(config?.edgeFeather, 0.16, 0.02, 0.42),
+  }
+}
+
+function normalizePipPreset(value: unknown): AppSettings['camera']['pipPreset'] {
+  return value === 'off' || value === 'bottom-right' || value === 'bottom-left' || value === 'free' ? value : 'bottom-right'
 }
 
 function toSourceGeometry(source: CaptureSource): StartRequest['sourceGeometry'] {
@@ -906,6 +1045,58 @@ function toBoundScreenIndicatorRequest(sourceId: string): BoundScreenIndicatorRe
   return {
     sourceId,
   }
+}
+
+function toBoundPipOverlayRequest(config: PIPConfig, mode: PIPOverlayMode, camera: string | PIPOverlayCamera): BoundPIPOverlayRequest {
+  const target = normalizePipOverlayCamera(camera)
+  return {
+    config: config as unknown as BoundPIPOverlayRequest['config'],
+    mode,
+    cameraName: target.name,
+    camera: target as BoundPIPOverlayRequest['camera'],
+  }
+}
+
+function browserPipOverlayState(config: PIPConfig, mode: PIPOverlayMode, camera: string | PIPOverlayCamera): PIPOverlayState {
+  const target = normalizePipOverlayCamera(camera)
+  const overlayBounds = {x: 0, y: 0, width: Math.max(320, window.innerWidth || 1280), height: Math.max(240, window.innerHeight || 720)}
+  const normalized = fromBoundPipConfig(config, config.preset)
+  const size = Math.round(Math.max(96, Math.min(overlayBounds.width, overlayBounds.height) * normalized.scale))
+  const contentBounds = {x: 24, y: 24, width: size, height: size}
+  return {
+    config: normalized,
+    placement: {
+      visible: normalized.preset !== 'off',
+      rect: {...contentBounds, visible: normalized.preset !== 'off'},
+      shape: normalized.shape,
+      mirror: normalized.mirror,
+      edgeFeather: normalized.edgeFeather,
+    },
+    overlayBounds,
+    windowBounds: {x: 0, y: 0, width: size + 48, height: size + 48},
+    contentBounds,
+    mode,
+    cameraName: target.name,
+    camera: target,
+    captureExcluded: false,
+  }
+}
+
+function normalizePipOverlayCamera(camera: string | PIPOverlayCamera | undefined): PIPOverlayCamera {
+  const target = typeof camera === 'string' ? {name: camera} : {...(camera ?? {})}
+  const next = {
+    deviceId: cleanOptionalString(target.deviceId),
+    nativeId: cleanOptionalString(target.nativeId),
+    name: cleanOptionalString(target.name),
+  }
+  if (!next.name) next.name = next.nativeId || next.deviceId
+  return next
+}
+
+function cleanOptionalString(value: unknown): string | undefined {
+  if (typeof value !== 'string') return undefined
+  const trimmed = value.trim()
+  return trimmed || undefined
 }
 
 function normalizeRecordingQuality(value: string): AppSettings['recording']['quality'] {
@@ -977,6 +1168,13 @@ function normalizedUnit(value: unknown): number {
   return numeric
 }
 
+function normalizedRange(value: unknown, fallback: number, minimum: number, maximum: number): number {
+  const numeric = typeof value === 'number' && Number.isFinite(value) ? value : fallback
+  if (numeric < minimum) return minimum
+  if (numeric > maximum) return maximum
+  return numeric
+}
+
 function fromBoundRecovery(recovery: BoundRecoverySummary): RecordingRecovery {
   return {
     packagePath: recovery.packageDir,
@@ -984,5 +1182,18 @@ function fromBoundRecovery(recovery: BoundRecoverySummary): RecordingRecovery {
     status: recovery.status,
     recoverable: recovery.recoverable,
     reason: recovery.reason,
+  }
+}
+
+function fromBoundExport(result: BoundExportRecordingResult): RecordingExportResult {
+  return {
+    outputPath: result.export.outputPath,
+    bytes: result.export.bytes,
+    screenInputPath: result.export.screenInputPath,
+    webcamInputPath: result.export.webcamInputPath,
+    pipVisible: result.export.pipVisible,
+    ffmpegPath: result.export.ffmpegPath,
+    outputVerified: result.export.outputVerified === true,
+    warnings: result.plan.warnings ?? [],
   }
 }

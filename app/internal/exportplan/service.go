@@ -59,8 +59,12 @@ func (s *Service) Plan(req Request) (Plan, error) {
 		return Plan{}, err
 	}
 
-	preset := pip.Normalize(manifest.Camera.PIPPreset)
-	rect, err := pip.Layout(preset, canvasForPIP(req.Canvas, preset))
+	pipConfig := pip.NormalizeConfigForPreset(manifest.Camera.PIPPreset, manifest.Camera.PIP)
+	canvas := canvasForPIP(req.Canvas, pipConfig.Preset)
+	if pipConfig.Preset != pip.PresetOff && (canvas.Width <= 0 || canvas.Height <= 0) {
+		canvas = canvasFromManifest(manifest)
+	}
+	placement, err := pip.Place(pipConfig, canvas)
 	if err != nil {
 		return Plan{}, err
 	}
@@ -70,8 +74,10 @@ func (s *Service) Plan(req Request) (Plan, error) {
 		OutputPath:          filepath.Join(packageDir, filepath.Clean(outputRel)),
 		ScreenInputPath:     screenInput,
 		WebcamStartOffsetMs: manifest.Media.WebcamStartOffsetMs,
-		PIPPreset:           string(preset),
-		PIPRect:             rect,
+		PIPPreset:           string(pipConfig.Preset),
+		PIPConfig:           pipConfig,
+		PIPRect:             placement.Rect,
+		PIPLayout:           placement,
 	}
 	if manifest.Diagnostics.Sync != nil {
 		plan.TimelineBase = manifest.Diagnostics.Sync.TimelineBase
@@ -94,8 +100,9 @@ func (s *Service) Plan(req Request) (Plan, error) {
 		}
 	}
 
-	if preset == pip.PresetOff || !manifest.Camera.Enabled {
+	if pipConfig.Preset == pip.PresetOff || !manifest.Camera.Enabled {
 		plan.PIPRect = pip.Rect{Visible: false}
+		plan.PIPLayout = pip.Placement{Visible: false, Rect: pip.Rect{Visible: false}, Shape: pipConfig.Shape, Mirror: pipConfig.Mirror, EdgeFeather: pipConfig.EdgeFeather}
 		plan.WebcamStartOffsetMs = 0
 		return plan, nil
 	}
@@ -106,9 +113,6 @@ func (s *Service) Plan(req Request) (Plan, error) {
 	plan.WebcamInputPath = webcamInput
 	if manifest.Media.WebcamStartOffsetMs == 0 {
 		plan.Warnings = append(plan.Warnings, "webcamStartOffsetMs is zero; export will align webcam at screen start")
-	}
-	if req.Canvas.Width <= 0 || req.Canvas.Height <= 0 {
-		return Plan{}, errors.New("canvas size is required for visible PIP export")
 	}
 	if err := ensureInside(videoDir, packageDir); err != nil {
 		return Plan{}, err
@@ -198,4 +202,11 @@ func canvasForPIP(canvas pip.Size, preset pip.Preset) pip.Size {
 		return pip.Size{Width: 1, Height: 1}
 	}
 	return canvas
+}
+
+func canvasFromManifest(manifest recpackage.Manifest) pip.Size {
+	if manifest.Source.Geometry != nil && manifest.Source.Geometry.Width > 0 && manifest.Source.Geometry.Height > 0 {
+		return pip.Size{Width: manifest.Source.Geometry.Width, Height: manifest.Source.Geometry.Height}
+	}
+	return pip.Size{}
 }

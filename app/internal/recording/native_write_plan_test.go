@@ -5,6 +5,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/lemon-casino/RecordingFreedom/app/internal/pip"
 	"github.com/lemon-casino/RecordingFreedom/app/internal/recordingprofile"
 	"github.com/lemon-casino/RecordingFreedom/app/internal/recpackage"
 )
@@ -35,6 +36,14 @@ func TestCreateNativeWritePlanMapsNormalizedStartRequest(t *testing.T) {
 			Camera: CameraRequest{
 				Enabled:   true,
 				PIPPreset: "bottom-left",
+				PIP: pip.Config{
+					Preset:      pip.PresetFree,
+					Shape:       pip.ShapeSquare,
+					Mirror:      false,
+					Position:    pip.Position{X: 0.2, Y: 0.7},
+					Scale:       0.32,
+					EdgeFeather: 0.18,
+				},
 			},
 		},
 	})
@@ -67,8 +76,11 @@ func TestCreateNativeWritePlanMapsNormalizedStartRequest(t *testing.T) {
 	if manifest.Audio.MicrophoneNoiseSuppression != recpackage.NoiseSuppressionOn {
 		t.Fatalf("noise suppression = %q, want rnnoise", manifest.Audio.MicrophoneNoiseSuppression)
 	}
-	if manifest.Camera.DeviceID != defaultCameraID || manifest.Camera.PIPPreset != "bottom-left" {
-		t.Fatalf("camera = %#v, want default camera bottom-left", manifest.Camera)
+	if manifest.Camera.DeviceID != defaultCameraID || manifest.Camera.PIPPreset != "free" {
+		t.Fatalf("camera = %#v, want default camera free layout", manifest.Camera)
+	}
+	if manifest.Camera.PIP.Shape != pip.ShapeSquare || manifest.Camera.PIP.Mirror || manifest.Camera.PIP.Scale != 0.32 || manifest.Camera.PIP.EdgeFeather != 0.18 {
+		t.Fatalf("camera pip = %#v, want custom square layout", manifest.Camera.PIP)
 	}
 	if manifest.Diagnostics.Mock || manifest.Diagnostics.Sync != nil {
 		t.Fatalf("native write plan diagnostics = %#v, want non-mock without sync", manifest.Diagnostics)
@@ -110,7 +122,7 @@ func TestCreateNativeWritePlanOmitsDisabledStreams(t *testing.T) {
 	if manifest.Audio.SystemDeviceID != "" || manifest.Audio.MicrophoneDeviceID != "" || manifest.Audio.MicrophoneNoiseSuppression != recpackage.NoiseSuppressionOff {
 		t.Fatalf("disabled audio manifest = %#v, want cleared streams", manifest.Audio)
 	}
-	if manifest.Camera.Enabled || manifest.Camera.DeviceID != "" || manifest.Camera.PIPPreset != "off" {
+	if manifest.Camera.Enabled || manifest.Camera.DeviceID != "" || manifest.Camera.PIPPreset != "off" || manifest.Camera.PIP.Preset != pip.PresetOff {
 		t.Fatalf("disabled camera manifest = %#v, want off", manifest.Camera)
 	}
 	if manifest.Media.WebcamVideoPath != "" {

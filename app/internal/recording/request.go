@@ -46,11 +46,13 @@ func NormalizeStartRequest(req StartRequest) (StartRequest, error) {
 		if req.Camera.DeviceID == "" {
 			req.Camera.DeviceID = defaultCameraID
 		}
-		req.Camera.PIPPreset = string(pip.Normalize(req.Camera.PIPPreset))
+		req.Camera.PIP = pip.NormalizeConfigForPreset(req.Camera.PIPPreset, req.Camera.PIP)
+		req.Camera.PIPPreset = string(req.Camera.PIP.Preset)
 	} else {
 		req.Camera.DeviceID = ""
 		req.Camera.DeviceNativeID = ""
 		req.Camera.PIPPreset = string(pip.PresetOff)
+		req.Camera.PIP = pip.OffConfig()
 	}
 	return req, nil
 }

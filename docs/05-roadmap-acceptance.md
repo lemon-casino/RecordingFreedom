@@ -124,15 +124,15 @@
 - 录音包在 UI 中显示为音频录制。
 - 关闭的音频设备不会污染 manifest。
 
-## M6 摄像头 sidecar 和画中画预备（暂停）
+## M6 摄像头 sidecar 和画中画
 
-状态：按当前验收策略暂停，等待视频录制和语音/音频录制验收后再恢复。本节保留为后续路线，不作为当前 preview 发布或验收门槛。
+状态：第一条可验证代码闭环已完成。结构化 `camera.pip` 合同已贯通 settings、start request、manifest、export plan 和前端摄像头设置；透明 PIP overlay 支持录制前/录制中预览、拖动、缩放、圆形/方形、镜像和透明边缘；Windows DirectShow、macOS AVFoundation、Linux v4l2 的 FFmpeg camera sidecar writer 已接入；PIP 导出合成已通过 `internal/exporter`、Wails `ExportRecordingPackage()` 和 `cmd/pip-export-smoke` 接入，导出前会验证输出 MP4 可解码首帧。仍需真实摄像头设备 smoke、预览匹配验收、screen + camera + audio 组合、pause/resume 同步和长录验证。
 
 目标：
 
 - 录制摄像头 sidecar。
 - 记录 `webcamStartOffsetMs`。
-- 设置默认 PIP preset。
+- 设置默认 PIP 配置，支持圆形/方形、镜像、大小、透明边缘和自由位置。
 
 验收：
 
@@ -140,7 +140,7 @@
 - 摄像头文件可独立播放。
 - manifest 记录 sidecar 相对路径和 offset。
 - 摄像头开启时，如果 webcam sidecar 缺失或为 0 字节，停止阶段不能把包标记为 `ready`。
-- UI 中可以看到后续 PIP 预设，不影响屏幕录制稳定性。
+- UI 中可以设置 PIP 样式；录制中 overlay 和导出合成已经进入可验状态，真实设备验收需覆盖圆形/方形、镜像、透明边缘、拖动、缩放和导出结果。
 
 ## M7 Linux experimental
 
@@ -169,6 +169,7 @@
 - 导出计划拒绝包外路径、mock 包、缺失 screen media、缺失 webcam sidecar 和缺失 sync diagnostics。
 - 导出不依赖最终内存 Blob。
 - screen、mic/system audio、webcam offset 对齐。
+- PIP 导出结果必须在覆盖旧输出前通过 FFmpeg 视频首帧解码验证。
 - 30 分钟项目导出不出现内存暴涨。
 
 ## 全局完成定义

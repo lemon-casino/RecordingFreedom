@@ -23,7 +23,9 @@ type Plan struct {
 	WebcamInputPath      string             `json:"webcamInputPath,omitempty"`
 	WebcamStartOffsetMs  int                `json:"webcamStartOffsetMs,omitempty"`
 	PIPPreset            string             `json:"pipPreset"`
+	PIPConfig            pip.Config         `json:"pipConfig"`
 	PIPRect              pip.Rect           `json:"pipRect"`
+	PIPLayout            pip.Placement      `json:"pipLayout"`
 	TimelineBase         string             `json:"timelineBase,omitempty"`
 	AudioDiagnosticsPath string             `json:"audioDiagnosticsPath,omitempty"`
 	VideoDiagnosticsPath string             `json:"videoDiagnosticsPath,omitempty"`

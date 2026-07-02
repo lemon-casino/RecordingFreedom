@@ -37,6 +37,7 @@ func CreateNativeWritePlan(packages *recpackage.Service, backendID string, req B
 			Enabled:   normalized.Camera.Enabled,
 			DeviceID:  normalized.Camera.DeviceID,
 			PIPPreset: normalized.Camera.PIPPreset,
+			PIP:       normalized.Camera.PIP,
 		},
 		WebcamVideoPath: webcamVideoFileForBackend(backendID, normalized.Camera.Enabled),
 	})

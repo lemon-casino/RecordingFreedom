@@ -21,6 +21,10 @@
             <string>12.3.0</string>
         <key>NSHighResolutionCapable</key>
             <string>true</string>
+        <key>NSCameraUsageDescription</key>
+            <string>RecordingFreedom uses the camera only when camera sidecar or picture-in-picture recording is enabled.</string>
+        <key>NSMicrophoneUsageDescription</key>
+            <string>RecordingFreedom uses the microphone only when microphone recording is enabled.</string>
         <key>NSHumanReadableCopyright</key>
             <string>© 2026, My Company</string>
         <key>NSAppTransportSecurity</key>

@@ -6,9 +6,11 @@ import {
   ChevronLeft,
   CircleDot,
   Crosshair,
+  FlipHorizontal,
   Gauge,
   Languages,
   Maximize2,
+  Move,
   MousePointer2,
   Monitor,
   Pause,
@@ -21,7 +23,7 @@ import {
   Wand2,
   X,
 } from 'lucide-react'
-import {useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent, type ReactNode} from 'react'
+import {useEffect, useMemo, useRef, useState, type CSSProperties, type PointerEvent as ReactPointerEvent, type ReactNode} from 'react'
 import {copyByLocale, type RecorderCopy, type RecoveryMessageKey, type SourceSelectionMessageKey, type StatusMessageKey, type StorageMessageKey} from './i18n'
 import {
   cameraDevices,
@@ -37,8 +39,10 @@ import {
   type CaptureCapability,
   type CaptureSource,
   type LocaleCode,
+  type PIPConfig,
   type MediaDevice,
   type MediaInventory,
+  type PIPShape,
   type PIPPreset,
   type RecordingMode,
   type RecordingPreflight,
@@ -47,7 +51,7 @@ import {
   fallbackCapabilities,
   fallbackStorageStatus,
 } from './services/mockBackend'
-import {cancelRegionSelector, cancelSelectedRegion, completeRegionSelection, hideRegionFrame, hideScreenIndicator, hideSettingsWindow, loadBootstrap, loadSettings, openRecordingPackage, openVideoDirectory, pauseRecording, preflightAudioOnlyRecording, preflightRecording, quitApplication, recoverRecordingPackage, resumeRecording, saveSettings, setCapsuleWindowExpanded, setDataRoot, showRegionSelector, showScreenIndicator, startAudioOnlyRecording, startMicrophoneLevelMonitor, startRecording, stopMicrophoneLevelMonitor, stopRecording, subscribeAudioLevel, subscribeRecordingStatus, subscribeRegionSelection, subscribeSettingsChanged, updateSelectedRegion, type AudioLevelUpdate, type RecordingRecovery, type RecordingStatusUpdate, type RegionSelectionSession} from './services/recorderBackend'
+import {cancelRegionSelector, cancelSelectedRegion, completeRegionSelection, exportRecordingPackage, hidePipOverlay, hideRegionFrame, hideScreenIndicator, hideSettingsWindow, loadBootstrap, loadSettings, openRecordingPackage, openVideoDirectory, pauseRecording, preflightAudioOnlyRecording, preflightRecording, quitApplication, recoverRecordingPackage, resumeRecording, saveSettings, setCapsuleWindowExpanded, setDataRoot, showPipOverlay, showRegionSelector, showScreenIndicator, startAudioOnlyRecording, startMicrophoneLevelMonitor, startRecording, stopMicrophoneLevelMonitor, stopRecording, subscribeAudioLevel, subscribeRecordingStatus, subscribeRegionSelection, subscribeSettingsChanged, updatePipOverlay, updateSelectedRegion, type AudioLevelUpdate, type PIPOverlayCamera, type PIPOverlayState, type RecordingRecovery, type RecordingStatusUpdate, type RegionSelectionSession} from './services/recorderBackend'
 
 const sourceIcon = {
   screen: Monitor,
@@ -58,6 +62,7 @@ const sourceIcon = {
 }
 
 const pipPresetOptions: PIPPreset[] = ['bottom-right', 'bottom-left', 'free', 'off']
+const pipShapeOptions: PIPShape[] = ['circle', 'square']
 
 const recordingQualityOptions: RecordingQuality[] = ['standard', 'balanced', 'high']
 const fpsOptions = [24, 30, 60]
@@ -67,6 +72,35 @@ type ActivePanel = 'source' | 'audio' | 'camera' | 'language'
 
 function normalizePipPreset(value: PIPPreset): PIPPreset {
   return pipPresetOptions.includes(value) ? value : 'bottom-right'
+}
+
+function normalizePipShape(value: PIPShape): PIPShape {
+  return pipShapeOptions.includes(value) ? value : 'circle'
+}
+
+function defaultPipPosition(preset: PIPPreset) {
+  return {x: preset === 'bottom-left' ? 0 : 1, y: 1}
+}
+
+function clampNumber(value: number, min: number, max: number) {
+  if (!Number.isFinite(value)) return min
+  return Math.min(max, Math.max(min, value))
+}
+
+function normalizePipConfig(value: Partial<PIPConfig> | undefined, fallbackPreset: PIPPreset): PIPConfig {
+  const preset = normalizePipPreset((value?.preset as PIPPreset | undefined) ?? fallbackPreset)
+  const fallbackPosition = defaultPipPosition(preset)
+  return {
+    preset,
+    shape: normalizePipShape((value?.shape as PIPShape | undefined) ?? 'circle'),
+    mirror: value?.mirror !== false,
+    position: {
+      x: clampNumber(value?.position?.x ?? fallbackPosition.x, 0, 1),
+      y: clampNumber(value?.position?.y ?? fallbackPosition.y, 0, 1),
+    },
+    scale: clampNumber(value?.scale ?? 0.2, 0.1, 0.42),
+    edgeFeather: clampNumber(value?.edgeFeather ?? 0.16, 0.02, 0.42),
+  }
 }
 
 function normalizeRecordingQuality(value: string): RecordingQuality {
@@ -144,6 +178,12 @@ type RecoveryMessageState = {
   count?: number
 }
 
+type ExportMessageState = {
+  key: 'ready' | 'failed'
+  path?: string
+  fallback?: string
+}
+
 type StorageMessageState = {
   key: StorageMessageKey
   path?: string
@@ -161,11 +201,15 @@ function App() {
   const isSettingsWindow = route === '/settings'
   const isRegionOverlayWindow = route === '/region-overlay'
   const isScreenIndicatorWindow = route === '/screen-indicator'
+  const isPipOverlayWindow = route === '/pip-overlay'
   if (isScreenIndicatorWindow) {
     return <ScreenIndicatorWindow />
   }
   if (isRegionOverlayWindow) {
     return <RegionOverlayWindow />
+  }
+  if (isPipOverlayWindow) {
+    return <PIPOverlayWindow />
   }
 
   const [selectedSource, setSelectedSource] = useState<CaptureSource>(sources[0])
@@ -197,6 +241,11 @@ function App() {
   const [availableCameras, setAvailableCameras] = useState<MediaDevice[]>(cameraDevices)
   const [selectedCamera, setSelectedCamera] = useState(cameraDevices[0].id)
   const [pipPreset, setPipPreset] = useState<PIPPreset>('bottom-right')
+  const [pipShape, setPipShape] = useState<PIPShape>('circle')
+  const [pipMirror, setPipMirror] = useState(true)
+  const [pipPosition, setPipPosition] = useState(defaultPipPosition('bottom-right'))
+  const [pipScale, setPipScale] = useState(0.2)
+  const [pipEdgeFeather, setPipEdgeFeather] = useState(0.16)
   const [locale, setLocale] = useState<LocaleCode>('zh-CN')
   const [lastPackage, setLastPackage] = useState<string>(previewPackagePath)
   const [lastBackend, setLastBackend] = useState<string>('ui-preview')
@@ -205,6 +254,8 @@ function App() {
   const [recoveries, setRecoveries] = useState<RecordingRecovery[]>([])
   const [recoveryBusy, setRecoveryBusy] = useState(false)
   const [recoveryMessage, setRecoveryMessage] = useState<RecoveryMessageState | null>(null)
+  const [exportBusy, setExportBusy] = useState(false)
+  const [exportMessage, setExportMessage] = useState<ExportMessageState | null>(null)
   const [settingsLoaded, setSettingsLoaded] = useState(false)
   const [capabilities, setCapabilities] = useState<CaptureCapabilities>(fallbackCapabilities)
   const [appData, setAppData] = useState<AppDataInfo>(fallbackAppData)
@@ -219,6 +270,7 @@ function App() {
   const copy = copyByLocale[locale]
   const lastStatusText = lastStatusMessage.fallback ?? copy.statusMessages[lastStatusMessage.key]
   const recoveryText = recoveryMessage ? formatRecoveryMessage(recoveryMessage, copy) : ''
+  const exportText = exportMessage ? formatExportMessage(exportMessage, copy) : ''
   const storageText = storageMessage ? formatStorageMessage(storageMessage, copy) : ''
   const sourceSelectionText = sourceSelectionMessage ? formatSourceSelectionMessage(sourceSelectionMessage, copy) : ''
   const isRecording = state === 'recording' || state === 'paused' || state === 'preparing' || state === 'stopping'
@@ -230,8 +282,8 @@ function App() {
       ? 330
       : activePanel === 'audio'
         ? 520
-        : activePanel === 'camera'
-          ? 470
+      : activePanel === 'camera'
+          ? 640
           : activePanel === 'language'
             ? 300
             : 520
@@ -266,11 +318,19 @@ function App() {
       enabled: camera,
       deviceId: selectedCamera,
       pipPreset,
+      pip: {
+        preset: pipPreset,
+        shape: pipShape,
+        mirror: pipMirror,
+        position: pipPosition,
+        scale: pipScale,
+        edgeFeather: pipEdgeFeather,
+      },
     },
     window: {
       minimizeToTray: true,
     },
-  }), [appData.rootDir, camera, captureCursor, countdownSeconds, locale, microphone, noiseSuppression, pipPreset, recordingFPS, recordingQuality, selectedCamera, selectedMic, selectedSource.id, selectedSource.type, selectedSystemAudio, systemAudio])
+  }), [appData.rootDir, camera, captureCursor, countdownSeconds, locale, microphone, noiseSuppression, pipEdgeFeather, pipMirror, pipPosition, pipPreset, pipScale, pipShape, recordingFPS, recordingQuality, selectedCamera, selectedMic, selectedSource.id, selectedSource.type, selectedSystemAudio, systemAudio])
   const capabilityRows = useMemo(() => [
     capabilities.sourceEnumeration,
     capabilities.screenRecording,
@@ -293,6 +353,20 @@ function App() {
     () => availableCameras.find((device) => device.id === selectedCamera),
     [availableCameras, selectedCamera],
   )
+  const currentPipConfig = useMemo<PIPConfig>(() => normalizePipConfig({
+    preset: pipPreset,
+    shape: pipShape,
+    mirror: pipMirror,
+    position: pipPosition,
+    scale: pipScale,
+    edgeFeather: pipEdgeFeather,
+  }, pipPreset), [pipEdgeFeather, pipMirror, pipPosition, pipPreset, pipScale, pipShape])
+  const pipCameraLabel = selectedCameraDevice?.name || selectedCamera
+  const pipCameraTarget = useMemo<PIPOverlayCamera>(() => ({
+    deviceId: selectedCameraDevice?.id || selectedCamera,
+    nativeId: selectedCameraDevice?.nativeId,
+    name: pipCameraLabel,
+  }), [pipCameraLabel, selectedCamera, selectedCameraDevice?.id, selectedCameraDevice?.nativeId])
   const selectedMicrophoneDevice = useMemo(
     () => availableMicrophones.find((device) => device.id === selectedMic),
     [availableMicrophones, selectedMic],
@@ -317,8 +391,23 @@ function App() {
     const height = active ? Math.max(14, Math.min(100, micMeterLevel * 100 + index * 0.9)) : 8
     return {active, height: `${height}%`}
   }), [micMeterLevel])
+  const pipPreviewSize = Math.round(68 + ((pipScale - 0.1) / 0.32) * 54)
   const canOpenLastPackage = isRecordingPackagePath(lastPackage) && lastPackage !== previewPackagePath
   const lastPackageName = canOpenLastPackage ? packageDisplayName(lastPackage) : copy.settings.noRecordingPackage
+  const openPipEditor = async () => {
+    const nextConfig = currentPipConfig.preset === 'off'
+      ? normalizePipConfig({...currentPipConfig, preset: 'bottom-right', position: defaultPipPosition('bottom-right')}, 'bottom-right')
+      : currentPipConfig
+    if (nextConfig.preset !== pipPreset) {
+      setPipPreset(nextConfig.preset)
+      setPipPosition(nextConfig.position)
+    }
+    try {
+      await showPipOverlay(nextConfig, 'edit', pipCameraTarget)
+    } catch (error) {
+      console.info('PIP editor unavailable:', error)
+    }
+  }
   const applyRecordingStatus = (update: RecordingStatusUpdate) => {
     setState(update.status as RecordingState)
     if (update.session?.packagePath) setLastPackage(update.session.packagePath)
@@ -340,7 +429,13 @@ function App() {
     setMicrophone(nextSettings.audio.microphone && nextHasAvailableMicrophone)
     setNoiseSuppression(nextSettings.audio.microphone && nextHasAvailableMicrophone && nextSettings.audio.noiseSuppression)
     setCamera(nextSettings.camera.enabled)
-    setPipPreset(normalizePipPreset(nextSettings.camera.pipPreset))
+    const nextPip = normalizePipConfig(nextSettings.camera.pip, normalizePipPreset(nextSettings.camera.pipPreset))
+    setPipPreset(nextPip.preset)
+    setPipShape(nextPip.shape)
+    setPipMirror(nextPip.mirror)
+    setPipPosition(nextPip.position)
+    setPipScale(nextPip.scale)
+    setPipEdgeFeather(nextPip.edgeFeather)
 
     if (systemAudioList) setAvailableSystemAudio(systemAudioList)
     if (microphoneList) setAvailableMicrophones(microphoneList)
@@ -409,6 +504,13 @@ function App() {
       setActivePanel(null)
     }
   }, [activePanel, recordingMode])
+
+  useEffect(() => {
+    if (isSettingsWindow) return
+    if (!camera || recordingMode === 'audio') {
+      void hidePipOverlay()
+    }
+  }, [camera, isSettingsWindow, recordingMode])
 
   useEffect(() => {
     if (!recordingConfigLocked) return
@@ -586,6 +688,14 @@ function App() {
         cameraDeviceId: selectedCamera,
         cameraDeviceNativeId: selectedCameraDevice?.nativeId,
         pipPreset,
+        pip: {
+          preset: pipPreset,
+          shape: pipShape,
+          mirror: pipMirror,
+          position: pipPosition,
+          scale: pipScale,
+          edgeFeather: pipEdgeFeather,
+        },
       }
       const preflight = await preflightRecording(request)
       setLastPreflight(preflight)
@@ -738,6 +848,21 @@ function App() {
     }
   }
 
+  const exportLastRecordingPackage = async () => {
+    if (!canOpenLastPackage || exportBusy || isRecording) return
+    setExportBusy(true)
+    setExportMessage(null)
+    try {
+      const result = await exportRecordingPackage(lastPackage)
+      setExportMessage({key: 'ready', path: result.outputPath})
+    } catch (error) {
+      console.error('Failed to export recording package:', error)
+      setExportMessage({key: 'failed', fallback: error instanceof Error ? error.message : undefined})
+    } finally {
+      setExportBusy(false)
+    }
+  }
+
   const togglePanel = (panel: ActivePanel) => {
     setSettingsOpen(false)
     setClosePromptOpen(false)
@@ -876,6 +1001,14 @@ function App() {
           actionLabel={copy.settings.openPackage}
           actionDisabled={!canOpenLastPackage}
           onAction={() => void openLastRecordingPackage()}
+        />
+        <SettingLine
+          title={copy.settings.exportPackage}
+          value={exportBusy ? copy.settings.exporting : copy.settings.exportPackageValue}
+          detail={exportText || copy.settings.exportPackageDetail}
+          actionLabel={exportBusy ? copy.settings.exporting : copy.settings.exportPackage}
+          actionDisabled={!canOpenLastPackage || exportBusy || isRecording}
+          onAction={() => void exportLastRecordingPackage()}
         />
         <SettingSelect
           title={copy.settings.quality}
@@ -1240,12 +1373,78 @@ function App() {
                   value={pipPreset}
                   disabled={recordingConfigLocked}
                   options={pipPresetOptions.map((preset) => ({value: preset, label: copy.pipPresetLabels[preset]}))}
-                  onChange={(value) => setPipPreset(value as PIPPreset)}
+                  onChange={(value) => {
+                    const nextPreset = value as PIPPreset
+                    setPipPreset(nextPreset)
+                    if (nextPreset !== 'free') setPipPosition(defaultPipPosition(nextPreset))
+                  }}
                 />
+                <span className="field-label">{copy.panels.pipShape}</span>
+                <div className="mode-toggle">
+                  {pipShapeOptions.map((shape) => {
+                    const ShapeIcon = shape === 'circle' ? CircleDot : Square
+                    return (
+                      <button
+                        key={shape}
+                        type="button"
+                        className={pipShape === shape ? 'selected' : ''}
+                        disabled={recordingConfigLocked}
+                        onClick={() => setPipShape(shape)}
+                      >
+                        <ShapeIcon size={15} />
+                        <span>{copy.pipShapeLabels[shape]}</span>
+                      </button>
+                    )
+                  })}
+                </div>
+                <SwitchRow label={copy.panels.pipMirror} checked={pipMirror} disabled={recordingConfigLocked} onChange={setPipMirror} />
+                <label className="field-label" htmlFor="pip-size">{copy.panels.pipSize}</label>
+                <div className="pip-slider-row">
+                  <input
+                    id="pip-size"
+                    type="range"
+                    min="0.1"
+                    max="0.42"
+                    step="0.01"
+                    value={pipScale}
+                    disabled={recordingConfigLocked}
+                    onChange={(event) => setPipScale(Number(event.currentTarget.value))}
+                  />
+                  <b>{Math.round(pipScale * 100)}%</b>
+                </div>
+                <label className="field-label" htmlFor="pip-edge">{copy.panels.pipEdge}</label>
+                <div className="pip-slider-row">
+                  <input
+                    id="pip-edge"
+                    type="range"
+                    min="0.02"
+                    max="0.42"
+                    step="0.01"
+                    value={pipEdgeFeather}
+                    disabled={recordingConfigLocked}
+                    onChange={(event) => setPipEdgeFeather(Number(event.currentTarget.value))}
+                  />
+                  <b>{Math.round(pipEdgeFeather * 100)}%</b>
+                </div>
                 <div className="camera-preview">
-                  <Video size={26} />
+                  <div
+                    className={`pip-preview-frame ${pipShape} ${pipMirror ? 'mirrored' : ''}`}
+                    style={{width: pipPreviewSize, height: pipPreviewSize}}
+                    aria-hidden="true"
+                  >
+                    <Video size={24} />
+                  </div>
                   <span>{copy.panels.pipPresetPreview(copy.pipPresetLabels[pipPreset])}</span>
                 </div>
+                <button
+                  type="button"
+                  className="pip-edit-button"
+                  disabled={recordingConfigLocked || !camera}
+                  onClick={() => void openPipEditor()}
+                >
+                  <Maximize2 size={16} />
+                  <span>{copy.panels.pipEdit}</span>
+                </button>
               </div>
             )}
 
@@ -1328,6 +1527,402 @@ function ScreenIndicatorWindow() {
       <span>{label || '1'}</span>
     </main>
   )
+}
+
+type PIPEditAction = 'move' | 'n' | 'e' | 's' | 'w' | 'ne' | 'nw' | 'se' | 'sw'
+
+const pipResizeActions: PIPEditAction[] = ['n', 'e', 's', 'w', 'ne', 'nw', 'se', 'sw']
+const pipMinimumContentSize = 96
+
+function PIPOverlayWindow() {
+  const pipWindow = window as Window & {__RF_PIP_OVERLAY__?: PIPOverlayState}
+  const [overlayState, setOverlayState] = useState<PIPOverlayState | undefined>(pipWindow.__RF_PIP_OVERLAY__)
+  const overlayStateRef = useRef<PIPOverlayState | undefined>(overlayState)
+  const editRef = useRef<{
+    action: PIPEditAction
+    startX: number
+    startY: number
+    content: {x: number; y: number; width: number; height: number}
+    state: PIPOverlayState
+    latest: PIPConfig
+  } | null>(null)
+  const pendingPreviewRef = useRef<PIPConfig | null>(null)
+  const previewFrameRef = useRef<number | null>(null)
+  const videoRef = useRef<HTMLVideoElement | null>(null)
+  const [cameraReady, setCameraReady] = useState(false)
+  const [cameraError, setCameraError] = useState<string | null>(null)
+  const [overlayLocale, setOverlayLocale] = useState<LocaleCode>(navigator.language.toLowerCase().startsWith('zh') ? 'zh-CN' : 'en')
+  const copy = copyByLocale[overlayLocale]
+
+  useEffect(() => {
+    overlayStateRef.current = overlayState
+  }, [overlayState])
+
+  useEffect(() => {
+    document.body.classList.add('rf-pip-overlay-window')
+    return () => document.body.classList.remove('rf-pip-overlay-window')
+  }, [])
+
+  useEffect(() => {
+    void loadSettings()
+      .then((settings) => setOverlayLocale(normalizeLocale(settings.locale)))
+      .catch((error) => console.info('Using PIP overlay language fallback:', error))
+  }, [])
+
+  useEffect(() => subscribeSettingsChanged((settings) => {
+    setOverlayLocale(normalizeLocale(settings.locale))
+  }), [])
+
+  useEffect(() => {
+    const onState = (event: Event) => {
+      const next = (event as CustomEvent<PIPOverlayState>).detail
+      if (next) setOverlayState(next)
+    }
+    window.addEventListener('rf-pip-overlay', onState)
+    return () => window.removeEventListener('rf-pip-overlay', onState)
+  }, [])
+
+  useEffect(() => {
+    if (!overlayState || overlayState.config.preset === 'off') return
+    if (!navigator.mediaDevices?.getUserMedia) {
+      setCameraReady(false)
+      setCameraError('media-devices-unavailable')
+      return
+    }
+    const cameraTarget = overlayState.camera ?? (overlayState.cameraName ? {name: overlayState.cameraName} : undefined)
+    let cancelled = false
+    let stream: MediaStream | null = null
+    setCameraReady(false)
+    setCameraError(null)
+    void openPipCameraStream(cameraTarget).then((nextStream) => {
+      if (cancelled) {
+        nextStream.getTracks().forEach((track) => track.stop())
+        return
+      }
+      stream = nextStream
+      if (videoRef.current) {
+        videoRef.current.srcObject = nextStream
+      }
+      setCameraReady(true)
+      setCameraError(null)
+    }).catch((error) => {
+      if (cancelled) return
+      setCameraReady(false)
+      setCameraError(readableError(error))
+    })
+    return () => {
+      cancelled = true
+      stream?.getTracks().forEach((track) => track.stop())
+      if (videoRef.current) {
+        videoRef.current.srcObject = null
+      }
+    }
+  }, [overlayState?.camera?.deviceId, overlayState?.camera?.name, overlayState?.camera?.nativeId, overlayState?.cameraName, overlayState?.config.preset])
+
+  useEffect(() => () => {
+    if (previewFrameRef.current !== null) {
+      window.cancelAnimationFrame(previewFrameRef.current)
+      previewFrameRef.current = null
+    }
+  }, [])
+
+  const overlayConfig = async (config: PIPConfig, commit: boolean) => {
+    const state = overlayStateRef.current
+    const mode = state?.mode ?? 'edit'
+    const cameraTarget = state?.camera ?? (state?.cameraName ? {name: state.cameraName} : '')
+    const nextConfig = normalizePipConfig(config, config.preset)
+    const nextState = commit
+      ? await updatePipOverlay(nextConfig, mode, cameraTarget)
+      : await showPipOverlay(nextConfig, mode, cameraTarget)
+    setOverlayState(nextState)
+  }
+
+  const previewConfig = (config: PIPConfig) => {
+    pendingPreviewRef.current = config
+    if (previewFrameRef.current !== null) return
+    previewFrameRef.current = window.requestAnimationFrame(() => {
+      previewFrameRef.current = null
+      const pending = pendingPreviewRef.current
+      pendingPreviewRef.current = null
+      if (pending) {
+        void overlayConfig(pending, false).catch((error) => console.info('PIP preview update failed:', error))
+      }
+    })
+  }
+
+  const commitConfig = async (config: PIPConfig) => {
+    if (previewFrameRef.current !== null) {
+      window.cancelAnimationFrame(previewFrameRef.current)
+      previewFrameRef.current = null
+      pendingPreviewRef.current = null
+    }
+    await overlayConfig(config, true)
+  }
+
+  const beginEdit = (event: ReactPointerEvent<HTMLElement>, action: PIPEditAction) => {
+    const state = overlayStateRef.current
+    if (!state || state.config.preset === 'off' || event.button !== 0) return
+    event.preventDefault()
+    event.stopPropagation()
+    event.currentTarget.setPointerCapture(event.pointerId)
+    editRef.current = {
+      action,
+      startX: event.screenX,
+      startY: event.screenY,
+      content: pipAbsoluteContentRect(state),
+      state,
+      latest: state.config,
+    }
+  }
+
+  const updateEdit = (event: ReactPointerEvent<HTMLElement>) => {
+    const edit = editRef.current
+    if (!edit) return
+    event.preventDefault()
+    const rect = resizePipRect(edit.state, edit.content, edit.action, event.screenX - edit.startX, event.screenY - edit.startY)
+    const next = pipConfigFromAbsoluteRect(edit.state, rect)
+    edit.latest = next
+    previewConfig(next)
+  }
+
+  const completeEdit = (event: ReactPointerEvent<HTMLElement>) => {
+    const edit = editRef.current
+    if (!edit) return
+    if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+      event.currentTarget.releasePointerCapture(event.pointerId)
+    }
+    editRef.current = null
+    void commitConfig(edit.latest).catch((error) => console.info('PIP commit failed:', error))
+  }
+
+  const updateShape = (shape: PIPShape) => {
+    if (!overlayState) return
+    void commitConfig({...overlayState.config, shape})
+  }
+
+  const toggleMirror = () => {
+    if (!overlayState) return
+    void commitConfig({...overlayState.config, mirror: !overlayState.config.mirror})
+  }
+
+  const closePip = () => {
+    if (!overlayState) {
+      void hidePipOverlay()
+      return
+    }
+    void commitConfig({...overlayState.config, preset: 'off'})
+      .then(() => hidePipOverlay())
+      .catch((error) => console.info('PIP close failed:', error))
+  }
+
+  const content = overlayState?.config.preset !== 'off' ? overlayState?.contentBounds : undefined
+  const featherPx = content && overlayState ? Math.max(2, Math.round(content.width * overlayState.config.edgeFeather)) : 12
+  const frameStyle = content ? {
+    left: content.x,
+    top: content.y,
+    width: content.width,
+    height: content.height,
+    '--pip-feather': `${featherPx}px`,
+  } as CSSProperties : undefined
+
+  return (
+    <main
+      className={`pip-overlay-shell ${overlayState?.mode ?? 'edit'}`}
+      aria-label={copy.pipOverlay.label}
+      onPointerMove={updateEdit}
+      onPointerUp={completeEdit}
+      onPointerCancel={completeEdit}
+    >
+      {overlayState && content && frameStyle && (
+        <div className="pip-live-frame" style={frameStyle}>
+          <div className={`pip-live-media ${overlayState.config.shape} ${overlayState.config.mirror ? 'mirrored' : ''}`}>
+            <video ref={videoRef} autoPlay muted playsInline className={cameraReady ? 'ready' : ''} />
+            {!cameraReady && (
+              <div className="pip-camera-placeholder">
+                <Camera size={24} />
+                <span>{cameraError ? copy.pipOverlay.cameraUnavailable : overlayState.camera?.name || overlayState.cameraName || copy.panels.cameraSidecar}</span>
+              </div>
+            )}
+          </div>
+          <button className="pip-drag-anchor" type="button" aria-label={copy.pipOverlay.move} title={copy.pipOverlay.move} onPointerDown={(event) => beginEdit(event, 'move')}>
+            <Move size={18} />
+          </button>
+          {pipResizeActions.map((action) => (
+            <button
+              key={action}
+              className={`pip-resize-handle ${action}`}
+              type="button"
+              aria-label={copy.pipOverlay.resize}
+              title={copy.pipOverlay.resize}
+              onPointerDown={(event) => beginEdit(event, action)}
+            />
+          ))}
+          <div className="pip-overlay-tools">
+            <button type="button" className={overlayState.config.shape === 'circle' ? 'selected' : ''} aria-label={copy.pipShapeLabels.circle} title={copy.pipShapeLabels.circle} onClick={() => updateShape('circle')}>
+              <CircleDot size={15} />
+            </button>
+            <button type="button" className={overlayState.config.shape === 'square' ? 'selected' : ''} aria-label={copy.pipShapeLabels.square} title={copy.pipShapeLabels.square} onClick={() => updateShape('square')}>
+              <Square size={15} />
+            </button>
+            <button type="button" className={overlayState.config.mirror ? 'selected' : ''} aria-label={copy.pipOverlay.mirror} title={copy.pipOverlay.mirror} onClick={toggleMirror}>
+              <FlipHorizontal size={15} />
+            </button>
+            <button type="button" aria-label={copy.pipOverlay.close} title={copy.pipOverlay.close} onClick={closePip}>
+              <X size={15} />
+            </button>
+          </div>
+        </div>
+      )}
+    </main>
+  )
+}
+
+async function openPipCameraStream(target?: PIPOverlayCamera): Promise<MediaStream> {
+  const videoConstraints = {
+    width: {ideal: 1280},
+    height: {ideal: 720},
+  }
+  const defaultStream = await navigator.mediaDevices.getUserMedia({
+    video: videoConstraints,
+    audio: false,
+  })
+  const device = await selectPipPreviewDevice(target, defaultStream)
+  if (!device?.deviceId) return defaultStream
+  const currentDeviceId = defaultStream.getVideoTracks()[0]?.getSettings().deviceId
+  if (currentDeviceId && currentDeviceId === device.deviceId) return defaultStream
+  try {
+    const exactStream = await navigator.mediaDevices.getUserMedia({
+      video: {
+        ...videoConstraints,
+        deviceId: {exact: device.deviceId},
+      },
+      audio: false,
+    })
+    stopMediaStream(defaultStream)
+    return exactStream
+  } catch (error) {
+    console.info('PIP preview selected camera unavailable, using default camera:', error)
+    return defaultStream
+  }
+}
+
+async function selectPipPreviewDevice(target: PIPOverlayCamera | undefined, stream: MediaStream): Promise<MediaDeviceInfo | undefined> {
+  const devices = await navigator.mediaDevices.enumerateDevices?.()
+  const videoDevices = devices?.filter((device) => device.kind === 'videoinput') ?? []
+  if (videoDevices.length === 0) return undefined
+  const currentDeviceId = stream.getVideoTracks()[0]?.getSettings().deviceId
+  const matched = findMatchingPipPreviewDevice(target, videoDevices)
+  if (matched) return matched
+  if (currentDeviceId) {
+    return videoDevices.find((device) => device.deviceId === currentDeviceId)
+  }
+  return videoDevices[0]
+}
+
+function findMatchingPipPreviewDevice(target: PIPOverlayCamera | undefined, devices: MediaDeviceInfo[]) {
+  const tokens = pipPreviewMatchTokens(target)
+  if (tokens.length === 0) return undefined
+  return devices.find((device) => {
+    const label = normalizePipPreviewText(device.label)
+    const id = normalizePipPreviewText(device.deviceId)
+    if (!label && !id) return false
+    return tokens.some((token) => {
+      const normalized = normalizePipPreviewText(token)
+      if (!normalized || normalized.length < 3) return false
+      const labelMatches = label !== '' && (label === normalized || label.includes(normalized) || normalized.includes(label))
+      const idMatches = id !== '' && id === normalized
+      return labelMatches || idMatches
+    })
+  })
+}
+
+function pipPreviewMatchTokens(target: PIPOverlayCamera | undefined) {
+  const rawTokens = [
+    target?.name,
+    stripDefaultDevicePrefix(target?.name),
+    target?.nativeId,
+    target?.deviceId,
+  ]
+  return Array.from(new Set(rawTokens.map((token) => token?.trim()).filter((token): token is string => Boolean(token && token.length >= 3))))
+}
+
+function stripDefaultDevicePrefix(value?: string) {
+  return value?.replace(/^\s*default\s+/i, '').replace(/^\s*默认\s*/, '')
+}
+
+function normalizePipPreviewText(value?: string) {
+  return (value ?? '')
+    .toLowerCase()
+    .replace(/^\s*default\s+/i, '')
+    .replace(/^\s*默认\s*/, '')
+    .replace(/[^a-z0-9\u4e00-\u9fa5]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+}
+
+function stopMediaStream(stream: MediaStream) {
+  stream.getTracks().forEach((track) => track.stop())
+}
+
+function pipAbsoluteContentRect(state: PIPOverlayState) {
+  return {
+    x: state.windowBounds.x + state.contentBounds.x,
+    y: state.windowBounds.y + state.contentBounds.y,
+    width: state.contentBounds.width,
+    height: state.contentBounds.height,
+  }
+}
+
+function pipCanvasMargin(bounds: PIPOverlayState['overlayBounds']) {
+  return Math.max(16, Math.trunc(bounds.width / 40))
+}
+
+function pipMaxContentSize(state: PIPOverlayState) {
+  const margin = pipCanvasMargin(state.overlayBounds)
+  return Math.max(pipMinimumContentSize, Math.min(state.overlayBounds.width, state.overlayBounds.height) - margin * 2)
+}
+
+function resizePipRect(state: PIPOverlayState, content: {x: number; y: number; width: number; height: number}, action: PIPEditAction, dx: number, dy: number) {
+  if (action === 'move') {
+    return {...content, x: content.x + dx, y: content.y + dy}
+  }
+  let delta = 0
+  if (action === 'e') delta = dx
+  if (action === 's') delta = dy
+  if (action === 'w') delta = -dx
+  if (action === 'n') delta = -dy
+  if (action === 'se') delta = Math.max(dx, dy)
+  if (action === 'sw') delta = Math.max(-dx, dy)
+  if (action === 'ne') delta = Math.max(dx, -dy)
+  if (action === 'nw') delta = Math.max(-dx, -dy)
+  const size = clampNumber(Math.round(content.width + delta), pipMinimumContentSize, pipMaxContentSize(state))
+  const next = {...content, width: size, height: size}
+  if (action.includes('w')) next.x = content.x + content.width - size
+  if (action.includes('n')) next.y = content.y + content.height - size
+  return next
+}
+
+function pipConfigFromAbsoluteRect(state: PIPOverlayState, rect: {x: number; y: number; width: number; height: number}): PIPConfig {
+  const overlay = state.overlayBounds
+  const margin = pipCanvasMargin(overlay)
+  const size = clampNumber(Math.round(Math.max(rect.width, rect.height)), pipMinimumContentSize, pipMaxContentSize(state))
+  const minX = overlay.x + margin
+  const minY = overlay.y + margin
+  const maxX = overlay.x + overlay.width - margin - size
+  const maxY = overlay.y + overlay.height - margin - size
+  const x = clampNumber(rect.x, minX, Math.max(minX, maxX))
+  const y = clampNumber(rect.y, minY, Math.max(minY, maxY))
+  const availableWidth = Math.max(1, maxX - minX)
+  const availableHeight = Math.max(1, maxY - minY)
+  return normalizePipConfig({
+    ...state.config,
+    preset: 'free',
+    position: {
+      x: (x - minX) / availableWidth,
+      y: (y - minY) / availableHeight,
+    },
+    scale: size / Math.max(1, overlay.width),
+  }, 'free')
 }
 
 type RegionFrameState = {
@@ -1820,6 +2415,12 @@ function statusMessageFromBackend(message: string): StatusMessageState {
 function formatRecoveryMessage(message: RecoveryMessageState, copy: RecorderCopy) {
   if (message.key === 'recovered' && message.count) return copy.recoveryMessages.recoveredCount(message.count)
   return copy.recoveryMessages[message.key]
+}
+
+function formatExportMessage(message: ExportMessageState, copy: RecorderCopy) {
+  if (message.fallback) return message.fallback
+  if (message.key === 'ready' && message.path) return copy.settings.exportReady(message.path)
+  return copy.settings.exportFailed
 }
 
 function formatStorageMessage(message: StorageMessageState, copy: RecorderCopy) {

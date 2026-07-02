@@ -1,10 +1,10 @@
 # 08. 未完成任务计划：真实音频与 RNNoise 优先
 
-更新时间：2026-07-01
+更新时间：2026-07-02
 
-本文档把初版 preview 之后尚未完成的工作拆成可执行任务。当前策略调整为：先收口语言设置、真实语音/音频录制与视频录制；摄像头 sidecar、画中画、导出和正式发布链路在这三项验收后再恢复。
+本文档把初版 preview 之后尚未完成的工作拆成可执行任务。当前策略调整为：语言设置、真实语音/音频录制与视频录制继续收口；摄像头 sidecar、画中画已经恢复排期并进入代码闭环验收阶段；正式安装包发布链路在 preview 验收继续推进后恢复。
 
-当前 preview 仍不能对外宣称完整真实录制已完成。已完成的是 UI Shell、设置、语言、图标、mock `.rfrec` 包、`data/video` 写盘结构、全平台 preview build、Windows WASAPI 音频采集、真实麦克风设备枚举与电平监听、RNNoise native wrapper、Windows FFmpeg desktop video writer 代码路径、Windows 停止阶段音视频 mux、Windows 20 分钟音视频长录 smoke、Windows portable zip FFmpeg 依赖准备路径、Windows `v0.1.0-preview.15` release asset 下载/SHA256/portable zip 结构复验、Windows portable clean-machine smoke runner 打包、当前 Windows 桌面 artifact-run 3 秒矩阵 12/12 通过、Windows GUI subsystem/FFmpeg 子进程命令窗口隐藏门禁、Windows 默认音频设备保留真实 WASAPI endpoint、录制态来源/音频/摄像头配置锁定、区域录制持久边框、设置窗口打开 `data/video` 目录和最近 `.rfrec` 包内容入口、macOS ScreenCaptureKit video/system-audio mux 代码路径、macOS CoreAudio 麦克风枚举和 PCM 采集代码路径，以及无 GUI doctor/smoke 验收入口。`v0.1.0-preview.15` 已作为 GitHub prerelease 发布，Release Gate、Windows x64、macOS arm64、Linux x64 和 Publish GitHub Release 均通过；本轮新增 Windows portable smoke runner 和 release/CI 门禁。还缺少的是外部 clean-machine 长时长真实录制 smoke、目标桌面 RNNoise 听感诊断、macOS/Linux 真机视频验收和 Linux PipeWire writer。摄像头 sidecar 和 PIP 当前暂停，不计入本轮视频/语音验收。
+当前 preview 仍不能对外宣称完整真实录制已完成。已完成的是 UI Shell、设置、语言、图标、mock `.rfrec` 包、`data/video` 写盘结构、全平台 preview build、Windows WASAPI 音频采集、真实麦克风设备枚举与电平监听、RNNoise native wrapper、Windows FFmpeg desktop video writer 代码路径、Windows 停止阶段音视频 mux、Windows 20 分钟音视频长录 smoke、Windows portable zip FFmpeg 依赖准备路径、Windows `v0.1.0-preview.15` release asset 下载/SHA256/portable zip 结构复验、Windows portable clean-machine smoke runner 打包、当前 Windows 桌面 artifact-run 3 秒矩阵 12/12 通过、Windows GUI subsystem/FFmpeg 子进程命令窗口隐藏门禁、Windows 默认音频设备保留真实 WASAPI endpoint、录制态来源/音频/摄像头配置锁定、区域录制持久边框、设置窗口打开 `data/video` 目录和最近 `.rfrec` 包内容入口、macOS ScreenCaptureKit video/system-audio mux 代码路径、macOS CoreAudio 麦克风枚举和 PCM 采集代码路径，以及无 GUI doctor/smoke 验收入口。`v0.1.0-preview.16` 已作为 GitHub prerelease 发布，Release Gate、Windows x64、macOS arm64、Linux x64 和 Publish GitHub Release 均通过；本轮新增摄像头 sidecar/PIP 第一条代码闭环：结构化 `camera.pip` 合同、PIP overlay、WebView 预览设备匹配、Windows/macOS/Linux FFmpeg sidecar writer、Wails 导出入口、`cmd/pip-export-smoke` 和导出后首帧解码门禁。还缺少的是外部 clean-machine 长时长真实录制 smoke、目标桌面 RNNoise 听感诊断、macOS/Linux 真机视频验收、Linux PipeWire writer、跨平台真实摄像头设备 smoke、screen + camera + audio 组合、pause/resume PIP 同步和长录验证。
 
 ## P0-AUDIO：真实音频与 RNNoise 降噪
 
@@ -21,7 +21,7 @@
 
 - 不先做最终混音导出。
 - 不把摄像头 PIP 烘焙进屏幕视频。
-- 不在视频录制和语音/音频录制验收前继续摄像头/画中画功能。
+- 摄像头/PIP 当前恢复排期，但不把未验收的 PIP 合成说成正式录制能力。
 - 不把 mock 音频或静音音轨伪装成真实音频。
 
 ### A0 音频后端边界
@@ -243,23 +243,24 @@
 - 暂停/继续不会造成 manifest 状态错误。
 - kill app 后可扫描 recoverable package。
 
-## P1-CAMERA：摄像头 sidecar 与画中画预备（暂停）
+## P1-CAMERA：摄像头 sidecar 与画中画
 
-状态：按当前验收策略暂停。摄像头 sidecar 和画中画不参与本轮视频录制与语音/音频录制验收，也不作为 preview 发布门槛。已有代码路径保持可追踪：Windows FFmpeg DirectShow sidecar writer 已接入 runtime，开启摄像头时使用枚举到的 DirectShow 原生设备名写入包内 `webcam.mp4`，pause/resume 会分段录制并在 stop 合并，sync diagnostics 会写入 `webcam` track 和 `webcamStartOffsetMs`。`PIPExport` 仍为 queued。`go run ./cmd/video-smoke -duration=2s -camera` 已执行到真实设备选择阶段，但当前本机没有可用 sidecar 摄像头，因此不能记录为真实摄像头 smoke 通过。等视频录制和语音/音频录制验收后，再恢复有摄像头机器的 sidecar smoke、长录同步和 clean-machine artifact 验证。macOS AVFoundation、Linux PipeWire 摄像头 sidecar 未完成。
+状态：第一条可验证代码闭环已完成。Windows FFmpeg DirectShow sidecar writer 已接入 runtime，开启摄像头时使用枚举到的 DirectShow 原生设备名写入包内 `webcam.mp4`，pause/resume 会分段录制并在 stop 合并，sync diagnostics 会写入 `webcam` track 和 `webcamStartOffsetMs`。macOS FFmpeg AVFoundation sidecar writer 已接入 `webcam.mov`，并通过 FFmpeg AVFoundation 设备列表解析摄像头索引；Linux FFmpeg v4l2 sidecar writer 已接入 `webcam.mov`，并从 `/dev/video*` 枚举可用摄像头。PIP 已从单一 `pipPreset` 扩展为结构化 `camera.pip` 合同：支持 `preset`、`shape`、`mirror`、`position`、`scale` 和 `edgeFeather`，并已贯通 settings、start request、manifest、export plan 和前端摄像头设置面板。透明 PIP overlay 已支持拖动、缩放、圆形/方形、镜像、透明边缘、关闭和录制中 manifest patch；WebView 预览会按 `deviceId/nativeId/name` 尽量匹配 sidecar 摄像头。PIP 导出合成已通过 `internal/exporter`、Wails `ExportRecordingPackage()` 和 `cmd/pip-export-smoke` 接入，导出后会解码首个视频帧再安装输出。仍未完成的是跨平台真实摄像头设备 smoke、预览匹配效果、screen + camera + audio 组合、pause/resume 精确同步、长录验证和后续原生 writer 替换。
 
 任务：
 
-- macOS AVFoundation 摄像头 sidecar。
+- macOS AVFoundation 摄像头 sidecar 真机 smoke、权限提示和长录同步验收。
 - Windows DirectShow camera sidecar 真机 smoke、长录同步和 clean-machine artifact 验证；后续再评估是否替换为 Media Foundation。
-- Linux PipeWire 摄像头 sidecar experimental。
-- 记录 `webcamStartOffsetMs`。Windows 已写入，macOS/Linux 待接入。
-- PIP preset 继续只作为 sidecar 布局，不烘焙进原始 screen media。
+- Linux v4l2 sidecar 当前为 FFmpeg experimental；后续评估 PipeWire 摄像头路径。
+- 记录 `webcamStartOffsetMs`。Windows/runtime 已写入；macOS/Linux sidecar offset 仍需真机验证。
+- 录制中透明 PIP 编辑 overlay 已接入；下一步做真机验证并确认拖动、缩放、圆形/方形、镜像和透明边缘不会污染原始 `screen.mp4`。
+- PIP 导出合成已读取结构化 `camera.pip`，不烘焙进原始 screen media；下一步扩展真实录制包矩阵导出和音轨/时长 ffprobe 门禁。
 
 验收：
 
 - 开启摄像头后包内存在可播放 `webcam.mov` 或 `webcam.mp4`。
 - 摄像头开启但 sidecar 缺失或 0 字节时，manifest 不能进入 ready。
-- PIP preset 写入 manifest，导出计划可读取。
+- `camera.pip` 写入 manifest，导出计划可读取 shape、mirror、position、scale、edgeFeather。
 
 ## P1-EXPORT：真实导出与音画同步
 
@@ -323,4 +324,4 @@
 7. A6 预检、UI 和设置联动。
 8. A7 三平台手动验证矩阵。
 
-完成三平台真机 video-smoke、目标桌面 RNNoise 实录 smoke、长录同步和 mux 验收前，不对外宣称 RecordingFreedom 的正式录制流程已支持完整真实音视频录制。摄像头 sidecar/PIP 当前暂停，不计入本轮完成声明。
+完成三平台真机 video-smoke、目标桌面 RNNoise 实录 smoke、长录同步、摄像头 sidecar 真机 smoke 和 PIP 导出合成验收前，不对外宣称 RecordingFreedom 的正式录制流程已支持完整真实音视频录制。

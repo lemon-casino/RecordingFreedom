@@ -207,7 +207,14 @@ static void rfca_free_device_list(rf_coreaudio_device_list list) {
 import "C"
 
 import (
+	"bytes"
+	"context"
 	"fmt"
+	"os"
+	"os/exec"
+	"path/filepath"
+	"strings"
+	"time"
 	"unsafe"
 )
 
@@ -221,9 +228,7 @@ func listPlatformMediaDevices() (MediaInventory, error) {
 			defaultMediaDeviceForPlatform("darwin", DeviceSystemAudio, mediaBackendMessage("darwin", DeviceSystemAudio)),
 		},
 		Microphones: microphones,
-		Cameras: []MediaDevice{
-			defaultMediaDevice(DeviceCamera, mediaBackendMessage("darwin", DeviceCamera)),
-		},
+		Cameras:     listDarwinCameraDevices(),
 		Enhancement: defaultAudioEnhancement("RNNoise requires the rnnoise_native tag; CoreAudio microphone PCM is available without denoising."),
 	}, nil
 }
@@ -267,4 +272,71 @@ func listCoreAudioMicrophones() ([]MediaDevice, error) {
 		return nil, fmt.Errorf("CoreAudio returned no input devices with stable UIDs")
 	}
 	return devices, nil
+}
+
+func listDarwinCameraDevices() []MediaDevice {
+	ffmpegPath, err := resolveDarwinFFmpegPath()
+	if err != nil {
+		return []MediaDevice{defaultMediaDevice(DeviceCamera, "AVFoundation camera enumeration requires FFmpeg; "+err.Error())}
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	cmd := exec.CommandContext(ctx, ffmpegPath, "-hide_banner", "-f", "avfoundation", "-list_devices", "true", "-i", "")
+	configureBackgroundCommand(cmd)
+	var output bytes.Buffer
+	cmd.Stdout = &output
+	cmd.Stderr = &output
+	_ = cmd.Run()
+	devices := parseAVFoundationCameraDevices(output.String())
+	if len(devices) == 0 {
+		reason := "AVFoundation returned no camera devices"
+		if ctx.Err() != nil {
+			reason = "AVFoundation camera enumeration timed out"
+		}
+		return []MediaDevice{defaultMediaDevice(DeviceCamera, reason)}
+	}
+	return devices
+}
+
+func resolveDarwinFFmpegPath() (string, error) {
+	const envFFmpegPath = "RECORDINGFREEDOM_FFMPEG_PATH"
+	if configured := strings.TrimSpace(os.Getenv(envFFmpegPath)); configured != "" {
+		return validateDarwinFFmpegPath(configured, envFFmpegPath)
+	}
+	candidates := make([]string, 0, 8)
+	if executable, err := os.Executable(); err == nil {
+		base := filepath.Dir(executable)
+		candidates = append(candidates,
+			filepath.Join(base, "ffmpeg"),
+			filepath.Join(base, "tools", "ffmpeg"),
+			filepath.Join(base, "bin", "ffmpeg"),
+		)
+	}
+	if cwd, err := os.Getwd(); err == nil {
+		candidates = append(candidates,
+			filepath.Join(cwd, "ffmpeg"),
+			filepath.Join(cwd, "tools", "ffmpeg"),
+			filepath.Join(cwd, "bin", "ffmpeg"),
+		)
+	}
+	for _, candidate := range candidates {
+		if path, err := validateDarwinFFmpegPath(candidate, "bundled ffmpeg"); err == nil {
+			return path, nil
+		}
+	}
+	if path, err := exec.LookPath("ffmpeg"); err == nil {
+		return path, nil
+	}
+	return "", fmt.Errorf("FFmpeg executable was not found; set %s or bundle ffmpeg beside the app under tools/", envFFmpegPath)
+}
+
+func validateDarwinFFmpegPath(path string, source string) (string, error) {
+	info, err := os.Stat(path)
+	if err != nil {
+		return "", fmt.Errorf("%s %q is not readable: %w", source, path, err)
+	}
+	if info.IsDir() {
+		return "", fmt.Errorf("%s %q is a directory, not an ffmpeg executable", source, path)
+	}
+	return path, nil
 }

@@ -3,6 +3,9 @@
 
 // eslint-disable-next-line @typescript-eslint/ban-ts-comment
 // @ts-ignore: Unused imports
+import * as pip$0 from "../pip/models.js";
+// eslint-disable-next-line @typescript-eslint/ban-ts-comment
+// @ts-ignore: Unused imports
 import * as recordingprofile$0 from "../recordingprofile/models.js";
 // eslint-disable-next-line @typescript-eslint/ban-ts-comment
 // @ts-ignore: Unused imports
@@ -21,6 +24,7 @@ export interface CameraSettings {
     "enabled": boolean;
     "deviceId"?: string;
     "pipPreset": string;
+    "pip": pip$0.Config;
 }
 
 export enum Locale {

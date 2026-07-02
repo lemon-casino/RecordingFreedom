@@ -52,10 +52,12 @@ func main() {
 	settingsWindow := createSettingsWindow(app)
 	regionOverlayWindow := createRegionOverlayWindow(app)
 	screenIndicatorWindow := createScreenIndicatorWindow(app)
+	pipOverlayWindow := createPIPOverlayWindow(app)
 	recordingFreedom.setCapsuleWindow(capsuleWindow)
 	recordingFreedom.setSettingsWindow(settingsWindow)
 	recordingFreedom.setRegionOverlayWindow(regionOverlayWindow)
 	recordingFreedom.setScreenIndicatorWindow(screenIndicatorWindow)
+	recordingFreedom.setPIPOverlayWindow(pipOverlayWindow)
 	initialLocale := settings.LocaleZhCN
 	if currentSettings, err := recordingFreedom.settings.Load(); err == nil {
 		initialLocale = currentSettings.Locale

@@ -6,6 +6,9 @@
 import * as devices$0 from "../devices/models.js";
 // eslint-disable-next-line @typescript-eslint/ban-ts-comment
 // @ts-ignore: Unused imports
+import * as pip$0 from "../pip/models.js";
+// eslint-disable-next-line @typescript-eslint/ban-ts-comment
+// @ts-ignore: Unused imports
 import * as recordingprofile$0 from "../recordingprofile/models.js";
 // eslint-disable-next-line @typescript-eslint/ban-ts-comment
 // @ts-ignore: Unused imports
@@ -30,6 +33,7 @@ export interface CameraRequest {
     "deviceId"?: string;
     "deviceNativeId"?: string;
     "pipPreset": string;
+    "pip": pip$0.Config;
 }
 
 export type CaptureSourceType = devices$0.CaptureSourceType;

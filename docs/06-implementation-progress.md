@@ -1,6 +1,6 @@
 # 06. 当前实现进度
 
-更新时间：2026-07-01
+更新时间：2026-07-02
 
 ## 已完成
 
@@ -10,7 +10,7 @@
 - 实现第一版胶囊录制工具窗口：
   - 源选择：All screens / Screen 1..N / Region / Locked window。Program/Application 后端合同保留，但当前胶囊菜单不展示程序来源。
   - 音频：系统声音、麦克风、RNNoise 开关、麦克风设备、电平显示。
-  - 摄像头：保留 sidecar/PIP 设置入口和数据合同；当前暂停开发与验收，不纳入视频录制和语音/音频录制收口。
+  - 摄像头：Windows sidecar writer 已接入；PIP 设置入口、结构化数据合同和透明置顶 PIP 编辑 overlay 已恢复开发，支持位置、圆形/方形、镜像、大小、透明边缘、拖动、缩放和录制中 manifest patch。
   - 控制：开始、暂停/继续、结束、状态、计时器。
   - 语言：简体中文、English；胶囊语言菜单和独立设置窗口都可切换，并通过 `settings.changed` 同步到其它窗口。
   - 设置：独立 Wails window，列出 storage、package、backend、audio、camera、recovery、capability、release。
@@ -40,7 +40,7 @@
   - `DeviceService` 已新增 `MediaDeviceProvider` 替换边界；默认平台 provider 当前返回 queued inventory，测试可注入 provider 验证真实枚举、空结果和错误回退不影响前端合同。
   - Windows `MediaDeviceProvider` 已通过 MMDevice API 枚举 WASAPI render/capture endpoint：系统声音和麦克风返回真实 endpoint `NativeID`、friendly name、默认设备和 `enumerated` capability。
   - Windows `MediaDeviceProvider` 已通过 FFmpeg DirectShow 设备列表解析摄像头：存在 `tools/ffmpeg.exe` / PATH / `RECORDINGFREEDOM_FFMPEG_PATH` 时返回真实 camera device name、稳定 `camera:dshow:*` ID、原始 DirectShow `NativeID` 和 `sidecarEligible`；缺 FFmpeg 或无摄像头时返回明确 unavailable reason。Windows 摄像头 sidecar writer 已接入 FFmpeg DirectShow，开启摄像头时写入包内 `webcam.mp4`，缺少真实 sidecar 或 0 字节 sidecar 仍会被 ready 门禁拦截。
-  - macOS/Linux 媒体设备当前仍返回明确的 `native-backend-queued` capability，预留给 CoreAudio/PipeWire 与 AVFoundation/PipeWire 后续接入。
+  - macOS 媒体设备已返回 CoreAudio 麦克风枚举和 FFmpeg AVFoundation 摄像头枚举；Linux 摄像头已按 `/dev/video*` 暴露 v4l2 sidecar 设备，系统声音/麦克风仍保持后续 PipeWire/PulseAudio 接入边界。
   - Linux 当前返回明确的 `native-backend-queued` capability，占位给 XDG Portal 后端接入，不伪装真实枚举完成。
   - `CaptureService` 已新增平台能力矩阵，覆盖 source enumeration、screen/window/program recording、system audio、microphone、RNNoise、camera sidecar、PIP export 和 package recovery。
   - 能力状态统一为 `available`、`queued`、`blocked`、`unsupported`，并带 backend、permission 和 reason，避免 UI 或文档误报真实录制已完成。
@@ -59,7 +59,9 @@
   - 新增 `NativeBackendRuntime.SyncDiagnostics()`：把 video/audio/camera diagnostics 转成 manifest `diagnostics.sync`，统一输出 screen、system audio、microphone、webcam track 起止、duration、drop count、append failure、sample rate/frame rate 和 diagnostics 相对路径；webcam offset 会同步写入 `media.webcamStartOffsetMs`。
   - 新增 `recording.NativeRuntimeBackend`：把 runtime 包装成可注册的真实 `Backend`，平台后端只需要提供 video/audio/camera session factory，不需要重复实现包创建、状态转换、失败标记和 sync diagnostics。
   - 新增 macOS ScreenCaptureKit display/window/region video session：`screen:display-<CGDirectDisplayID>` 通过 `SCDisplay` 采集，`window:<CGWindowID>` 通过 `SCWindow` 采集，单显示器 `region:custom` 通过 `SCStreamConfiguration.sourceRect` 裁剪，三者都由 `SCStream` 输出真实 screen sample buffer，`AVAssetWriter` 写入包内 `screen.mp4`，停止时写 `video-diagnostics.json`；开启系统声音时，ScreenCaptureKit audio sample 写入同一个 `screen.mp4` 的 AAC 音轨，manifest 记录 `systemAudioStorage: "muxed"`。`application:<pid>` 解析代码保留给后续演进，但当前 capability 为 queued，不在初版验收范围内。macOS `native`/`sck` backend 已注册到 `NativeRuntimeBackend`。当前仍需 macOS 真机录制 smoke 验证，麦克风 mux 还未完成。
-  - 新增 Windows FFmpeg DirectShow camera sidecar session：使用枚举到的 DirectShow 原生设备名启动 FFmpeg，pause/resume 走分段录制，stop 合并为包内 `webcam.mp4`；`RecordingFreedomService` 会在 preflight/start 前用 `MediaInventory.Cameras` 补齐 `deviceNativeId`，`video-smoke -camera` 同样走真实设备名。PIP export 不再阻断 sidecar 录制，但仍以 warning 保持 queued。
+  - 新增 Windows FFmpeg DirectShow camera sidecar session：使用枚举到的 DirectShow 原生设备名启动 FFmpeg，pause/resume 走分段录制，stop 合并为包内 `webcam.mp4`；`RecordingFreedomService` 会在 preflight/start 前用 `MediaInventory.Cameras` 补齐 `deviceNativeId`，`video-smoke -camera` 同样走真实设备名。
+  - 新增 macOS FFmpeg AVFoundation camera sidecar session 和 Linux FFmpeg v4l2 camera sidecar session：macOS 使用 AVFoundation 设备索引写 `webcam.mov`，Linux 使用 `/dev/video*` 写 `webcam.mov`。三平台 sidecar 均依赖 FFmpeg capability，缺 FFmpeg 时 preflight blocked。
+  - 新增 `internal/exporter` FFmpeg PIP 导出器、Wails `ExportRecordingPackage()` 和 `cmd/pip-export-smoke`：按 `camera.pip` 的圆形/方形、镜像、位置、大小、边缘羽化和 `webcamStartOffsetMs` 合成包内 `exports/recording.mp4`，并保护原始 `screen.mp4` / `webcam.*` 不被覆盖。导出器会在安装输出前用 FFmpeg 解码首个视频帧，`pip-export-smoke` 返回 `outputVerified`。本机已用临时真实 MP4 素材跑通圆形镜像 PIP 与方形羽化 PIP 导出。
   - 新增 `cmd/video-smoke`：无 UI 真实视频录制验收入口，默认使用 `native` backend、自动选择第一个可用屏幕源，也支持 `-source-type=window` 和 `-source-type=region` 验证窗口/区域源；默认关闭音频和摄像头，停止后校验 `.rfrec` 包、`screen.mp4` 非 0 字节、`video-diagnostics.json`、manifest `ready` 和 `diagnostics.sync`。
   - 正式录制策略调整为 mux 优先：默认目标是把屏幕视频、系统声音和麦克风写入同一个主媒体 `screen.mp4`；包内 WAV sidecar 继续作为 smoke、fallback、恢复和诊断路径。
   - `internal/recpackage` 已新增音频存储形态合同：系统声音和麦克风分别通过 `systemAudioStorage` / `microphoneAudioStorage` 标记为 `sidecar` 或 `muxed`；fallback 写 `system-audio.wav` / `microphone.wav`，Windows 停止阶段 mux 成功后会把路径切到 `screen.mp4`。
@@ -105,6 +107,9 @@
   - `RecordingFreedomService.SetDataRoot`
   - `RecordingFreedomService.ShowSettingsWindow`
   - `RecordingFreedomService.HideSettingsWindow`
+  - `RecordingFreedomService.ShowPIPOverlay`
+  - `RecordingFreedomService.UpdatePIPOverlay`
+  - `RecordingFreedomService.HidePIPOverlay`
   - `RecordingFreedomService.ShowRegionSelector`
   - `RecordingFreedomService.CompleteRegionSelection`
   - `RecordingFreedomService.CancelRegionSelection`
@@ -132,7 +137,9 @@
   - 胶囊语言、源、系统声音、麦克风、RNNoise、摄像头设置会 debounce 保存。
   - 语言切换已接入全局前端 i18n 显示层，且只保留简体中文和 English：点击语言后，胶囊主控、弹窗、独立设置窗口、区域 overlay、状态条、预检摘要、存储状态和能力矩阵会通过 `settings.changed` 同步到对应语言；后端 ID、manifest 字段、路径和诊断字符串保持稳定不翻译。
   - 独立设置窗口已接入质量、FPS、录制光标、倒计时控件；开始录制会把当前录制 profile 传给后端并写入 manifest。
-  - 摄像头菜单已接入 PIP preset 下拉；开始录制会把当前 preset 传给后端，摄像头关闭时 manifest 使用 `off`。
+  - 摄像头菜单已接入 PIP preset 下拉和“编辑画中画”入口；开始录制会把当前 PIP 配置传给后端，摄像头关闭时 manifest 使用 `off`。
+  - PIP 编辑 overlay 已落地为独立透明 `/#/pip-overlay` Wails window，支持中心拖动、八方向缩放、圆形/方形切换、镜像切换、关闭 PIP，并尝试使用 WebView `getUserMedia()` 显示实时摄像头预览；overlay 请求会携带所选摄像头的 device id、native id 和显示名，预览会在授权后枚举 `videoinput` 并优先匹配同一摄像头，匹配失败才回退默认摄像头。拖动过程只预览位置，松手后通过 `UpdatePIPOverlay()` 写回 settings 和活动录制 manifest，避免高频写盘。
+  - PIP overlay 使用 Wails `SetContentProtection()` 尝试排除窗口捕获：Windows 映射到 `SetWindowDisplayAffinity`，macOS 映射到 `NSWindowSharingNone`，Linux 当前为不支持返回。原始 `screen.mp4` 仍保持干净，PIP 合成留给导出阶段。
   - 音频菜单已接入系统声音设备下拉；开始录制会把当前 `systemDeviceId` 传给后端，系统声音关闭时 manifest 不保留旧 device id。
   - 独立设置窗口已接入 `CaptureService` 能力矩阵，按后端返回展示平台、backend、权限和 `Ready/Queued/Blocked/Unsupported` 状态。
   - 独立设置窗口新增 Recording backend 行，启动后显示当前 backend，并说明 queued native backend 仍会被 preflight 阻止。
@@ -422,10 +429,10 @@ RecordingFreedom/app/bin/recordingfreedom.exe
 - 真实 macOS CoreAudio 麦克风枚举和 Linux PipeWire 音频设备枚举；当前 Windows WASAPI endpoint 枚举已完成，macOS system audio 使用 ScreenCaptureKit 默认系统混音流。
 - 真实 CoreAudio/PipeWire 音频采集；当前 Windows WASAPI 麦克风采集已通过 smoke，Windows system loopback 已通过有播放源真实样本 smoke，Windows FFmpeg 视频后端已通过 `NativeBackendRuntime` 调用 WASAPI 音频运行时，并在停止阶段把系统声音/麦克风 mux 到主 `screen.mp4`。macOS CoreAudio 麦克风枚举和 PCM 采集代码路径已完成，仍需 macOS 真机 smoke、视频麦克风 mux/sync 验收；Linux 音频源和长录同步仍未完成。
 - 真实 audio-only 录制模式；当前已完成 `.rfrec` audio-only 包格式、`audio.m4a` 主媒体路径、WAV sidecar 写盘、停止阶段 FFmpeg M4A 封装、ready 前 `soun` 音轨门禁、`audio-smoke` 包级验收入口、RecordingService/Wails 后端入口、胶囊 UI 模式入口和 audio-only preflight。macOS/Linux 真实音频源、RNNoise 目标桌面实录听感和长录同步仍未完成。
-- 摄像头/画中画当前暂停开发与验收，等待视频录制和语音/音频录制验收后再恢复；Windows 摄像头设备枚举和 FFmpeg DirectShow sidecar writer 已接入，但最新本机 `video-smoke -camera` 因没有可用 sidecar 摄像头未能做真实摄像头录制，不能计入当前完成项。
+- 摄像头/画中画已完成第一条可验证代码闭环：结构化 `camera.pip` 合同贯通 settings、start request、manifest、export plan、前端摄像头设置面板、透明 PIP 编辑 overlay、三平台 FFmpeg sidecar writer、Wails 导出入口和 FFmpeg PIP 导出器。仍不能把没有真机摄像头录制 smoke 的平台说成已完成真实摄像头验收。
 - RNNoise native DSP 的 C 源码和 Go wrapper 已迁移并隔离；CI/release gate 已恢复 native 定向测试。当前能力矩阵会按 `rnnoise.Available()` 动态显示：带 `rnnoise_native` 的 release artifact 显示可用并允许预检，未带标签的本地开发构建仍显示 queued/blocked。三平台 preview artifact 构建已要求 `desktop-doctor -require-rnnoise` 通过；目标桌面的 `audio-smoke -rnnoise` 实录听感和长录诊断仍需补。
-- macOS AVFoundation、Linux PipeWire 摄像头 sidecar 写入以及真实 PIP 预览/导出均保持后续项，不作为当前 preview 验收门槛。
-- 真实 FFmpeg/原生流式导出执行；当前只完成导出计划和路径/同步/PIP 校验合同。
+- macOS AVFoundation、Windows DirectShow、Linux v4l2 摄像头 sidecar 写入已接入 FFmpeg 实现；WebView 预览与 sidecar 设备的最佳匹配逻辑已接入。真实设备预览匹配效果、macOS/Linux 真机 sidecar smoke、PipeWire 摄像头替换和长时长同步仍保持后续项。
+- 真实 FFmpeg PIP 导出执行已接入并通过本机临时包 smoke；导出后首帧解码门禁已接入。暂停片段精确同步、真实录制包矩阵导出、ffprobe 音轨/时长门禁和长录同步仍保持后续项。
 - 真实音画同步时间戳采集和容器级媒体 probe；当前只完成 manifest 诊断合同、mock 标记、ready 前非 0 字节媒体门禁。
 
 ## 已知提示
@@ -436,7 +443,7 @@ RecordingFreedom/app/bin/recordingfreedom.exe
 
 ## 下一步
 
-1. 当前验收边界固定为语言设置、语音/音频录制和视频录制；摄像头/画中画等这三项验收后再恢复。
+1. 当前验收边界在语言设置、语音/音频录制和视频录制之外，已把摄像头 sidecar/PIP 恢复为进行中能力；下一步补真实设备 smoke、预览设备匹配和导出同步门禁。
 2. A1 已完成 Windows WASAPI system audio/microphone endpoint 枚举；继续补 macOS CoreAudio 与 Linux PipeWire/PulseAudio 枚举。
 3. Windows 麦克风 PCM 采集、系统声音 loopback 样本写盘、FFmpeg desktop video writer、runtime backend 注册、Windows portable zip FFmpeg 准备路径、停止阶段音视频 mux、音频会话有界队列和队列水位/丢帧诊断已落地；下一步补有 C 工具链本机的 `audio-smoke -rnnoise`、目标桌面 RNNoise 实录听感/诊断、30 分钟以上音频队列/内存水位记录，以及 macOS/Linux 音频源。
 4. 在真实 macOS 机器补 ScreenCaptureKit screen/window/region/system-audio `video-smoke`，确认权限、可播放性、`video-diagnostics.json` 和 `diagnostics.sync`。

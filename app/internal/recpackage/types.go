@@ -3,6 +3,7 @@ package recpackage
 import (
 	"time"
 
+	"github.com/lemon-casino/RecordingFreedom/app/internal/pip"
 	"github.com/lemon-casino/RecordingFreedom/app/internal/recordingprofile"
 )
 
@@ -114,9 +115,10 @@ type ManifestAudio struct {
 }
 
 type ManifestCamera struct {
-	Enabled   bool   `json:"enabled"`
-	DeviceID  string `json:"deviceId,omitempty"`
-	PIPPreset string `json:"pipPreset"`
+	Enabled   bool       `json:"enabled"`
+	DeviceID  string     `json:"deviceId,omitempty"`
+	PIPPreset string     `json:"pipPreset"`
+	PIP       pip.Config `json:"pip"`
 }
 
 type ManifestDiagnostics struct {
