@@ -226,6 +226,11 @@ type SourceSelectionMessageState = {
   fallback?: string
 }
 
+type ApplySettingsOptions = {
+  preserveCameraEnabled?: boolean
+  preserveCameraSelection?: boolean
+}
+
 function App() {
   const route = currentWindowRoute()
   const isSettingsWindow = route === '/settings'
@@ -301,6 +306,7 @@ function App() {
   const settingsPanelRef = useRef<HTMLElement | null>(null)
   const closePromptRef = useRef<HTMLElement | null>(null)
   const selectedMicRef = useRef(selectedMic)
+  const cameraRef = useRef(camera)
   const rnnoiseActive = microphone && noiseSuppression
 
   const copy = copyByLocale[locale]
@@ -416,6 +422,10 @@ function App() {
     [availableCameras],
   )
   const selectedCameraUsable = selectedCameraDevice ? isUsableCameraDevice(selectedCameraDevice) : hasUsableCamera
+  const fallbackUsableCameraDevice = useMemo(
+    () => availableCameras.find(isUsableCameraDevice),
+    [availableCameras],
+  )
   const cameraUnavailableText = selectedCameraDevice?.unavailableReason || selectedCameraDevice?.meta || copy.pipOverlay.cameraUnavailable
   const cameraStatusText = !hasUsableCamera || !selectedCameraUsable
     ? cameraUnavailableText
@@ -461,7 +471,7 @@ function App() {
     if (backend) setLastBackend(backend)
     if (update.message) setLastStatusMessage(statusMessageFromBackend(update.message))
   }
-  const applySettingsState = (nextSettings: AppSettings, nextMedia?: MediaInventory, nextSources?: CaptureSource[]) => {
+  const applySettingsState = (nextSettings: AppSettings, nextMedia?: MediaInventory, nextSources?: CaptureSource[], options: ApplySettingsOptions = {}) => {
     const systemAudioList = nextMedia?.systemAudio
     const microphoneList = nextMedia?.microphones
     const cameraList = nextMedia?.cameras
@@ -474,9 +484,12 @@ function App() {
     const nextHasAvailableMicrophone = !microphoneList || microphoneList.some((device) => device.available !== false)
     const nextCameraDevice = selectPreferredCameraDevice(cameraList, nextSettings.camera.deviceId)
     const nextHasUsableCamera = !cameraList || Boolean(nextCameraDevice)
-    const nextCameraEnabled = nextSettings.camera.enabled && nextHasUsableCamera
+    const nextCameraEnabled = options.preserveCameraEnabled
+      ? cameraRef.current
+      : nextSettings.camera.enabled && nextHasUsableCamera
     setMicrophone(nextSettings.audio.microphone && nextHasAvailableMicrophone)
     setNoiseSuppression(nextSettings.audio.microphone && nextHasAvailableMicrophone && nextSettings.audio.noiseSuppression)
+    cameraRef.current = nextCameraEnabled
     setCamera(nextCameraEnabled)
     const nextPip = nextCameraEnabled
       ? ensureVisiblePipConfig(normalizePipConfig(nextSettings.camera.pip, normalizePipPreset(nextSettings.camera.pipPreset)))
@@ -503,12 +516,14 @@ function App() {
     } else if (microphoneList) {
       setSelectedMic('')
     }
-    if (!cameraList) {
-      if (nextSettings.camera.deviceId) setSelectedCamera(nextSettings.camera.deviceId)
-    } else if (nextCameraDevice) {
-      setSelectedCamera(nextCameraDevice.id)
-    } else {
-      setSelectedCamera(cameraList[0]?.id ?? '')
+    if (!options.preserveCameraSelection) {
+      if (!cameraList) {
+        if (nextSettings.camera.deviceId) setSelectedCamera(nextSettings.camera.deviceId)
+      } else if (nextCameraDevice) {
+        setSelectedCamera(nextCameraDevice.id)
+      } else {
+        setSelectedCamera(cameraList[0]?.id ?? '')
+      }
     }
     if (nextSources) {
       setSelectedSource(selectVisibleInitialSource(nextSources, nextSettings.source.lastSourceId, nextSettings.source.lastSourceType))
@@ -530,6 +545,10 @@ function App() {
   useEffect(() => {
     selectedMicRef.current = selectedMic
   }, [selectedMic])
+
+  useEffect(() => {
+    cameraRef.current = camera
+  }, [camera])
 
   useEffect(() => subscribeAudioLevel((update: AudioLevelUpdate) => {
     const currentMic = selectedMicRef.current
@@ -626,20 +645,11 @@ function App() {
 
   useEffect(() => {
     if (isRecording) return
-    const shouldPreview = !isSettingsWindow &&
-      camera &&
-      recordingMode === 'video' &&
-      hasUsableCamera &&
-      selectedCameraUsable
-
-    if (!shouldPreview) {
-      void hidePipOverlay()
-      return
-    }
+    if (isSettingsWindow || !camera || recordingMode !== 'video' || !hasUsableCamera) return
 
     void showPipOverlay(ensureVisiblePipConfig(currentPipConfig), 'edit', pipCameraTarget)
       .catch((error) => console.info('PIP camera preview unavailable:', error))
-  }, [camera, currentPipConfig, hasUsableCamera, isRecording, isSettingsWindow, pipCameraTarget, recordingMode, selectedCameraUsable])
+  }, [camera, currentPipConfig, hasUsableCamera, isRecording, isSettingsWindow, pipCameraTarget, recordingMode])
 
   useEffect(() => {
     if (!recordingConfigLocked) return
@@ -729,7 +739,10 @@ function App() {
   useEffect(() => subscribeRecordingStatus(applyRecordingStatus), [])
 
   useEffect(() => subscribeSettingsChanged((settings) => {
-    applySettingsState(settings)
+    applySettingsState(settings, undefined, undefined, {
+      preserveCameraEnabled: true,
+      preserveCameraSelection: true,
+    })
   }), [])
 
   useEffect(() => subscribeRegionSelection((result) => {
@@ -1549,6 +1562,10 @@ function App() {
                   disabled={recordingConfigLocked || !hasUsableCamera}
                   onChange={(value) => {
                     const enabled = value && hasUsableCamera
+                    if (enabled && !selectedCameraUsable && fallbackUsableCameraDevice) {
+                      setSelectedCamera(fallbackUsableCameraDevice.id)
+                    }
+                    cameraRef.current = enabled
                     setCamera(enabled)
                     if (enabled && pipPreset === 'off') {
                       setPipPreset('bottom-right')
@@ -1724,8 +1741,13 @@ type PIPEditAction = 'move' | 'n' | 'e' | 's' | 'w' | 'ne' | 'nw' | 'se' | 'sw'
 const pipResizeActions: PIPEditAction[] = ['n', 'e', 's', 'w', 'ne', 'nw', 'se', 'sw']
 const pipMinimumContentSize = 96
 
+type PIPOverlayWindowGlobal = Window & {
+  __RF_PIP_OVERLAY__?: PIPOverlayState
+  __RF_STOP_PIP_CAMERA__?: () => void
+}
+
 function PIPOverlayWindow() {
-  const pipWindow = window as Window & {__RF_PIP_OVERLAY__?: PIPOverlayState}
+  const pipWindow = window as PIPOverlayWindowGlobal
   const [overlayState, setOverlayState] = useState<PIPOverlayState | undefined>(pipWindow.__RF_PIP_OVERLAY__)
   const overlayStateRef = useRef<PIPOverlayState | undefined>(overlayState)
   const editRef = useRef<{
@@ -1739,10 +1761,28 @@ function PIPOverlayWindow() {
   const pendingPreviewRef = useRef<PIPConfig | null>(null)
   const previewFrameRef = useRef<number | null>(null)
   const videoRef = useRef<HTMLVideoElement | null>(null)
+  const activeCameraStreamRef = useRef<MediaStream | null>(null)
+  const cameraRequestTokenRef = useRef(0)
   const [cameraReady, setCameraReady] = useState(false)
   const [cameraError, setCameraError] = useState<string | null>(null)
   const [overlayLocale, setOverlayLocale] = useState<LocaleCode>(navigator.language.toLowerCase().startsWith('zh') ? 'zh-CN' : 'en')
   const copy = copyByLocale[overlayLocale]
+
+  const stopActivePipCameraStream = () => {
+    if (activeCameraStreamRef.current) {
+      stopMediaStream(activeCameraStreamRef.current)
+      activeCameraStreamRef.current = null
+    }
+    if (videoRef.current) {
+      videoRef.current.srcObject = null
+    }
+  }
+
+  const cancelPipCameraStream = () => {
+    cameraRequestTokenRef.current += 1
+    stopActivePipCameraStream()
+    setCameraReady(false)
+  }
 
   useEffect(() => {
     overlayStateRef.current = overlayState
@@ -1750,7 +1790,12 @@ function PIPOverlayWindow() {
 
   useEffect(() => {
     document.body.classList.add('rf-pip-overlay-window')
-    return () => document.body.classList.remove('rf-pip-overlay-window')
+    pipWindow.__RF_STOP_PIP_CAMERA__ = cancelPipCameraStream
+    return () => {
+      cancelPipCameraStream()
+      delete pipWindow.__RF_STOP_PIP_CAMERA__
+      document.body.classList.remove('rf-pip-overlay-window')
+    }
   }, [])
 
   useEffect(() => {
@@ -1774,37 +1819,34 @@ function PIPOverlayWindow() {
 
   useEffect(() => {
     if (!overlayState || overlayState.config.preset === 'off') {
-      setCameraReady(false)
+      cancelPipCameraStream()
       setCameraError(null)
-      if (videoRef.current) {
-        videoRef.current.srcObject = null
-      }
       return
     }
     if (overlayState.mode === 'recording') {
-      setCameraReady(false)
+      cancelPipCameraStream()
       setCameraError(null)
-      if (videoRef.current) {
-        videoRef.current.srcObject = null
-      }
       return
     }
     if (!navigator.mediaDevices?.getUserMedia) {
+      cancelPipCameraStream()
       setCameraReady(false)
       setCameraError('media-devices-unavailable')
       return
     }
     const cameraTarget = overlayState.camera ?? (overlayState.cameraName ? {name: overlayState.cameraName} : undefined)
+    const requestToken = cameraRequestTokenRef.current + 1
+    cameraRequestTokenRef.current = requestToken
     let cancelled = false
-    let stream: MediaStream | null = null
+    stopActivePipCameraStream()
     setCameraReady(false)
     setCameraError(null)
     void openPipCameraStream(cameraTarget).then((nextStream) => {
-      if (cancelled) {
-        nextStream.getTracks().forEach((track) => track.stop())
+      if (cancelled || cameraRequestTokenRef.current !== requestToken) {
+        stopMediaStream(nextStream)
         return
       }
-      stream = nextStream
+      activeCameraStreamRef.current = nextStream
       if (videoRef.current) {
         videoRef.current.srcObject = nextStream
       }
@@ -1817,10 +1859,11 @@ function PIPOverlayWindow() {
     })
     return () => {
       cancelled = true
-      stream?.getTracks().forEach((track) => track.stop())
-      if (videoRef.current) {
-        videoRef.current.srcObject = null
+      if (cameraRequestTokenRef.current === requestToken) {
+        cameraRequestTokenRef.current += 1
       }
+      stopActivePipCameraStream()
+      setCameraReady(false)
     }
   }, [overlayState?.camera?.deviceId, overlayState?.camera?.name, overlayState?.camera?.nativeId, overlayState?.cameraName, overlayState?.config.preset, overlayState?.mode])
 

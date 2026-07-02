@@ -13,7 +13,7 @@ import (
 )
 
 const pipOverlayPadding = 24
-const stopPIPOverlayMediaScript = `document.querySelectorAll("video").forEach((video)=>{const stream=video.srcObject;if(stream&&typeof stream.getTracks==="function"){stream.getTracks().forEach((track)=>track.stop());}video.srcObject=null;});`
+const stopPIPOverlayMediaScript = `if(window.__RF_STOP_PIP_CAMERA__){window.__RF_STOP_PIP_CAMERA__();}document.querySelectorAll("video").forEach((video)=>{const stream=video.srcObject;if(stream&&typeof stream.getTracks==="function"){stream.getTracks().forEach((track)=>track.stop());}video.srcObject=null;});`
 
 type PIPOverlayRequest struct {
 	Config     pip.Config `json:"config"`
@@ -83,6 +83,7 @@ func (s *RecordingFreedomService) HidePIPOverlay() error {
 	if s.pipOverlay == nil {
 		return nil
 	}
+	s.pipOverlay.ExecJS(stopPIPOverlayMediaScript)
 	if state, err := s.pipOverlayState(pip.OffConfig(), "edit", PIPCamera{}); err == nil {
 		s.broadcastPIPOverlayState(state)
 	}
