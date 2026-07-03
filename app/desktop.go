@@ -86,6 +86,127 @@ func createSettingsWindow(app *application.App) *application.WebviewWindow {
 	return window
 }
 
+func createWhiteboardWindow(app *application.App) *application.WebviewWindow {
+	window := app.Window.NewWithOptions(application.WebviewWindowOptions{
+		Name:          "whiteboard",
+		Title:         "RecordingFreedom Whiteboard",
+		Width:         1120,
+		Height:        760,
+		MinWidth:      760,
+		MinHeight:     520,
+		Hidden:        true,
+		Frameless:     true,
+		AlwaysOnTop:   true,
+		HideOnEscape:  true,
+		DisableResize: false,
+		Mac: application.MacWindow{
+			Backdrop: application.MacBackdropTranslucent,
+			TitleBar: application.MacTitleBar{
+				AppearsTransparent: true,
+				Hide:               true,
+				HideTitle:          true,
+				FullSizeContent:    true,
+			},
+		},
+		Windows: application.WindowsWindow{
+			DisableFramelessWindowDecorations: true,
+		},
+		Linux: application.LinuxWindow{
+			Icon: appIcon,
+		},
+		BackgroundColour: application.NewRGB(11, 15, 19),
+		URL:              "/#/whiteboard",
+	})
+
+	window.RegisterHook(events.Common.WindowClosing, func(e *application.WindowEvent) {
+		window.Hide()
+		e.Cancel()
+	})
+
+	return window
+}
+
+func createAnnotationOverlayWindow(app *application.App) *application.WebviewWindow {
+	window := app.Window.NewWithOptions(application.WebviewWindowOptions{
+		Name:             "annotation-overlay",
+		Title:            "RecordingFreedom Annotation Overlay",
+		Width:            1280,
+		Height:           720,
+		Frameless:        true,
+		AlwaysOnTop:      true,
+		DisableResize:    true,
+		Hidden:           true,
+		BackgroundType:   application.BackgroundTypeTransparent,
+		BackgroundColour: application.NewRGBA(0, 0, 0, 0),
+		Mac: application.MacWindow{
+			Backdrop: application.MacBackdropTransparent,
+			TitleBar: application.MacTitleBar{
+				AppearsTransparent: true,
+				Hide:               true,
+				HideTitle:          true,
+				FullSizeContent:    true,
+			},
+			CollectionBehavior: application.MacWindowCollectionBehaviorCanJoinAllSpaces |
+				application.MacWindowCollectionBehaviorFullScreenAuxiliary,
+			WindowLevel: application.MacWindowLevelFloating,
+		},
+		Windows: application.WindowsWindow{
+			HiddenOnTaskbar:                   true,
+			DisableFramelessWindowDecorations: true,
+		},
+		Linux: application.LinuxWindow{
+			Icon:                appIcon,
+			WindowIsTranslucent: true,
+		},
+		URL: "/#/annotation-overlay",
+	})
+
+	window.RegisterHook(events.Common.WindowClosing, func(e *application.WindowEvent) {
+		window.Hide()
+		e.Cancel()
+	})
+
+	return window
+}
+
+func createAnnotationRendererWindow(app *application.App) *application.WebviewWindow {
+	window := app.Window.NewWithOptions(application.WebviewWindowOptions{
+		Name:          "annotation-renderer",
+		Title:         "RecordingFreedom Annotation Renderer",
+		Width:         annotationRendererWindowWidth,
+		Height:        annotationRendererWindowHeight,
+		Hidden:        true,
+		Frameless:     true,
+		AlwaysOnTop:   false,
+		DisableResize: true,
+		HideOnEscape:  false,
+		Mac: application.MacWindow{
+			TitleBar: application.MacTitleBar{
+				AppearsTransparent: true,
+				Hide:               true,
+				HideTitle:          true,
+				FullSizeContent:    true,
+			},
+		},
+		Windows: application.WindowsWindow{
+			HiddenOnTaskbar:                   true,
+			DisableFramelessWindowDecorations: true,
+		},
+		Linux: application.LinuxWindow{
+			Icon: appIcon,
+		},
+		BackgroundColour: application.NewRGB(11, 15, 19),
+		URL:              "/#/annotation-renderer",
+	})
+
+	window.RegisterHook(events.Common.WindowClosing, func(e *application.WindowEvent) {
+		window.Hide()
+		e.Cancel()
+	})
+
+	return window
+}
+
 func createRegionOverlayWindow(app *application.App) *application.WebviewWindow {
 	window := app.Window.NewWithOptions(application.WebviewWindowOptions{
 		Name:             "region-overlay",

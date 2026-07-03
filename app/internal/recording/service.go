@@ -20,6 +20,8 @@ type Service struct {
 	mu               sync.Mutex
 	state            State
 	session          *Session
+	pausedDuration   time.Duration
+	pauseStartedAt   time.Time
 }
 
 func NewService(appData *appdata.Service) *Service {
@@ -66,6 +68,44 @@ func (s *Service) ActiveBackendID() string {
 		return s.session.Backend
 	}
 	return s.backend.ID()
+}
+
+func (s *Service) ActiveSession() (Session, bool) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.session == nil {
+		return Session{}, false
+	}
+	switch s.state {
+	case StatePreparing, StateRecording, StatePaused, StateStopping:
+		return *s.session, true
+	default:
+		return Session{}, false
+	}
+}
+
+func (s *Service) ActiveRecordingOffset(now time.Time) (int64, bool) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.session == nil || s.session.StartedAt.IsZero() {
+		return 0, false
+	}
+	switch s.state {
+	case StatePreparing, StateRecording, StatePaused, StateStopping:
+	default:
+		return 0, false
+	}
+	if now.IsZero() {
+		now = time.Now()
+	}
+	elapsed := now.Sub(s.session.StartedAt) - s.pausedDuration
+	if s.state == StatePaused && !s.pauseStartedAt.IsZero() {
+		elapsed -= now.Sub(s.pauseStartedAt)
+	}
+	if elapsed < 0 {
+		elapsed = 0
+	}
+	return elapsed.Milliseconds(), true
 }
 
 func (s *Service) PatchActiveCameraPIP(config pip.Config) error {
@@ -141,6 +181,8 @@ func (s *Service) StartRecording(req StartRequest) (Session, error) {
 
 	now := time.Now()
 	s.state = StatePreparing
+	s.pausedDuration = 0
+	s.pauseStartedAt = time.Time{}
 	result, err := s.backend.Start(context.Background(), BackendStartRequest{
 		StartRequest: req,
 		VideoDir:     videoDir,
@@ -188,6 +230,8 @@ func (s *Service) StartAudioOnlyRecording(req AudioOnlyRequest) (Session, error)
 
 	now := time.Now()
 	s.state = StatePreparing
+	s.pausedDuration = 0
+	s.pauseStartedAt = time.Time{}
 	result, err := s.audioOnlyBackend.Start(context.Background(), videoDir, now, req)
 	if err != nil {
 		s.state = StateFailed
@@ -284,8 +328,18 @@ func (s *Service) setActiveState(from State, to State) (Session, error) {
 		_ = s.packages.PatchStatus(s.session.Manifest, recpackage.StatusFailed, nil)
 		return *s.session, err
 	}
+	transitionedAt := time.Now()
 	s.state = to
 	s.session.Status = to
+	switch to {
+	case StatePaused:
+		s.pauseStartedAt = transitionedAt
+	case StateRecording:
+		if !s.pauseStartedAt.IsZero() {
+			s.pausedDuration += transitionedAt.Sub(s.pauseStartedAt)
+			s.pauseStartedAt = time.Time{}
+		}
+	}
 	if err := s.packages.PatchStatus(s.session.Manifest, recpackageStatus(to), nil); err != nil {
 		return Session{}, err
 	}

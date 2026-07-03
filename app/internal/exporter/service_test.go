@@ -79,6 +79,166 @@ func TestFFmpegArgsPIPCircleUsesAlphaMask(t *testing.T) {
 	}
 }
 
+func TestFFmpegArgsAnnotationComposesSnapshot(t *testing.T) {
+	plan := testPlan(t, false)
+	annotationPath := filepath.Join(plan.PackageDir, "annotations", "exports", "annotation.png")
+	if err := os.MkdirAll(filepath.Dir(annotationPath), 0o755); err != nil {
+		t.Fatalf("mkdir annotations: %v", err)
+	}
+	if err := os.WriteFile(annotationPath, []byte("png media"), 0o644); err != nil {
+		t.Fatalf("write annotation: %v", err)
+	}
+	plan.AnnotationInputPath = annotationPath
+	plan.AnnotationsVisible = true
+
+	args, err := FFmpegArgs(plan, filepath.Join(plan.PackageDir, "exports", "tmp.mp4"), Options{})
+	if err != nil {
+		t.Fatalf("FFmpegArgs(annotation) error = %v", err)
+	}
+	joined := strings.Join(args, " ")
+	if !strings.Contains(joined, "-loop 1 -i "+annotationPath) {
+		t.Fatalf("args = %q, want looped annotation image input", joined)
+	}
+	filter := argAfter(args, "-filter_complex")
+	for _, want := range []string{"[1:v]format=rgba[annotation]", "[base][annotation]overlay=0:0", "repeatlast=1", "[vout]"} {
+		if !strings.Contains(filter, want) {
+			t.Fatalf("filter = %q, want %q", filter, want)
+		}
+	}
+}
+
+func TestFFmpegArgsAnnotationStartsAtTimelineOffset(t *testing.T) {
+	plan := testPlan(t, false)
+	annotationPath := filepath.Join(plan.PackageDir, "annotations", "exports", "annotation.png")
+	if err := os.MkdirAll(filepath.Dir(annotationPath), 0o755); err != nil {
+		t.Fatalf("mkdir annotations: %v", err)
+	}
+	if err := os.WriteFile(annotationPath, []byte("png media"), 0o644); err != nil {
+		t.Fatalf("write annotation: %v", err)
+	}
+	plan.AnnotationInputPath = annotationPath
+	plan.AnnotationStartMs = 3456
+	plan.AnnotationsVisible = true
+
+	args, err := FFmpegArgs(plan, filepath.Join(plan.PackageDir, "exports", "tmp.mp4"), Options{})
+	if err != nil {
+		t.Fatalf("FFmpegArgs(annotation timeline) error = %v", err)
+	}
+	filter := argAfter(args, "-filter_complex")
+	if !strings.Contains(filter, "overlay=0:0:eof_action=pass:repeatlast=1:enable='gte(t,3.456)'") {
+		t.Fatalf("filter = %q, want annotation enable timeline", filter)
+	}
+}
+
+func TestFFmpegArgsAnnotationSnapshotSegments(t *testing.T) {
+	plan := testPlan(t, false)
+	firstSnapshot := filepath.Join(plan.PackageDir, "annotations", "snapshots", "annotation-000001.png")
+	secondSnapshot := filepath.Join(plan.PackageDir, "annotations", "snapshots", "annotation-000002.png")
+	for _, path := range []string{firstSnapshot, secondSnapshot} {
+		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+			t.Fatalf("mkdir annotation snapshots: %v", err)
+		}
+		if err := os.WriteFile(path, []byte("png media"), 0o644); err != nil {
+			t.Fatalf("write annotation snapshot: %v", err)
+		}
+	}
+	plan.AnnotationsVisible = true
+	plan.AnnotationTimeline = "snapshot-segments"
+	plan.AnnotationSnapshots = []exportplan.AnnotationSnapshotPlan{
+		{InputPath: firstSnapshot, StartOffsetMs: 1200, EndOffsetMs: 3456},
+		{InputPath: secondSnapshot, StartOffsetMs: 3456},
+	}
+
+	args, err := FFmpegArgs(plan, filepath.Join(plan.PackageDir, "exports", "tmp.mp4"), Options{})
+	if err != nil {
+		t.Fatalf("FFmpegArgs(annotation segments) error = %v", err)
+	}
+	joined := strings.Join(args, " ")
+	for _, want := range []string{"-loop 1 -i " + firstSnapshot, "-loop 1 -i " + secondSnapshot} {
+		if !strings.Contains(joined, want) {
+			t.Fatalf("args = %q, want %q", joined, want)
+		}
+	}
+	filter := argAfter(args, "-filter_complex")
+	for _, want := range []string{
+		"[1:v]format=rgba[annotation0]",
+		"[base][annotation0]overlay=0:0:eof_action=pass:repeatlast=1:enable='gte(t,1.200)*lt(t,3.456)'[withannotation0]",
+		"[2:v]format=rgba[annotation1]",
+		"[withannotation0][annotation1]overlay=0:0:eof_action=pass:repeatlast=1:enable='gte(t,3.456)'[withannotation1]",
+	} {
+		if !strings.Contains(filter, want) {
+			t.Fatalf("filter = %q, want %q", filter, want)
+		}
+	}
+}
+
+func TestFFmpegArgsAnnotationElementPNGs(t *testing.T) {
+	plan := testPlan(t, false)
+	firstSnapshot := filepath.Join(plan.PackageDir, "annotations", "reconstructed", "png", "annotation-000001.png")
+	secondSnapshot := filepath.Join(plan.PackageDir, "annotations", "reconstructed", "png", "annotation-000002.png")
+	for _, path := range []string{firstSnapshot, secondSnapshot} {
+		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+			t.Fatalf("mkdir rendered annotation snapshots: %v", err)
+		}
+		if err := os.WriteFile(path, []byte("rendered png media"), 0o644); err != nil {
+			t.Fatalf("write rendered annotation snapshot: %v", err)
+		}
+	}
+	plan.AnnotationsVisible = true
+	plan.AnnotationTimeline = "element-pngs"
+	plan.AnnotationRenderMode = "element-pngs"
+	plan.AnnotationSnapshots = []exportplan.AnnotationSnapshotPlan{
+		{InputPath: firstSnapshot, RelativePath: "annotations/reconstructed/png/annotation-000001.png", StartOffsetMs: 800, EndOffsetMs: 1600},
+		{InputPath: secondSnapshot, RelativePath: "annotations/reconstructed/png/annotation-000002.png", StartOffsetMs: 1600},
+	}
+
+	args, err := FFmpegArgs(plan, filepath.Join(plan.PackageDir, "exports", "tmp.mp4"), Options{})
+	if err != nil {
+		t.Fatalf("FFmpegArgs(rendered annotation PNGs) error = %v", err)
+	}
+	joined := strings.Join(args, " ")
+	for _, want := range []string{"-loop 1 -i " + firstSnapshot, "-loop 1 -i " + secondSnapshot} {
+		if !strings.Contains(joined, want) {
+			t.Fatalf("args = %q, want %q", joined, want)
+		}
+	}
+	filter := argAfter(args, "-filter_complex")
+	for _, want := range []string{
+		"[1:v]format=rgba[annotation0]",
+		"[base][annotation0]overlay=0:0:eof_action=pass:repeatlast=1:enable='gte(t,0.800)*lt(t,1.600)'[withannotation0]",
+		"[2:v]format=rgba[annotation1]",
+		"[withannotation0][annotation1]overlay=0:0:eof_action=pass:repeatlast=1:enable='gte(t,1.600)'[withannotation1]",
+	} {
+		if !strings.Contains(filter, want) {
+			t.Fatalf("filter = %q, want %q", filter, want)
+		}
+	}
+}
+
+func TestFFmpegArgsPIPAndAnnotationUseSeparateInputs(t *testing.T) {
+	plan := testPlan(t, true)
+	annotationPath := filepath.Join(plan.PackageDir, "annotations", "exports", "annotation.png")
+	if err := os.MkdirAll(filepath.Dir(annotationPath), 0o755); err != nil {
+		t.Fatalf("mkdir annotations: %v", err)
+	}
+	if err := os.WriteFile(annotationPath, []byte("png media"), 0o644); err != nil {
+		t.Fatalf("write annotation: %v", err)
+	}
+	plan.AnnotationInputPath = annotationPath
+	plan.AnnotationsVisible = true
+
+	args, err := FFmpegArgs(plan, filepath.Join(plan.PackageDir, "exports", "tmp.mp4"), Options{})
+	if err != nil {
+		t.Fatalf("FFmpegArgs(pip+annotation) error = %v", err)
+	}
+	filter := argAfter(args, "-filter_complex")
+	for _, want := range []string{"[1:v]setpts=PTS-STARTPTS", "[2:v]format=rgba[annotation]", "[withpip][annotation]overlay=0:0"} {
+		if !strings.Contains(filter, want) {
+			t.Fatalf("filter = %q, want %q", filter, want)
+		}
+	}
+}
+
 func TestExportRunsFFmpegIntoTempThenInstallsOutput(t *testing.T) {
 	plan := testPlan(t, true)
 	outputPath := plan.OutputPath

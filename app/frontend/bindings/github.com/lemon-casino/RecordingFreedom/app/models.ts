@@ -29,6 +29,68 @@ import * as recpackage$0 from "./internal/recpackage/models.js";
 // @ts-ignore: Unused imports
 import * as settings$0 from "./internal/settings/models.js";
 
+export interface AnnotationCaptureRequest {
+    "sceneJson": string;
+    "snapshotDataUrl": string;
+    "eventsJsonl"?: string;
+}
+
+export interface AnnotationCaptureResult {
+    "packageDir": string;
+    "scenePath": string;
+    "eventsPath": string;
+    "snapshotPath": string;
+    "timelineSnapshotPath"?: string;
+    "bytes": number;
+}
+
+export interface AnnotationOverlayState {
+    "packageDir"?: string;
+    "manifestPath"?: string;
+    "windowBounds": RegionRect;
+    "canvasBounds": RegionRect;
+    "target": recpackage$0.ManifestAnnotationTarget;
+    "captureExcluded": boolean;
+}
+
+export interface AnnotationPreviewImageRequest {
+    "packageDir": string;
+    "snapshotPath": string;
+}
+
+export interface AnnotationPreviewImageResult {
+    "available": boolean;
+    "dataUrl"?: string;
+    "relativePath"?: string;
+    "bytes"?: number;
+}
+
+export interface AnnotationRenderJob {
+    "id": string;
+    "packageDir": string;
+    "scenePath": string;
+    "relativeScenePath": string;
+    "outputPath": string;
+    "relativeOutputPath": string;
+    "sceneJson": string;
+    "canvasWidth": number;
+    "canvasHeight": number;
+    "index": number;
+    "startOffsetMs"?: number;
+    "endOffsetMs"?: number;
+}
+
+export interface AnnotationRenderJobClaim {
+    "available": boolean;
+    "job"?: AnnotationRenderJob | null;
+}
+
+export interface AnnotationRenderJobResult {
+    "id": string;
+    "dataUrl"?: string;
+    "error"?: string;
+}
+
 export interface AudioLevelEvent {
     "deviceId": string;
     "level": number;
@@ -95,11 +157,16 @@ export interface ClientLogEvent {
     "fields"?: { [_ in string]?: string } | null;
 }
 
+export interface ExportRecordingPlanResult {
+    "plan": exportplan$0.Plan;
+}
+
 export interface ExportRecordingRequest {
     "packageDir": string;
     "outputPath"?: string;
     "canvasWidth"?: number;
     "canvasHeight"?: number;
+    "includeAnnotations"?: boolean | null;
 }
 
 export interface ExportRecordingResult {
@@ -193,4 +260,44 @@ export interface SettingsPreferencesPatchRequest {
     "recordingFps"?: number | null;
     "captureCursor"?: boolean | null;
     "countdownSeconds"?: number | null;
+}
+
+export interface WhiteboardExportRequest {
+    "format": string;
+    "dataUrl"?: string;
+    "payload"?: string;
+}
+
+export interface WhiteboardExportResult {
+    "format": string;
+    "outputPath": string;
+    "bytes": number;
+}
+
+export interface WhiteboardSceneRequest {
+    "sceneJson": string;
+}
+
+export interface WhiteboardSceneResult {
+    "available": boolean;
+    "scenePath": string;
+    "sceneJson"?: string;
+    "bytes": number;
+    "updatedAt"?: string;
+    "contentType"?: string;
+}
+
+export interface WhiteboardSettingsPatchRequest {
+    "enabled"?: boolean | null;
+    "lastMode"?: string | null;
+    "lastTool"?: string | null;
+    "lastStrokeColor"?: string | null;
+    "lastStrokeWidth"?: string | null;
+    "lastOpacity"?: number | null;
+    "capturePolicy"?: string | null;
+}
+
+export interface WhiteboardVisibilityEvent {
+    "visible": boolean;
+    "mode": string;
 }

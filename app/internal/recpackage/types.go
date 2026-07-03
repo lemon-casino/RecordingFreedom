@@ -8,36 +8,45 @@ import (
 )
 
 const (
-	AppName                = "RecordingFreedom"
-	ManifestFile           = "manifest.json"
-	AudioDiagnosticsFile   = "audio-diagnostics.json"
-	VideoDiagnosticsFile   = "video-diagnostics.json"
-	ScreenVideoFile        = "screen.mp4"
-	AudioOnlyFile          = "audio.m4a"
-	AudioOnlyWAVFile       = "audio.wav"
-	SystemAudioFile        = "system-audio.wav"
-	MicrophoneAudioFile    = "microphone.wav"
-	WebcamVideoFile        = "webcam.mov"
-	WindowsWebcamVideoFile = "webcam.mp4"
-	MockScreenFile         = "screen.mock.txt"
-	CacheDir               = "cache"
-	ExportsDir             = "exports"
-	PackageDirSuffix       = ".rfrec"
-	StatusRecording        = "recording"
-	StatusPaused           = "paused"
-	StatusFinalizing       = "finalizing"
-	StatusReady            = "ready"
-	StatusRecoverable      = "recoverable"
-	StatusFailed           = "failed"
-	NoiseSuppressionOn     = "rnnoise"
-	NoiseSuppressionOff    = "off"
-	TimelineBaseMock       = "mock"
-	TimelineBaseMedia      = "media-timestamp"
-	TimelineBasePlatform   = "platform-start-timestamp"
-	AudioStorageSidecar    = "sidecar"
-	AudioStorageMuxed      = "muxed"
-	RecordingModeScreen    = "screen"
-	RecordingModeAudio     = "audio-only"
+	AppName                          = "RecordingFreedom"
+	ManifestFile                     = "manifest.json"
+	AudioDiagnosticsFile             = "audio-diagnostics.json"
+	VideoDiagnosticsFile             = "video-diagnostics.json"
+	ScreenVideoFile                  = "screen.mp4"
+	AudioOnlyFile                    = "audio.m4a"
+	AudioOnlyWAVFile                 = "audio.wav"
+	SystemAudioFile                  = "system-audio.wav"
+	MicrophoneAudioFile              = "microphone.wav"
+	WebcamVideoFile                  = "webcam.mov"
+	WindowsWebcamVideoFile           = "webcam.mp4"
+	MockScreenFile                   = "screen.mock.txt"
+	CacheDir                         = "cache"
+	ExportsDir                       = "exports"
+	AnnotationsDir                   = "annotations"
+	AnnotationExportsDir             = "annotations/exports"
+	AnnotationSnapshotsDir           = "annotations/snapshots"
+	AnnotationRenderDir              = "annotations/reconstructed"
+	AnnotationRenderPNGDir           = "annotations/reconstructed/png"
+	AnnotationSceneFile              = "annotations/scene.excalidraw"
+	AnnotationEventsFile             = "annotations/events.jsonl"
+	AnnotationSnapshotFile           = "annotations/exports/annotation.png"
+	AnnotationOverlayDiagnosticsFile = "annotations/overlay-diagnostics.jsonl"
+	PackageDirSuffix                 = ".rfrec"
+	StatusRecording                  = "recording"
+	StatusPaused                     = "paused"
+	StatusFinalizing                 = "finalizing"
+	StatusReady                      = "ready"
+	StatusRecoverable                = "recoverable"
+	StatusFailed                     = "failed"
+	NoiseSuppressionOn               = "rnnoise"
+	NoiseSuppressionOff              = "off"
+	TimelineBaseMock                 = "mock"
+	TimelineBaseMedia                = "media-timestamp"
+	TimelineBasePlatform             = "platform-start-timestamp"
+	AudioStorageSidecar              = "sidecar"
+	AudioStorageMuxed                = "muxed"
+	RecordingModeScreen              = "screen"
+	RecordingModeAudio               = "audio-only"
 )
 
 type Package struct {
@@ -72,6 +81,7 @@ type Manifest struct {
 	Recording     recordingprofile.Profile `json:"recording"`
 	Audio         ManifestAudio            `json:"audio"`
 	Camera        ManifestCamera           `json:"camera"`
+	Annotations   *ManifestAnnotations     `json:"annotations,omitempty"`
 	Diagnostics   ManifestDiagnostics      `json:"diagnostics"`
 }
 
@@ -119,6 +129,23 @@ type ManifestCamera struct {
 	DeviceID  string     `json:"deviceId,omitempty"`
 	PIPPreset string     `json:"pipPreset"`
 	PIP       pip.Config `json:"pip"`
+}
+
+type ManifestAnnotations struct {
+	Enabled         bool                     `json:"enabled"`
+	Mode            string                   `json:"mode"`
+	ScenePath       string                   `json:"scenePath,omitempty"`
+	EventsPath      string                   `json:"eventsPath,omitempty"`
+	SnapshotPath    string                   `json:"snapshotPath,omitempty"`
+	DiagnosticsPath string                   `json:"diagnosticsPath,omitempty"`
+	CapturePolicy   string                   `json:"capturePolicy"`
+	Target          ManifestAnnotationTarget `json:"target"`
+}
+
+type ManifestAnnotationTarget struct {
+	Type     string                  `json:"type"`
+	ID       string                  `json:"id"`
+	Geometry *ManifestSourceGeometry `json:"geometry,omitempty"`
 }
 
 type ManifestDiagnostics struct {

@@ -22,6 +22,15 @@ function Require-File([string]$Path) {
     return $item
 }
 
+function Assert-FileContains([string]$Path, [string[]]$Needles) {
+    $content = Get-Content -LiteralPath $Path -Raw
+    foreach ($needle in $Needles) {
+        if (-not $content.Contains($needle)) {
+            throw "File $Path is missing required text: $needle"
+        }
+    }
+}
+
 $installer = Resolve-FullPath $InstallerPath
 if (-not (Test-Path -LiteralPath $installer -PathType Leaf)) {
     throw "Windows installer does not exist: $installer"
@@ -58,9 +67,17 @@ try {
     $ffmpegPath = Join-Path $toolsDir "ffmpeg.exe"
     $ffprobePath = Join-Path $toolsDir "ffprobe.exe"
     $noticePath = Join-Path $toolsDir "THIRD_PARTY_FFMPEG.txt"
+    $thirdPartyNoticesPath = Join-Path $toolsDir "THIRD_PARTY_NOTICES.txt"
     Require-File $ffmpegPath | Out-Null
     Require-File $ffprobePath | Out-Null
     Require-File $noticePath | Out-Null
+    Require-File $thirdPartyNoticesPath | Out-Null
+    Assert-FileContains -Path $thirdPartyNoticesPath -Needles @(
+        "@excalidraw/excalidraw",
+        "License: MIT",
+        "Copyright (c) 2020 Excalidraw",
+        "THE SOFTWARE IS PROVIDED `"AS IS`""
+    )
     Require-File (Join-Path $InstallDir "uninstall.exe") | Out-Null
 
     $version = & $ffmpegPath -version 2>$null | Select-Object -First 1

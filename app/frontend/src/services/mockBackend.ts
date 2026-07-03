@@ -9,6 +9,10 @@ export type PIPPreset = 'off' | 'bottom-right' | 'bottom-left' | 'free'
 export type PIPShape = 'circle' | 'square'
 export type RecordingQuality = 'standard' | 'balanced' | 'high'
 export type RecordingPreflightStatus = 'ready' | 'warning' | 'blocked'
+export type WhiteboardMode = 'board' | 'annotation'
+export type WhiteboardTool = 'selection' | 'hand' | 'freedraw' | 'laser' | 'arrow' | 'line' | 'rectangle' | 'ellipse' | 'text' | 'eraser'
+export type WhiteboardStrokeWidth = 'thin' | 'medium' | 'bold'
+export type WhiteboardCapturePolicy = 'preview-only' | 'export-compose'
 
 export type PIPConfig = {
   preset: PIPPreset
@@ -139,6 +143,15 @@ export type AppSettings = {
     deviceId?: string
     pipPreset: PIPPreset
     pip: PIPConfig
+  }
+  whiteboard: {
+    enabled: boolean
+    lastMode: WhiteboardMode
+    lastTool: WhiteboardTool
+    lastStrokeColor: string
+    lastStrokeWidth: WhiteboardStrokeWidth
+    lastOpacity: number
+    capturePolicy: WhiteboardCapturePolicy
   }
   window: {
     minimizeToTray: boolean
@@ -473,6 +486,15 @@ export const defaultSettings: AppSettings = {
       scale: 0.08,
       edgeFeather: 0.16,
     },
+  },
+  whiteboard: {
+    enabled: true,
+    lastMode: 'board',
+    lastTool: 'freedraw',
+    lastStrokeColor: '#ef4444',
+    lastStrokeWidth: 'medium',
+    lastOpacity: 100,
+    capturePolicy: 'export-compose',
   },
   window: {
     minimizeToTray: true,

@@ -128,6 +128,60 @@ func TestPatchStatusWritesCompletedAt(t *testing.T) {
 	}
 }
 
+func TestPatchAnnotationsWritesRelativeManifestContract(t *testing.T) {
+	service := NewService()
+	pkg, err := service.CreateMock(t.TempDir(), CreateMockRequest{
+		Source: ManifestSource{
+			Type: "region",
+			ID:   "region:custom",
+			Geometry: &ManifestSourceGeometry{
+				X:      10,
+				Y:      20,
+				Width:  800,
+				Height: 450,
+			},
+		},
+	})
+	if err != nil {
+		t.Fatalf("CreateMock() error = %v", err)
+	}
+
+	manifest, err := service.PatchAnnotations(pkg.ManifestPath, ManifestAnnotations{})
+	if err != nil {
+		t.Fatalf("PatchAnnotations() error = %v", err)
+	}
+	if manifest.Annotations == nil || !manifest.Annotations.Enabled {
+		t.Fatalf("annotations = %#v, want enabled contract", manifest.Annotations)
+	}
+	if manifest.Annotations.ScenePath != AnnotationSceneFile ||
+		manifest.Annotations.EventsPath != AnnotationEventsFile ||
+		manifest.Annotations.SnapshotPath != AnnotationSnapshotFile ||
+		manifest.Annotations.DiagnosticsPath != AnnotationOverlayDiagnosticsFile ||
+		manifest.Annotations.CapturePolicy != "export-compose" {
+		t.Fatalf("annotations paths/policy = %#v, want defaults", manifest.Annotations)
+	}
+	if manifest.Annotations.Target.Type != "region" || manifest.Annotations.Target.ID != "region:custom" || manifest.Annotations.Target.Geometry == nil || manifest.Annotations.Target.Geometry.Width != 800 {
+		t.Fatalf("annotation target = %#v, want source-derived target", manifest.Annotations.Target)
+	}
+}
+
+func TestWriteManifestRejectsEscapingAnnotationPath(t *testing.T) {
+	service := NewService()
+	err := service.WriteManifest(filepath.Join(t.TempDir(), ManifestFile), Manifest{
+		SchemaVersion: 1,
+		App:           AppName,
+		Status:        StatusRecording,
+		Media:         ManifestMedia{ScreenVideoPath: MockScreenFile},
+		Annotations: &ManifestAnnotations{
+			Enabled:      true,
+			SnapshotPath: "../annotation.png",
+		},
+	})
+	if err == nil {
+		t.Fatal("WriteManifest() accepted an escaping annotation path")
+	}
+}
+
 func TestCreateNativeInitializesWritePlanWithoutCreatingMedia(t *testing.T) {
 	root := t.TempDir()
 	createdAt := time.Date(2026, 6, 30, 18, 30, 0, 456000000, time.UTC)
@@ -1024,14 +1078,33 @@ func TestRecoverRejectsPackageOutsideVideoDir(t *testing.T) {
 	}
 }
 
+func TestProbeMP4ReportsTracksAndDuration(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "screen.mp4")
+	writeMinimalMP4(t, path, "vide")
+
+	probe, err := ProbeMP4(path)
+	if err != nil {
+		t.Fatalf("ProbeMP4() error = %v", err)
+	}
+	if !probe.HasFileType || !probe.HasMovie || !probe.HasVideoTrack || probe.HasAudioTrack || probe.DurationMs != 1000 {
+		t.Fatalf("ProbeMP4() = %#v, want video mp4 with 1000ms duration", probe)
+	}
+}
+
 func writeMinimalMP4(t *testing.T, path string, handlerType string) {
 	t.Helper()
+	mvhdPayload := make([]byte, 20)
+	binary.BigEndian.PutUint32(mvhdPayload[12:16], 1000)
+	binary.BigEndian.PutUint32(mvhdPayload[16:20], 1000)
+
 	payload := make([]byte, 0, 12)
 	payload = append(payload, 0, 0, 0, 0)
 	payload = append(payload, 0, 0, 0, 0)
 	payload = append(payload, []byte(handlerType)...)
 	data := mp4TestBox("ftyp", []byte("isom0000"))
-	data = append(data, mp4TestBox("moov", mp4TestBox("trak", mp4TestBox("mdia", mp4TestBox("hdlr", payload))))...)
+	moovPayload := mp4TestBox("mvhd", mvhdPayload)
+	moovPayload = append(moovPayload, mp4TestBox("trak", mp4TestBox("mdia", mp4TestBox("hdlr", payload)))...)
+	data = append(data, mp4TestBox("moov", moovPayload)...)
 	if err := os.WriteFile(path, data, 0o644); err != nil {
 		t.Fatalf("WriteFile(minimal mp4) error = %v", err)
 	}

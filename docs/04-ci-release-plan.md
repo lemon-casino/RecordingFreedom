@@ -26,7 +26,7 @@ https://github.com/lemon-casino/RecordingFreedom.git
 
 当前已落地 jobs：
 
-- `validate`：安装 Go、Node、Linux Wails 依赖和 Wails v3 CLI，生成 bindings，校验 `frontend/bindings` 无未提交差异，运行前端 build、`go test ./...`、RNNoise native DSP + recording runtime 定向测试、`go run ./cmd/preview-smoke`、`go run ./cmd/release-config-check`，并用 `CGO_ENABLED=1 go run -tags "gtk3 rnnoise_native" ./cmd/desktop-doctor -require-rnnoise` 阻断不能创建 RNNoise native suppressor 的构建。
+- `validate`：安装 Go、Node、Linux Wails 依赖、Wails v3 CLI 和 Playwright Chromium，生成 bindings，校验 `frontend/bindings` 无未提交差异，运行前端 build、前端 `test:e2e`、`go test ./...`、RNNoise native DSP + recording runtime 定向测试、`go run ./cmd/preview-smoke`、`go run ./cmd/release-config-check`，并用 `CGO_ENABLED=1 go run -tags "gtk3 rnnoise_native" ./cmd/desktop-doctor -require-rnnoise` 阻断不能创建 RNNoise native suppressor 的构建。前端 e2e 覆盖普通画板、主胶囊画板入口双态规则和录制标注 overlay 命中区域，防止画板入口在录制紧凑态被隐藏或误切模式；`release-config-check` 同时检查 `12-annotation-overlay-platform-smoke.md` 的实机 overlay 验收标准，避免把导出合成 smoke 误写成透明 overlay 已完成。
 - `windows-build`：当前只在 `windows-latest` 上运行带 `rnnoise_native` 的 Wails 构建。Windows runner 会显式准备 MinGW GCC 供 cgo 编译 RNNoise，构建后运行 `desktop-doctor -require-video -require-rnnoise`，并打包 portable smoke tools。macOS/Linux Wails build 暂时关闭，等对应 smoke/release gates 稳定后再恢复。
 
 ## 当前 Release 工作流
@@ -35,7 +35,7 @@ https://github.com/lemon-casino/RecordingFreedom.git
 
 发布前门禁：
 
-- `Release Gate`：生成 bindings 并校验无差异，运行前端 build、`go test ./...`、RNNoise native DSP + recording runtime 定向测试、`go run ./cmd/preview-smoke`，并运行带 `rnnoise_native` 的 `desktop-doctor -require-rnnoise`。从当前 preview 开始，发布 artifact 默认启用 RNNoise native DSP，不能再发布“按钮存在但二进制没有真降噪”的验收包。
+- `Release Gate`：生成 bindings 并校验无差异，运行前端 build、前端 `test:e2e`、`go test ./...`、RNNoise native DSP + recording runtime 定向测试、`go run ./cmd/preview-smoke`，并运行带 `rnnoise_native` 的 `desktop-doctor -require-rnnoise`。从当前 preview 开始，发布 artifact 默认启用 RNNoise native DSP，不能再发布“按钮存在但二进制没有真降噪”的验收包；画板入口也必须满足未录制打开普通画板、视频录制/暂停中打开录制标注、音频录制中仍打开普通画板的双态验收。
 - Windows build 只有在 `Release Gate` 通过后才会启动。
 
 平台 runner：
@@ -73,13 +73,13 @@ GitHub Actions 会自动运行 `release.yml`，通过后生成 GitHub prerelease
 - 无 GUI preview smoke 是否能完成设置持久化、storage health、预检、mock 开始/暂停/继续/结束、manifest ready 校验和恢复扫描。
 - Windows 是否能完成 Wails 构建；macOS/Linux 构建当前暂时关闭，不作为本轮 Actions 验收项。
 - 发布二进制是否通过 `desktop-doctor -require-rnnoise`，确认 RNNoise native DSP 已真实编入 artifact。
-- Windows portable zip 是否通过 `scripts/verify-windows-portable.ps1`：包含 `recordingfreedom.exe`、`tools/ffmpeg.exe`、`tools/ffprobe.exe`、`tools/THIRD_PARTY_FFMPEG.txt`、`tools/desktop-doctor.exe`、`tools/video-smoke.exe`、`tools/audio-smoke.exe` 和 `tools/run-windows-portable-smoke.ps1`，并能在 Windows runner 上执行 FFmpeg/FFprobe；校验脚本还会解析 portable 内的 smoke runner，并检查它覆盖 doctor、video-smoke、audio-smoke、FFmpeg 环境变量、区域/窗口/系统声音/麦克风/RNNoise 关键入口。
+- Windows portable zip 是否通过 `scripts/verify-windows-portable.ps1`：包含 `recordingfreedom.exe`、`tools/ffmpeg.exe`、`tools/ffprobe.exe`、`tools/THIRD_PARTY_FFMPEG.txt`、`tools/THIRD_PARTY_NOTICES.txt`、`tools/desktop-doctor.exe`、`tools/video-smoke.exe`、`tools/audio-smoke.exe`、`tools/annotation-export-smoke.exe`、`tools/annotation-overlay-evidence-check.exe` 和 `tools/run-windows-portable-smoke.ps1`，并能在 Windows runner 上执行 FFmpeg/FFprobe；校验脚本还会解析 portable 内的 smoke runner，检查它覆盖 doctor、video-smoke、audio-smoke、annotation-export-smoke、annotation-overlay-evidence-check、FFmpeg 环境变量、区域/窗口 annotation target 绑定、系统声音/麦克风/RNNoise 关键入口，并确认 Excalidraw MIT 许可证声明已进入 artifact。
 - 已发布的 Windows preview asset 可用 `scripts/verify-windows-preview-release.ps1` 下载复验：脚本会从 GitHub Release 下载 Windows portable zip 和 `SHA256SUMS-windows-x64*.txt`，校验 SHA256，再调用 `scripts/verify-windows-portable.ps1` 检查 portable zip 内容、x64 PE 头、`recordingfreedom.exe` GUI subsystem、FFmpeg/FFprobe 依赖。
 - Windows artifact 是否保持 GUI subsystem 和隐藏 FFmpeg/DirectShow 子进程命令窗口的配置，避免启动软件或开始录制时弹出控制台窗口。
 
 当前已验证的 preview 是 `v0.1.0-preview.15`。该 tag 的 Release workflow 已通过 Release Gate、Windows x64、macOS arm64、Linux x64 和 Publish GitHub Release，Actions run 为 `https://github.com/lemon-casino/RecordingFreedom/actions/runs/28502127468`，发布到 `https://github.com/lemon-casino/RecordingFreedom/releases/tag/v0.1.0-preview.15`。产物包含 `RecordingFreedom-windows-x64-v0.1.0-preview.15-portable.zip`、`RecordingFreedom-macos-arm64-v0.1.0-preview.15`、`RecordingFreedom-linux-x64-v0.1.0-preview.15` 和三个平台 SHA256SUMS。`scripts/verify-windows-preview-release.ps1 -TagName v0.1.0-preview.15` 已完成真实 GitHub Release 下载复验：Windows portable zip SHA256 为 `99E1EB5C425B925F0F0269EE364C95A4F0CB7278EEE73C8E6D5A31196A8CD7DD`，`recordingfreedom.exe` 是 x64 GUI PE，FFmpeg/FFprobe 是 x64 PE 且 `-version` 可执行，`tools/desktop-doctor.exe`、`tools/video-smoke.exe` 和 `tools/audio-smoke.exe` 均为 x64 console PE，`tools/run-windows-portable-smoke.ps1` 已打入 zip。当前 `main` 的下一次 portable 校验还会解析 runner 并检查关键 smoke 命令内容。`v0.1.0-preview.7` 和 `v0.1.0-preview.8` 保留为失败记录：前者暴露 Linux Wails build tag 拼接问题，后者暴露 Windows FFmpeg bootstrap 下载链路问题；两个问题均已在 `preview.9` 前修复。`v0.1.0-preview.11` 在 `preview.10` 基础上修复 Windows 默认麦克风保留真实 WASAPI endpoint、录制中锁定来源/音频/摄像头配置，以及区域录制选区持久边框。`v0.1.0-preview.13` 修复胶囊透明背景灰底、屏幕编号标识尺寸/居中，并把区域框选后的编辑态改为透明 overlay。`v0.1.0-preview.14` 把区域录制开始后的持久边框也改为鼠标穿透透明 overlay，避免四个窄条 WebView 窗口露出浅色背景和关闭按钮，同时清理 macOS CoreAudio deprecated property element annotation。`v0.1.0-preview.15` 把 Windows clean-machine 验收工具和 runner 纳入 portable zip，并把 release/CI 门禁扩展到这些工具。
 
-当前 preview release 必须在 release notes 中明确：macOS ScreenCaptureKit display/window/region capture 已接入代码路径但仍需真机 smoke 验收，Program/Application 当前是 queued 后续项；Windows portable zip 会携带 FFmpeg desktop writer 依赖和 clean-machine smoke runner，当前 Windows 桌面已从已发布 `v0.1.0-preview.15` portable artifact 解压运行 `tools/run-windows-portable-smoke.ps1 -Duration 3s -ContinueOnError`，12/12 step 通过，覆盖 screen/all-screens/region/window、pause/resume、系统声音、麦克风、RNNoise 和 audio-only 组合；Windows WASAPI 音频已能在停止阶段 mux 到主 `screen.mp4`，且本机 1 分钟、5 分钟和 20 分钟 smoke 已通过。外部 clean machine、长时长 artifact runner、跨平台长录同步、Linux PipeWire、目标桌面 RNNoise 实录听感仍属于后续验收；摄像头 sidecar/PIP 已完成结构化配置合同、透明 PIP 编辑 overlay、WebView 预览与 sidecar 设备最佳匹配逻辑、Windows/macOS/Linux FFmpeg sidecar writer、`ExportRecordingPackage()`、`cmd/pip-export-smoke` 和 FFmpeg PIP 导出合成，本机已用临时真实 MP4 素材跑通圆形镜像 PIP 与方形羽化 PIP 导出，并在安装输出前通过 FFmpeg 解码首个视频帧。仍不能把跨平台真实摄像头设备预览匹配效果、macOS/Linux 真机 sidecar smoke、暂停片段精确同步和长期原生采集替换说成已完成。不能把 mock package、未验收的 ScreenCaptureKit/FFmpeg artifact 路径、单机导出 smoke 或 `audio-smoke` 说成完整正式录制。
+当前 preview release 必须在 release notes 中明确：macOS ScreenCaptureKit display/window/region capture 已接入代码路径但仍需真机 smoke 验收，Program/Application 当前是 queued 后续项；Windows portable zip 会携带 FFmpeg desktop writer 依赖和 clean-machine smoke runner，当前 Windows 桌面已从已发布 `v0.1.0-preview.15` portable artifact 解压运行 `tools/run-windows-portable-smoke.ps1 -Duration 3s -ContinueOnError`，12/12 step 通过，覆盖 screen/all-screens/region/window、pause/resume、系统声音、麦克风、RNNoise 和 audio-only 组合；Windows WASAPI 音频已能在停止阶段 mux 到主 `screen.mp4`，且本机 1 分钟、5 分钟和 20 分钟 smoke 已通过。外部 clean machine、长时长 artifact runner、跨平台长录同步、Linux PipeWire、目标桌面 RNNoise 实录听感仍属于后续验收；摄像头 sidecar/PIP 已完成结构化配置合同、透明 PIP 编辑 overlay、WebView 预览与 sidecar 设备最佳匹配逻辑、Windows/macOS/Linux FFmpeg sidecar writer、`ExportRecordingPackage()`、`cmd/pip-export-smoke` 和 FFmpeg PIP 导出合成，本机已用临时真实 MP4 素材跑通圆形镜像 PIP 与方形羽化 PIP 导出，并在安装输出前通过 FFmpeg 解码首个视频帧。标注导出新增 `cmd/annotation-export-smoke`，会生成真实短 MP4 + 可配置多段透明 annotation PNG + `.rfrec`，导出后逐段抽帧检查标注像素进入最终 MP4；该工具已纳入下一版 Windows portable runner，runner 默认执行 region source 的 snapshot-segments 与 window source 的 element-pngs 两条 `-duration=5s -segments=5` 验收，证明 annotation target 会跟随录制来源绑定。`cmd/annotation-overlay-evidence-check` 也会进入 Windows portable tools，用于真实 overlay smoke 完成后校验证据目录中的 `.rfrec/annotations/`、标注 PNG 和 `exports/recording.mp4`。仍不能把跨平台真实摄像头设备预览匹配效果、macOS/Linux 真机 sidecar smoke、暂停片段精确同步和长期原生采集替换说成已完成。不能把 mock package、未验收的 ScreenCaptureKit/FFmpeg artifact 路径、单机导出 smoke 或 `audio-smoke` 说成完整正式录制。
 
 Windows preview asset 下载复验命令：
 
@@ -93,7 +93,17 @@ Windows preview asset 下载复验命令：
 .\tools\run-windows-portable-smoke.ps1
 ```
 
-该脚本会把 `RECORDINGFREEDOM_FFMPEG_PATH` 指向随包 `tools/ffmpeg.exe`，再运行 `desktop-doctor -require-video -require-rnnoise`、screen/all-screens/region/window `video-smoke`、pause/resume、系统声音/麦克风 mux 组合，以及 `audio-smoke` 的麦克风/RNNoise、系统声音和混合音频 smoke。默认输出在 portable 根目录的 `data-smoke/data/video` 下；没有窗口源、麦克风或系统播放环境时，可以用 `-SkipWindow`、`-SkipMicrophone`、`-SkipSystemAudio` 等参数做诊断，但完整验收不能跳过这些项目。2026-07-01 当前 Windows 桌面已用 `v0.1.0-preview.15` 发布 zip 运行该 runner，3 秒矩阵 12/12 通过，生成 11 个 ready `.rfrec` 包；代表性混合视频包含 H.264 video + AAC audio，混合 audio-only 包含 AAC audio。
+该脚本会把 `RECORDINGFREEDOM_FFMPEG_PATH` 指向随包 `tools/ffmpeg.exe`，再运行 `desktop-doctor -require-video -require-rnnoise`、`annotation-export-smoke -duration=5s -segments=5 -timeline=snapshot-segments -source-type=region`、`annotation-export-smoke -duration=5s -segments=5 -timeline=element-pngs -source-type=window` 两条标注导出逐段抽帧验收、screen/all-screens/region/window `video-smoke`、pause/resume、系统声音/麦克风 mux 组合，以及 `audio-smoke` 的麦克风/RNNoise、系统声音和混合音频 smoke。默认输出在 portable 根目录的 `data-smoke/data/video` 下；没有窗口源、麦克风或系统播放环境时，可以用 `-SkipWindow`、`-SkipMicrophone`、`-SkipSystemAudio` 等参数做诊断，但完整验收不能跳过这些项目。2026-07-01 当前 Windows 桌面已用 `v0.1.0-preview.15` 发布 zip 运行该 runner，3 秒矩阵 12/12 通过，生成 11 个 ready `.rfrec` 包；代表性混合视频包含 H.264 video + AAC audio，混合 audio-only 包含 AAC audio。下一版 runner 会额外生成 region snapshot 与 window element-pngs 两个 annotation export smoke `.rfrec`，并验证最终 MP4 中 5 段标注分别在对应时间段呈现正确颜色。
+
+长标注验收可以在同一个 portable 入口显式启用：
+
+```powershell
+.\tools\run-windows-portable-smoke.ps1 -RunAnnotationLong
+```
+
+该模式会在默认 5 秒标注 smoke 之外追加 `1m` 和 `5m` 两组 annotation export smoke，每组分别覆盖 region snapshot timeline 和 window element-pngs timeline，默认每条长时间线 60 段。它证明发布包内 `.rfrec` 标注时间线、元素级 PNG 合成和最终 MP4 抽帧验证可以跑过 1 分钟/5 分钟的可配置长时间线；它仍不是替代用户真实手绘 overlay、真实录屏输入和 macOS/Linux 透明窗口穿透的真机验收。
+
+真实录制标注 overlay 的平台验收必须按 `12-annotation-overlay-platform-smoke.md` 执行并保存 evidence。Windows portable 包会携带 `tools/annotation-overlay-evidence-check.exe`，可在目标机器用它复查 evidence 目录里的真实 `.rfrec/annotations/`、`diagnostics.sync.screen.durationMs`、1 分钟/5 分钟 ready 包、all-screens / screen / region / window 来源矩阵、元素级标注事件、绘制/穿透 hit-region 诊断、`annotations/overlay-diagnostics.jsonl`、标注 PNG 和最终 `exports/recording.mp4`；该工具只检查证据结构和诊断 JSONL，不能替代人工确认点击穿透、鼠标闪烁和多屏坐标。只有在对应平台完成全屏、单屏、区域、锁定窗口、多屏/高 DPI、绘制态、穿透态、真实 `.rfrec/annotations/`、overlay diagnostics 和最终 `exports/recording.mp4` 验收后，release notes 才能把该平台的录制标注 overlay 写为完成。
 
 `preview`、`alpha`、`beta`、`rc` 标签会被 workflow 自动标记为 GitHub prerelease；正式稳定版本再移除这些后缀。
 
@@ -122,6 +132,7 @@ Windows preview asset 下载复验命令：
 
 - Windows FFmpeg desktop writer 能检测 ffmpeg，缺失时 preflight blocked，存在时能启动 video-smoke。
 - FFmpeg 二进制来源、SHA256 校验、许可证文本和再分发义务在 release notes 或第三方 notices 中明确；当前 preview 通过 `scripts/ensure-windows-ffmpeg.ps1` 下载 BtbN FFmpeg-Builds static Windows zip，按 `checksums.sha256` 校验，并生成 `tools/THIRD_PARTY_FFMPEG.txt`。
+- Excalidraw 等嵌入式前端组件的许可证文本必须进入 `tools/THIRD_PARTY_NOTICES.txt`，Windows portable zip 和安装包 verifier 都要阻断缺失或内容不完整的 artifact。
 - WASAPI system audio 和 microphone capture smoke test 通过。
 - 摄像头 sidecar smoke test 通过；Windows 当前使用 FFmpeg DirectShow，macOS 当前使用 FFmpeg AVFoundation，Linux 当前使用 FFmpeg v4l2。后续如替换为 Media Foundation/AVFoundation/PipeWire 原生 writer，仍必须复用同一 `.rfrec` 和 PIP 导出合同。
 - MSVC runtime 静态链接，或随包附带并验证 DLL。
@@ -157,7 +168,7 @@ Linux 初期为 experimental：
 - RNNoise native DSP 已进入目标 preview/release toolchain 的 cgo 构建和 doctor 门禁；正式发布前仍需补目标桌面的 `audio-smoke -rnnoise` 实录听感与诊断验证。
 - FFmpeg 或系统编码依赖策略检查；PIP 导出和当前三平台摄像头 sidecar 均依赖 FFmpeg，可用性必须进入 capability、doctor 和 release notes。
 - Windows portable zip 解压后 `recordingfreedom.exe` 能从同级 `tools/ffmpeg.exe` 解析依赖。
-- Release workflow 在上传 artifact 前运行 `scripts/verify-windows-portable.ps1`，缺少 exe、FFmpeg、FFprobe 或第三方说明会直接失败；该脚本还会解压 portable zip，检查 `recordingfreedom.exe` 是 x64 GUI PE，并确认 FFmpeg/FFprobe 是 x64 PE，在 Windows host 上继续执行 `-version`。
+- Release workflow 在上传 artifact 前运行 `scripts/verify-windows-portable.ps1`，缺少 exe、FFmpeg、FFprobe、FFmpeg 第三方说明或 Excalidraw MIT notices 会直接失败；该脚本还会解压 portable zip，检查 `recordingfreedom.exe` 是 x64 GUI PE，并确认 FFmpeg/FFprobe 是 x64 PE，在 Windows host 上继续执行 `-version`。
 - Release 发布后可运行 `scripts/verify-windows-preview-release.ps1` 对 GitHub Release asset 做下载级复验，覆盖 SHA256SUMS 和 portable zip 结构。
 - 正式安装包环境中的 GUI/进程级 smoke test。
 - signed/notarized/package 后的 mock `.rfrec/manifest.json` 创建 smoke test。

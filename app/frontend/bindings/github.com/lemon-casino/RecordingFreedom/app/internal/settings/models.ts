@@ -47,6 +47,7 @@ export interface Settings {
     "recording": RecordingSettings;
     "audio": AudioSettings;
     "camera": CameraSettings;
+    "whiteboard": WhiteboardSettings;
     "window": WindowSettings;
     "updatedAt": time$0.Time;
 }
@@ -73,6 +74,16 @@ export enum Theme {
     ThemeInkPurple = "ink-purple",
     ThemeSageGray = "sage-gray",
 };
+
+export interface WhiteboardSettings {
+    "enabled": boolean;
+    "lastMode": string;
+    "lastTool": string;
+    "lastStrokeColor": string;
+    "lastStrokeWidth": string;
+    "lastOpacity": number;
+    "capturePolicy": string;
+}
 
 export interface WindowSettings {
     "minimizeToTray": boolean;

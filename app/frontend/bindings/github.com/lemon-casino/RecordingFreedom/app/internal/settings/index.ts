@@ -13,5 +13,6 @@ export type {
     Settings,
     SourceSettings,
     StorageSettings,
+    WhiteboardSettings,
     WindowSettings
 } from "./models.js";

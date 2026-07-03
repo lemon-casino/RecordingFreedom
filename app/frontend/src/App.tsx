@@ -14,6 +14,7 @@ import {
   MousePointer2,
   Monitor,
   Pause,
+  PenLine,
   Play,
   Radio,
   Settings,
@@ -23,10 +24,11 @@ import {
   Wand2,
   X,
 } from 'lucide-react'
-import {useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type PointerEvent as ReactPointerEvent, type ReactNode} from 'react'
+import {Suspense, lazy, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type PointerEvent as ReactPointerEvent, type ReactNode} from 'react'
 import {copyByLocale, type RecorderCopy, type RecoveryMessageKey, type SourceSelectionMessageKey, type StatusMessageKey, type StorageMessageKey} from './i18n'
 import {
   cameraDevices,
+  defaultSettings,
   fallbackAppData,
   localeOptions,
   normalizeLocale,
@@ -57,7 +59,11 @@ import {
   fallbackCapabilities,
   fallbackStorageStatus,
 } from './services/mockBackend'
-import {cancelRegionSelector, cancelSelectedRegion, completeRegionSelection, exportRecordingPackage, hidePipOverlay, hideRegionFrame, hideScreenIndicator, hideSettingsWindow, loadBootstrap, loadSettings, logClientEvent, openRecordingPackage, openVideoDirectory, patchAudioState, patchSettingsPreferences, pauseRecording, preflightAudioOnlyRecording, preflightRecording, quitApplication, readPipPreviewImage, recoverRecordingPackage, restoreCapsuleWindow, resumeRecording, saveSettings, setCapsuleWindowExpanded, setCapsuleWindowHitRegions, setDataRoot, showPipOverlay, showRegionSelector, showScreenIndicator, startAudioOnlyRecording, startMicrophoneLevelMonitor, startRecording, stopMicrophoneLevelMonitor, stopRecording, subscribeAudioLevel, subscribeAudioState, subscribeCapsuleWindowMoveEnded, subscribeRecordingStatus, subscribeRegionSelection, subscribeSettingsChanged, updatePipOverlay, updateSelectedRegion, type AudioControlState, type AudioLevelUpdate, type AudioStatePatch, type CapsuleWindowExpandDirection, type CapsuleWindowHitRegion, type PIPOverlayCamera, type PIPOverlayState, type RecordingRecovery, type RecordingStatusUpdate, type RegionSelectionSession, type SettingsPreferencesPatch} from './services/recorderBackend'
+import {cancelRegionSelector, cancelSelectedRegion, completeRegionSelection, exportRecordingPackage, hidePipOverlay, hideRegionFrame, hideScreenIndicator, hideSettingsWindow, loadBootstrap, loadSettings, logClientEvent, openRecordingPackage, openVideoDirectory, patchAudioState, patchSettingsPreferences, patchWhiteboardSettings, pauseRecording, preflightAudioOnlyRecording, preflightRecording, previewExportRecordingPackage, quitApplication, readAnnotationPreviewImage, readPipPreviewImage, recoverRecordingPackage, restoreCapsuleWindow, resumeRecording, saveSettings, setCapsuleWindowExpanded, setCapsuleWindowHitRegions, setDataRoot, showAnnotationOverlay, showPipOverlay, showRegionSelector, showScreenIndicator, showWhiteboardWindow, startAudioOnlyRecording, startMicrophoneLevelMonitor, startRecording, stopMicrophoneLevelMonitor, stopRecording, subscribeAudioLevel, subscribeAudioState, subscribeCapsuleWindowMoveEnded, subscribeRecordingStatus, subscribeRegionSelection, subscribeSettingsChanged, subscribeWhiteboardVisibility, updatePipOverlay, updateSelectedRegion, type AudioControlState, type AudioLevelUpdate, type AudioStatePatch, type CapsuleWindowExpandDirection, type CapsuleWindowHitRegion, type PIPOverlayCamera, type PIPOverlayState, type RecordingExportPlan, type RecordingRecovery, type RecordingStatusUpdate, type RegionSelectionSession, type SettingsPreferencesPatch, type WhiteboardSettingsPatch, type WhiteboardVisibilityUpdate} from './services/recorderBackend'
+
+const AnnotationOverlayWindow = lazy(() => import('./AnnotationOverlayWindow'))
+const AnnotationRenderWindow = lazy(() => import('./AnnotationRenderWindow'))
+const WhiteboardWindow = lazy(() => import('./WhiteboardWindow'))
 
 const sourceIcon = {
   screen: Monitor,
@@ -131,6 +137,14 @@ function ensureVisiblePipConfig(value: PIPConfig): PIPConfig {
 
 function normalizeRecordingQuality(value: string): RecordingQuality {
   return recordingQualityOptions.includes(value as RecordingQuality) ? value as RecordingQuality : 'balanced'
+}
+
+function annotationCapturePolicy(includeAnnotations: boolean): AppSettings['whiteboard']['capturePolicy'] {
+  return includeAnnotations ? 'export-compose' : 'preview-only'
+}
+
+function whiteboardLaunchMode(state: RecordingState, recordingMode: RecordingMode): 'whiteboard' | 'annotation' {
+  return (state === 'recording' || state === 'paused') && recordingMode === 'video' ? 'annotation' : 'whiteboard'
 }
 
 function formatTime(totalSeconds: number) {
@@ -280,6 +294,7 @@ type ApplySettingsOptions = {
   preserveCameraEnabled?: boolean
   preserveCameraSelection?: boolean
   preservePipConfig?: boolean
+  preserveWhiteboard?: boolean
 }
 
 function App() {
@@ -288,8 +303,25 @@ function App() {
   const isRegionOverlayWindow = route === '/region-overlay'
   const isScreenIndicatorWindow = route === '/screen-indicator'
   const isPipOverlayWindow = route === '/pip-overlay'
+  const isWhiteboardWindow = route === '/whiteboard'
+  const isAnnotationOverlayWindow = route === '/annotation-overlay'
+  const isAnnotationRendererWindow = route === '/annotation-renderer'
   if (isScreenIndicatorWindow) {
     return <ScreenIndicatorWindow />
+  }
+  if (isAnnotationOverlayWindow) {
+    return (
+      <Suspense fallback={<main className="whiteboard-loading"><span>Loading annotation</span></main>}>
+        <AnnotationOverlayWindow />
+      </Suspense>
+    )
+  }
+  if (isAnnotationRendererWindow) {
+    return (
+      <Suspense fallback={<main className="whiteboard-loading"><span>Loading annotation renderer</span></main>}>
+        <AnnotationRenderWindow />
+      </Suspense>
+    )
   }
   if (isRegionOverlayWindow) {
     return <RegionOverlayWindow />
@@ -297,12 +329,20 @@ function App() {
   if (isPipOverlayWindow) {
     return <PIPOverlayWindow />
   }
+  if (isWhiteboardWindow) {
+    return (
+      <Suspense fallback={<main className="whiteboard-loading"><span>Loading whiteboard</span></main>}>
+        <WhiteboardWindow />
+      </Suspense>
+    )
+  }
 
   const [selectedSource, setSelectedSource] = useState<CaptureSource>(sources[0])
   const [availableSources, setAvailableSources] = useState<CaptureSource[]>(sources)
   const [activePanel, setActivePanel] = useState<ActivePanel | null>(null)
   const [sourcePickerView, setSourcePickerView] = useState<'overview' | 'windows'>('overview')
   const [settingsOpen, setSettingsOpen] = useState(false)
+  const [whiteboardVisibility, setWhiteboardVisibility] = useState<WhiteboardVisibilityUpdate | null>(null)
   const [closePromptOpen, setClosePromptOpen] = useState(false)
   const [closeBusy, setCloseBusy] = useState(false)
   const [recordingMode, setRecordingMode] = useState<RecordingMode>('video')
@@ -335,6 +375,7 @@ function App() {
   const [pipEdgeFeather, setPipEdgeFeather] = useState(0.16)
   const [locale, setLocale] = useState<LocaleCode>('zh-CN')
   const [theme, setTheme] = useState<ThemeCode>('night-teal')
+  const [includeAnnotationsInExport, setIncludeAnnotationsInExport] = useState(true)
   const [lastPackage, setLastPackage] = useState<string>(previewPackagePath)
   const [lastBackend, setLastBackend] = useState<string>('ui-preview')
   const [lastStatusMessage, setLastStatusMessage] = useState<StatusMessageState>({key: 'waiting'})
@@ -345,6 +386,9 @@ function App() {
   const [recoveryMessage, setRecoveryMessage] = useState<RecoveryMessageState | null>(null)
   const [exportBusy, setExportBusy] = useState(false)
   const [exportMessage, setExportMessage] = useState<ExportMessageState | null>(null)
+  const [exportPlanPreview, setExportPlanPreview] = useState<RecordingExportPlan | null>(null)
+  const [exportPlanBusy, setExportPlanBusy] = useState(false)
+  const [exportPlanError, setExportPlanError] = useState('')
   const [settingsLoaded, setSettingsLoaded] = useState(false)
   const [capsuleExpandDirection, setCapsuleExpandDirection] = useState<CapsuleWindowExpandDirection>('down')
   const [capabilities, setCapabilities] = useState<CaptureCapabilities>(fallbackCapabilities)
@@ -371,8 +415,11 @@ function App() {
   const cameraPreviewGenerationRef = useRef(0)
   const audioPatchTokenRef = useRef(0)
   const preferencePatchTokenRef = useRef(0)
+  const whiteboardPatchTokenRef = useRef(0)
+  const exportPlanTokenRef = useRef(0)
   const localAudioIntentUntilRef = useRef(0)
   const localPreferenceIntentUntilRef = useRef(0)
+  const localWhiteboardIntentUntilRef = useRef(0)
   const localCameraIntentUntilRef = useRef(0)
   const localPipIntentUntilRef = useRef(0)
   const selectedSystemAudioRef = useRef(selectedSystemAudio)
@@ -393,6 +440,7 @@ function App() {
   const sourceSelectionText = sourceSelectionMessage ? formatSourceSelectionMessage(sourceSelectionMessage, copy) : ''
   const isRecording = state === 'recording' || state === 'paused' || state === 'preparing' || state === 'stopping'
   const recordingConfigLocked = isRecording
+  const whiteboardButtonActive = whiteboardVisibility?.visible === true
   const capsuleExpanded = activePanel !== null || settingsOpen || closePromptOpen
   const capsuleWindowCompact = recordingConfigLocked && !capsuleExpanded
   const capsuleExpandedHeight = settingsOpen
@@ -449,6 +497,10 @@ function App() {
         pipPreset: savedPipConfig.preset,
         pip: savedPipConfig,
       },
+      whiteboard: {
+        ...(persistedSettingsRef.current?.whiteboard ?? defaultSettings.whiteboard),
+        capturePolicy: annotationCapturePolicy(includeAnnotationsInExport),
+      },
       window: {
         minimizeToTray: true,
         theme,
@@ -468,12 +520,16 @@ function App() {
         captureCursor,
         countdownSeconds,
       },
+      whiteboard: {
+        ...persistedSettingsRef.current.whiteboard,
+        capturePolicy: annotationCapturePolicy(includeAnnotationsInExport),
+      },
       window: {
         minimizeToTray: true,
         theme,
       },
     }
-  }, [appData.rootDir, camera, captureCursor, countdownSeconds, isSettingsWindow, locale, microphone, noiseSuppression, pipEdgeFeather, pipMirror, pipPosition, pipPreset, pipScale, pipShape, recordingFPS, recordingQuality, selectedCamera, selectedMic, selectedSource.id, selectedSource.type, selectedSystemAudio, systemAudio, theme])
+  }, [appData.rootDir, camera, captureCursor, countdownSeconds, includeAnnotationsInExport, isSettingsWindow, locale, microphone, noiseSuppression, pipEdgeFeather, pipMirror, pipPosition, pipPreset, pipScale, pipShape, recordingFPS, recordingQuality, selectedCamera, selectedMic, selectedSource.id, selectedSource.type, selectedSystemAudio, systemAudio, theme])
   const settingsAutosaveKey = useMemo(() => JSON.stringify({
     locale,
     sourceId: selectedSource.id,
@@ -570,6 +626,39 @@ function App() {
   }), [micMeterLevel])
   const canOpenLastPackage = isRecordingPackagePath(lastPackage) && lastPackage !== previewPackagePath
   const lastPackageName = canOpenLastPackage ? packageDisplayName(lastPackage) : copy.settings.noRecordingPackage
+  const exportPlanValue = exportPlanBusy
+    ? copy.settings.exportPlanLoading
+    : exportPlanPreview
+      ? formatExportPlanValue(exportPlanPreview, copy)
+      : copy.settings.exportPlanUnavailable
+  const exportPlanDetail = exportPlanError || (exportPlanPreview ? formatExportPlanDetail(exportPlanPreview, copy) : copy.settings.exportPlanPendingDetail)
+
+  useEffect(() => {
+    const token = exportPlanTokenRef.current + 1
+    exportPlanTokenRef.current = token
+    if (!canOpenLastPackage || isRecording) {
+      setExportPlanPreview(null)
+      setExportPlanError('')
+      setExportPlanBusy(false)
+      return
+    }
+    setExportPlanBusy(true)
+    setExportPlanError('')
+    void previewExportRecordingPackage(lastPackage, {includeAnnotations: includeAnnotationsInExport})
+      .then((plan) => {
+        if (token !== exportPlanTokenRef.current) return
+        setExportPlanPreview(plan)
+      })
+      .catch((error) => {
+        if (token !== exportPlanTokenRef.current) return
+        setExportPlanPreview(null)
+        setExportPlanError(error instanceof Error ? error.message : String(error))
+      })
+      .finally(() => {
+        if (token === exportPlanTokenRef.current) setExportPlanBusy(false)
+      })
+  }, [canOpenLastPackage, includeAnnotationsInExport, isRecording, lastPackage])
+
   const openPipEditor = async () => {
     if (!cameraRef.current || !hasUsableCamera || recordingMode !== 'video') return
     const nextConfig = currentPipConfig.preset === 'off'
@@ -703,11 +792,15 @@ function App() {
   const markLocalPreferenceIntent = () => {
     localPreferenceIntentUntilRef.current = Date.now() + 5000
   }
+  const markLocalWhiteboardIntent = () => {
+    localWhiteboardIntentUntilRef.current = Date.now() + 5000
+  }
   const markLocalPipIntent = () => {
     localPipIntentUntilRef.current = Date.now() + 5000
   }
   const hasLocalAudioIntent = () => Date.now() < localAudioIntentUntilRef.current
   const hasLocalPreferenceIntent = () => Date.now() < localPreferenceIntentUntilRef.current
+  const hasLocalWhiteboardIntent = () => Date.now() < localWhiteboardIntentUntilRef.current
   const hasLocalCameraIntent = () => Date.now() < localCameraIntentUntilRef.current
   const hasLocalPipIntent = () => Date.now() < localPipIntentUntilRef.current
   const settingsWithPreferencePatch = (settings: AppSettings | null, patch: SettingsPreferencesPatch): AppSettings | null => {
@@ -770,6 +863,49 @@ function App() {
         void loadSettings()
           .then((settings) => applySettingsState(settings))
           .catch((loadError) => console.error('Failed to reload settings preferences:', loadError))
+      })
+  }
+  const settingsWithWhiteboardPatch = (settings: AppSettings | null, patch: WhiteboardSettingsPatch): AppSettings | null => {
+    if (!settings) return settings
+    return {
+      ...settings,
+      whiteboard: {
+        ...settings.whiteboard,
+        ...patch,
+      },
+    }
+  }
+  const applyLocalWhiteboardPatch = (patch: WhiteboardSettingsPatch) => {
+    if (patch.capturePolicy !== undefined) {
+      setIncludeAnnotationsInExport(patch.capturePolicy !== 'preview-only')
+    }
+    currentSettingsRef.current = settingsWithWhiteboardPatch(currentSettingsRef.current, patch)
+    persistedSettingsRef.current = settingsWithWhiteboardPatch(persistedSettingsRef.current, patch)
+  }
+  const commitWhiteboardSettingsPatch = (patch: WhiteboardSettingsPatch) => {
+    markLocalWhiteboardIntent()
+    const token = whiteboardPatchTokenRef.current + 1
+    whiteboardPatchTokenRef.current = token
+    applyLocalWhiteboardPatch(patch)
+    void logClientEvent('whiteboard-settings', 'patch-request', {
+      capturePolicy: patch.capturePolicy ?? '',
+      lastMode: patch.lastMode ?? '',
+      lastTool: patch.lastTool ?? '',
+    })
+    void patchWhiteboardSettings(patch)
+      .then((settings) => {
+        if (token !== whiteboardPatchTokenRef.current) return
+        localWhiteboardIntentUntilRef.current = Date.now() + 3000
+        persistedSettingsRef.current = settings
+        currentSettingsRef.current = settings
+        setIncludeAnnotationsInExport(settings.whiteboard.capturePolicy !== 'preview-only')
+      })
+      .catch((error) => {
+        console.error('Failed to patch whiteboard settings:', error)
+        void logClientEvent('whiteboard-settings', 'patch-error', {}, readableError(error))
+        void loadSettings()
+          .then((settings) => applySettingsState(settings))
+          .catch((loadError) => console.error('Failed to reload whiteboard settings:', loadError))
       })
   }
   const mergeAudioIntoSettingsCache = (audio: AudioControlState) => {
@@ -854,7 +990,7 @@ function App() {
   }
   const applySettingsState = (nextSettings: AppSettings, nextMedia?: MediaInventory, nextSources?: CaptureSource[], options: ApplySettingsOptions = {}) => {
     let effectiveSettings = nextSettings
-    if ((options.preserveRecordingSettings || options.preserveTheme || options.preservePipConfig) && currentSettingsRef.current) {
+    if ((options.preserveRecordingSettings || options.preserveTheme || options.preservePipConfig || options.preserveWhiteboard) && currentSettingsRef.current) {
       effectiveSettings = {
         ...effectiveSettings,
         recording: options.preserveRecordingSettings
@@ -873,9 +1009,13 @@ function App() {
               pip: currentSettingsRef.current.camera.pip,
             }
           : effectiveSettings.camera,
+        whiteboard: options.preserveWhiteboard
+          ? currentSettingsRef.current.whiteboard
+          : effectiveSettings.whiteboard,
       }
     }
     persistedSettingsRef.current = effectiveSettings
+    setIncludeAnnotationsInExport(effectiveSettings.whiteboard.capturePolicy !== 'preview-only')
     const systemAudioList = nextMedia?.systemAudio
     const microphoneList = nextMedia?.microphones
     const cameraList = nextMedia?.cameras
@@ -1331,6 +1471,10 @@ function App() {
 
   useEffect(() => subscribeRecordingStatus(applyRecordingStatus), [])
 
+  useEffect(() => subscribeWhiteboardVisibility((event) => {
+    setWhiteboardVisibility(event.visible ? event : null)
+  }), [])
+
   useEffect(() => subscribeAudioState((audio) => {
     void logClientEvent('audio', 'state', {
       system: audio.system,
@@ -1345,6 +1489,7 @@ function App() {
   useEffect(() => subscribeSettingsChanged((settings) => {
     const incomingCameraOff = !settings.camera.enabled
     const preservePreferences = hasLocalPreferenceIntent()
+    const preserveWhiteboard = hasLocalWhiteboardIntent()
     const preserveAudioEnabled = !isSettingsWindow && hasLocalAudioIntent()
     const preserveCameraEnabled = !isSettingsWindow && hasLocalCameraIntent()
     const preserveAudioSelection = preserveAudioEnabled
@@ -1357,7 +1502,9 @@ function App() {
       recordingQuality: settings.recording.quality,
       recordingFps: settings.recording.fps,
       theme: settings.window.theme,
+      whiteboardCapturePolicy: settings.whiteboard.capturePolicy,
       preservePreferences,
+      preserveWhiteboard,
       preserveAudioEnabled,
       preserveAudioSelection,
       cameraEnabled: settings.camera.enabled,
@@ -1377,6 +1524,7 @@ function App() {
       preserveCameraEnabled,
       preserveCameraSelection: preserveCameraEnabled,
       preservePipConfig,
+      preserveWhiteboard,
     })
   }), [isSettingsWindow])
 
@@ -1655,7 +1803,7 @@ function App() {
     setExportMessage(null)
     setLastStatusMessage({key: 'exportingPip'})
     try {
-      const result = await exportRecordingPackage(packagePath)
+      const result = await exportRecordingPackage(packagePath, {includeAnnotations: includeAnnotationsInExport})
       setExportMessage({key: 'ready', path: result.outputPath})
       setLastStatusMessage({key: result.pipVisible ? 'pipReady' : 'ready'})
     } catch (error) {
@@ -1778,7 +1926,7 @@ function App() {
     setExportBusy(true)
     setExportMessage(null)
     try {
-      const result = await exportRecordingPackage(lastPackage)
+      const result = await exportRecordingPackage(lastPackage, {includeAnnotations: includeAnnotationsInExport})
       setExportMessage({key: 'ready', path: result.outputPath})
     } catch (error) {
       console.error('Failed to export recording package:', error)
@@ -1804,6 +1952,30 @@ function App() {
     setActivePanel(null)
     setSettingsOpen(false)
     setClosePromptOpen(true)
+  }
+
+  const openWhiteboard = () => {
+    setActivePanel(null)
+    setSettingsOpen(false)
+    setClosePromptOpen(false)
+    const launchMode = whiteboardLaunchMode(state, recordingMode)
+    void (async () => {
+      if (launchMode === 'whiteboard') {
+        await showWhiteboardWindow()
+        return
+      }
+      try {
+        await showAnnotationOverlay()
+      } catch (error) {
+        console.error('Failed to open recording annotation overlay:', error)
+        void logClientEvent('whiteboard', 'annotation-open-fallback', {
+          state,
+          recordingMode,
+          message: error instanceof Error ? error.message : String(error),
+        })
+        await showWhiteboardWindow()
+      }
+    })()
   }
 
   const confirmCloseApplication = async () => {
@@ -1945,6 +2117,18 @@ function App() {
           actionDisabled={!canOpenLastPackage || exportBusy || isRecording}
           onAction={() => void exportLastRecordingPackage()}
         />
+        <SettingLine
+          title={copy.settings.exportPlan}
+          value={exportPlanValue}
+          detail={exportPlanDetail}
+        />
+        <ExportPlanTimelinePreview plan={exportPlanPreview} copy={copy} />
+        <SettingToggle
+          title={copy.settings.includeAnnotations}
+          checked={includeAnnotationsInExport}
+          detail={copy.settings.includeAnnotationsDetail}
+          onChange={(value) => commitWhiteboardSettingsPatch({capturePolicy: annotationCapturePolicy(value)})}
+        />
         <SettingSelect
           title={copy.settings.quality}
           value={recordingQuality}
@@ -2059,6 +2243,17 @@ function App() {
             onClick={toggleRecord}
           >
             {state === 'recording' || state === 'paused' ? <Square size={20} /> : <CircleDot size={22} />}
+          </button>
+
+          <button
+            className={`icon-button soft whiteboard-open-button ${whiteboardButtonActive ? 'selected' : ''}`}
+            type="button"
+            aria-label={copy.aria.openWhiteboard}
+            aria-pressed={whiteboardButtonActive}
+            title={copy.aria.openWhiteboard}
+            onClick={openWhiteboard}
+          >
+            <PenLine size={18} />
           </button>
 
           <div className="time-chip" aria-live="polite">
@@ -3731,6 +3926,121 @@ function formatExportMessage(message: ExportMessageState, copy: RecorderCopy) {
   return copy.settings.exportFailed
 }
 
+function ExportPlanTimelinePreview({plan, copy}: {plan: RecordingExportPlan | null; copy: RecorderCopy}) {
+  const visibleSegments = plan?.annotationsVisible ? plan.annotationSnapshots?.slice(0, 4) ?? [] : []
+  const previewKey = visibleSegments.map((segment) => `${segment.relativePath || segment.inputPath}:${segment.startOffsetMs}`).join('|')
+  const [previewImages, setPreviewImages] = useState<Record<string, string>>({})
+
+  useEffect(() => {
+    setPreviewImages({})
+    if (!plan?.packageDir || visibleSegments.length === 0) return
+    let cancelled = false
+    void (async () => {
+      const entries = await Promise.all(visibleSegments.map(async (segment) => {
+        const key = annotationSegmentKey(segment)
+        const snapshotPath = segment.relativePath || segment.inputPath
+        if (!snapshotPath) return null
+        const preview = await readAnnotationPreviewImage(plan.packageDir, snapshotPath)
+        if (!preview.available || !preview.dataUrl) return null
+        return [key, preview.dataUrl] as const
+      }))
+      if (cancelled) return
+      const nextImages: Record<string, string> = {}
+      for (const entry of entries) {
+        if (entry) nextImages[entry[0]] = entry[1]
+      }
+      setPreviewImages(nextImages)
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [plan?.packageDir, previewKey])
+
+  if (!plan?.annotationsVisible || visibleSegments.length === 0) return null
+  const remaining = (plan.annotationSnapshots?.length ?? visibleSegments.length) - visibleSegments.length
+  const summary = plan.annotationSummary
+  const eventBytes = formatBytes(summary?.eventFileBytes ?? 0)
+  const snapshotBytes = formatBytes(summary?.snapshotBytes ?? 0)
+  const skipped = summary?.skippedSnapshotCount ?? 0
+  return (
+    <div className="export-plan-timeline">
+      <div className="export-plan-timeline-header">
+        <strong>{copy.settings.exportPlanTimelineTitle}</strong>
+        <span>{copy.settings.exportPlanTimelineStats(eventBytes, snapshotBytes, skipped)}</span>
+        {(summary?.elementKeyframeCount ?? 0) > 0 && (
+          <span>
+            {copy.settings.exportPlanElementTimelineStats(
+              summary?.elementKeyframeCount ?? 0,
+              summary?.finalElementCount ?? 0,
+              summary?.missingElementPayloads ?? 0,
+            )}
+          </span>
+        )}
+      </div>
+      <div className="export-plan-segments" aria-label={copy.settings.exportPlanTimelineTitle}>
+        {visibleSegments.map((segment, index) => {
+          const start = formatMilliseconds(segment.startOffsetMs)
+          const end = segment.endOffsetMs && segment.endOffsetMs > segment.startOffsetMs
+            ? formatMilliseconds(segment.endOffsetMs)
+            : copy.settings.exportPlanOpenEnded
+          const size = formatBytes(segment.bytes ?? 0)
+          const label = copy.settings.exportPlanSegmentLabel(index + 1, start, end, size)
+          const segmentKey = annotationSegmentKey(segment)
+          const previewUrl = previewImages[segmentKey]
+          return (
+            <div className={`export-plan-segment ${previewUrl ? 'has-preview' : ''}`} key={segmentKey}>
+              {previewUrl && <img src={previewUrl} alt="" />}
+              <span style={{'--segment-start': `${Math.min(92, Math.max(0, segment.startOffsetMs / 1000))}%`} as CSSProperties} />
+              <small>{label}</small>
+              {segment.relativePath && <em>{segment.relativePath}</em>}
+            </div>
+          )
+        })}
+      </div>
+      {remaining > 0 && <p>{copy.settings.exportPlanSegmentMore(remaining)}</p>}
+    </div>
+  )
+}
+
+function annotationSegmentKey(segment: NonNullable<RecordingExportPlan['annotationSnapshots']>[number]) {
+  return `${segment.relativePath || segment.inputPath}:${segment.startOffsetMs}`
+}
+
+function formatExportPlanValue(plan: RecordingExportPlan, copy: RecorderCopy) {
+  const pip = plan.pipVisible ? copy.settings.exportPlanPip : copy.settings.exportPlanNoPip
+  if (!plan.annotationsVisible) {
+    return `${pip} · ${copy.settings.exportPlanAnnotationsOff}`
+  }
+  const events = plan.annotationSummary?.eventCount ?? 0
+  if (plan.annotationTimeline === 'element-pngs' && plan.annotationSnapshots?.length) {
+    return `${pip} · ${copy.settings.exportPlanRenderedSegments(plan.annotationSnapshots.length, events)}`
+  }
+  if (plan.annotationTimeline === 'snapshot-segments' && plan.annotationSnapshots?.length) {
+    return `${pip} · ${copy.settings.exportPlanSnapshotSegments(plan.annotationSnapshots.length, events)}`
+  }
+  return `${pip} · ${copy.settings.exportPlanSnapshotFallback(plan.annotationTimeline || plan.annotationSummary?.mode || '', events)}`
+}
+
+function formatExportPlanDetail(plan: RecordingExportPlan, copy: RecorderCopy) {
+  const details = [copy.settings.exportPlanOutput(plan.outputPath)]
+  if (!plan.annotationsVisible) {
+    details.push(copy.settings.exportPlanNoAnnotations)
+  } else {
+    const start = plan.annotationSummary?.startOffsetMs ?? plan.annotationStartMs ?? 0
+    const end = plan.annotationSummary?.endOffsetMs ?? 0
+    details.push(copy.settings.exportPlanRange(formatMilliseconds(start), end > 0 ? formatMilliseconds(end) : copy.settings.exportPlanOpenEnded))
+  }
+  if (plan.warnings.length > 0) {
+    details.push(copy.settings.exportPlanWarnings(plan.warnings.length))
+  }
+  return details.join(' · ')
+}
+
+function formatMilliseconds(value: number) {
+  const numeric = Number.isFinite(value) ? Math.max(0, value) : 0
+  return `${(numeric / 1000).toFixed(1)}s`
+}
+
 function formatStorageMessage(message: StorageMessageState, copy: RecorderCopy) {
   if (message.key === 'changed' && message.path) return copy.storageMessages.changedTo(message.path)
   return copy.storageMessages[message.key]
@@ -3951,10 +4261,11 @@ function SettingTextAction({
   )
 }
 
-function SettingToggle({title, checked, onChange}: {title: string; checked: boolean; onChange: (value: boolean) => void}) {
+function SettingToggle({title, checked, detail, onChange}: {title: string; checked: boolean; detail?: string; onChange: (value: boolean) => void}) {
   return (
     <div className="setting-line setting-control">
       <SwitchRow label={title} checked={checked} onChange={onChange} />
+      {detail && <small>{detail}</small>}
     </div>
   )
 }

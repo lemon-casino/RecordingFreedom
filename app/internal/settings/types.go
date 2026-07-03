@@ -28,15 +28,16 @@ const (
 )
 
 type Settings struct {
-	SchemaVersion int               `json:"schemaVersion"`
-	Locale        Locale            `json:"locale"`
-	Source        SourceSettings    `json:"source"`
-	Storage       StorageSettings   `json:"storage"`
-	Recording     RecordingSettings `json:"recording"`
-	Audio         AudioSettings     `json:"audio"`
-	Camera        CameraSettings    `json:"camera"`
-	Window        WindowSettings    `json:"window"`
-	UpdatedAt     time.Time         `json:"updatedAt"`
+	SchemaVersion int                `json:"schemaVersion"`
+	Locale        Locale             `json:"locale"`
+	Source        SourceSettings     `json:"source"`
+	Storage       StorageSettings    `json:"storage"`
+	Recording     RecordingSettings  `json:"recording"`
+	Audio         AudioSettings      `json:"audio"`
+	Camera        CameraSettings     `json:"camera"`
+	Whiteboard    WhiteboardSettings `json:"whiteboard"`
+	Window        WindowSettings     `json:"window"`
+	UpdatedAt     time.Time          `json:"updatedAt"`
 }
 
 type RecordingSettings = recordingprofile.Profile
@@ -64,6 +65,16 @@ type CameraSettings struct {
 	DeviceID  string     `json:"deviceId,omitempty"`
 	PIPPreset string     `json:"pipPreset"`
 	PIP       pip.Config `json:"pip"`
+}
+
+type WhiteboardSettings struct {
+	Enabled         bool   `json:"enabled"`
+	LastMode        string `json:"lastMode"`
+	LastTool        string `json:"lastTool"`
+	LastStrokeColor string `json:"lastStrokeColor"`
+	LastStrokeWidth string `json:"lastStrokeWidth"`
+	LastOpacity     int    `json:"lastOpacity"`
+	CapturePolicy   string `json:"capturePolicy"`
 }
 
 type WindowSettings struct {

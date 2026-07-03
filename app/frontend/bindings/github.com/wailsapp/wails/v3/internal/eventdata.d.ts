@@ -23,6 +23,7 @@ declare module "@wailsio/runtime" {
             "capture.region.selected": main$0.RegionSelectionResult;
             "recording.status": recording$0.StatusEvent;
             "settings.changed": settings$0.Settings;
+            "whiteboard.visibility": main$0.WhiteboardVisibilityEvent;
         }
     }
 }

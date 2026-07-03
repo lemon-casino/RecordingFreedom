@@ -7,6 +7,14 @@ export {
 };
 
 export type {
+    AnnotationCaptureRequest,
+    AnnotationCaptureResult,
+    AnnotationOverlayState,
+    AnnotationPreviewImageRequest,
+    AnnotationPreviewImageResult,
+    AnnotationRenderJob,
+    AnnotationRenderJobClaim,
+    AnnotationRenderJobResult,
     AudioLevelEvent,
     AudioState,
     AudioStatePatchRequest,
@@ -14,6 +22,7 @@ export type {
     CapsuleWindowHitRegion,
     CapsuleWindowHitRegionsRequest,
     ClientLogEvent,
+    ExportRecordingPlanResult,
     ExportRecordingRequest,
     ExportRecordingResult,
     PIPCamera,
@@ -27,5 +36,11 @@ export type {
     RegionSelectionSession,
     ScreenIndicatorRequest,
     ScreenIndicatorResult,
-    SettingsPreferencesPatchRequest
+    SettingsPreferencesPatchRequest,
+    WhiteboardExportRequest,
+    WhiteboardExportResult,
+    WhiteboardSceneRequest,
+    WhiteboardSceneResult,
+    WhiteboardSettingsPatchRequest,
+    WhiteboardVisibilityEvent
 } from "./models.js";

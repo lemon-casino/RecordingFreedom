@@ -41,13 +41,25 @@ type capsuleWinRect struct {
 }
 
 func (s *RecordingFreedomService) capsuleWindowWndProcInterceptor(hwnd uintptr, msg uint32, wParam uintptr, lParam uintptr) (uintptr, bool) {
-	if msg != wmNCHitTest || s == nil || s.capsuleWindow == nil {
+	if msg != wmNCHitTest || s == nil {
 		return 0, false
 	}
-	nativeWindow := s.capsuleWindow.NativeWindow()
-	if nativeWindow == nil || hwnd != uintptr(nativeWindow) {
-		return 0, false
+	if s.capsuleWindow != nil {
+		nativeWindow := s.capsuleWindow.NativeWindow()
+		if nativeWindow != nil && hwnd == uintptr(nativeWindow) {
+			return s.hitTestWindowRegions(hwnd, lParam, s.capsuleHitRegions)
+		}
 	}
+	if s.annotationOverlay != nil {
+		nativeWindow := s.annotationOverlay.NativeWindow()
+		if nativeWindow != nil && hwnd == uintptr(nativeWindow) {
+			return s.hitTestWindowRegions(hwnd, lParam, s.annotationHitRegions)
+		}
+	}
+	return 0, false
+}
+
+func (s *RecordingFreedomService) hitTestWindowRegions(hwnd uintptr, lParam uintptr, regions capsuleWindowHitRegions) (uintptr, bool) {
 	clientX, clientY, ok := capsuleClientPoint(hwnd, lParam)
 	if !ok {
 		return 0, false
@@ -56,7 +68,7 @@ func (s *RecordingFreedomService) capsuleWindowWndProcInterceptor(hwnd uintptr, 
 	if !ok {
 		return 0, false
 	}
-	handled, hit := s.capsuleHitRegions.TestClientPoint(clientX, clientY, clientWidth, clientHeight)
+	handled, hit := regions.TestClientPoint(clientX, clientY, clientWidth, clientHeight)
 	if !handled || hit {
 		return 0, false
 	}
@@ -90,6 +102,10 @@ func (s *RecordingFreedomService) applyCapsuleWindowRegion(state capsuleWindowHi
 		}
 		return nil
 	})
+}
+
+func (s *RecordingFreedomService) applyAnnotationOverlayHitRegions() error {
+	return nil
 }
 
 func capsuleClientPoint(hwnd uintptr, lParam uintptr) (int, int, bool) {

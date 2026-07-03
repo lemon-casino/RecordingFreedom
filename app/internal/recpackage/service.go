@@ -290,6 +290,22 @@ func (s *Service) PatchSyncDiagnostics(manifestPath string, sync ManifestSyncDia
 	return s.WriteManifest(manifestPath, manifest)
 }
 
+func (s *Service) PatchAnnotations(manifestPath string, annotations ManifestAnnotations) (Manifest, error) {
+	manifest, err := s.ReadManifest(manifestPath)
+	if err != nil {
+		return Manifest{}, err
+	}
+	annotations.Enabled = true
+	if strings.TrimSpace(annotations.DiagnosticsPath) == "" {
+		annotations.DiagnosticsPath = AnnotationOverlayDiagnosticsFile
+	}
+	manifest.Annotations = &annotations
+	if err := s.WriteManifest(manifestPath, manifest); err != nil {
+		return Manifest{}, err
+	}
+	return s.ReadManifest(manifestPath)
+}
+
 func (s *Service) PatchCameraPIP(manifestPath string, config pip.Config) (Manifest, error) {
 	manifest, err := s.ReadManifest(manifestPath)
 	if err != nil {
@@ -525,6 +541,7 @@ func (s *Service) WriteManifest(manifestPath string, manifest Manifest) error {
 	manifest.Audio = normalizeAudio(manifest.Audio)
 	manifest.Camera = normalizeCamera(manifest.Camera)
 	manifest.Media = normalizeMedia(manifest.Media, manifest.RecordingMode, manifest.Audio, manifest.Camera, manifest.Diagnostics.Mock)
+	manifest.Annotations = normalizeAnnotations(manifest)
 	manifest.Diagnostics = normalizeDiagnostics(manifest)
 	if err := validateManifest(manifest); err != nil {
 		return err
@@ -726,6 +743,46 @@ func normalizeDiagnostics(manifest Manifest) ManifestDiagnostics {
 	return diagnostics
 }
 
+func normalizeAnnotations(manifest Manifest) *ManifestAnnotations {
+	annotations := manifest.Annotations
+	if annotations == nil || manifest.RecordingMode != RecordingModeScreen {
+		return nil
+	}
+	if !annotations.Enabled && annotations.ScenePath == "" && annotations.EventsPath == "" && annotations.SnapshotPath == "" && annotations.DiagnosticsPath == "" {
+		return nil
+	}
+	annotations.Enabled = true
+	if strings.TrimSpace(annotations.Mode) == "" {
+		annotations.Mode = "overlay"
+	}
+	if annotations.Mode != "overlay" {
+		annotations.Mode = "overlay"
+	}
+	if annotations.CapturePolicy != "preview-only" && annotations.CapturePolicy != "export-compose" {
+		annotations.CapturePolicy = "export-compose"
+	}
+	if strings.TrimSpace(annotations.ScenePath) == "" {
+		annotations.ScenePath = AnnotationSceneFile
+	}
+	if strings.TrimSpace(annotations.EventsPath) == "" {
+		annotations.EventsPath = AnnotationEventsFile
+	}
+	if strings.TrimSpace(annotations.SnapshotPath) == "" {
+		annotations.SnapshotPath = AnnotationSnapshotFile
+	}
+	if strings.TrimSpace(annotations.Target.Type) == "" {
+		annotations.Target.Type = manifest.Source.Type
+	}
+	if strings.TrimSpace(annotations.Target.ID) == "" {
+		annotations.Target.ID = manifest.Source.ID
+	}
+	if annotations.Target.Geometry == nil && manifest.Source.Geometry != nil {
+		geometry := *manifest.Source.Geometry
+		annotations.Target.Geometry = &geometry
+	}
+	return annotations
+}
+
 func normalizeAudioStorage(storage string, mediaPath string, primaryPath string) string {
 	storage = strings.TrimSpace(storage)
 	switch storage {
@@ -810,7 +867,40 @@ func validateManifest(manifest Manifest) error {
 	if err := validatePackageRelativePath("webcamVideoPath", manifest.Media.WebcamVideoPath); err != nil {
 		return err
 	}
+	if err := validateAnnotations(manifest.Annotations); err != nil {
+		return err
+	}
 	if err := validateSyncDiagnostics(manifest.Diagnostics.Sync); err != nil {
+		return err
+	}
+	return nil
+}
+
+func validateAnnotations(annotations *ManifestAnnotations) error {
+	if annotations == nil {
+		return nil
+	}
+	if !annotations.Enabled {
+		return nil
+	}
+	if annotations.Mode != "overlay" {
+		return fmt.Errorf("annotations.mode %q is not supported", annotations.Mode)
+	}
+	switch annotations.CapturePolicy {
+	case "preview-only", "export-compose":
+	default:
+		return fmt.Errorf("annotations.capturePolicy %q is not supported", annotations.CapturePolicy)
+	}
+	if err := validatePackageRelativePath("annotations.scenePath", annotations.ScenePath); err != nil {
+		return err
+	}
+	if err := validatePackageRelativePath("annotations.eventsPath", annotations.EventsPath); err != nil {
+		return err
+	}
+	if err := validatePackageRelativePath("annotations.snapshotPath", annotations.SnapshotPath); err != nil {
+		return err
+	}
+	if err := validatePackageRelativePath("annotations.diagnosticsPath", annotations.DiagnosticsPath); err != nil {
 		return err
 	}
 	return nil

@@ -176,9 +176,12 @@ try {
     Require-Entry -Entries $entries -Name "recordingfreedom.exe" | Out-Null
     Require-Entry -Entries $entries -Name "tools/ffmpeg.exe" | Out-Null
     Require-Entry -Entries $entries -Name "tools/THIRD_PARTY_FFMPEG.txt" | Out-Null
+    Require-Entry -Entries $entries -Name "tools/THIRD_PARTY_NOTICES.txt" | Out-Null
     Require-Entry -Entries $entries -Name "tools/desktop-doctor.exe" | Out-Null
     Require-Entry -Entries $entries -Name "tools/video-smoke.exe" | Out-Null
     Require-Entry -Entries $entries -Name "tools/audio-smoke.exe" | Out-Null
+    Require-Entry -Entries $entries -Name "tools/annotation-export-smoke.exe" | Out-Null
+    Require-Entry -Entries $entries -Name "tools/annotation-overlay-evidence-check.exe" | Out-Null
     Require-Entry -Entries $entries -Name "tools/run-windows-portable-smoke.ps1" | Out-Null
     if (-not $AllowMissingFFprobe) {
         Require-Entry -Entries $entries -Name "tools/ffprobe.exe" | Out-Null
@@ -203,6 +206,17 @@ if (-not $SkipExecutableCheck) {
             throw "Extracted portable zip is missing tools/ffmpeg.exe"
         }
         Assert-PEMetadata -Path $ffmpegPath -ExpectedMachine 0x8664
+
+        $thirdPartyNoticesPath = Join-Path $extractDir "tools/THIRD_PARTY_NOTICES.txt"
+        if (-not (Test-Path -LiteralPath $thirdPartyNoticesPath)) {
+            throw "Extracted portable zip is missing tools/THIRD_PARTY_NOTICES.txt"
+        }
+        Assert-FileContains -Path $thirdPartyNoticesPath -Needles @(
+            "@excalidraw/excalidraw",
+            "License: MIT",
+            "Copyright (c) 2020 Excalidraw",
+            "THE SOFTWARE IS PROVIDED `"AS IS`""
+        )
 
         if (-not $AllowMissingFFprobe) {
             $ffprobePath = Join-Path $extractDir "tools/ffprobe.exe"
@@ -230,6 +244,18 @@ if (-not $SkipExecutableCheck) {
         }
         Assert-PEMetadata -Path $audioSmokePath -ExpectedMachine 0x8664 -ExpectedSubsystem 3
 
+        $annotationSmokePath = Join-Path $extractDir "tools/annotation-export-smoke.exe"
+        if (-not (Test-Path -LiteralPath $annotationSmokePath)) {
+            throw "Extracted portable zip is missing tools/annotation-export-smoke.exe"
+        }
+        Assert-PEMetadata -Path $annotationSmokePath -ExpectedMachine 0x8664 -ExpectedSubsystem 3
+
+        $annotationEvidenceCheckPath = Join-Path $extractDir "tools/annotation-overlay-evidence-check.exe"
+        if (-not (Test-Path -LiteralPath $annotationEvidenceCheckPath)) {
+            throw "Extracted portable zip is missing tools/annotation-overlay-evidence-check.exe"
+        }
+        Assert-PEMetadata -Path $annotationEvidenceCheckPath -ExpectedMachine 0x8664 -ExpectedSubsystem 3
+
         $portableSmokePath = Join-Path $extractDir "tools/run-windows-portable-smoke.ps1"
         if (-not (Test-Path -LiteralPath $portableSmokePath)) {
             throw "Extracted portable zip is missing tools/run-windows-portable-smoke.ps1"
@@ -239,6 +265,17 @@ if (-not $SkipExecutableCheck) {
             "desktop-doctor.exe",
             "video-smoke.exe",
             "audio-smoke.exe",
+            "annotation-export-smoke.exe",
+            "annotation-overlay-evidence-check.exe",
+            "RunAnnotationLong",
+            "LongAnnotationDurations",
+            "LongAnnotationSegments",
+            "annotation-long-snapshots",
+            "annotation-long-element-pngs",
+            "-segments=",
+            "-timeline=element-pngs",
+            "-source-type=region",
+            "-source-type=window",
             "RECORDINGFREEDOM_FFMPEG_PATH",
             "-source-type=region",
             "-source-type=window",

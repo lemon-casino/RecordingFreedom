@@ -272,8 +272,8 @@ input:disabled,
 }
 
 .rf-shell.is-recording-compact {
-  --capsule-stage-width: 344px;
-  --capsule-width: 324px;
+  --capsule-stage-width: 400px;
+  --capsule-width: 380px;
 }
 
 .rf-shell.is-collapsed .recorder-stage {
@@ -294,7 +294,7 @@ input:disabled,
   display: flex;
   align-items: center;
   gap: 6px;
-  width: min(var(--capsule-width, 704px), 100%);
+  width: min(var(--capsule-width, 724px), 100%);
   min-height: 64px;
   padding: 8px;
   border: 1px solid var(--line);
@@ -494,6 +494,12 @@ select:disabled {
   color: var(--accent-readable);
 }
 
+.icon-button.selected {
+  border-color: var(--accent-border-soft);
+  background: var(--teal-soft);
+  color: var(--accent-readable);
+}
+
 .close-app-button {
   border-color: rgba(240, 68, 56, 0.2);
   background: rgba(240, 68, 56, 0.1);
@@ -531,6 +537,10 @@ select:disabled {
 
 .capsule.capsule-compact .record-button {
   order: 1;
+}
+
+.whiteboard-open-button {
+  order: 5;
 }
 
 .record-button.idle,
@@ -575,11 +585,11 @@ select:disabled {
 }
 
 .capsule-utility-segment {
-  order: 5;
+  order: 6;
 }
 
 .close-app-button {
-  order: 6;
+  order: 7;
 }
 
 .time-chip strong {
@@ -1395,6 +1405,107 @@ input {
   word-break: break-word;
 }
 
+.export-plan-timeline {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.035);
+}
+
+.export-plan-timeline-header {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.export-plan-timeline-header strong {
+  min-width: 0;
+  color: var(--text);
+  font-size: 12px;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+
+.export-plan-timeline-header span,
+.export-plan-timeline p {
+  margin: 0;
+  color: var(--quiet);
+  font-size: 10.5px;
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+}
+
+.export-plan-segments {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+}
+
+.export-plan-segment {
+  position: relative;
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+  padding: 8px 10px 8px 12px;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.045);
+}
+
+.export-plan-segment.has-preview {
+  grid-template-columns: 58px minmax(0, 1fr);
+  column-gap: 10px;
+  align-items: center;
+}
+
+.export-plan-segment img {
+  grid-row: span 2;
+  width: 58px;
+  height: 36px;
+  object-fit: contain;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background:
+    linear-gradient(45deg, rgba(255, 255, 255, 0.06) 25%, transparent 25%),
+    linear-gradient(-45deg, rgba(255, 255, 255, 0.06) 25%, transparent 25%),
+    linear-gradient(45deg, transparent 75%, rgba(255, 255, 255, 0.06) 75%),
+    linear-gradient(-45deg, transparent 75%, rgba(255, 255, 255, 0.06) 75%),
+    rgba(6, 9, 12, 0.52);
+  background-position: 0 0, 0 6px, 6px -6px, -6px 0;
+  background-size: 12px 12px;
+}
+
+.export-plan-segment > span {
+  position: absolute;
+  top: 6px;
+  bottom: 6px;
+  left: clamp(8px, var(--segment-start, 0%), calc(100% - 12px));
+  width: 2px;
+  border-radius: 2px;
+  background: var(--teal);
+  opacity: 0.82;
+}
+
+.export-plan-segment small,
+.export-plan-segment em {
+  min-width: 0;
+  padding-left: 8px;
+  color: var(--text);
+  font-size: 10.5px;
+  font-style: normal;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+.export-plan-segment em {
+  color: var(--quiet);
+}
+
 .setting-control {
   gap: 8px;
 }
@@ -1549,6 +1660,418 @@ input {
   border-color: rgba(240, 68, 56, 0.34);
   background: var(--red-soft);
   color: #ffdfdc;
+}
+
+body.rf-whiteboard-window {
+  overflow: hidden;
+  background: var(--settings-bg);
+  user-select: none;
+}
+
+body.rf-annotation-render-window {
+  overflow: hidden;
+  background: #0b0f13;
+  user-select: none;
+}
+
+.annotation-renderer-shell {
+  display: grid;
+  width: 100%;
+  height: 100%;
+  min-height: 100vh;
+  place-items: center;
+  background: #0b0f13;
+  color: rgba(226, 232, 240, 0.72);
+  font: 12px/1.4 ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+}
+
+.whiteboard-loading,
+.whiteboard-shell {
+  width: 100%;
+  height: 100%;
+  min-width: 0;
+  min-height: 0;
+  color: var(--text);
+}
+
+.whiteboard-loading {
+  display: grid;
+  place-items: center;
+  background: var(--settings-bg);
+}
+
+.whiteboard-loading span {
+  display: inline-grid;
+  min-width: 150px;
+  min-height: 38px;
+  place-items: center;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-pill);
+  background: var(--panel);
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.whiteboard-shell {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  gap: 8px;
+  padding: 10px;
+  background: transparent;
+  --wails-draggable: drag;
+}
+
+.whiteboard-capsule {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  min-height: 58px;
+  padding: 7px;
+  border: 1px solid var(--line);
+  border-radius: 28px;
+  background: var(--capsule-bg);
+  box-shadow:
+    var(--shadow-tight),
+    inset 0 1px 0 rgba(255, 255, 255, 0.08),
+    inset 0 -1px 0 rgba(0, 0, 0, 0.34);
+  backdrop-filter: blur(22px) saturate(150%);
+  --wails-draggable: drag;
+}
+
+.whiteboard-title {
+  display: grid;
+  flex: 0 1 148px;
+  min-width: 116px;
+  padding: 0 10px;
+  line-height: 1.15;
+}
+
+.whiteboard-title strong {
+  overflow: hidden;
+  color: var(--text);
+  font-size: 12px;
+  font-weight: 900;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.whiteboard-title span {
+  overflow: hidden;
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 700;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.whiteboard-tools,
+.whiteboard-style-group,
+.whiteboard-width-group,
+.whiteboard-opacity-group,
+.whiteboard-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+  padding: 4px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-pill);
+  background: rgba(255, 255, 255, 0.045);
+  --wails-draggable: no-drag;
+}
+
+.whiteboard-tools {
+  flex: 1 1 322px;
+}
+
+.whiteboard-style-group {
+  flex: 0 0 auto;
+}
+
+.whiteboard-width-group {
+  flex: 0 0 auto;
+}
+
+.whiteboard-opacity-group {
+  flex: 0 0 126px;
+}
+
+.whiteboard-actions {
+  flex: 0 0 auto;
+}
+
+.whiteboard-tools button,
+.whiteboard-style-group button,
+.whiteboard-width-group button,
+.whiteboard-opacity-group,
+.whiteboard-actions button {
+  display: inline-grid;
+  height: 32px;
+  place-items: center;
+  border: 1px solid transparent;
+  border-radius: var(--radius-pill);
+  background: transparent;
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 900;
+  transition: background 160ms ease, border-color 160ms ease, color 160ms ease, transform 120ms ease;
+  cursor: pointer;
+  --wails-draggable: no-drag;
+}
+
+.whiteboard-tools button,
+.whiteboard-actions button {
+  min-width: 32px;
+  padding: 0 8px;
+}
+
+.whiteboard-style-group button {
+  width: 24px;
+  min-width: 24px;
+  height: 24px;
+  border-color: rgba(255, 255, 255, 0.16);
+  background: var(--swatch);
+  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.2);
+}
+
+.whiteboard-width-group button {
+  min-width: 44px;
+  padding: 0 10px;
+}
+
+.whiteboard-opacity-group {
+  display: inline-flex;
+  gap: 8px;
+  padding: 0 10px;
+}
+
+.whiteboard-opacity-group span {
+  width: 34px;
+  color: var(--text);
+  font-size: 10px;
+  text-align: right;
+}
+
+.whiteboard-opacity-group input {
+  width: 62px;
+  accent-color: var(--accent);
+  cursor: pointer;
+}
+
+.whiteboard-tools button:hover,
+.whiteboard-width-group button:hover,
+.whiteboard-opacity-group:hover,
+.whiteboard-actions button:hover {
+  border-color: var(--line-strong);
+  background: rgba(255, 255, 255, 0.085);
+  color: var(--text);
+}
+
+.whiteboard-tools button.selected,
+.whiteboard-style-group button.selected,
+.whiteboard-width-group button.selected {
+  border-color: var(--accent-border);
+  background: var(--teal-soft);
+  color: var(--accent-readable);
+}
+
+.whiteboard-style-group button.selected {
+  box-shadow:
+    0 0 0 2px rgba(255, 255, 255, 0.2),
+    0 0 0 4px var(--accent-border-soft);
+}
+
+.whiteboard-actions button:active,
+.whiteboard-tools button:active,
+.whiteboard-width-group button:active {
+  transform: scale(0.96);
+}
+
+.whiteboard-actions button.danger {
+  color: #ffd9d6;
+}
+
+.whiteboard-actions button.danger:hover,
+.whiteboard-actions button.danger.armed {
+  border-color: rgba(240, 68, 56, 0.42);
+  background: rgba(240, 68, 56, 0.2);
+  color: #ffffff;
+}
+
+.whiteboard-actions button span {
+  margin-left: 4px;
+}
+
+.whiteboard-canvas {
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  background: rgba(12, 16, 21, 0.92);
+  box-shadow: var(--shadow-panel);
+  --wails-draggable: no-drag;
+}
+
+.whiteboard-canvas .excalidraw {
+  height: 100%;
+  min-height: 0;
+  --wails-draggable: no-drag;
+}
+
+.whiteboard-status {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  min-height: 30px;
+  padding: 0 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-pill);
+  background: rgba(255, 255, 255, 0.045);
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 800;
+  --wails-draggable: no-drag;
+}
+
+.whiteboard-status span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.whiteboard-status.saved {
+  border-color: var(--accent-border-soft);
+  color: var(--accent-readable);
+}
+
+.whiteboard-status.failed {
+  border-color: rgba(240, 68, 56, 0.36);
+  color: #ffd9d6;
+}
+
+body.rf-annotation-overlay-window {
+  overflow: hidden;
+  background: transparent;
+  user-select: none;
+}
+
+.annotation-overlay-shell {
+  position: fixed;
+  inset: 0;
+  overflow: hidden;
+  background: transparent;
+  color: var(--text);
+  --wails-draggable: no-drag;
+}
+
+.annotation-overlay-canvas {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  background: transparent;
+}
+
+.annotation-overlay-shell.is-pass-through .annotation-overlay-canvas,
+.annotation-overlay-shell.is-pass-through .annotation-overlay-canvas .excalidraw {
+  pointer-events: none;
+}
+
+.annotation-overlay-shell.is-drawing .annotation-overlay-canvas,
+.annotation-overlay-shell.is-drawing .annotation-overlay-canvas .excalidraw {
+  pointer-events: auto;
+}
+
+.annotation-overlay-canvas .excalidraw {
+  width: 100%;
+  height: 100%;
+  background: transparent !important;
+  --wails-draggable: no-drag;
+}
+
+.annotation-overlay-canvas .excalidraw .layer-ui__wrapper,
+.annotation-overlay-canvas .excalidraw .App-menu {
+  display: none !important;
+}
+
+.annotation-capsule {
+  position: absolute;
+  top: 14px;
+  left: 50%;
+  z-index: 4;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  max-width: min(calc(100vw - 28px), 720px);
+  min-height: 42px;
+  padding: 5px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-pill);
+  background: var(--capsule-bg);
+  box-shadow: var(--shadow-tight), inset 0 1px 0 rgba(255, 255, 255, 0.08);
+  backdrop-filter: blur(22px) saturate(150%);
+  transform: translateX(-50%);
+  --wails-draggable: drag;
+}
+
+.annotation-capsule-title {
+  max-width: 72px;
+  overflow: hidden;
+  padding: 0 8px;
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 900;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.annotation-tools {
+  display: inline-flex;
+  gap: 4px;
+  padding: 3px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-pill);
+  background: rgba(255, 255, 255, 0.045);
+  --wails-draggable: no-drag;
+}
+
+.annotation-capsule button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  min-width: 30px;
+  height: 30px;
+  padding: 0 8px;
+  border: 1px solid transparent;
+  border-radius: var(--radius-pill);
+  background: transparent;
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 900;
+  cursor: pointer;
+  transition: background 160ms ease, border-color 160ms ease, color 160ms ease, transform 120ms ease;
+  --wails-draggable: no-drag;
+}
+
+.annotation-capsule button:hover,
+.annotation-capsule button.selected {
+  border-color: var(--line-strong);
+  background: rgba(255, 255, 255, 0.085);
+  color: var(--text);
+}
+
+.annotation-capsule button.selected {
+  border-color: var(--accent-border);
+  background: var(--teal-soft);
+  color: var(--accent-readable);
+}
+
+.annotation-capsule button:active {
+  transform: scale(0.96);
 }
 
 .region-overlay-shell {

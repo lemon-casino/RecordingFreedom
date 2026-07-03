@@ -48,6 +48,8 @@ app/frontend/node_modules/
 app/frontend/.codex-run/
 app/frontend/capsule-preview.png
 app/frontend/vite-preview.log
+app/frontend/playwright-report/
+app/frontend/test-results/
 
 # Platform packaging caches
 app/build/linux/appimage/build/
@@ -57,6 +59,7 @@ app/build/windows/nsis/MicrosoftEdgeWebview2Setup.exe
 app/tools/*
 !app/tools/
 !app/tools/.gitkeep
+!app/tools/THIRD_PARTY_NOTICES.txt
 
 # Mobile generated files contain machine-local paths
 app/build/ios/xcode/overlay.json

@@ -39,15 +39,20 @@ type BootstrapState struct {
 }
 
 type ExportRecordingRequest struct {
-	PackageDir   string `json:"packageDir"`
-	OutputPath   string `json:"outputPath,omitempty"`
-	CanvasWidth  int    `json:"canvasWidth,omitempty"`
-	CanvasHeight int    `json:"canvasHeight,omitempty"`
+	PackageDir         string `json:"packageDir"`
+	OutputPath         string `json:"outputPath,omitempty"`
+	CanvasWidth        int    `json:"canvasWidth,omitempty"`
+	CanvasHeight       int    `json:"canvasHeight,omitempty"`
+	IncludeAnnotations *bool  `json:"includeAnnotations,omitempty"`
 }
 
 type ExportRecordingResult struct {
 	Plan   exportplan.Plan `json:"plan"`
 	Export exporter.Result `json:"export"`
+}
+
+type ExportRecordingPlanResult struct {
+	Plan exportplan.Plan `json:"plan"`
 }
 
 type PIPPreviewImageRequest struct {
@@ -61,6 +66,18 @@ type PIPPreviewImageResult struct {
 	ModifiedUnixNano int64  `json:"modifiedUnixNano,omitempty"`
 }
 
+type AnnotationPreviewImageRequest struct {
+	PackageDir   string `json:"packageDir"`
+	SnapshotPath string `json:"snapshotPath"`
+}
+
+type AnnotationPreviewImageResult struct {
+	Available    bool   `json:"available"`
+	DataURL      string `json:"dataUrl,omitempty"`
+	RelativePath string `json:"relativePath,omitempty"`
+	Bytes        int64  `json:"bytes,omitempty"`
+}
+
 type ClientLogEvent struct {
 	Component string            `json:"component"`
 	Event     string            `json:"event"`
@@ -68,7 +85,10 @@ type ClientLogEvent struct {
 	Fields    map[string]string `json:"fields,omitempty"`
 }
 
-const maxPIPPreviewImageBytes = 2 * 1024 * 1024
+const (
+	maxPIPPreviewImageBytes        = 2 * 1024 * 1024
+	maxAnnotationPreviewImageBytes = 8 * 1024 * 1024
+)
 
 type RecordingFreedomService struct {
 	appData   *appdata.Service
@@ -78,25 +98,35 @@ type RecordingFreedomService struct {
 	recorder  *recording.Service
 	settings  *settings.Service
 
-	app               *application.App
-	capsuleWindow     *application.WebviewWindow
-	settingsWindow    *application.WebviewWindow
-	regionOverlay     *application.WebviewWindow
-	screenIndicator   *application.WebviewWindow
-	pipOverlay        *application.WebviewWindow
-	trayLocale        func(settings.Locale)
-	capsuleHitRegions capsuleWindowHitRegions
-	settingsMu        sync.Mutex
-	regionMu          sync.Mutex
-	regionSession     *RegionSelectionSession
-	selectedRegionDIP application.Rect
-	pipOverlayMu      sync.Mutex
-	pipOverlayToken   uint64
-	micLevelMu        sync.Mutex
-	micLevelSource    audioLevelCaptureSource
-	micLevelDevice    string
-	micLevelToken     uint64
-	logMu             sync.Mutex
+	app                   *application.App
+	capsuleWindow         *application.WebviewWindow
+	settingsWindow        *application.WebviewWindow
+	whiteboardWindow      *application.WebviewWindow
+	annotationOverlay     *application.WebviewWindow
+	annotationRenderer    *application.WebviewWindow
+	regionOverlay         *application.WebviewWindow
+	screenIndicator       *application.WebviewWindow
+	pipOverlay            *application.WebviewWindow
+	trayLocale            func(settings.Locale)
+	capsuleHitRegions     capsuleWindowHitRegions
+	annotationHitRegions  capsuleWindowHitRegions
+	settingsMu            sync.Mutex
+	whiteboardMu          sync.Mutex
+	whiteboardVisible     bool
+	annotationMu          sync.Mutex
+	annotationToken       uint64
+	annotationRenderMu    sync.Mutex
+	annotationRenderBatch *annotationRenderBatch
+	regionMu              sync.Mutex
+	regionSession         *RegionSelectionSession
+	selectedRegionDIP     application.Rect
+	pipOverlayMu          sync.Mutex
+	pipOverlayToken       uint64
+	micLevelMu            sync.Mutex
+	micLevelSource        audioLevelCaptureSource
+	micLevelDevice        string
+	micLevelToken         uint64
+	logMu                 sync.Mutex
 }
 
 func NewRecordingFreedomService() *RecordingFreedomService {
@@ -121,6 +151,14 @@ func (s *RecordingFreedomService) setCapsuleWindow(window *application.WebviewWi
 
 func (s *RecordingFreedomService) setSettingsWindow(window *application.WebviewWindow) {
 	s.settingsWindow = window
+}
+
+func (s *RecordingFreedomService) setWhiteboardWindow(window *application.WebviewWindow) {
+	s.whiteboardWindow = window
+}
+
+func (s *RecordingFreedomService) setAnnotationOverlayWindow(window *application.WebviewWindow) {
+	s.annotationOverlay = window
 }
 
 func (s *RecordingFreedomService) setRegionOverlayWindow(window *application.WebviewWindow) {
@@ -175,38 +213,152 @@ func (s *RecordingFreedomService) ReadPIPPreviewImage(req PIPPreviewImageRequest
 		return PIPPreviewImageResult{}, fmt.Errorf("PIP preview image %q must be a JPEG", path)
 	}
 
-	info, err := os.Stat(path)
-	if errors.Is(err, os.ErrNotExist) {
-		return PIPPreviewImageResult{Available: false}, nil
-	}
+	image, err := readPreviewImageDataURL(path, "PIP preview image", "image/jpeg", maxPIPPreviewImageBytes, req.KnownModifiedUnixNano)
 	if err != nil {
 		return PIPPreviewImageResult{}, err
 	}
+	return PIPPreviewImageResult{
+		Available:        image.Available,
+		DataURL:          image.DataURL,
+		ModifiedUnixNano: image.ModifiedUnixNano,
+	}, nil
+}
+
+func (s *RecordingFreedomService) ReadAnnotationPreviewImage(req AnnotationPreviewImageRequest) (AnnotationPreviewImageResult, error) {
+	if s.appData == nil {
+		return AnnotationPreviewImageResult{}, errors.New("app data service is not initialized")
+	}
+	info, err := s.appData.Info()
+	if err != nil {
+		return AnnotationPreviewImageResult{}, err
+	}
+	packageDir, err := managedRecordingPackageDir(info.VideoDir, req.PackageDir)
+	if err != nil {
+		return AnnotationPreviewImageResult{}, err
+	}
+	target, relativePath, err := annotationPreviewSnapshotPath(packageDir, req.SnapshotPath)
+	if err != nil {
+		return AnnotationPreviewImageResult{}, err
+	}
+	image, err := readPreviewImageDataURL(target, "annotation preview image", "image/png", maxAnnotationPreviewImageBytes, 0)
+	if err != nil {
+		return AnnotationPreviewImageResult{}, err
+	}
+	return AnnotationPreviewImageResult{
+		Available:    image.Available,
+		DataURL:      image.DataURL,
+		RelativePath: relativePath,
+		Bytes:        image.Bytes,
+	}, nil
+}
+
+type previewImageDataURL struct {
+	Available        bool
+	DataURL          string
+	ModifiedUnixNano int64
+	Bytes            int64
+}
+
+func readPreviewImageDataURL(path string, label string, mimeType string, maxBytes int64, knownModifiedUnixNano int64) (previewImageDataURL, error) {
+	info, err := os.Stat(path)
+	if errors.Is(err, os.ErrNotExist) {
+		return previewImageDataURL{Available: false}, nil
+	}
+	if err != nil {
+		return previewImageDataURL{}, err
+	}
 	if info.IsDir() {
-		return PIPPreviewImageResult{}, fmt.Errorf("PIP preview image %q is a directory", path)
+		return previewImageDataURL{}, fmt.Errorf("%s %q is a directory", label, path)
 	}
 	modified := info.ModTime().UnixNano()
-	if req.KnownModifiedUnixNano > 0 && modified <= req.KnownModifiedUnixNano {
-		return PIPPreviewImageResult{Available: false, ModifiedUnixNano: modified}, nil
+	if knownModifiedUnixNano > 0 && modified <= knownModifiedUnixNano {
+		return previewImageDataURL{Available: false, ModifiedUnixNano: modified}, nil
 	}
 	if info.Size() <= 0 {
-		return PIPPreviewImageResult{Available: false, ModifiedUnixNano: modified}, nil
+		return previewImageDataURL{Available: false, ModifiedUnixNano: modified}, nil
 	}
-	if info.Size() > maxPIPPreviewImageBytes {
-		return PIPPreviewImageResult{}, fmt.Errorf("PIP preview image %q is too large", path)
+	if info.Size() > maxBytes {
+		return previewImageDataURL{}, fmt.Errorf("%s %q is too large", label, path)
 	}
 	data, err := os.ReadFile(path)
 	if err != nil {
-		return PIPPreviewImageResult{}, err
+		return previewImageDataURL{}, err
 	}
 	if len(data) == 0 {
-		return PIPPreviewImageResult{Available: false, ModifiedUnixNano: modified}, nil
+		return previewImageDataURL{Available: false, ModifiedUnixNano: modified}, nil
 	}
-	return PIPPreviewImageResult{
+	return previewImageDataURL{
 		Available:        true,
-		DataURL:          "data:image/jpeg;base64," + base64.StdEncoding.EncodeToString(data),
+		DataURL:          "data:" + mimeType + ";base64," + base64.StdEncoding.EncodeToString(data),
 		ModifiedUnixNano: modified,
+		Bytes:            info.Size(),
 	}, nil
+}
+
+func annotationPreviewSnapshotPath(packageDir string, value string) (string, string, error) {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return "", "", errors.New("annotation snapshot path is required")
+	}
+	packageDir, err := filepath.Abs(packageDir)
+	if err != nil {
+		return "", "", err
+	}
+	var target string
+	if filepath.IsAbs(value) {
+		target, err = filepath.Abs(value)
+		if err != nil {
+			return "", "", err
+		}
+	} else {
+		if err := validateAnnotationPreviewRelativePath(value); err != nil {
+			return "", "", err
+		}
+		target = filepath.Join(packageDir, filepath.Clean(value))
+	}
+	relativePath, err := filepath.Rel(packageDir, target)
+	if err != nil {
+		return "", "", err
+	}
+	if relativePath == "." || relativePath == ".." || strings.HasPrefix(relativePath, ".."+string(filepath.Separator)) || filepath.IsAbs(relativePath) {
+		return "", "", fmt.Errorf("annotation preview image %q must stay inside package %q", value, packageDir)
+	}
+	relativePath = filepath.ToSlash(filepath.Clean(relativePath))
+	if !annotationPreviewSnapshotAllowed(relativePath) {
+		return "", "", fmt.Errorf("annotation preview image %q must be an annotation snapshot", value)
+	}
+	if strings.ToLower(filepath.Ext(relativePath)) != ".png" {
+		return "", "", fmt.Errorf("annotation preview image %q must be a PNG", value)
+	}
+	return target, relativePath, nil
+}
+
+func annotationPreviewSnapshotAllowed(relativePath string) bool {
+	relativePath = filepath.ToSlash(strings.TrimSpace(relativePath))
+	if relativePath == recpackage.AnnotationSnapshotFile {
+		return true
+	}
+	for _, dir := range []string{recpackage.AnnotationSnapshotsDir, recpackage.AnnotationRenderPNGDir} {
+		prefix := filepath.ToSlash(dir) + "/"
+		if strings.HasPrefix(relativePath, prefix) {
+			return true
+		}
+	}
+	return false
+}
+
+func validateAnnotationPreviewRelativePath(value string) error {
+	if value == "" {
+		return nil
+	}
+	if filepath.IsAbs(value) {
+		return fmt.Errorf("annotation snapshot path must be package-relative, got absolute path %q", value)
+	}
+	cleaned := filepath.Clean(value)
+	if cleaned == "." || cleaned == ".." || strings.HasPrefix(cleaned, ".."+string(filepath.Separator)) {
+		return fmt.Errorf("annotation snapshot path must stay inside the recording package, got %q", value)
+	}
+	return nil
 }
 
 func (s *RecordingFreedomService) logEvent(component string, event string, fields map[string]string) {
@@ -408,28 +560,11 @@ func (s *RecordingFreedomService) OpenRecordingPackage(packageDir string) (recpa
 }
 
 func (s *RecordingFreedomService) ExportRecordingPackage(req ExportRecordingRequest) (ExportRecordingResult, error) {
-	if recorderIsActive(s.recorder.State()) {
-		return ExportRecordingResult{}, errors.New("cannot export a recording package while recording is active")
-	}
-	info, err := s.appData.Info()
+	plan, err := s.exportRecordingPlan(req, true)
 	if err != nil {
 		return ExportRecordingResult{}, err
 	}
-	packageDir, err := managedRecordingPackageDir(info.VideoDir, req.PackageDir)
-	if err != nil {
-		return ExportRecordingResult{}, err
-	}
-	outputPath := strings.TrimSpace(req.OutputPath)
-	if outputPath == "" {
-		outputPath = exportplan.DefaultOutputPath
-	}
-	plan, err := exportplan.NewService(nil).Plan(exportplan.Request{
-		VideoDir:    info.VideoDir,
-		PackageDir:  packageDir,
-		OutputPath:  outputPath,
-		Canvas:      pip.Size{Width: req.CanvasWidth, Height: req.CanvasHeight},
-		RequireSync: true,
-	})
+	plan, err = s.ensureAnnotationRenderedAssets(req, plan)
 	if err != nil {
 		return ExportRecordingResult{}, err
 	}
@@ -438,6 +573,41 @@ func (s *RecordingFreedomService) ExportRecordingPackage(req ExportRecordingRequ
 		return ExportRecordingResult{}, err
 	}
 	return ExportRecordingResult{Plan: plan, Export: result}, nil
+}
+
+func (s *RecordingFreedomService) PreviewExportRecordingPackage(req ExportRecordingRequest) (ExportRecordingPlanResult, error) {
+	plan, err := s.exportRecordingPlan(req, false)
+	if err != nil {
+		return ExportRecordingPlanResult{}, err
+	}
+	return ExportRecordingPlanResult{Plan: plan}, nil
+}
+
+func (s *RecordingFreedomService) exportRecordingPlan(req ExportRecordingRequest, prepareAnnotationAssets bool) (exportplan.Plan, error) {
+	if recorderIsActive(s.recorder.State()) {
+		return exportplan.Plan{}, errors.New("cannot export a recording package while recording is active")
+	}
+	info, err := s.appData.Info()
+	if err != nil {
+		return exportplan.Plan{}, err
+	}
+	packageDir, err := managedRecordingPackageDir(info.VideoDir, req.PackageDir)
+	if err != nil {
+		return exportplan.Plan{}, err
+	}
+	outputPath := strings.TrimSpace(req.OutputPath)
+	if outputPath == "" {
+		outputPath = exportplan.DefaultOutputPath
+	}
+	return exportplan.NewService(nil).Plan(exportplan.Request{
+		VideoDir:                info.VideoDir,
+		PackageDir:              packageDir,
+		OutputPath:              outputPath,
+		Canvas:                  pip.Size{Width: req.CanvasWidth, Height: req.CanvasHeight},
+		RequireSync:             true,
+		IncludeAnnotations:      req.IncludeAnnotations,
+		PrepareAnnotationAssets: prepareAnnotationAssets,
+	})
 }
 
 func managedRecordingPackageSummary(videoDir string, packageDir string) (recpackage.RecoverySummary, error) {
@@ -845,6 +1015,7 @@ func (s *RecordingFreedomService) StopRecording() (recording.Session, error) {
 		return session, err
 	}
 	_ = s.HidePIPOverlay()
+	_ = s.HideAnnotationOverlay()
 	s.emitSessionStatus(session, "Recording package ready")
 	return session, nil
 }
@@ -891,6 +1062,16 @@ func (s *RecordingFreedomService) emitSettingsChanged(next settings.Settings) {
 		return
 	}
 	s.app.Event.Emit("settings.changed", next)
+}
+
+func (s *RecordingFreedomService) emitWhiteboardVisibility(visible bool, mode string) {
+	if s.app == nil {
+		return
+	}
+	s.app.Event.Emit("whiteboard.visibility", WhiteboardVisibilityEvent{
+		Visible: visible,
+		Mode:    strings.TrimSpace(mode),
+	})
 }
 
 func (s *RecordingFreedomService) emitAudioState(audio settings.AudioSettings) {

@@ -5,6 +5,60 @@
 // @ts-ignore: Unused imports
 import * as pip$0 from "../pip/models.js";
 
+export interface AnnotationElementKeyframePlan {
+    "sequence"?: number;
+    "startOffsetMs"?: number;
+    "eventType"?: string;
+    "elementId"?: string;
+    "elementType"?: string;
+    "activeElementCount"?: number;
+    "hasElementPayload": boolean;
+}
+
+export interface AnnotationElementScenePlan {
+    "inputPath": string;
+    "relativePath"?: string;
+    "renderInputPath"?: string;
+    "renderRelativePath"?: string;
+    "startOffsetMs"?: number;
+    "endOffsetMs"?: number;
+    "durationMs"?: number;
+    "canvasWidth"?: number;
+    "canvasHeight"?: number;
+    "elementCount"?: number;
+    "sourceEventSequence"?: number;
+    "bytes"?: number;
+}
+
+export interface AnnotationSnapshotPlan {
+    "inputPath": string;
+    "relativePath"?: string;
+    "startOffsetMs": number;
+    "endOffsetMs"?: number;
+    "durationMs"?: number;
+    "bytes"?: number;
+}
+
+export interface AnnotationTimelineSummary {
+    "mode"?: string;
+    "eventCount"?: number;
+    "snapshotCount"?: number;
+    "exportedSnapshotCount"?: number;
+    "skippedSnapshotCount"?: number;
+    "elementEventCount"?: number;
+    "elementTimelineMode"?: string;
+    "elementKeyframeCount"?: number;
+    "finalElementCount"?: number;
+    "deletedElementCount"?: number;
+    "missingElementPayloads"?: number;
+    "startOffsetMs"?: number;
+    "endOffsetMs"?: number;
+    "eventFileBytes"?: number;
+    "snapshotBytes"?: number;
+    "elementTypeCounts"?: { [_ in string]?: number } | null;
+    "elementPreviewFrames"?: AnnotationElementKeyframePlan[] | null;
+}
+
 export interface PauseSegmentPlan {
     "startOffsetMs": number;
     "endOffsetMs": number;
@@ -18,6 +72,15 @@ export interface Plan {
     "screenInputPath": string;
     "webcamInputPath"?: string;
     "webcamStartOffsetMs"?: number;
+    "annotationInputPath"?: string;
+    "annotationEventsPath"?: string;
+    "annotationStartMs"?: number;
+    "annotationTimeline"?: string;
+    "annotationSnapshots"?: AnnotationSnapshotPlan[] | null;
+    "annotationRenderMode"?: string;
+    "annotationElementScenes"?: AnnotationElementScenePlan[] | null;
+    "annotationSummary"?: AnnotationTimelineSummary | null;
+    "annotationsVisible": boolean;
     "pipPreset": string;
     "pipConfig": pip$0.Config;
     "pipRect": pip$0.Rect;

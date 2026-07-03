@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"encoding/base64"
 	"encoding/json"
 	"os"
 	"path/filepath"
@@ -12,6 +13,7 @@ import (
 	"github.com/lemon-casino/RecordingFreedom/app/internal/appdata"
 	"github.com/lemon-casino/RecordingFreedom/app/internal/capture"
 	"github.com/lemon-casino/RecordingFreedom/app/internal/devices"
+	"github.com/lemon-casino/RecordingFreedom/app/internal/exportplan"
 	"github.com/lemon-casino/RecordingFreedom/app/internal/pip"
 	"github.com/lemon-casino/RecordingFreedom/app/internal/preflight"
 	"github.com/lemon-casino/RecordingFreedom/app/internal/recording"
@@ -286,6 +288,42 @@ func TestPatchSettingsPreferencesPersistsRecordingAndTheme(t *testing.T) {
 	}
 }
 
+func TestPatchWhiteboardSettingsPersistsWhiteboardOnly(t *testing.T) {
+	data := appdata.NewService(t.TempDir())
+	service := &RecordingFreedomService{
+		appData:  data,
+		settings: settings.NewService(data),
+	}
+	theme := settings.ThemeSageGray
+	quality := recordingprofile.QualityHigh
+	if _, err := service.PatchSettingsPreferences(SettingsPreferencesPatchRequest{
+		Theme:            &theme,
+		RecordingQuality: &quality,
+	}); err != nil {
+		t.Fatalf("PatchSettingsPreferences() error = %v", err)
+	}
+	tool := "rectangle"
+	color := "#38bdf8"
+	width := "bold"
+	opacity := 140
+
+	saved, err := service.PatchWhiteboardSettings(WhiteboardSettingsPatchRequest{
+		LastTool:        &tool,
+		LastStrokeColor: &color,
+		LastStrokeWidth: &width,
+		LastOpacity:     &opacity,
+	})
+	if err != nil {
+		t.Fatalf("PatchWhiteboardSettings() error = %v", err)
+	}
+	if saved.Whiteboard.LastTool != tool || saved.Whiteboard.LastStrokeColor != color || saved.Whiteboard.LastStrokeWidth != width || saved.Whiteboard.LastOpacity != 100 {
+		t.Fatalf("whiteboard settings = %#v, want patched values with opacity clamped", saved.Whiteboard)
+	}
+	if saved.Window.Theme != theme || saved.Recording.Quality != quality {
+		t.Fatalf("whiteboard patch changed unrelated preferences: theme %q recording %#v", saved.Window.Theme, saved.Recording)
+	}
+}
+
 func TestSaveSettingsDoesNotOverwritePatchedPreferences(t *testing.T) {
 	data := appdata.NewService(t.TempDir())
 	service := &RecordingFreedomService{
@@ -316,6 +354,213 @@ func TestSaveSettingsDoesNotOverwritePatchedPreferences(t *testing.T) {
 	}
 	if saved.Window.Theme != theme || saved.Recording.Quality != quality || saved.Recording.FPS != fps {
 		t.Fatalf("SaveSettings overwrote patched preferences: theme %q recording %#v", saved.Window.Theme, saved.Recording)
+	}
+}
+
+func TestSaveWhiteboardExportWritesExcalidrawScene(t *testing.T) {
+	data := appdata.NewService(t.TempDir())
+	service := &RecordingFreedomService{appData: data}
+
+	result, err := service.SaveWhiteboardExport(WhiteboardExportRequest{
+		Format:  "excalidraw",
+		Payload: `{"type":"excalidraw","version":2,"source":"RecordingFreedom","elements":[],"appState":{},"files":{}}`,
+	})
+	if err != nil {
+		t.Fatalf("SaveWhiteboardExport(excalidraw) error = %v", err)
+	}
+	if result.Format != "excalidraw" || filepath.Ext(result.OutputPath) != ".excalidraw" {
+		t.Fatalf("export result = %#v, want .excalidraw output", result)
+	}
+	root, err := data.RootDir()
+	if err != nil {
+		t.Fatalf("RootDir() error = %v", err)
+	}
+	rel, err := filepath.Rel(root, result.OutputPath)
+	if err != nil {
+		t.Fatalf("Rel() error = %v", err)
+	}
+	if strings.HasPrefix(rel, ".."+string(os.PathSeparator)) || filepath.IsAbs(rel) {
+		t.Fatalf("export path %q escaped root %q", result.OutputPath, root)
+	}
+	if _, err := os.Stat(result.OutputPath); err != nil {
+		t.Fatalf("export file was not written: %v", err)
+	}
+}
+
+func TestSaveWhiteboardExportRejectsInvalidExcalidrawScene(t *testing.T) {
+	data := appdata.NewService(t.TempDir())
+	service := &RecordingFreedomService{appData: data}
+
+	if _, err := service.SaveWhiteboardExport(WhiteboardExportRequest{Format: "excalidraw", Payload: "{invalid"}); err == nil {
+		t.Fatal("SaveWhiteboardExport(excalidraw invalid JSON) succeeded, want error")
+	}
+}
+
+func TestSaveAnnotationCaptureWritesActivePackageAnnotations(t *testing.T) {
+	data := appdata.NewService(t.TempDir())
+	service := &RecordingFreedomService{
+		appData:  data,
+		recorder: recording.NewServiceWithBackend(data, recording.NewMockBackend(recpackage.NewService())),
+	}
+	session, err := service.StartRecording(recording.StartRequest{
+		SourceID:   "screen:primary",
+		SourceType: recording.SourceScreen,
+		SourceName: "Primary",
+		SourceGeometry: &recording.SourceGeometry{
+			Width:  1280,
+			Height: 720,
+		},
+		Recording: recordingprofile.Default(),
+	})
+	if err != nil {
+		t.Fatalf("StartRecording() error = %v", err)
+	}
+
+	result, err := service.SaveAnnotationCapture(AnnotationCaptureRequest{
+		SceneJSON:       `{"type":"excalidraw","elements":[],"appState":{},"files":{}}`,
+		SnapshotDataURL: "data:image/png;base64," + base64.StdEncoding.EncodeToString([]byte("png")),
+	})
+	if err != nil {
+		t.Fatalf("SaveAnnotationCapture() error = %v", err)
+	}
+	if result.PackageDir != session.PackageDir {
+		t.Fatalf("annotation packageDir = %q, want active package %q", result.PackageDir, session.PackageDir)
+	}
+	for _, path := range []string{result.ScenePath, result.EventsPath, result.SnapshotPath} {
+		if _, err := os.Stat(path); err != nil {
+			t.Fatalf("annotation artifact %q missing: %v", path, err)
+		}
+	}
+	if result.TimelineSnapshotPath == "" {
+		t.Fatal("TimelineSnapshotPath is empty, want per-save annotation snapshot")
+	}
+	if _, err := os.Stat(result.TimelineSnapshotPath); err != nil {
+		t.Fatalf("timeline annotation snapshot %q missing: %v", result.TimelineSnapshotPath, err)
+	}
+	manifest, err := recpackage.NewService().ReadManifest(session.Manifest)
+	if err != nil {
+		t.Fatalf("ReadManifest() error = %v", err)
+	}
+	if manifest.Annotations == nil || !manifest.Annotations.Enabled || manifest.Annotations.SnapshotPath != recpackage.AnnotationSnapshotFile || manifest.Annotations.DiagnosticsPath != recpackage.AnnotationOverlayDiagnosticsFile {
+		t.Fatalf("manifest annotations = %#v, want enabled snapshot contract", manifest.Annotations)
+	}
+	if manifest.Annotations.Target.Type != "screen" || manifest.Annotations.Target.ID != "screen:primary" || manifest.Annotations.Target.Geometry == nil || manifest.Annotations.Target.Geometry.Width != 1280 {
+		t.Fatalf("annotation target = %#v, want active source target", manifest.Annotations.Target)
+	}
+	loaded, err := service.LoadAnnotationCapture()
+	if err != nil {
+		t.Fatalf("LoadAnnotationCapture() error = %v", err)
+	}
+	if !loaded.Available || loaded.ScenePath != result.ScenePath || !strings.Contains(loaded.SceneJSON, `"type":"excalidraw"`) {
+		t.Fatalf("loaded annotation = %#v, want saved active scene", loaded)
+	}
+	eventsData, err := os.ReadFile(result.EventsPath)
+	if err != nil {
+		t.Fatalf("ReadFile(annotation events) error = %v", err)
+	}
+	var event map[string]any
+	if err := json.Unmarshal(bytes.TrimSpace(eventsData), &event); err != nil {
+		t.Fatalf("annotation event JSON = %q, error = %v", eventsData, err)
+	}
+	snapshotPath, _ := event["snapshotPath"].(string)
+	if event["type"] != "scene-snapshot" || event["scenePath"] != recpackage.AnnotationSceneFile || !strings.HasPrefix(snapshotPath, recpackage.AnnotationSnapshotsDir+"/") {
+		t.Fatalf("annotation event = %#v, want scene snapshot with timeline snapshot path", event)
+	}
+	if _, ok := event["recordingOffsetMs"].(float64); !ok {
+		t.Fatalf("annotation event = %#v, want recordingOffsetMs", event)
+	}
+	diagnosticsPath := filepath.Join(session.PackageDir, recpackage.AnnotationOverlayDiagnosticsFile)
+	diagnosticsData, err := os.ReadFile(diagnosticsPath)
+	if err != nil {
+		t.Fatalf("ReadFile(annotation overlay diagnostics) error = %v", err)
+	}
+	if !strings.Contains(string(diagnosticsData), `"type":"save-capture"`) || !strings.Contains(string(diagnosticsData), `"windowBounds"`) {
+		t.Fatalf("overlay diagnostics = %s, want save-capture bounds evidence", diagnosticsData)
+	}
+}
+
+func TestSaveAnnotationCaptureUsesRecordingOffsetAfterPauseResume(t *testing.T) {
+	data := appdata.NewService(t.TempDir())
+	service := &RecordingFreedomService{
+		appData:  data,
+		recorder: recording.NewServiceWithBackend(data, recording.NewMockBackend(recpackage.NewService())),
+	}
+	if _, err := service.StartRecording(recording.StartRequest{
+		SourceID:   "screen:primary",
+		SourceType: recording.SourceScreen,
+		Recording:  recordingprofile.Default(),
+	}); err != nil {
+		t.Fatalf("StartRecording() error = %v", err)
+	}
+	if _, err := service.recorder.Pause(); err != nil {
+		t.Fatalf("Pause() error = %v", err)
+	}
+	time.Sleep(80 * time.Millisecond)
+	if _, err := service.recorder.Resume(); err != nil {
+		t.Fatalf("Resume() error = %v", err)
+	}
+
+	result, err := service.SaveAnnotationCapture(AnnotationCaptureRequest{
+		SceneJSON:       `{"type":"excalidraw","elements":[{"id":"a","type":"freedraw"}],"appState":{},"files":{}}`,
+		SnapshotDataURL: "data:image/png;base64," + base64.StdEncoding.EncodeToString([]byte("png")),
+	})
+	if err != nil {
+		t.Fatalf("SaveAnnotationCapture() error = %v", err)
+	}
+	eventsData, err := os.ReadFile(result.EventsPath)
+	if err != nil {
+		t.Fatalf("ReadFile(annotation events) error = %v", err)
+	}
+	var event map[string]any
+	if err := json.Unmarshal(bytes.TrimSpace(eventsData), &event); err != nil {
+		t.Fatalf("annotation event JSON = %q, error = %v", eventsData, err)
+	}
+	wallOffsetMs, wallOK := event["wallOffsetMs"].(float64)
+	recordingOffsetMs, recordingOK := event["recordingOffsetMs"].(float64)
+	if !wallOK || !recordingOK {
+		t.Fatalf("annotation event = %#v, want wallOffsetMs and recordingOffsetMs", event)
+	}
+	if recordingOffsetMs >= wallOffsetMs {
+		t.Fatalf("recordingOffsetMs = %.0f, wallOffsetMs = %.0f, want recording offset to subtract pause duration", recordingOffsetMs, wallOffsetMs)
+	}
+	if wallOffsetMs-recordingOffsetMs < 40 {
+		t.Fatalf("offset delta = %.0fms, want pause duration reflected in annotation event", wallOffsetMs-recordingOffsetMs)
+	}
+}
+
+func TestSaveAnnotationCaptureUsesWhiteboardCapturePolicy(t *testing.T) {
+	data := appdata.NewService(t.TempDir())
+	settingsService := settings.NewService(data)
+	current := settings.Default()
+	current.Whiteboard.CapturePolicy = "preview-only"
+	if _, err := settingsService.Save(current); err != nil {
+		t.Fatalf("Save(settings) error = %v", err)
+	}
+	service := &RecordingFreedomService{
+		appData:  data,
+		recorder: recording.NewServiceWithBackend(data, recording.NewMockBackend(recpackage.NewService())),
+		settings: settingsService,
+	}
+	session, err := service.StartRecording(recording.StartRequest{
+		SourceID:   "screen:primary",
+		SourceType: recording.SourceScreen,
+		Recording:  recordingprofile.Default(),
+	})
+	if err != nil {
+		t.Fatalf("StartRecording() error = %v", err)
+	}
+	if _, err := service.SaveAnnotationCapture(AnnotationCaptureRequest{
+		SceneJSON:       `{"type":"excalidraw","elements":[],"appState":{},"files":{}}`,
+		SnapshotDataURL: "data:image/png;base64," + base64.StdEncoding.EncodeToString([]byte("png")),
+	}); err != nil {
+		t.Fatalf("SaveAnnotationCapture() error = %v", err)
+	}
+	manifest, err := recpackage.NewService().ReadManifest(session.Manifest)
+	if err != nil {
+		t.Fatalf("ReadManifest() error = %v", err)
+	}
+	if manifest.Annotations == nil || manifest.Annotations.CapturePolicy != "preview-only" {
+		t.Fatalf("manifest annotations = %#v, want preview-only policy from settings", manifest.Annotations)
 	}
 }
 
@@ -392,6 +637,147 @@ func TestOpenRecordingPackageUsesManagedPackageDir(t *testing.T) {
 	}
 }
 
+func TestPreviewExportRecordingPackageReturnsAnnotationPlan(t *testing.T) {
+	data := appdata.NewService(t.TempDir())
+	info, err := data.Info()
+	if err != nil {
+		t.Fatalf("Info() error = %v", err)
+	}
+	packageDir := createReadyExportPackage(t, info.VideoDir, true)
+	service := &RecordingFreedomService{
+		appData:  data,
+		recorder: recording.NewService(data),
+	}
+
+	result, err := service.PreviewExportRecordingPackage(ExportRecordingRequest{
+		PackageDir: packageDir,
+	})
+	if err != nil {
+		t.Fatalf("PreviewExportRecordingPackage() error = %v", err)
+	}
+	if result.Plan.OutputPath != filepath.Join(packageDir, exportplan.DefaultOutputPath) {
+		t.Fatalf("output path = %q, want package default export", result.Plan.OutputPath)
+	}
+	if !result.Plan.AnnotationsVisible || result.Plan.AnnotationTimeline != "snapshot-segments" {
+		t.Fatalf("annotation plan = visible:%v timeline:%q, want snapshot segment preview", result.Plan.AnnotationsVisible, result.Plan.AnnotationTimeline)
+	}
+	if len(result.Plan.AnnotationSnapshots) != 2 {
+		t.Fatalf("annotation snapshots = %#v, want two preview segments", result.Plan.AnnotationSnapshots)
+	}
+	if result.Plan.AnnotationSummary == nil || result.Plan.AnnotationSummary.SnapshotCount != 2 || result.Plan.AnnotationSummary.ElementEventCount != 1 {
+		t.Fatalf("annotation summary = %#v, want snapshot and element counts", result.Plan.AnnotationSummary)
+	}
+}
+
+func TestPreviewExportRecordingPackageHonorsAnnotationToggle(t *testing.T) {
+	data := appdata.NewService(t.TempDir())
+	info, err := data.Info()
+	if err != nil {
+		t.Fatalf("Info() error = %v", err)
+	}
+	packageDir := createReadyExportPackage(t, info.VideoDir, true)
+	includeAnnotations := false
+	service := &RecordingFreedomService{
+		appData:  data,
+		recorder: recording.NewService(data),
+	}
+
+	result, err := service.PreviewExportRecordingPackage(ExportRecordingRequest{
+		PackageDir:         packageDir,
+		IncludeAnnotations: &includeAnnotations,
+	})
+	if err != nil {
+		t.Fatalf("PreviewExportRecordingPackage(disabled annotations) error = %v", err)
+	}
+	if result.Plan.AnnotationsVisible || len(result.Plan.AnnotationSnapshots) != 0 || result.Plan.AnnotationSummary != nil {
+		t.Fatalf("annotation plan = visible:%v snapshots:%#v summary:%#v, want annotations skipped", result.Plan.AnnotationsVisible, result.Plan.AnnotationSnapshots, result.Plan.AnnotationSummary)
+	}
+}
+
+func TestReadAnnotationPreviewImageReturnsPackageSnapshotDataURL(t *testing.T) {
+	data := appdata.NewService(t.TempDir())
+	info, err := data.Info()
+	if err != nil {
+		t.Fatalf("Info() error = %v", err)
+	}
+	packageDir := createReadyExportPackage(t, info.VideoDir, true)
+	service := &RecordingFreedomService{appData: data}
+
+	result, err := service.ReadAnnotationPreviewImage(AnnotationPreviewImageRequest{
+		PackageDir:   packageDir,
+		SnapshotPath: filepath.ToSlash(filepath.Join(recpackage.AnnotationSnapshotsDir, "annotation-000001.png")),
+	})
+	if err != nil {
+		t.Fatalf("ReadAnnotationPreviewImage() error = %v", err)
+	}
+	if !result.Available || result.RelativePath != "annotations/snapshots/annotation-000001.png" || result.Bytes <= 0 {
+		t.Fatalf("result = %#v, want readable package annotation snapshot", result)
+	}
+	wantDataURL := "data:image/png;base64," + base64.StdEncoding.EncodeToString([]byte("timeline annotation png"))
+	if result.DataURL != wantDataURL {
+		t.Fatalf("data URL = %q, want encoded annotation snapshot", result.DataURL)
+	}
+}
+
+func TestReadAnnotationPreviewImageReturnsRenderedPNGDataURL(t *testing.T) {
+	data := appdata.NewService(t.TempDir())
+	info, err := data.Info()
+	if err != nil {
+		t.Fatalf("Info() error = %v", err)
+	}
+	packageDir := createReadyExportPackage(t, info.VideoDir, true)
+	renderPath := filepath.Join(packageDir, recpackage.AnnotationRenderPNGDir, "annotation-000001.png")
+	if err := os.MkdirAll(filepath.Dir(renderPath), 0o755); err != nil {
+		t.Fatalf("MkdirAll(render path) error = %v", err)
+	}
+	if err := os.WriteFile(renderPath, []byte("rendered annotation png"), 0o644); err != nil {
+		t.Fatalf("WriteFile(rendered annotation) error = %v", err)
+	}
+	service := &RecordingFreedomService{appData: data}
+
+	result, err := service.ReadAnnotationPreviewImage(AnnotationPreviewImageRequest{
+		PackageDir:   packageDir,
+		SnapshotPath: filepath.ToSlash(filepath.Join(recpackage.AnnotationRenderPNGDir, "annotation-000001.png")),
+	})
+	if err != nil {
+		t.Fatalf("ReadAnnotationPreviewImage(rendered) error = %v", err)
+	}
+	if !result.Available || result.RelativePath != "annotations/reconstructed/png/annotation-000001.png" || result.Bytes <= 0 {
+		t.Fatalf("result = %#v, want readable rendered annotation PNG", result)
+	}
+	wantDataURL := "data:image/png;base64," + base64.StdEncoding.EncodeToString([]byte("rendered annotation png"))
+	if result.DataURL != wantDataURL {
+		t.Fatalf("data URL = %q, want encoded rendered annotation", result.DataURL)
+	}
+}
+
+func TestReadAnnotationPreviewImageRejectsEscapingSnapshotPath(t *testing.T) {
+	data := appdata.NewService(t.TempDir())
+	info, err := data.Info()
+	if err != nil {
+		t.Fatalf("Info() error = %v", err)
+	}
+	packageDir := createReadyExportPackage(t, info.VideoDir, true)
+	outside := filepath.Join(t.TempDir(), "annotation.png")
+	if err := os.WriteFile(outside, []byte("outside"), 0o644); err != nil {
+		t.Fatalf("WriteFile(outside) error = %v", err)
+	}
+	service := &RecordingFreedomService{appData: data}
+
+	if _, err := service.ReadAnnotationPreviewImage(AnnotationPreviewImageRequest{
+		PackageDir:   packageDir,
+		SnapshotPath: outside,
+	}); err == nil {
+		t.Fatal("ReadAnnotationPreviewImage() accepted an absolute path outside the package")
+	}
+	if _, err := service.ReadAnnotationPreviewImage(AnnotationPreviewImageRequest{
+		PackageDir:   packageDir,
+		SnapshotPath: recpackage.ScreenVideoFile,
+	}); err == nil {
+		t.Fatal("ReadAnnotationPreviewImage() accepted a non-annotation package path")
+	}
+}
+
 func TestOpenRecordingPackageAllowsMissingManifestForDiagnostics(t *testing.T) {
 	data := appdata.NewService(t.TempDir())
 	info, err := data.Info()
@@ -424,6 +810,130 @@ func TestOpenRecordingPackageAllowsMissingManifestForDiagnostics(t *testing.T) {
 	if summary.Status != recpackage.StatusFailed || summary.Reason == "" {
 		t.Fatalf("summary = %#v, want failed diagnostic summary", summary)
 	}
+}
+
+func TestRecoverRecordingPackagePreservesAnnotationExportPlan(t *testing.T) {
+	data := appdata.NewService(t.TempDir())
+	info, err := data.Info()
+	if err != nil {
+		t.Fatalf("Info() error = %v", err)
+	}
+	packageDir := createReadyExportPackage(t, info.VideoDir, true)
+	manifestPath := filepath.Join(packageDir, recpackage.ManifestFile)
+	packageService := recpackage.NewService()
+	manifest, err := packageService.ReadManifest(manifestPath)
+	if err != nil {
+		t.Fatalf("ReadManifest() error = %v", err)
+	}
+	manifest.Status = recpackage.StatusRecording
+	manifest.CompletedAt = nil
+	if err := packageService.WriteManifest(manifestPath, manifest); err != nil {
+		t.Fatalf("WriteManifest(recording) error = %v", err)
+	}
+	service := &RecordingFreedomService{
+		appData:  data,
+		recorder: recording.NewServiceWithBackend(data, recording.NewMockBackend(packageService)),
+	}
+
+	summary, err := service.RecoverRecordingPackage(packageDir)
+	if err != nil {
+		t.Fatalf("RecoverRecordingPackage() error = %v", err)
+	}
+	if summary.Status != recpackage.StatusReady || summary.Recoverable {
+		t.Fatalf("summary = %#v, want ready recovered package", summary)
+	}
+	recovered, err := packageService.ReadManifest(manifestPath)
+	if err != nil {
+		t.Fatalf("ReadManifest(recovered) error = %v", err)
+	}
+	if !recovered.Diagnostics.Recovered {
+		t.Fatal("recovered manifest must mark diagnostics.recovered")
+	}
+	if recovered.Annotations == nil || !recovered.Annotations.Enabled || recovered.Annotations.EventsPath != recpackage.AnnotationEventsFile {
+		t.Fatalf("recovered annotations = %#v, want preserved annotation contract", recovered.Annotations)
+	}
+
+	preview, err := service.PreviewExportRecordingPackage(ExportRecordingRequest{PackageDir: packageDir})
+	if err != nil {
+		t.Fatalf("PreviewExportRecordingPackage(recovered annotations) error = %v", err)
+	}
+	if !preview.Plan.AnnotationsVisible || preview.Plan.AnnotationTimeline != "snapshot-segments" || len(preview.Plan.AnnotationSnapshots) != 2 {
+		t.Fatalf("annotation plan = visible:%v timeline:%q snapshots:%#v, want recovered snapshot annotation timeline", preview.Plan.AnnotationsVisible, preview.Plan.AnnotationTimeline, preview.Plan.AnnotationSnapshots)
+	}
+	if preview.Plan.AnnotationSummary == nil || preview.Plan.AnnotationSummary.EventCount != 3 || preview.Plan.AnnotationSummary.ExportedSnapshotCount != 2 {
+		t.Fatalf("annotation summary = %#v, want recovered annotation events and snapshots", preview.Plan.AnnotationSummary)
+	}
+}
+
+func createReadyExportPackage(t *testing.T, videoDir string, annotations bool) string {
+	t.Helper()
+	packageDir := filepath.Join(videoDir, "recording-preview-plan-test"+recpackage.PackageDirSuffix)
+	if err := os.MkdirAll(packageDir, 0o755); err != nil {
+		t.Fatalf("MkdirAll(package) error = %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(packageDir, recpackage.ScreenVideoFile), []byte("screen media"), 0o644); err != nil {
+		t.Fatalf("WriteFile(screen) error = %v", err)
+	}
+	manifest := recpackage.Manifest{
+		SchemaVersion: 1,
+		App:           recpackage.AppName,
+		CreatedAt:     time.Date(2026, 7, 3, 22, 0, 0, 0, time.UTC),
+		Status:        recpackage.StatusReady,
+		RecordingMode: recpackage.RecordingModeScreen,
+		Media:         recpackage.ManifestMedia{ScreenVideoPath: recpackage.ScreenVideoFile},
+		Source:        recpackage.ManifestSource{Type: "screen", ID: "screen:primary"},
+		Recording:     recordingprofile.Profile{Quality: recordingprofile.QualityHigh, FPS: 30, CaptureCursor: true},
+		Diagnostics: recpackage.ManifestDiagnostics{
+			Sync: &recpackage.ManifestSyncDiagnostics{
+				TimelineBase: recpackage.TimelineBaseMedia,
+				Screen: recpackage.ManifestTrackDiagnostics{
+					Enabled:     true,
+					Path:        recpackage.ScreenVideoFile,
+					Clock:       recpackage.TimelineBaseMedia,
+					EndOffsetMs: 6000,
+					DurationMs:  6000,
+					FrameRate:   30,
+				},
+			},
+		},
+	}
+	if annotations {
+		if err := os.MkdirAll(filepath.Join(packageDir, recpackage.AnnotationExportsDir), 0o755); err != nil {
+			t.Fatalf("MkdirAll(annotation exports) error = %v", err)
+		}
+		if err := os.MkdirAll(filepath.Join(packageDir, recpackage.AnnotationSnapshotsDir), 0o755); err != nil {
+			t.Fatalf("MkdirAll(annotation snapshots) error = %v", err)
+		}
+		if err := os.WriteFile(filepath.Join(packageDir, recpackage.AnnotationSnapshotFile), []byte("final annotation png"), 0o644); err != nil {
+			t.Fatalf("WriteFile(annotation final snapshot) error = %v", err)
+		}
+		for _, name := range []string{"annotation-000001.png", "annotation-000003.png"} {
+			if err := os.WriteFile(filepath.Join(packageDir, recpackage.AnnotationSnapshotsDir, name), []byte("timeline annotation png"), 0o644); err != nil {
+				t.Fatalf("WriteFile(annotation timeline snapshot) error = %v", err)
+			}
+		}
+		events := strings.Join([]string{
+			`{"type":"scene-snapshot","recordingOffsetMs":1000,"snapshotPath":"annotations/snapshots/annotation-000001.png"}`,
+			`{"type":"element-created","elementId":"a","recordingOffsetMs":1000}`,
+			`{"type":"scene-snapshot","recordingOffsetMs":2500,"snapshotPath":"annotations/snapshots/annotation-000003.png"}`,
+		}, "\n")
+		if err := os.WriteFile(filepath.Join(packageDir, recpackage.AnnotationEventsFile), []byte(events+"\n"), 0o644); err != nil {
+			t.Fatalf("WriteFile(annotation events) error = %v", err)
+		}
+		manifest.Annotations = &recpackage.ManifestAnnotations{
+			Enabled:       true,
+			Mode:          "overlay",
+			ScenePath:     recpackage.AnnotationSceneFile,
+			EventsPath:    recpackage.AnnotationEventsFile,
+			SnapshotPath:  recpackage.AnnotationSnapshotFile,
+			CapturePolicy: "export-compose",
+			Target:        recpackage.ManifestAnnotationTarget{Type: "screen", ID: "screen:primary"},
+		}
+	}
+	if err := recpackage.NewService().WriteManifest(filepath.Join(packageDir, recpackage.ManifestFile), manifest); err != nil {
+		t.Fatalf("WriteManifest() error = %v", err)
+	}
+	return packageDir
 }
 
 func TestOpenRecordingPackageRejectsPathsOutsideManagedDataVideo(t *testing.T) {

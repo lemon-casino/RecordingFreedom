@@ -155,6 +155,7 @@ tasks:
           exit 1
         fi
       - cp tools/THIRD_PARTY_FFMPEG.txt "{{.BIN_DIR}}/{{.APP_NAME}}.app/Contents/MacOS/tools/THIRD_PARTY_FFMPEG.txt"
+      - cp tools/THIRD_PARTY_NOTICES.txt "{{.BIN_DIR}}/{{.APP_NAME}}.app/Contents/MacOS/tools/THIRD_PARTY_NOTICES.txt"
       - cp build/darwin/Info.plist "{{.BIN_DIR}}/{{.APP_NAME}}.app/Contents"
       - task: '{{if eq OS "darwin"}}codesign:adhoc{{else}}codesign:skip{{end}}'
 

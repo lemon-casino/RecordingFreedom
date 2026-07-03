@@ -51,6 +51,7 @@ export type RecorderCopy = {
     resumeRecording: string
     selectLanguage: string
     openSettings: string
+    openWhiteboard: string
     closeApplication: string
     recordingMode: string
     menu: (panel: string) => string
@@ -127,6 +128,28 @@ export type RecorderCopy = {
     exporting: string
     exportPackageValue: string
     exportPackageDetail: string
+    exportPlan: string
+    exportPlanLoading: string
+    exportPlanUnavailable: string
+    exportPlanPendingDetail: string
+    exportPlanPip: string
+    exportPlanNoPip: string
+    exportPlanAnnotationsOff: string
+    exportPlanNoAnnotations: string
+    exportPlanRenderedSegments: (segments: number, events: number) => string
+    exportPlanSnapshotSegments: (segments: number, events: number) => string
+    exportPlanSnapshotFallback: (mode: string, events: number) => string
+    exportPlanOutput: (path: string) => string
+    exportPlanRange: (start: string, end: string) => string
+    exportPlanOpenEnded: string
+    exportPlanWarnings: (count: number) => string
+    exportPlanTimelineTitle: string
+    exportPlanTimelineStats: (events: string, snapshots: string, skipped: number) => string
+    exportPlanElementTimelineStats: (frames: number, active: number, missing: number) => string
+    exportPlanSegmentLabel: (index: number, start: string, end: string, size: string) => string
+    exportPlanSegmentMore: (count: number) => string
+    includeAnnotations: string
+    includeAnnotationsDetail: string
     exportReady: (path: string) => string
     exportFailed: string
     quality: string
@@ -183,6 +206,43 @@ export type RecorderCopy = {
     cameraUnavailable: string
     cameraPreparing: string
     cameraRecording: string
+  }
+  whiteboard: {
+    title: string
+    subtitle: string
+    open: string
+    close: string
+    save: string
+    saved: string
+    saveFailed: string
+    loading: string
+    exportPng: string
+    exportSvg: string
+    exportExc: string
+    exported: (path: string) => string
+    exportFailed: string
+    clear: string
+    clearConfirm: string
+    undo: string
+    redo: string
+    select: string
+    hand: string
+    pen: string
+    laser: string
+    arrow: string
+    line: string
+    rectangle: string
+    ellipse: string
+    text: string
+    eraser: string
+    strokeColor: string
+    strokeWidth: string
+    opacity: string
+    thin: string
+    medium: string
+    bold: string
+    unsaved: string
+    ready: string
   }
   statusChips: Record<RecordingState, string>
   statusMessages: Record<StatusMessageKey, string>
@@ -255,6 +315,7 @@ const zhCN: RecorderCopy = {
     resumeRecording: '继续录制',
     selectLanguage: '选择语言',
     openSettings: '打开设置',
+    openWhiteboard: '打开画板',
     closeApplication: '关闭软件',
     recordingMode: '录制模式',
     menu: (panel) => `${panel} 菜单`,
@@ -361,7 +422,29 @@ const zhCN: RecorderCopy = {
     exportPackage: '导出视频',
     exporting: '导出中',
     exportPackageValue: 'MP4 成品',
-    exportPackageDetail: '将最近录制包导出为 exports/recording.mp4；画中画会在导出阶段合成，原始 screen.mp4 保持干净。',
+    exportPackageDetail: '将最近录制包导出为 exports/recording.mp4；画中画和标注会按下方开关在导出阶段合成，原始 screen.mp4 保持干净。',
+    exportPlan: '导出预览',
+    exportPlanLoading: '读取中',
+    exportPlanUnavailable: '暂无预览',
+    exportPlanPendingDetail: '选择一个已完成录制包后，会在这里显示导出前的画中画和标注合成计划。',
+    exportPlanPip: '含画中画',
+    exportPlanNoPip: '无画中画',
+    exportPlanAnnotationsOff: '不合成标注',
+    exportPlanNoAnnotations: '本次导出不会合成录制标注。',
+    exportPlanRenderedSegments: (segments, events) => `元素级标注 · ${segments} 段 · ${events} 个事件`,
+    exportPlanSnapshotSegments: (segments, events) => `分段标注 · ${segments} 段 · ${events} 个事件`,
+    exportPlanSnapshotFallback: (mode, events) => `标注快照 · ${mode || '兼容模式'} · ${events} 个事件`,
+    exportPlanOutput: (path) => `输出：${path}`,
+    exportPlanRange: (start, end) => `标注时间：${start} 至 ${end}`,
+    exportPlanOpenEnded: '视频结束',
+    exportPlanWarnings: (count) => `${count} 条导出提示`,
+    exportPlanTimelineTitle: '标注时间线',
+    exportPlanTimelineStats: (events, snapshots, skipped) => skipped > 0 ? `事件 ${events} · 快照 ${snapshots} · 跳过 ${skipped} 段` : `事件 ${events} · 快照 ${snapshots}`,
+    exportPlanElementTimelineStats: (frames, active, missing) => missing > 0 ? `元素重建 ${frames} 帧 · 当前 ${active} 个 · 缺失 ${missing} 个 payload` : `元素重建 ${frames} 帧 · 当前 ${active} 个`,
+    exportPlanSegmentLabel: (index, start, end, size) => `#${index} ${start} - ${end} · ${size}`,
+    exportPlanSegmentMore: (count) => `还有 ${count} 段将在导出时合成`,
+    includeAnnotations: '导出包含标注',
+    includeAnnotationsDetail: '开启后，录制中的画板标注会合成进最终 MP4；关闭后只保留在录制包 annotations 目录中。',
     exportReady: (path) => `导出完成：${path}`,
     exportFailed: '导出失败，请检查录制包和 FFmpeg。',
     quality: '画质',
@@ -418,6 +501,43 @@ const zhCN: RecorderCopy = {
     cameraUnavailable: '摄像头预览不可用',
     cameraPreparing: '正在打开摄像头预览',
     cameraRecording: '摄像头录制中',
+  },
+  whiteboard: {
+    title: '画板',
+    subtitle: '录制前和录制中都可使用',
+    open: '画板',
+    close: '关闭画板',
+    save: '保存',
+    saved: '已保存',
+    saveFailed: '保存失败',
+    loading: '正在载入画板',
+    exportPng: '导出 PNG',
+    exportSvg: '导出 SVG',
+    exportExc: '导出 Excalidraw',
+    exported: (path) => `已导出：${path}`,
+    exportFailed: '导出失败',
+    clear: '清空',
+    clearConfirm: '再次点击清空',
+    undo: '撤销',
+    redo: '重做',
+    select: '选择',
+    hand: '拖动画布',
+    pen: '画笔',
+    laser: '激光笔',
+    arrow: '箭头',
+    line: '直线',
+    rectangle: '矩形',
+    ellipse: '圆形',
+    text: '文字',
+    eraser: '橡皮',
+    strokeColor: '颜色',
+    strokeWidth: '线宽',
+    opacity: '透明度',
+    thin: '细',
+    medium: '中',
+    bold: '粗',
+    unsaved: '未保存',
+    ready: '可绘制',
   },
   statusChips: {
     idle: '待机',
@@ -621,6 +741,7 @@ const en: RecorderCopy = {
     resumeRecording: 'Resume recording',
     selectLanguage: 'Select language',
     openSettings: 'Open settings',
+    openWhiteboard: 'Open whiteboard',
     closeApplication: 'Close app',
     recordingMode: 'Recording mode',
     menu: (panel) => `${panel} menu`,
@@ -727,7 +848,29 @@ const en: RecorderCopy = {
     exportPackage: 'Export video',
     exporting: 'Exporting',
     exportPackageValue: 'MP4 output',
-    exportPackageDetail: 'Export the latest package to exports/recording.mp4; PIP is composed during export and raw screen.mp4 stays clean.',
+    exportPackageDetail: 'Export the latest package to exports/recording.mp4; PIP and annotations are composed during export according to the switch below, while raw screen.mp4 stays clean.',
+    exportPlan: 'Export preview',
+    exportPlanLoading: 'Reading',
+    exportPlanUnavailable: 'No preview',
+    exportPlanPendingDetail: 'Select a completed recording package to preview the PIP and annotation composition plan before export.',
+    exportPlanPip: 'PIP included',
+    exportPlanNoPip: 'No PIP',
+    exportPlanAnnotationsOff: 'No annotations',
+    exportPlanNoAnnotations: 'This export will not compose recording annotations.',
+    exportPlanRenderedSegments: (segments, events) => `Element annotations · ${segments} segment(s) · ${events} event(s)`,
+    exportPlanSnapshotSegments: (segments, events) => `Segmented annotations · ${segments} segment(s) · ${events} event(s)`,
+    exportPlanSnapshotFallback: (mode, events) => `Annotation snapshot · ${mode || 'compat'} · ${events} event(s)`,
+    exportPlanOutput: (path) => `Output: ${path}`,
+    exportPlanRange: (start, end) => `Annotation time: ${start} to ${end}`,
+    exportPlanOpenEnded: 'video end',
+    exportPlanWarnings: (count) => `${count} export warning(s)`,
+    exportPlanTimelineTitle: 'Annotation timeline',
+    exportPlanTimelineStats: (events, snapshots, skipped) => skipped > 0 ? `Events ${events} · Snapshots ${snapshots} · ${skipped} skipped` : `Events ${events} · Snapshots ${snapshots}`,
+    exportPlanElementTimelineStats: (frames, active, missing) => missing > 0 ? `Element reconstruction ${frames} frame(s) · ${active} active · ${missing} missing payload(s)` : `Element reconstruction ${frames} frame(s) · ${active} active`,
+    exportPlanSegmentLabel: (index, start, end, size) => `#${index} ${start} - ${end} · ${size}`,
+    exportPlanSegmentMore: (count) => `${count} more segment(s) will be composed during export`,
+    includeAnnotations: 'Include annotations',
+    includeAnnotationsDetail: 'When enabled, recording whiteboard annotations are composed into the final MP4; when disabled, they stay only in the package annotations folder.',
     exportReady: (path) => `Export complete: ${path}`,
     exportFailed: 'Export failed. Check the package and FFmpeg.',
     quality: 'Quality',
@@ -784,6 +927,43 @@ const en: RecorderCopy = {
     cameraUnavailable: 'Camera preview unavailable',
     cameraPreparing: 'Opening camera preview',
     cameraRecording: 'Camera recording',
+  },
+  whiteboard: {
+    title: 'Whiteboard',
+    subtitle: 'Available before and during recording',
+    open: 'Board',
+    close: 'Close whiteboard',
+    save: 'Save',
+    saved: 'Saved',
+    saveFailed: 'Save failed',
+    loading: 'Loading whiteboard',
+    exportPng: 'Export PNG',
+    exportSvg: 'Export SVG',
+    exportExc: 'Export Excalidraw',
+    exported: (path) => `Exported: ${path}`,
+    exportFailed: 'Export failed',
+    clear: 'Clear',
+    clearConfirm: 'Click again to clear',
+    undo: 'Undo',
+    redo: 'Redo',
+    select: 'Select',
+    hand: 'Hand',
+    pen: 'Pen',
+    laser: 'Laser',
+    arrow: 'Arrow',
+    line: 'Line',
+    rectangle: 'Rectangle',
+    ellipse: 'Ellipse',
+    text: 'Text',
+    eraser: 'Eraser',
+    strokeColor: 'Color',
+    strokeWidth: 'Stroke',
+    opacity: 'Opacity',
+    thin: 'Thin',
+    medium: 'Medium',
+    bold: 'Bold',
+    unsaved: 'Unsaved',
+    ready: 'Ready',
   },
   statusChips: {
     idle: 'IDLE',

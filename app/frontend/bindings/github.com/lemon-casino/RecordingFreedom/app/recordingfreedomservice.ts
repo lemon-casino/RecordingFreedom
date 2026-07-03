@@ -43,6 +43,14 @@ export function CancelSelectedRegion(): $CancellablePromise<$models.RegionSelect
     return $Call.ByID(1279436437);
 }
 
+export function ClaimAnnotationRenderJob(): $CancellablePromise<$models.AnnotationRenderJobClaim> {
+    return $Call.ByID(3090640534);
+}
+
+export function CompleteAnnotationRenderJob(result: $models.AnnotationRenderJobResult): $CancellablePromise<void> {
+    return $Call.ByID(1422662043, result);
+}
+
 export function CompleteRegionSelection(req: $models.RegionSelectionRequest): $CancellablePromise<$models.RegionSelectionResult> {
     return $Call.ByID(1962254349, req);
 }
@@ -57,6 +65,10 @@ export function GetCaptureCapabilities(): $CancellablePromise<capture$0.Capabili
 
 export function GetSettings(): $CancellablePromise<settings$0.Settings> {
     return $Call.ByID(1085525119);
+}
+
+export function HideAnnotationOverlay(): $CancellablePromise<void> {
+    return $Call.ByID(3633794229);
 }
 
 export function HidePIPOverlay(): $CancellablePromise<void> {
@@ -75,12 +87,24 @@ export function HideSettingsWindow(): $CancellablePromise<void> {
     return $Call.ByID(4158023747);
 }
 
+export function HideWhiteboardWindow(): $CancellablePromise<void> {
+    return $Call.ByID(3405865905);
+}
+
 export function ListMediaDevices(): $CancellablePromise<devices$0.MediaInventory> {
     return $Call.ByID(2412119741);
 }
 
 export function ListSources(): $CancellablePromise<devices$0.CaptureSource[] | null> {
     return $Call.ByID(3137910140);
+}
+
+export function LoadAnnotationCapture(): $CancellablePromise<$models.WhiteboardSceneResult> {
+    return $Call.ByID(2840498151);
+}
+
+export function LoadWhiteboardScene(): $CancellablePromise<$models.WhiteboardSceneResult> {
+    return $Call.ByID(3447890335);
 }
 
 export function LogClientEvent(event: $models.ClientLogEvent): $CancellablePromise<void> {
@@ -103,6 +127,10 @@ export function PatchSettingsPreferences(patch: $models.SettingsPreferencesPatch
     return $Call.ByID(2494029929, patch);
 }
 
+export function PatchWhiteboardSettings(patch: $models.WhiteboardSettingsPatchRequest): $CancellablePromise<settings$0.Settings> {
+    return $Call.ByID(3918109714, patch);
+}
+
 export function PauseRecording(): $CancellablePromise<recording$0.Session> {
     return $Call.ByID(2282766307);
 }
@@ -113,6 +141,14 @@ export function PreflightAudioOnlyRecording(req: recording$0.AudioOnlyRequest): 
 
 export function PreflightRecording(req: recording$0.StartRequest): $CancellablePromise<preflight$0.Summary> {
     return $Call.ByID(2137129988, req);
+}
+
+export function PreviewExportRecordingPackage(req: $models.ExportRecordingRequest): $CancellablePromise<$models.ExportRecordingPlanResult> {
+    return $Call.ByID(960079289, req);
+}
+
+export function ReadAnnotationPreviewImage(req: $models.AnnotationPreviewImageRequest): $CancellablePromise<$models.AnnotationPreviewImageResult> {
+    return $Call.ByID(2093045446, req);
 }
 
 export function ReadPIPPreviewImage(req: $models.PIPPreviewImageRequest): $CancellablePromise<$models.PIPPreviewImageResult> {
@@ -127,12 +163,28 @@ export function ResumeRecording(): $CancellablePromise<recording$0.Session> {
     return $Call.ByID(2366067120);
 }
 
+export function SaveAnnotationCapture(req: $models.AnnotationCaptureRequest): $CancellablePromise<$models.AnnotationCaptureResult> {
+    return $Call.ByID(938219912, req);
+}
+
 export function SaveSettings(next: settings$0.Settings): $CancellablePromise<settings$0.Settings> {
     return $Call.ByID(35428118, next);
 }
 
+export function SaveWhiteboardExport(req: $models.WhiteboardExportRequest): $CancellablePromise<$models.WhiteboardExportResult> {
+    return $Call.ByID(3548116314, req);
+}
+
+export function SaveWhiteboardScene(req: $models.WhiteboardSceneRequest): $CancellablePromise<$models.WhiteboardSceneResult> {
+    return $Call.ByID(1809937380, req);
+}
+
 export function ScanRecordingPackages(): $CancellablePromise<recpackage$0.RecoverySummary[] | null> {
     return $Call.ByID(1742539791);
+}
+
+export function SetAnnotationOverlayHitRegions(req: $models.CapsuleWindowHitRegionsRequest): $CancellablePromise<void> {
+    return $Call.ByID(2215651335, req);
 }
 
 export function SetCapsuleWindowHitRegions(req: $models.CapsuleWindowHitRegionsRequest): $CancellablePromise<void> {
@@ -141,6 +193,10 @@ export function SetCapsuleWindowHitRegions(req: $models.CapsuleWindowHitRegionsR
 
 export function SetDataRoot(rootDir: string): $CancellablePromise<appdata$0.Info> {
     return $Call.ByID(2213117442, rootDir);
+}
+
+export function ShowAnnotationOverlay(): $CancellablePromise<$models.AnnotationOverlayState> {
+    return $Call.ByID(2906956594);
 }
 
 export function ShowPIPOverlay(req: $models.PIPOverlayRequest): $CancellablePromise<$models.PIPOverlayState> {
@@ -157,6 +213,10 @@ export function ShowScreenIndicator(req: $models.ScreenIndicatorRequest): $Cance
 
 export function ShowSettingsWindow(): $CancellablePromise<void> {
     return $Call.ByID(795547170);
+}
+
+export function ShowWhiteboardWindow(): $CancellablePromise<void> {
+    return $Call.ByID(3067691032);
 }
 
 export function StartAudioOnlyRecording(req: recording$0.AudioOnlyRequest): $CancellablePromise<recording$0.Session> {
@@ -181,6 +241,10 @@ export function StopMicrophoneLevelMonitor(): $CancellablePromise<void> {
 
 export function StopRecording(): $CancellablePromise<recording$0.Session> {
     return $Call.ByID(4017105749);
+}
+
+export function ToggleWhiteboardWindow(): $CancellablePromise<void> {
+    return $Call.ByID(1949585145);
 }
 
 export function UpdatePIPOverlay(req: $models.PIPOverlayRequest): $CancellablePromise<$models.PIPOverlayState> {

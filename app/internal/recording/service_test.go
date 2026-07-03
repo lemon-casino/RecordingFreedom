@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/lemon-casino/RecordingFreedom/app/internal/appdata"
 	"github.com/lemon-casino/RecordingFreedom/app/internal/audio"
@@ -112,6 +113,29 @@ func TestPauseResumeStopPatchManifestStatus(t *testing.T) {
 	}
 	if session, err := service.Stop(); err != nil || session.Status != StateReady {
 		t.Fatalf("Stop() = (%v, %v), want ready", session.Status, err)
+	}
+}
+
+func TestActiveRecordingOffsetSubtractsPausedDuration(t *testing.T) {
+	started := time.Date(2026, 7, 3, 12, 0, 0, 0, time.UTC)
+	service := &Service{
+		state: StatePaused,
+		session: &Session{
+			ID:            "session-1",
+			RecordingMode: recpackage.RecordingModeScreen,
+			Status:        StatePaused,
+			StartedAt:     started,
+		},
+		pausedDuration: 2 * time.Second,
+		pauseStartedAt: started.Add(5 * time.Second),
+	}
+
+	offset, ok := service.ActiveRecordingOffset(started.Add(8 * time.Second))
+	if !ok {
+		t.Fatal("ActiveRecordingOffset() ok = false, want true")
+	}
+	if offset != 3000 {
+		t.Fatalf("offset = %dms, want 3000ms after subtracting completed and active pauses", offset)
 	}
 }
 

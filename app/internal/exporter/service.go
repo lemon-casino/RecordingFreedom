@@ -145,14 +145,14 @@ func FFmpegArgs(plan exportplan.Plan, outputPath string, options Options) ([]str
 	if err := validatePlanForOutput(plan, outputPath); err != nil {
 		return nil, err
 	}
-	if !plan.PIPLayout.Visible || strings.TrimSpace(plan.WebcamInputPath) == "" {
+	if !plan.PIPLayout.Visible && !plan.AnnotationsVisible {
 		return screenOnlyArgs(plan.ScreenInputPath, outputPath), nil
 	}
-	filter, err := pipFilter(plan)
+	filter, err := composeFilter(plan)
 	if err != nil {
 		return nil, err
 	}
-	return pipArgs(plan.ScreenInputPath, plan.WebcamInputPath, filter, outputPath, options), nil
+	return composeArgs(plan, filter, outputPath, options), nil
 }
 
 func screenOnlyArgs(screenInput string, outputPath string) []string {
@@ -167,7 +167,7 @@ func screenOnlyArgs(screenInput string, outputPath string) []string {
 	}
 }
 
-func pipArgs(screenInput string, webcamInput string, filter string, outputPath string, options Options) []string {
+func composeArgs(plan exportplan.Plan, filter string, outputPath string, options Options) []string {
 	preset := strings.TrimSpace(options.VideoPreset)
 	if preset == "" {
 		preset = defaultVideoPreset
@@ -176,10 +176,17 @@ func pipArgs(screenInput string, webcamInput string, filter string, outputPath s
 	if crf == "" {
 		crf = defaultVideoCRF
 	}
-	return []string{
+	args := []string{
 		"-hide_banner", "-loglevel", "warning", "-y",
-		"-i", screenInput,
-		"-i", webcamInput,
+		"-i", plan.ScreenInputPath,
+	}
+	if plan.PIPLayout.Visible {
+		args = append(args, "-i", plan.WebcamInputPath)
+	}
+	for _, input := range annotationInputPaths(plan) {
+		args = append(args, "-loop", "1", "-i", input)
+	}
+	args = append(args,
 		"-filter_complex", filter,
 		"-map", "[vout]",
 		"-map", "0:a?",
@@ -189,31 +196,103 @@ func pipArgs(screenInput string, webcamInput string, filter string, outputPath s
 		"-c:a", "copy",
 		"-movflags", "+faststart",
 		outputPath,
-	}
+	)
+	return args
 }
 
-func pipFilter(plan exportplan.Plan) (string, error) {
-	layout := plan.PIPLayout
-	rect := layout.Rect
-	if !layout.Visible || !rect.Visible {
-		return "", errors.New("visible PIP export requires a visible PIP rect")
+func composeFilter(plan exportplan.Plan) (string, error) {
+	parts := []string{"[0:v]setpts=PTS-STARTPTS[base]"}
+	current := "base"
+	nextInputIndex := 1
+	if plan.PIPLayout.Visible {
+		layout := plan.PIPLayout
+		rect := layout.Rect
+		if !rect.Visible {
+			return "", errors.New("visible PIP export requires a visible PIP rect")
+		}
+		if rect.Width <= 0 || rect.Height <= 0 {
+			return "", fmt.Errorf("visible PIP export requires positive PIP size, got %dx%d", rect.Width, rect.Height)
+		}
+		width := evenDimension(rect.Width)
+		height := evenDimension(rect.Height)
+		parts = append(parts, webcamFilter(nextInputIndex, width, height, plan.WebcamStartOffsetMs, layout))
+		parts = append(parts, fmt.Sprintf("[%s][pip]overlay=%d:%d:eof_action=pass:repeatlast=0[withpip]", current, rect.X, rect.Y))
+		current = "withpip"
+		nextInputIndex++
 	}
-	if rect.Width <= 0 || rect.Height <= 0 {
-		return "", fmt.Errorf("visible PIP export requires positive PIP size, got %dx%d", rect.Width, rect.Height)
+	if plan.AnnotationsVisible {
+		if len(plan.AnnotationSnapshots) > 0 {
+			for index, segment := range plan.AnnotationSnapshots {
+				annotationLabel := fmt.Sprintf("annotation%d", index)
+				outputLabel := fmt.Sprintf("withannotation%d", index)
+				parts = append(parts, fmt.Sprintf("[%d:v]format=rgba[%s]", nextInputIndex, annotationLabel))
+				parts = append(parts, fmt.Sprintf("[%s][%s]%s[%s]", current, annotationLabel, annotationSegmentOverlayFilter(segment), outputLabel))
+				current = outputLabel
+				nextInputIndex++
+			}
+		} else {
+			if strings.TrimSpace(plan.AnnotationInputPath) == "" {
+				return "", errors.New("visible annotation export requires an annotation input")
+			}
+			parts = append(parts, fmt.Sprintf("[%d:v]format=rgba[annotation]", nextInputIndex))
+			parts = append(parts, fmt.Sprintf("[%s][annotation]%s[withannotations]", current, annotationOverlayFilter(plan.AnnotationStartMs)))
+			current = "withannotations"
+		}
 	}
-	width := evenDimension(rect.Width)
-	height := evenDimension(rect.Height)
-	parts := []string{
-		"[0:v]setpts=PTS-STARTPTS[base]",
-		webcamFilter(width, height, plan.WebcamStartOffsetMs, layout),
-		fmt.Sprintf("[base][pip]overlay=%d:%d:eof_action=pass:repeatlast=0,format=yuv420p,pad=ceil(iw/2)*2:ceil(ih/2)*2[vout]", rect.X, rect.Y),
-	}
+	parts = append(parts, fmt.Sprintf("[%s]format=yuv420p,pad=ceil(iw/2)*2:ceil(ih/2)*2[vout]", current))
 	return strings.Join(parts, ";"), nil
 }
 
-func webcamFilter(width int, height int, offsetMs int, layout pip.Placement) string {
+func annotationInputPaths(plan exportplan.Plan) []string {
+	if !plan.AnnotationsVisible {
+		return nil
+	}
+	if len(plan.AnnotationSnapshots) == 0 {
+		if strings.TrimSpace(plan.AnnotationInputPath) == "" {
+			return nil
+		}
+		return []string{plan.AnnotationInputPath}
+	}
+	paths := make([]string, 0, len(plan.AnnotationSnapshots))
+	for _, segment := range plan.AnnotationSnapshots {
+		if strings.TrimSpace(segment.InputPath) != "" {
+			paths = append(paths, segment.InputPath)
+		}
+	}
+	return paths
+}
+
+func annotationOverlayFilter(startOffsetMs int64) string {
+	filter := "overlay=0:0:eof_action=pass:repeatlast=1"
+	if startOffsetMs <= 0 {
+		return filter
+	}
+	return fmt.Sprintf("%s:enable='gte(t,%.3f)'", filter, float64(startOffsetMs)/1000)
+}
+
+func annotationSegmentOverlayFilter(segment exportplan.AnnotationSnapshotPlan) string {
+	filter := "overlay=0:0:eof_action=pass:repeatlast=1"
+	startSeconds := float64(maxInt64(0, segment.StartOffsetMs)) / 1000
+	if segment.EndOffsetMs > segment.StartOffsetMs {
+		endSeconds := float64(segment.EndOffsetMs) / 1000
+		return fmt.Sprintf("%s:enable='gte(t,%.3f)*lt(t,%.3f)'", filter, startSeconds, endSeconds)
+	}
+	if segment.StartOffsetMs <= 0 {
+		return filter
+	}
+	return fmt.Sprintf("%s:enable='gte(t,%.3f)'", filter, startSeconds)
+}
+
+func maxInt64(a int64, b int64) int64 {
+	if a > b {
+		return a
+	}
+	return b
+}
+
+func webcamFilter(inputIndex int, width int, height int, offsetMs int, layout pip.Placement) string {
 	filters := []string{
-		fmt.Sprintf("[1:v]%s", setPTSExpr(offsetMs)),
+		fmt.Sprintf("[%d:v]%s", inputIndex, setPTSExpr(offsetMs)),
 		fmt.Sprintf("scale=%d:%d:force_original_aspect_ratio=increase", width, height),
 		fmt.Sprintf("crop=%d:%d", width, height),
 		"format=rgba",
@@ -274,6 +353,20 @@ func validatePlan(plan exportplan.Plan) error {
 	if strings.TrimSpace(plan.WebcamInputPath) != "" && sameCleanPath(plan.OutputPath, plan.WebcamInputPath) {
 		return errors.New("export output must not overwrite the raw webcam sidecar")
 	}
+	if strings.TrimSpace(plan.AnnotationInputPath) != "" && sameCleanPath(plan.OutputPath, plan.AnnotationInputPath) {
+		return errors.New("export output must not overwrite the annotation snapshot")
+	}
+	if strings.TrimSpace(plan.AnnotationEventsPath) != "" && sameCleanPath(plan.OutputPath, plan.AnnotationEventsPath) {
+		return errors.New("export output must not overwrite the annotation events")
+	}
+	for _, segment := range plan.AnnotationSnapshots {
+		if strings.TrimSpace(segment.InputPath) == "" {
+			return errors.New("annotation timeline snapshot input path is required")
+		}
+		if strings.TrimSpace(segment.InputPath) != "" && sameCleanPath(plan.OutputPath, segment.InputPath) {
+			return errors.New("export output must not overwrite an annotation timeline snapshot")
+		}
+	}
 	if _, err := requireReadableFile(plan.ScreenInputPath, 1); err != nil {
 		return fmt.Errorf("screen input: %w", err)
 	}
@@ -283,6 +376,17 @@ func validatePlan(plan exportplan.Plan) error {
 		}
 		if _, err := requireReadableFile(plan.WebcamInputPath, 1); err != nil {
 			return fmt.Errorf("webcam input: %w", err)
+		}
+	}
+	if plan.AnnotationsVisible {
+		inputs := annotationInputPaths(plan)
+		if len(inputs) == 0 {
+			return errors.New("visible annotation export requires an annotation input")
+		}
+		for _, input := range inputs {
+			if _, err := requireReadableFile(input, 1); err != nil {
+				return fmt.Errorf("annotation input: %w", err)
+			}
 		}
 	}
 	return nil
@@ -295,8 +399,13 @@ func validatePlanForOutput(plan exportplan.Plan, outputPath string) error {
 	if strings.TrimSpace(outputPath) == "" {
 		return errors.New("temporary export output path is required")
 	}
-	if sameCleanPath(outputPath, plan.ScreenInputPath) || sameCleanPath(outputPath, plan.WebcamInputPath) {
+	if sameCleanPath(outputPath, plan.ScreenInputPath) || sameCleanPath(outputPath, plan.WebcamInputPath) || sameCleanPath(outputPath, plan.AnnotationInputPath) || sameCleanPath(outputPath, plan.AnnotationEventsPath) {
 		return errors.New("temporary export output must not overwrite raw media")
+	}
+	for _, segment := range plan.AnnotationSnapshots {
+		if sameCleanPath(outputPath, segment.InputPath) {
+			return errors.New("temporary export output must not overwrite raw media")
+		}
 	}
 	return nil
 }

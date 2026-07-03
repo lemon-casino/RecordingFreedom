@@ -102,6 +102,15 @@ func Default() Settings {
 			PIPPreset: string(pip.DefaultPreset),
 			PIP:       pip.DefaultConfig(),
 		},
+		Whiteboard: WhiteboardSettings{
+			Enabled:         true,
+			LastMode:        "board",
+			LastTool:        "freedraw",
+			LastStrokeColor: "#ef4444",
+			LastStrokeWidth: "medium",
+			LastOpacity:     100,
+			CapturePolicy:   "export-compose",
+		},
 		Window: WindowSettings{
 			MinimizeToTray: true,
 			Theme:          ThemeNightTeal,
@@ -136,10 +145,48 @@ func normalize(value Settings) Settings {
 	}
 	value.Camera.PIP = pip.NormalizeConfigForPreset(value.Camera.PIPPreset, value.Camera.PIP)
 	value.Camera.PIPPreset = string(value.Camera.PIP.Preset)
+	value.Whiteboard = normalizeWhiteboard(value.Whiteboard, defaults.Whiteboard)
 	if value.Window.Theme == "" || !validTheme(value.Window.Theme) {
 		value.Window.Theme = defaults.Window.Theme
 	}
 	return value
+}
+
+func normalizeWhiteboard(value WhiteboardSettings, defaults WhiteboardSettings) WhiteboardSettings {
+	if value.LastMode != "board" && value.LastMode != "annotation" {
+		value.LastMode = defaults.LastMode
+	}
+	if !validWhiteboardTool(value.LastTool) {
+		value.LastTool = defaults.LastTool
+	}
+	if strings.TrimSpace(value.LastStrokeColor) == "" {
+		value.LastStrokeColor = defaults.LastStrokeColor
+	}
+	if value.LastStrokeWidth != "thin" && value.LastStrokeWidth != "medium" && value.LastStrokeWidth != "bold" {
+		value.LastStrokeWidth = defaults.LastStrokeWidth
+	}
+	if value.LastOpacity <= 0 {
+		value.LastOpacity = defaults.LastOpacity
+	}
+	if value.LastOpacity < 5 {
+		value.LastOpacity = 5
+	}
+	if value.LastOpacity > 100 {
+		value.LastOpacity = 100
+	}
+	if value.CapturePolicy != "preview-only" && value.CapturePolicy != "export-compose" {
+		value.CapturePolicy = defaults.CapturePolicy
+	}
+	return value
+}
+
+func validWhiteboardTool(tool string) bool {
+	switch tool {
+	case "selection", "hand", "freedraw", "laser", "arrow", "line", "rectangle", "ellipse", "text", "eraser":
+		return true
+	default:
+		return false
+	}
 }
 
 func validLocale(locale Locale) bool {

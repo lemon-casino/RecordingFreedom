@@ -1,10 +1,18 @@
 import {Application, Events, Screens, Window as WailsWindow} from '@wailsio/runtime'
 import {RecordingFreedomService} from '../../bindings/github.com/lemon-casino/RecordingFreedom/app'
 import {
+  type AnnotationCaptureRequest as BoundAnnotationCaptureRequest,
+  type AnnotationCaptureResult as BoundAnnotationCaptureResult,
+  type AnnotationOverlayState as BoundAnnotationOverlayState,
+  type AnnotationPreviewImageRequest as BoundAnnotationPreviewImageRequest,
+  type AnnotationPreviewImageResult as BoundAnnotationPreviewImageResult,
+  type AnnotationRenderJobClaim as BoundAnnotationRenderJobClaim,
+  type AnnotationRenderJobResult as BoundAnnotationRenderJobResult,
   type AudioState as BoundAudioState,
   type AudioStatePatchRequest as BoundAudioStatePatchRequest,
   type BootstrapState as BoundBootstrapState,
   type CapsuleWindowHitRegionsRequest as BoundCapsuleWindowHitRegionsRequest,
+  type ExportRecordingPlanResult as BoundExportRecordingPlanResult,
   type ExportRecordingResult as BoundExportRecordingResult,
   type PIPPreviewImageRequest as BoundPIPPreviewImageRequest,
   type PIPPreviewImageResult as BoundPIPPreviewImageResult,
@@ -16,11 +24,19 @@ import {
   type ScreenIndicatorRequest as BoundScreenIndicatorRequest,
   type ScreenIndicatorResult as BoundScreenIndicatorResult,
   type SettingsPreferencesPatchRequest as BoundSettingsPreferencesPatchRequest,
+  type WhiteboardExportRequest as BoundWhiteboardExportRequest,
+  type WhiteboardExportResult as BoundWhiteboardExportResult,
+  type WhiteboardSceneRequest as BoundWhiteboardSceneRequest,
+  type WhiteboardSceneResult as BoundWhiteboardSceneResult,
+  type WhiteboardSettingsPatchRequest as BoundWhiteboardSettingsPatchRequest,
 } from '../../bindings/github.com/lemon-casino/RecordingFreedom/app/models'
 import {
   type Capabilities as BoundCaptureCapabilities,
   type Capability as BoundCaptureCapability,
 } from '../../bindings/github.com/lemon-casino/RecordingFreedom/app/internal/capture/models'
+import {
+  type Plan as BoundExportPlan,
+} from '../../bindings/github.com/lemon-casino/RecordingFreedom/app/internal/exportplan/models'
 import {
   CaptureSourceType as BoundCaptureSourceType,
   type CaptureSource as BoundCaptureSource,
@@ -122,6 +138,65 @@ export type SettingsPreferencesPatch = {
   countdownSeconds?: number
 }
 
+export type WhiteboardScene = {
+  available: boolean
+  scenePath: string
+  sceneJson?: string
+  bytes: number
+  updatedAt?: string
+  contentType?: string
+}
+
+export type WhiteboardExport = {
+  format: 'png' | 'svg' | 'excalidraw'
+  outputPath: string
+  bytes: number
+}
+
+export type WhiteboardSettingsPatch = Partial<AppSettings['whiteboard']>
+
+export type AnnotationOverlayState = {
+  packageDir?: string
+  manifestPath?: string
+  windowBounds: {x: number; y: number; width: number; height: number}
+  canvasBounds: {x: number; y: number; width: number; height: number}
+  target: {
+    type: string
+    id: string
+    geometry?: {x: number; y: number; width: number; height: number; displayIndex?: number; nativeId?: string}
+  }
+  captureExcluded: boolean
+}
+
+export type AnnotationCapture = {
+  packageDir: string
+  scenePath: string
+  eventsPath: string
+  snapshotPath: string
+  timelineSnapshotPath?: string
+  bytes: number
+}
+
+export type AnnotationRenderJob = {
+  id: string
+  packageDir: string
+  scenePath: string
+  relativeScenePath: string
+  outputPath: string
+  relativeOutputPath: string
+  sceneJson: string
+  canvasWidth: number
+  canvasHeight: number
+  index: number
+  startOffsetMs?: number
+  endOffsetMs?: number
+}
+
+export type AnnotationRenderJobClaim = {
+  available: boolean
+  job?: AnnotationRenderJob
+}
+
 export type RecorderBootstrap = {
   appData: AppDataInfo
   storage: AppStorageStatus
@@ -144,16 +219,24 @@ export type CapsuleWindowHitRegion = {
 }
 
 const browserSettingsKey = 'recordingfreedom.settings.v1'
+const browserWhiteboardSceneKey = 'recordingfreedom.whiteboard.scene.v1'
+const browserAnnotationSceneKey = 'recordingfreedom.annotation.scene.v1'
+const browserWhiteboardVisibilityEvent = 'rf-whiteboard-visibility'
 const capsuleWindowWidth = 760
 const capsuleWindowCompactWidth = 380
 const capsuleWindowCollapsedHeight = 96
 const capsuleWindowExpandedHeight = 600
 export type CapsuleWindowExpandDirection = 'down' | 'up'
 
+function isWailsDesktopRuntime(): boolean {
+  return window.navigator.userAgent.includes('Wails')
+}
+
 let lastCapsuleExpandedDirection: CapsuleWindowExpandDirection = 'down'
 let lastCapsuleExpandedHeight = capsuleWindowExpandedHeight
 let lastCapsuleCollapsedPosition: {x: number; y: number} | null = null
 let lastCapsuleHitRegionsSignature = ''
+let lastAnnotationOverlayHitRegionsSignature = ''
 
 export async function setCapsuleWindowHitRegions(req: {
   enabled: boolean
@@ -170,6 +253,25 @@ export async function setCapsuleWindowHitRegions(req: {
     lastCapsuleHitRegionsSignature = signature
   } catch (error) {
     console.info('Using browser capsule hit-region fallback:', error)
+  }
+}
+
+export async function setAnnotationOverlayHitRegions(req: {
+  enabled: boolean
+  force?: boolean
+  viewportWidth: number
+  viewportHeight: number
+  devicePixelRatio: number
+  regions: CapsuleWindowHitRegion[]
+}): Promise<void> {
+  const signature = capsuleHitRegionsSignature(req)
+  if (!req.force && signature === lastAnnotationOverlayHitRegionsSignature) return
+  try {
+    await RecordingFreedomService.SetAnnotationOverlayHitRegions(req as BoundCapsuleWindowHitRegionsRequest)
+    lastAnnotationOverlayHitRegionsSignature = signature
+  } catch (error) {
+    ;(window as Window & {__RF_LAST_ANNOTATION_HIT_REGIONS__?: typeof req}).__RF_LAST_ANNOTATION_HIT_REGIONS__ = req
+    console.info('Using browser annotation overlay hit-region fallback:', error)
   }
 }
 
@@ -266,15 +368,92 @@ export type PIPPreviewImage = {
   modifiedUnixNano?: number
 }
 
-export type RecordingExportResult = {
+export type AnnotationPreviewImage = {
+  available: boolean
+  dataUrl?: string
+  relativePath?: string
+  bytes?: number
+}
+
+export type WhiteboardVisibilityMode = 'whiteboard' | 'annotation'
+
+export type WhiteboardVisibilityUpdate = {
+  visible: boolean
+  mode: WhiteboardVisibilityMode
+}
+
+export type RecordingExportPlan = {
+  packageDir: string
   outputPath: string
-  bytes: number
   screenInputPath: string
   webcamInputPath?: string
   pipVisible: boolean
+  annotationsVisible: boolean
+  annotationInputPath?: string
+  annotationEventsPath?: string
+  annotationStartMs?: number
+  annotationTimeline?: string
+  annotationRenderMode?: string
+  annotationSnapshots?: Array<{
+    inputPath: string
+    relativePath?: string
+    startOffsetMs: number
+    endOffsetMs?: number
+    durationMs?: number
+    bytes?: number
+  }>
+  annotationElementScenes?: Array<{
+    inputPath: string
+    relativePath?: string
+    renderInputPath?: string
+    renderRelativePath?: string
+    startOffsetMs?: number
+    endOffsetMs?: number
+    durationMs?: number
+    canvasWidth?: number
+    canvasHeight?: number
+    elementCount?: number
+    sourceEventSequence?: number
+    bytes?: number
+  }>
+  annotationSummary?: {
+    mode?: string
+    eventCount?: number
+    snapshotCount?: number
+    exportedSnapshotCount?: number
+    skippedSnapshotCount?: number
+    elementEventCount?: number
+    elementTimelineMode?: string
+    elementKeyframeCount?: number
+    finalElementCount?: number
+    deletedElementCount?: number
+    missingElementPayloads?: number
+    startOffsetMs?: number
+    endOffsetMs?: number
+    eventFileBytes?: number
+    snapshotBytes?: number
+    elementTypeCounts?: Record<string, number>
+    elementPreviewFrames?: Array<{
+      sequence?: number
+      startOffsetMs?: number
+      eventType?: string
+      elementId?: string
+      elementType?: string
+      activeElementCount?: number
+      hasElementPayload: boolean
+    }>
+  }
+  warnings: string[]
+}
+
+export type RecordingExportResult = RecordingExportPlan & {
+  bytes: number
   ffmpegPath?: string
   outputVerified: boolean
-  warnings: string[]
+}
+
+export type RecordingExportOptions = {
+  includeAnnotations?: boolean
 }
 
 export async function setCapsuleWindowExpanded(
@@ -504,6 +683,25 @@ export function subscribeSettingsChanged(handler: (settings: AppSettings) => voi
   }
 }
 
+export function subscribeWhiteboardVisibility(handler: (event: WhiteboardVisibilityUpdate) => void): () => void {
+  let disposeDesktop = () => {}
+  try {
+    disposeDesktop = Events.On('whiteboard.visibility', (event) => {
+      handler(fromWhiteboardVisibilityEvent(event.data))
+    })
+  } catch (error) {
+    console.info('Using browser whiteboard visibility event fallback:', error)
+  }
+  const onBrowserEvent = (event: Event) => {
+    handler(fromWhiteboardVisibilityEvent((event as CustomEvent<WhiteboardVisibilityUpdate>).detail))
+  }
+  window.addEventListener(browserWhiteboardVisibilityEvent, onBrowserEvent)
+  return () => {
+    disposeDesktop()
+    window.removeEventListener(browserWhiteboardVisibilityEvent, onBrowserEvent)
+  }
+}
+
 export function subscribeAudioLevel(handler: (event: AudioLevelUpdate) => void): () => void {
   try {
     return Events.On('audio.level', (event) => {
@@ -582,6 +780,177 @@ export async function showSettingsWindow(): Promise<void> {
     console.info('Using browser settings window fallback:', error)
     const popup = window.open('/#/settings', 'recordingfreedom-settings', 'width=920,height=720')
     popup?.focus()
+  }
+}
+
+export async function showWhiteboardWindow(): Promise<void> {
+  try {
+    await RecordingFreedomService.ShowWhiteboardWindow()
+  } catch (error) {
+    if (isWailsDesktopRuntime()) throw error
+    console.info('Using browser whiteboard window fallback:', error)
+    ;(window as Window & {__RF_LAST_WHITEBOARD_LAUNCH__?: {mode: string; url: string; at: string}}).__RF_LAST_WHITEBOARD_LAUNCH__ = {
+      mode: 'whiteboard',
+      url: '/#/whiteboard',
+      at: new Date().toISOString(),
+    }
+    emitBrowserWhiteboardVisibility({visible: true, mode: 'whiteboard'})
+    const popup = window.open('/#/whiteboard', 'recordingfreedom-whiteboard', 'width=1120,height=760')
+    popup?.focus()
+  }
+}
+
+export async function showAnnotationOverlay(): Promise<AnnotationOverlayState> {
+  try {
+    return fromBoundAnnotationOverlayState(await RecordingFreedomService.ShowAnnotationOverlay())
+  } catch (error) {
+    if (isWailsDesktopRuntime()) throw error
+    console.info('Using browser annotation overlay fallback:', error)
+    ;(window as Window & {__RF_LAST_WHITEBOARD_LAUNCH__?: {mode: string; url: string; at: string}}).__RF_LAST_WHITEBOARD_LAUNCH__ = {
+      mode: 'annotation',
+      url: '/#/annotation-overlay',
+      at: new Date().toISOString(),
+    }
+    emitBrowserWhiteboardVisibility({visible: true, mode: 'annotation'})
+    const popup = window.open('/#/annotation-overlay', 'recordingfreedom-annotation-overlay', 'width=1280,height=720')
+    popup?.focus()
+    return browserAnnotationOverlayState()
+  }
+}
+
+export async function hideAnnotationOverlay(): Promise<void> {
+  try {
+    await RecordingFreedomService.HideAnnotationOverlay()
+  } catch (error) {
+    console.info('Using browser annotation overlay hide fallback:', error)
+    emitBrowserWhiteboardVisibility({visible: false, mode: 'annotation'})
+    window.close()
+  }
+}
+
+export async function loadAnnotationCapture(): Promise<WhiteboardScene> {
+  try {
+    return fromBoundWhiteboardScene(await RecordingFreedomService.LoadAnnotationCapture())
+  } catch (error) {
+    if (isWailsDesktopRuntime()) throw error
+    console.info('Using browser annotation capture load fallback:', error)
+    const sceneJson = window.localStorage?.getItem(browserAnnotationSceneKey) ?? ''
+    return {
+      available: sceneJson.trim() !== '',
+      scenePath: 'browser-preview/data/video/recording-preview.rfrec/annotations/scene.excalidraw',
+      sceneJson,
+      bytes: sceneJson.length,
+      contentType: 'application/vnd.excalidraw+json',
+    }
+  }
+}
+
+export async function saveAnnotationCapture(request: {sceneJson: string; snapshotDataUrl: string; eventsJsonl?: string}): Promise<AnnotationCapture> {
+  try {
+    return fromBoundAnnotationCapture(await RecordingFreedomService.SaveAnnotationCapture(request as BoundAnnotationCaptureRequest))
+  } catch (error) {
+    if (isWailsDesktopRuntime()) throw error
+    console.info('Using browser annotation capture fallback:', error)
+    window.localStorage?.setItem(browserAnnotationSceneKey, request.sceneJson)
+    return {
+      packageDir: 'browser-preview/data/video/recording-preview.rfrec',
+      scenePath: 'browser-preview/data/video/recording-preview.rfrec/annotations/scene.excalidraw',
+      eventsPath: 'browser-preview/data/video/recording-preview.rfrec/annotations/events.jsonl',
+      snapshotPath: 'browser-preview/data/video/recording-preview.rfrec/annotations/exports/annotation.png',
+      timelineSnapshotPath: 'browser-preview/data/video/recording-preview.rfrec/annotations/snapshots/annotation-000001.png',
+      bytes: request.sceneJson.length + request.snapshotDataUrl.length,
+    }
+  }
+}
+
+export async function claimAnnotationRenderJob(): Promise<AnnotationRenderJobClaim> {
+  try {
+    return fromBoundAnnotationRenderJobClaim(await RecordingFreedomService.ClaimAnnotationRenderJob())
+  } catch (error) {
+    if (isWailsDesktopRuntime()) throw error
+    console.info('Using browser annotation renderer idle fallback:', error)
+    return {available: false}
+  }
+}
+
+export async function completeAnnotationRenderJob(result: {id: string; dataUrl?: string; error?: string}): Promise<void> {
+  try {
+    await RecordingFreedomService.CompleteAnnotationRenderJob(result as BoundAnnotationRenderJobResult)
+  } catch (error) {
+    if (isWailsDesktopRuntime()) throw error
+    console.info('Using browser annotation renderer completion fallback:', error)
+  }
+}
+
+export async function hideWhiteboardWindow(): Promise<void> {
+  try {
+    await RecordingFreedomService.HideWhiteboardWindow()
+  } catch (error) {
+    if (isWailsDesktopRuntime()) throw error
+    console.info('Using browser whiteboard hide fallback:', error)
+    emitBrowserWhiteboardVisibility({visible: false, mode: 'whiteboard'})
+    window.close()
+  }
+}
+
+export async function loadWhiteboardScene(): Promise<WhiteboardScene> {
+  try {
+    return fromBoundWhiteboardScene(await RecordingFreedomService.LoadWhiteboardScene())
+  } catch (error) {
+    if (isWailsDesktopRuntime()) throw error
+    console.info('Using browser whiteboard scene fallback:', error)
+    const sceneJson = window.localStorage?.getItem(browserWhiteboardSceneKey) ?? ''
+    return {
+      available: sceneJson.trim() !== '',
+      scenePath: 'browser-preview/data/whiteboards/board-current.excalidraw',
+      sceneJson,
+      bytes: sceneJson.length,
+      contentType: 'application/vnd.excalidraw+json',
+    }
+  }
+}
+
+export async function saveWhiteboardScene(sceneJson: string): Promise<WhiteboardScene> {
+  try {
+    return fromBoundWhiteboardScene(await RecordingFreedomService.SaveWhiteboardScene({sceneJson} as BoundWhiteboardSceneRequest))
+  } catch (error) {
+    if (isWailsDesktopRuntime()) throw error
+    console.info('Using browser whiteboard scene save fallback:', error)
+    window.localStorage?.setItem(browserWhiteboardSceneKey, sceneJson)
+    return {
+      available: true,
+      scenePath: 'browser-preview/data/whiteboards/board-current.excalidraw',
+      sceneJson,
+      bytes: sceneJson.length,
+      updatedAt: new Date().toISOString(),
+      contentType: 'application/vnd.excalidraw+json',
+    }
+  }
+}
+
+export async function saveWhiteboardExport(request: {format: 'png' | 'svg' | 'excalidraw'; dataUrl?: string; payload?: string}): Promise<WhiteboardExport> {
+  try {
+    return fromBoundWhiteboardExport(await RecordingFreedomService.SaveWhiteboardExport(request as BoundWhiteboardExportRequest))
+  } catch (error) {
+    if (isWailsDesktopRuntime()) throw error
+    console.info('Using browser whiteboard export fallback:', error)
+    return {
+      format: request.format,
+      outputPath: `browser-preview/data/whiteboards/exports/whiteboard.${request.format}`,
+      bytes: (request.payload ?? request.dataUrl ?? '').length,
+    }
+  }
+}
+
+export async function patchWhiteboardSettings(patch: WhiteboardSettingsPatch): Promise<AppSettings> {
+  try {
+    return fromBoundSettings(await RecordingFreedomService.PatchWhiteboardSettings(patch as BoundWhiteboardSettingsPatchRequest))
+  } catch (error) {
+    if (isWailsDesktopRuntime()) throw error
+    console.info('Using browser whiteboard settings fallback:', error)
+    const next = applyBrowserWhiteboardPatch(loadBrowserSettings(), patch)
+    window.localStorage?.setItem(browserSettingsKey, JSON.stringify(next))
+    return next
   }
 }
 
@@ -817,12 +1186,46 @@ export async function openRecordingPackage(packagePath: string): Promise<Recordi
   }
 }
 
-export async function exportRecordingPackage(packagePath: string): Promise<RecordingExportResult> {
+export async function exportRecordingPackage(packagePath: string, options: RecordingExportOptions = {}): Promise<RecordingExportResult> {
   try {
-    return fromBoundExport(await RecordingFreedomService.ExportRecordingPackage({packageDir: packagePath}))
+    return fromBoundExport(await RecordingFreedomService.ExportRecordingPackage({
+      packageDir: packagePath,
+      includeAnnotations: options.includeAnnotations,
+    }))
   } catch (error) {
     console.info('Desktop recording export unavailable:', error)
     throw error
+  }
+}
+
+export async function previewExportRecordingPackage(packagePath: string, options: RecordingExportOptions = {}): Promise<RecordingExportPlan> {
+  try {
+    const result: BoundExportRecordingPlanResult = await RecordingFreedomService.PreviewExportRecordingPackage({
+      packageDir: packagePath,
+      includeAnnotations: options.includeAnnotations,
+    })
+    return fromBoundExportPlan(result.plan)
+  } catch (error) {
+    console.info('Desktop recording export preview unavailable:', error)
+    throw error
+  }
+}
+
+export async function readAnnotationPreviewImage(packagePath: string, snapshotPath: string): Promise<AnnotationPreviewImage> {
+  try {
+    const result: BoundAnnotationPreviewImageResult = await RecordingFreedomService.ReadAnnotationPreviewImage({
+      packageDir: packagePath,
+      snapshotPath,
+    } as BoundAnnotationPreviewImageRequest)
+    return {
+      available: result.available === true,
+      dataUrl: result.dataUrl,
+      relativePath: result.relativePath,
+      bytes: result.bytes,
+    }
+  } catch (error) {
+    console.info('Desktop annotation preview image unavailable:', error)
+    return {available: false}
   }
 }
 
@@ -1080,6 +1483,94 @@ function fromBoundPipPreviewImage(result: BoundPIPPreviewImageResult): PIPPrevie
   }
 }
 
+function fromBoundWhiteboardScene(result: BoundWhiteboardSceneResult): WhiteboardScene {
+  return {
+    available: result.available,
+    scenePath: result.scenePath,
+    sceneJson: result.sceneJson,
+    bytes: result.bytes,
+    updatedAt: result.updatedAt,
+    contentType: result.contentType,
+  }
+}
+
+function fromBoundWhiteboardExport(result: BoundWhiteboardExportResult): WhiteboardExport {
+  return {
+    format: result.format === 'svg' || result.format === 'excalidraw' ? result.format : 'png',
+    outputPath: result.outputPath,
+    bytes: result.bytes,
+  }
+}
+
+function fromBoundAnnotationOverlayState(state: BoundAnnotationOverlayState): AnnotationOverlayState {
+  return {
+    packageDir: state.packageDir,
+    manifestPath: state.manifestPath,
+    windowBounds: fromBoundRegionRect(state.windowBounds),
+    canvasBounds: fromBoundRegionRect(state.canvasBounds),
+    target: {
+      type: state.target.type,
+      id: state.target.id,
+      geometry: state.target.geometry ? {
+        x: state.target.geometry.x,
+        y: state.target.geometry.y,
+        width: state.target.geometry.width,
+        height: state.target.geometry.height,
+        displayIndex: state.target.geometry.displayIndex,
+        nativeId: state.target.geometry.nativeId,
+      } : undefined,
+    },
+    captureExcluded: state.captureExcluded === true,
+  }
+}
+
+function fromBoundAnnotationCapture(result: BoundAnnotationCaptureResult): AnnotationCapture {
+  return {
+    packageDir: result.packageDir,
+    scenePath: result.scenePath,
+    eventsPath: result.eventsPath,
+    snapshotPath: result.snapshotPath,
+    timelineSnapshotPath: result.timelineSnapshotPath,
+    bytes: result.bytes,
+  }
+}
+
+function fromBoundAnnotationRenderJobClaim(result: BoundAnnotationRenderJobClaim): AnnotationRenderJobClaim {
+  const job = result.job
+  return {
+    available: result.available === true && Boolean(job),
+    job: job
+      ? {
+        id: job.id,
+        packageDir: job.packageDir,
+        scenePath: job.scenePath,
+        relativeScenePath: job.relativeScenePath,
+        outputPath: job.outputPath,
+        relativeOutputPath: job.relativeOutputPath,
+        sceneJson: job.sceneJson,
+        canvasWidth: job.canvasWidth,
+        canvasHeight: job.canvasHeight,
+        index: job.index,
+        startOffsetMs: job.startOffsetMs,
+        endOffsetMs: job.endOffsetMs,
+      }
+      : undefined,
+  }
+}
+
+function browserAnnotationOverlayState(): AnnotationOverlayState {
+  const width = Math.max(320, window.innerWidth || 1280)
+  const height = Math.max(240, window.innerHeight || 720)
+  return {
+    packageDir: 'browser-preview/data/video/recording-preview.rfrec',
+    manifestPath: 'browser-preview/data/video/recording-preview.rfrec/manifest.json',
+    windowBounds: {x: 0, y: 0, width, height},
+    canvasBounds: {x: 0, y: 0, width, height},
+    target: {type: 'screen', id: 'browser-preview'},
+    captureExcluded: false,
+  }
+}
+
 function fromBoundPipCamera(camera: BoundPIPOverlayState['camera']): PIPOverlayCamera | undefined {
   if (!camera) return undefined
   return normalizePipOverlayCamera({
@@ -1207,6 +1698,17 @@ function applyBrowserSettingsPreferencesPatch(settings: AppSettings, patch: Sett
   }
 }
 
+function applyBrowserWhiteboardPatch(settings: AppSettings, patch: WhiteboardSettingsPatch): AppSettings {
+  return {
+    ...settings,
+    whiteboard: fromBoundWhiteboardSettings({
+      ...settings.whiteboard,
+      ...patch,
+    }),
+    updatedAt: new Date().toISOString(),
+  }
+}
+
 function applyBrowserAudioPatch(audio: AppSettings['audio'], patch: AudioStatePatch): AppSettings['audio'] {
   const next = {...audio}
   if (patch.system !== undefined) next.system = patch.system
@@ -1290,6 +1792,7 @@ function fromBoundSettings(settings: BoundSettings): AppSettings {
       pipPreset: settings.camera.pipPreset as AppSettings['camera']['pipPreset'],
       pip: fromBoundPipConfig((settings.camera as BoundSettings['camera'] & {pip?: PIPConfig}).pip, settings.camera.pipPreset as AppSettings['camera']['pipPreset']),
     },
+    whiteboard: fromBoundWhiteboardSettings((settings as BoundSettings & {whiteboard?: Partial<AppSettings['whiteboard']>}).whiteboard),
     window: {
       minimizeToTray: settings.window.minimizeToTray,
       theme: normalizeTheme(settings.window.theme),
@@ -1329,6 +1832,7 @@ function toBoundSettings(settings: AppSettings): BoundSettings {
       pipPreset: settings.camera.pipPreset,
       pip: settings.camera.pip as unknown as BoundSettings['camera']['pip'],
     },
+    whiteboard: settings.whiteboard as unknown as BoundSettings['whiteboard'],
     window: {
       minimizeToTray: settings.window.minimizeToTray,
       theme: settings.window.theme as BoundSettings['window']['theme'],
@@ -1350,6 +1854,7 @@ function loadBrowserSettings(): AppSettings {
       recording: {...defaultSettings.recording, ...parsed.recording},
       audio: {...defaultSettings.audio, ...parsed.audio},
       camera: {...defaultSettings.camera, ...parsed.camera},
+      whiteboard: {...defaultSettings.whiteboard, ...parsed.whiteboard},
       window: {...defaultSettings.window, ...parsed.window},
     }
     const camera = {
@@ -1361,6 +1866,34 @@ function loadBrowserSettings(): AppSettings {
   } catch {
     return defaultSettings
   }
+}
+
+function fromBoundWhiteboardSettings(value: Partial<AppSettings['whiteboard']> | undefined): AppSettings['whiteboard'] {
+  const next = {...defaultSettings.whiteboard, ...(value ?? {})}
+  return {
+    enabled: next.enabled !== false,
+    lastMode: next.lastMode === 'annotation' ? 'annotation' : 'board',
+    lastTool: normalizeWhiteboardTool(next.lastTool),
+    lastStrokeColor: typeof next.lastStrokeColor === 'string' && next.lastStrokeColor.trim() ? next.lastStrokeColor : defaultSettings.whiteboard.lastStrokeColor,
+    lastStrokeWidth: next.lastStrokeWidth === 'thin' || next.lastStrokeWidth === 'bold' ? next.lastStrokeWidth : 'medium',
+    lastOpacity: normalizedRange(next.lastOpacity, defaultSettings.whiteboard.lastOpacity, 5, 100),
+    capturePolicy: next.capturePolicy === 'preview-only' ? 'preview-only' : 'export-compose',
+  }
+}
+
+function normalizeWhiteboardTool(value: unknown): AppSettings['whiteboard']['lastTool'] {
+  return value === 'selection' ||
+    value === 'hand' ||
+    value === 'freedraw' ||
+    value === 'laser' ||
+    value === 'arrow' ||
+    value === 'line' ||
+    value === 'rectangle' ||
+    value === 'ellipse' ||
+    value === 'text' ||
+    value === 'eraser'
+    ? value
+    : 'freedraw'
 }
 
 function toStartRequest(request: MockRecordingRequest): StartRequest {
@@ -1552,6 +2085,20 @@ function fromBoundStatusEvent(event: BoundStatusEvent): RecordingStatusUpdate {
   }
 }
 
+function fromWhiteboardVisibilityEvent(value: unknown): WhiteboardVisibilityUpdate {
+  const record = value && typeof value === 'object' ? value as Record<string, unknown> : {}
+  return {
+    visible: record.visible === true,
+    mode: record.mode === 'annotation' ? 'annotation' : 'whiteboard',
+  }
+}
+
+function emitBrowserWhiteboardVisibility(event: WhiteboardVisibilityUpdate) {
+  const normalized = fromWhiteboardVisibilityEvent(event)
+  ;(window as Window & {__RF_LAST_WHITEBOARD_VISIBILITY__?: WhiteboardVisibilityUpdate}).__RF_LAST_WHITEBOARD_VISIBILITY__ = normalized
+  window.dispatchEvent(new CustomEvent(browserWhiteboardVisibilityEvent, {detail: normalized}))
+}
+
 function fromBoundAudioLevel(event: unknown): AudioLevelUpdate {
   const data = (event ?? {}) as Partial<AudioLevelUpdate>
   return {
@@ -1588,8 +2135,62 @@ function fromBoundRecovery(recovery: BoundRecoverySummary): RecordingRecovery {
   }
 }
 
+function fromBoundExportPlan(plan: BoundExportPlan): RecordingExportPlan {
+  return {
+    packageDir: plan.packageDir,
+    outputPath: plan.outputPath,
+    screenInputPath: plan.screenInputPath,
+    webcamInputPath: plan.webcamInputPath,
+    pipVisible: plan.pipLayout?.visible === true,
+    annotationsVisible: plan.annotationsVisible === true,
+    annotationInputPath: plan.annotationInputPath,
+    annotationEventsPath: plan.annotationEventsPath,
+    annotationStartMs: plan.annotationStartMs,
+    annotationTimeline: plan.annotationTimeline,
+    annotationRenderMode: plan.annotationRenderMode,
+    annotationSnapshots: plan.annotationSnapshots?.map((snapshot) => ({
+      inputPath: snapshot.inputPath,
+      relativePath: snapshot.relativePath,
+      startOffsetMs: snapshot.startOffsetMs,
+      endOffsetMs: snapshot.endOffsetMs,
+      durationMs: snapshot.durationMs,
+      bytes: snapshot.bytes,
+    })),
+    annotationElementScenes: plan.annotationElementScenes?.map((scene) => ({
+      inputPath: scene.inputPath,
+      relativePath: scene.relativePath,
+      renderInputPath: scene.renderInputPath,
+      renderRelativePath: scene.renderRelativePath,
+      startOffsetMs: scene.startOffsetMs,
+      endOffsetMs: scene.endOffsetMs,
+      durationMs: scene.durationMs,
+      canvasWidth: scene.canvasWidth,
+      canvasHeight: scene.canvasHeight,
+      elementCount: scene.elementCount,
+      sourceEventSequence: scene.sourceEventSequence,
+      bytes: scene.bytes,
+    })),
+    annotationSummary: plan.annotationSummary
+      ? {
+        ...plan.annotationSummary,
+        elementTypeCounts: normalizedNumberRecord(plan.annotationSummary.elementTypeCounts),
+        elementPreviewFrames: plan.annotationSummary.elementPreviewFrames ?? undefined,
+      }
+      : undefined,
+    warnings: plan.warnings ?? [],
+  }
+}
+
+function normalizedNumberRecord(value: Record<string, number | undefined> | null | undefined): Record<string, number> | undefined {
+  if (!value) return undefined
+  const entries = Object.entries(value).filter((entry): entry is [string, number] => typeof entry[1] === 'number' && Number.isFinite(entry[1]))
+  if (entries.length === 0) return undefined
+  return Object.fromEntries(entries)
+}
+
 function fromBoundExport(result: BoundExportRecordingResult): RecordingExportResult {
   return {
+    ...fromBoundExportPlan(result.plan),
     outputPath: result.export.outputPath,
     bytes: result.export.bytes,
     screenInputPath: result.export.screenInputPath,
@@ -1597,6 +2198,5 @@ function fromBoundExport(result: BoundExportRecordingResult): RecordingExportRes
     pipVisible: result.export.pipVisible,
     ffmpegPath: result.export.ffmpegPath,
     outputVerified: result.export.outputVerified === true,
-    warnings: result.plan.warnings ?? [],
   }
 }

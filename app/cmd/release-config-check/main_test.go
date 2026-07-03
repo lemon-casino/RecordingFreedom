@@ -14,10 +14,15 @@ func TestRunAcceptsRequiredReleaseGates(t *testing.T) {
 	writeWorkflow(t, root, "app/build/darwin/Taskfile.yml", workflowFixture("app/build/darwin/Taskfile.yml"))
 	writeWorkflow(t, root, "app/build/windows/Taskfile.yml", workflowFixture("app/build/windows/Taskfile.yml"))
 	writeWorkflow(t, root, "app/build/windows/nsis/project.nsi", workflowFixture("app/build/windows/nsis/project.nsi"))
+	writeWorkflow(t, root, "app/tools/THIRD_PARTY_NOTICES.txt", workflowFixture("app/tools/THIRD_PARTY_NOTICES.txt"))
 	writeWorkflow(t, root, "scripts/verify-windows-installer.ps1", workflowFixture("scripts/verify-windows-installer.ps1"))
 	writeWorkflow(t, root, "scripts/verify-windows-portable.ps1", workflowFixture("scripts/verify-windows-portable.ps1"))
 	writeWorkflow(t, root, "scripts/verify-windows-preview-release.ps1", workflowFixture("scripts/verify-windows-preview-release.ps1"))
 	writeWorkflow(t, root, "scripts/run-windows-portable-smoke.ps1", workflowFixture("scripts/run-windows-portable-smoke.ps1"))
+	writeWorkflow(t, root, "app/frontend/tests/capsule-whiteboard-entry.spec.ts", workflowFixture("app/frontend/tests/capsule-whiteboard-entry.spec.ts"))
+	writeWorkflow(t, root, "docs/12-annotation-overlay-platform-smoke.md", workflowFixture("docs/12-annotation-overlay-platform-smoke.md"))
+	writeWorkflow(t, root, "app/cmd/annotation-overlay-evidence-check/main.go", workflowFixture("app/cmd/annotation-overlay-evidence-check/main.go"))
+	writeWorkflow(t, root, "docs/README.md", workflowFixture("docs/README.md"))
 
 	report, err := run(root)
 	if err != nil {
@@ -39,10 +44,15 @@ func TestRunRejectsMissingRNNoiseGate(t *testing.T) {
 	writeWorkflow(t, root, "app/build/darwin/Taskfile.yml", workflowFixture("app/build/darwin/Taskfile.yml"))
 	writeWorkflow(t, root, "app/build/windows/Taskfile.yml", workflowFixture("app/build/windows/Taskfile.yml"))
 	writeWorkflow(t, root, "app/build/windows/nsis/project.nsi", workflowFixture("app/build/windows/nsis/project.nsi"))
+	writeWorkflow(t, root, "app/tools/THIRD_PARTY_NOTICES.txt", workflowFixture("app/tools/THIRD_PARTY_NOTICES.txt"))
 	writeWorkflow(t, root, "scripts/verify-windows-installer.ps1", workflowFixture("scripts/verify-windows-installer.ps1"))
 	writeWorkflow(t, root, "scripts/verify-windows-portable.ps1", workflowFixture("scripts/verify-windows-portable.ps1"))
 	writeWorkflow(t, root, "scripts/verify-windows-preview-release.ps1", workflowFixture("scripts/verify-windows-preview-release.ps1"))
 	writeWorkflow(t, root, "scripts/run-windows-portable-smoke.ps1", workflowFixture("scripts/run-windows-portable-smoke.ps1"))
+	writeWorkflow(t, root, "app/frontend/tests/capsule-whiteboard-entry.spec.ts", workflowFixture("app/frontend/tests/capsule-whiteboard-entry.spec.ts"))
+	writeWorkflow(t, root, "docs/12-annotation-overlay-platform-smoke.md", workflowFixture("docs/12-annotation-overlay-platform-smoke.md"))
+	writeWorkflow(t, root, "app/cmd/annotation-overlay-evidence-check/main.go", workflowFixture("app/cmd/annotation-overlay-evidence-check/main.go"))
+	writeWorkflow(t, root, "docs/README.md", workflowFixture("docs/README.md"))
 
 	report, err := run(root)
 	if err != nil {
@@ -59,6 +69,42 @@ func TestRunRejectsMissingRNNoiseGate(t *testing.T) {
 	}
 	if !found {
 		t.Fatalf("blocked RNNoise check not found: %#v", report.Checks)
+	}
+}
+
+func TestRunRejectsMissingWhiteboardReleaseNotes(t *testing.T) {
+	root := t.TempDir()
+	release := strings.ReplaceAll(workflowFixture(".github/workflows/release.yml"), "Whiteboard / Excalidraw preview", "")
+	writeWorkflow(t, root, ".github/workflows/ci.yml", workflowFixture(".github/workflows/ci.yml"))
+	writeWorkflow(t, root, ".github/workflows/release.yml", release)
+	writeWorkflow(t, root, "app/build/darwin/Taskfile.yml", workflowFixture("app/build/darwin/Taskfile.yml"))
+	writeWorkflow(t, root, "app/build/windows/Taskfile.yml", workflowFixture("app/build/windows/Taskfile.yml"))
+	writeWorkflow(t, root, "app/build/windows/nsis/project.nsi", workflowFixture("app/build/windows/nsis/project.nsi"))
+	writeWorkflow(t, root, "app/tools/THIRD_PARTY_NOTICES.txt", workflowFixture("app/tools/THIRD_PARTY_NOTICES.txt"))
+	writeWorkflow(t, root, "scripts/verify-windows-installer.ps1", workflowFixture("scripts/verify-windows-installer.ps1"))
+	writeWorkflow(t, root, "scripts/verify-windows-portable.ps1", workflowFixture("scripts/verify-windows-portable.ps1"))
+	writeWorkflow(t, root, "scripts/verify-windows-preview-release.ps1", workflowFixture("scripts/verify-windows-preview-release.ps1"))
+	writeWorkflow(t, root, "scripts/run-windows-portable-smoke.ps1", workflowFixture("scripts/run-windows-portable-smoke.ps1"))
+	writeWorkflow(t, root, "app/frontend/tests/capsule-whiteboard-entry.spec.ts", workflowFixture("app/frontend/tests/capsule-whiteboard-entry.spec.ts"))
+	writeWorkflow(t, root, "docs/12-annotation-overlay-platform-smoke.md", workflowFixture("docs/12-annotation-overlay-platform-smoke.md"))
+	writeWorkflow(t, root, "app/cmd/annotation-overlay-evidence-check/main.go", workflowFixture("app/cmd/annotation-overlay-evidence-check/main.go"))
+	writeWorkflow(t, root, "docs/README.md", workflowFixture("docs/README.md"))
+
+	report, err := run(root)
+	if err != nil {
+		t.Fatalf("run() error = %v", err)
+	}
+	if report.OK {
+		t.Fatalf("report.OK = true, want blocked when whiteboard preview release notes are missing")
+	}
+	var found bool
+	for _, check := range report.Checks {
+		if check.Status == "blocked" && strings.Contains(check.Message, "Whiteboard / Excalidraw preview") {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatalf("blocked whiteboard release notes check not found: %#v", report.Checks)
 	}
 }
 
@@ -83,21 +129,39 @@ func workflowFixture(name string) string {
 	builder.WriteString("pacman -S --noconfirm --needed mingw-w64-x86_64-gcc\n")
 	builder.WriteString("./scripts/ensure-windows-ffmpeg.ps1\n")
 	builder.WriteString("-require-video -require-rnnoise\n")
+	builder.WriteString("Install Playwright Chromium\n")
+	builder.WriteString("Run frontend e2e\n")
+	builder.WriteString("npm run test:e2e\n")
 	builder.WriteString("Build Windows portable smoke tools\n")
 	builder.WriteString("bin\\desktop-doctor.exe\n")
 	builder.WriteString("bin\\video-smoke.exe\n")
 	builder.WriteString("bin\\audio-smoke.exe\n")
+	builder.WriteString("bin\\annotation-export-smoke.exe\n")
+	builder.WriteString("bin\\annotation-overlay-evidence-check.exe\n")
 	if strings.Contains(name, "release.yml") {
 		builder.WriteString("RNNoise native DSP is compiled into release artifacts\n")
+		builder.WriteString("Whiteboard / Excalidraw preview\n")
+		builder.WriteString("opens the normal whiteboard\n")
+		builder.WriteString("opens the annotation overlay\n")
+		builder.WriteString("Whiteboard scene persistence and export\n")
+		builder.WriteString("Recording annotation package flow\n")
+		builder.WriteString("Completed cross-platform annotation overlay acceptance\n")
+		builder.WriteString("real Windows/macOS/Linux evidence is still required\n")
+		builder.WriteString("transparent click-through\n")
+		builder.WriteString("multi-monitor/high-DPI geometry\n")
+		builder.WriteString("real hand-drawn annotation packages\n")
 		builder.WriteString("Install Windows installer tooling\n")
 		builder.WriteString("Build Windows installer\n")
 		builder.WriteString("setup.exe\n")
 		builder.WriteString("tools/ffmpeg.exe\n")
 		builder.WriteString("tools/ffprobe.exe\n")
 		builder.WriteString("tools/THIRD_PARTY_FFMPEG.txt\n")
+		builder.WriteString("tools/THIRD_PARTY_NOTICES.txt\n")
 		builder.WriteString("tools/desktop-doctor.exe\n")
 		builder.WriteString("tools/video-smoke.exe\n")
 		builder.WriteString("tools/audio-smoke.exe\n")
+		builder.WriteString("tools/annotation-export-smoke.exe\n")
+		builder.WriteString("tools/annotation-overlay-evidence-check.exe\n")
 		builder.WriteString("tools/run-windows-portable-smoke.ps1\n")
 		builder.WriteString("run-windows-portable-smoke.ps1\n")
 		builder.WriteString("./scripts/verify-windows-portable.ps1\n")
@@ -111,6 +175,7 @@ func workflowFixture(name string) string {
 		builder.WriteString("tools/ffmpeg\n")
 		builder.WriteString("tools/ffprobe\n")
 		builder.WriteString("THIRD_PARTY_FFMPEG.txt\n")
+		builder.WriteString("THIRD_PARTY_NOTICES.txt\n")
 	}
 	if strings.Contains(name, "app/build/windows/nsis/project.nsi") {
 		builder.WriteString("ARG_RECORDINGFREEDOM_TOOLS_DIR\n")
@@ -118,6 +183,7 @@ func workflowFixture(name string) string {
 		builder.WriteString("ffmpeg.exe\n")
 		builder.WriteString("ffprobe.exe\n")
 		builder.WriteString("THIRD_PARTY_FFMPEG.txt\n")
+		builder.WriteString("THIRD_PARTY_NOTICES.txt\n")
 	}
 	if strings.Contains(name, "verify-windows-installer.ps1") {
 		builder.WriteString("RecordingFreedom.exe\n")
@@ -126,6 +192,7 @@ func workflowFixture(name string) string {
 		builder.WriteString("ffmpeg.exe\n")
 		builder.WriteString("ffprobe.exe\n")
 		builder.WriteString("THIRD_PARTY_FFMPEG.txt\n")
+		builder.WriteString("THIRD_PARTY_NOTICES.txt\n")
 		builder.WriteString("uninstall.exe\n")
 	}
 	if strings.Contains(name, "verify-windows-portable.ps1") {
@@ -135,9 +202,14 @@ func workflowFixture(name string) string {
 		builder.WriteString("ExpectedSubsystem 2\n")
 		builder.WriteString("0x8664\n")
 		builder.WriteString("recordingfreedom.exe\n")
+		builder.WriteString("THIRD_PARTY_NOTICES.txt\n")
+		builder.WriteString("@excalidraw/excalidraw\n")
+		builder.WriteString("Copyright (c) 2020 Excalidraw\n")
 		builder.WriteString("tools/desktop-doctor.exe\n")
 		builder.WriteString("tools/video-smoke.exe\n")
 		builder.WriteString("tools/audio-smoke.exe\n")
+		builder.WriteString("tools/annotation-export-smoke.exe\n")
+		builder.WriteString("tools/annotation-overlay-evidence-check.exe\n")
 		builder.WriteString("tools/run-windows-portable-smoke.ps1\n")
 	}
 	if strings.Contains(name, "verify-windows-preview-release.ps1") {
@@ -150,12 +222,100 @@ func workflowFixture(name string) string {
 		builder.WriteString("desktop-doctor.exe\n")
 		builder.WriteString("video-smoke.exe\n")
 		builder.WriteString("audio-smoke.exe\n")
+		builder.WriteString("annotation-export-smoke.exe\n")
+		builder.WriteString("annotation-overlay-evidence-check.exe\n")
+		builder.WriteString("RunAnnotationLong\n")
+		builder.WriteString("LongAnnotationDurations\n")
+		builder.WriteString("LongAnnotationSegments\n")
+		builder.WriteString("annotation-long-snapshots\n")
+		builder.WriteString("annotation-long-element-pngs\n")
+		builder.WriteString("-segments=\n")
+		builder.WriteString("-timeline=element-pngs\n")
+		builder.WriteString("-source-type=region\n")
+		builder.WriteString("-source-type=window\n")
 		builder.WriteString("RECORDINGFREEDOM_FFMPEG_PATH\n")
 		builder.WriteString("-source-type=region\n")
 		builder.WriteString("-source-type=window\n")
 		builder.WriteString("-microphone\n")
 		builder.WriteString("-system\n")
 		builder.WriteString("-rnnoise\n")
+	}
+	if strings.Contains(name, "capsule-whiteboard-entry.spec.ts") {
+		builder.WriteString("opens board before recording and annotation during video recording\n")
+		builder.WriteString("remains available as a board during audio recording\n")
+		builder.WriteString("expectWhiteboardLaunch(page, 'whiteboard', '/#/whiteboard')\n")
+		builder.WriteString("expectWhiteboardLaunch(page, 'annotation', '/#/annotation-overlay')\n")
+		builder.WriteString("Pause recording\n")
+		builder.WriteString("Resume recording\n")
+		builder.WriteString("is-recording-compact\n")
+	}
+	if strings.Contains(name, "app/tools/THIRD_PARTY_NOTICES.txt") {
+		builder.WriteString("@excalidraw/excalidraw\n")
+		builder.WriteString("License: MIT\n")
+		builder.WriteString("Copyright (c) 2020 Excalidraw\n")
+		builder.WriteString("THE SOFTWARE IS PROVIDED \"AS IS\"\n")
+	}
+	if strings.Contains(name, "12-annotation-overlay-platform-smoke.md") {
+		builder.WriteString("录制标注 Overlay 实机验收标准\n")
+		builder.WriteString("annotation-export-smoke\n")
+		builder.WriteString("annotation-overlay-evidence-check\n")
+		builder.WriteString("不能替代真实桌面上的透明窗口\n")
+		builder.WriteString("全屏、单屏、区域、锁定窗口\n")
+		builder.WriteString("多屏幕\n")
+		builder.WriteString("高 DPI\n")
+		builder.WriteString("点击穿透\n")
+		builder.WriteString(".rfrec/annotations/\n")
+		builder.WriteString("annotations/overlay-diagnostics.jsonl\n")
+		builder.WriteString("exports/recording.mp4\n")
+		builder.WriteString("evidence/annotation-overlay\n")
+	}
+	if strings.Contains(name, "annotation-overlay-evidence-check/main.go") {
+		builder.WriteString("-evidence-dir\n")
+		builder.WriteString("manifest annotations.enabled is required\n")
+		builder.WriteString("annotation target geometry does not match source geometry\n")
+		builder.WriteString("validateEvidenceREADME\n")
+		builder.WriteString("README.md is missing evidence records\n")
+		builder.WriteString("artifact source\n")
+		builder.WriteString("validatePlatformFile\n")
+		builder.WriteString("platform.txt is missing display environment records\n")
+		builder.WriteString("displayResolutionPattern\n")
+		builder.WriteString("requiredScreenshotEvidence\n")
+		builder.WriteString("requiredRecordingEvidence\n")
+		builder.WriteString("requireEvidenceNamedFiles\n")
+		builder.WriteString("is missing evidence files\n")
+		builder.WriteString("validateAppLog\n")
+		builder.WriteString("app-log.jsonl is missing required events\n")
+		builder.WriteString("recording/start-request sourceType=\n")
+		builder.WriteString("annotation-overlay/show targetType=\n")
+		builder.WriteString("recpackage.AnnotationEventsFile\n")
+		builder.WriteString("recpackage.AnnotationOverlayDiagnosticsFile\n")
+		builder.WriteString("missing %s diagnostic event\n")
+		builder.WriteString("1m recording package\n")
+		builder.WriteString("5m recording package\n")
+		builder.WriteString("requiredEvidenceSourceChecks\n")
+		builder.WriteString("source all-screens package\n")
+		builder.WriteString("source screen package\n")
+		builder.WriteString("source region package\n")
+		builder.WriteString("source window package\n")
+		builder.WriteString("requireSourceType\n")
+		builder.WriteString("diagnostics.sync.screen.durationMs\n")
+		builder.WriteString("missing drawing hit-regions event with full canvas rect\n")
+		builder.WriteString("missing pass-through hit-regions event without full canvas rect\n")
+		builder.WriteString("hitRegionsContainCanvasRect\n")
+		builder.WriteString("hitRegionsContainPill\n")
+		builder.WriteString("validateAnnotationEvents\n")
+		builder.WriteString("missing element-created/element-updated/element-deleted event\n")
+		builder.WriteString("scene-snapshot has invalid snapshotPath\n")
+		builder.WriteString("findAnnotationSnapshot\n")
+		builder.WriteString("recpackage.ProbeMP4\n")
+		builder.WriteString("MP4 video track is missing\n")
+		builder.WriteString("diagnostics.sync.screen.durationMs\n")
+		builder.WriteString("exportplan.DefaultOutputPath\n")
+	}
+	if strings.Contains(name, "docs/README.md") {
+		builder.WriteString("12-annotation-overlay-platform-smoke.md\n")
+		builder.WriteString("真实桌面验收矩阵\n")
+		builder.WriteString("不能只靠 `annotation-export-smoke` 宣称完成\n")
 	}
 	return builder.String()
 }

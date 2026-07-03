@@ -5,6 +5,11 @@ param(
     [string]$Duration = "6s",
     [string]$PauseAfter = "2s",
     [string]$PauseDuration = "1s",
+    [string]$AnnotationDuration = "5s",
+    [int]$AnnotationSegments = 5,
+    [switch]$RunAnnotationLong,
+    [string[]]$LongAnnotationDurations = @("1m", "5m"),
+    [int]$LongAnnotationSegments = 60,
     [switch]$SkipAllScreens,
     [switch]$SkipRegion,
     [switch]$SkipWindow,
@@ -17,6 +22,13 @@ param(
 )
 
 $ErrorActionPreference = "Stop"
+
+if ($AnnotationSegments -lt 2) {
+    throw "AnnotationSegments must be at least 2."
+}
+if ($LongAnnotationSegments -lt 2) {
+    throw "LongAnnotationSegments must be at least 2."
+}
 
 function Resolve-FullPath {
     param([Parameter(Mandatory = $true)][string]$Path)
@@ -132,6 +144,8 @@ $ffprobePath = Require-File (Join-Path $toolsDir "ffprobe.exe")
 $doctorPath = Require-File (Join-Path $toolsDir "desktop-doctor.exe")
 $videoSmokePath = Require-File (Join-Path $toolsDir "video-smoke.exe")
 $audioSmokePath = Require-File (Join-Path $toolsDir "audio-smoke.exe")
+$annotationSmokePath = Require-File (Join-Path $toolsDir "annotation-export-smoke.exe")
+$annotationEvidenceCheckPath = Require-File (Join-Path $toolsDir "annotation-overlay-evidence-check.exe")
 
 if ($DataDir.Trim() -eq "") {
     $DataDir = Join-Path $portableRoot "data-smoke"
@@ -149,6 +163,26 @@ if (-not $SkipRNNoise) {
     $doctorArgs += "-require-rnnoise"
 }
 $steps.Add((New-Step "desktop-doctor" $doctorPath $doctorArgs))
+$steps.Add((New-Step "annotation-export-snapshots" $annotationSmokePath @("-data-dir", $DataDir, "-duration=$AnnotationDuration", "-segments=$AnnotationSegments", "-timeline=snapshot-segments", "-source-type=region", "-source-x=-1280", "-source-y=48", "-source-display-index=2", "-source-native-id=annotation-export-region-display", "-keep")))
+$steps.Add((New-Step "annotation-export-element-pngs" $annotationSmokePath @("-data-dir", $DataDir, "-duration=$AnnotationDuration", "-segments=$AnnotationSegments", "-timeline=element-pngs", "-source-type=window", "-source-id=window:annotation-export-smoke", "-keep")))
+if ($RunAnnotationLong) {
+    foreach ($longDuration in $LongAnnotationDurations) {
+        if ($null -eq $longDuration) {
+            continue
+        }
+        $durationValue = $longDuration.Trim()
+        if ($durationValue -eq "") {
+            continue
+        }
+        $durationName = Get-SafeName $durationValue
+        if (-not $SkipRegion) {
+            $steps.Add((New-Step "annotation-long-snapshots-$durationName" $annotationSmokePath @("-data-dir", $DataDir, "-duration=$durationValue", "-segments=$LongAnnotationSegments", "-timeline=snapshot-segments", "-source-type=region", "-source-x=-1280", "-source-y=48", "-source-display-index=2", "-source-native-id=annotation-long-region-display", "-keep")))
+        }
+        if (-not $SkipWindow) {
+            $steps.Add((New-Step "annotation-long-element-pngs-$durationName" $annotationSmokePath @("-data-dir", $DataDir, "-duration=$durationValue", "-segments=$LongAnnotationSegments", "-timeline=element-pngs", "-source-type=window", "-source-id=window:annotation-long-smoke", "-keep")))
+        }
+    }
+}
 $steps.Add((New-Step "video-screen" $videoSmokePath @("-data-dir", $DataDir, "-duration=$Duration", "-source-type=screen", "-keep")))
 if (-not $SkipAllScreens) {
     $steps.Add((New-Step "video-all-screens" $videoSmokePath @("-data-dir", $DataDir, "-duration=$Duration", "-source-type=all-screens", "-keep")))
@@ -215,9 +249,15 @@ $summary = [pscustomobject]@{
     app = $appPath
     ffmpeg = $ffmpegPath
     ffprobe = $ffprobePath
+    annotationEvidenceCheck = $annotationEvidenceCheckPath
     dataDir = $DataDir
     reportDir = $reportDir
     duration = $Duration
+    annotationDuration = $AnnotationDuration
+    annotationSegments = $AnnotationSegments
+    runAnnotationLong = [bool]$RunAnnotationLong
+    longAnnotationDurations = $LongAnnotationDurations
+    longAnnotationSegments = $LongAnnotationSegments
     continueOnError = [bool]$ContinueOnError
     steps = $results
 }

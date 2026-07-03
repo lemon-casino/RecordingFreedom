@@ -53,6 +53,10 @@ jobs:
         working-directory: ${{ env.APP_DIR }}/frontend
         run: npm ci
 
+      - name: Install Playwright Chromium
+        working-directory: ${{ env.APP_DIR }}/frontend
+        run: npx playwright install --with-deps chromium
+
       - name: Generate Wails bindings
         working-directory: ${{ env.APP_DIR }}
         run: wails3 generate bindings -ts -i -f "-tags gtk3"
@@ -64,6 +68,10 @@ jobs:
       - name: Build frontend
         working-directory: ${{ env.APP_DIR }}/frontend
         run: npm run build
+
+      - name: Run frontend e2e
+        working-directory: ${{ env.APP_DIR }}/frontend
+        run: npm run test:e2e
 
       - name: Test Go packages
         working-directory: ${{ env.APP_DIR }}
@@ -145,6 +153,8 @@ jobs:
           go build -tags "$env:RNNOISE_TAG" -trimpath -ldflags "-w -s" -o "bin\desktop-doctor.exe" ".\cmd\desktop-doctor"
           go build -tags "$env:RNNOISE_TAG" -trimpath -ldflags "-w -s" -o "bin\video-smoke.exe" ".\cmd\video-smoke"
           go build -tags "$env:RNNOISE_TAG" -trimpath -ldflags "-w -s" -o "bin\audio-smoke.exe" ".\cmd\audio-smoke"
+          go build -tags "$env:RNNOISE_TAG" -trimpath -ldflags "-w -s" -o "bin\annotation-export-smoke.exe" ".\cmd\annotation-export-smoke"
+          go build -tags "$env:RNNOISE_TAG" -trimpath -ldflags "-w -s" -o "bin\annotation-overlay-evidence-check.exe" ".\cmd\annotation-overlay-evidence-check"
 
       - name: Run desktop dependency doctor
         working-directory: ${{ env.APP_DIR }}

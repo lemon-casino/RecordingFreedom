@@ -9,3 +9,7 @@ func (s *RecordingFreedomService) capsuleWindowWndProcInterceptor(hwnd uintptr, 
 func (s *RecordingFreedomService) applyCapsuleWindowRegion(state capsuleWindowHitRegionState) error {
 	return nil
 }
+
+func (s *RecordingFreedomService) applyAnnotationOverlayHitRegions() error {
+	return nil
+}

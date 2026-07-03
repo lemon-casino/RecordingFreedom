@@ -65,6 +65,53 @@ func TestCapsuleHitRegionsScaleClientPixelsToCSSViewport(t *testing.T) {
 	}
 }
 
+func TestAnnotationOverlayHitRegionsKeepCanvasTransparentUntilDrawing(t *testing.T) {
+	var regions capsuleWindowHitRegions
+	regions.Set(CapsuleWindowHitRegionsRequest{
+		Enabled:        true,
+		ViewportWidth:  1280,
+		ViewportHeight: 720,
+		Regions: []CapsuleWindowHitRegion{
+			{X: 430, Y: 14, Width: 420, Height: 52, Kind: "pill", Radius: 999},
+		},
+	})
+
+	for _, tt := range []struct {
+		name string
+		x    int
+		y    int
+		hit  bool
+	}{
+		{name: "annotation capsule controls", x: 640, y: 40, hit: true},
+		{name: "recorded canvas center", x: 640, y: 360, hit: false},
+		{name: "recorded canvas lower corner", x: 1200, y: 680, hit: false},
+	} {
+		t.Run("pass-through/"+tt.name, func(t *testing.T) {
+			handled, hit := regions.TestClientPoint(tt.x, tt.y, 1280, 720)
+			if !handled {
+				t.Fatalf("TestClientPoint handled = false, want true")
+			}
+			if hit != tt.hit {
+				t.Fatalf("TestClientPoint hit = %v, want %v", hit, tt.hit)
+			}
+		})
+	}
+
+	regions.Set(CapsuleWindowHitRegionsRequest{
+		Enabled:        true,
+		ViewportWidth:  1280,
+		ViewportHeight: 720,
+		Regions: []CapsuleWindowHitRegion{
+			{X: 430, Y: 14, Width: 420, Height: 52, Kind: "pill", Radius: 999},
+			{X: 0, Y: 0, Width: 1280, Height: 720, Kind: "rect"},
+		},
+	})
+	handled, hit := regions.TestClientPoint(640, 360, 2560, 1440)
+	if !handled || !hit {
+		t.Fatalf("scaled drawing canvas point handled/hit = %v/%v, want true/true", handled, hit)
+	}
+}
+
 func TestCapsuleHitRegionsDisabledUntilValidGeometry(t *testing.T) {
 	var regions capsuleWindowHitRegions
 	regions.Set(CapsuleWindowHitRegionsRequest{Enabled: true})

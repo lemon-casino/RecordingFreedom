@@ -24,6 +24,12 @@ RecordingFreedom 是一个全新的录制软件重构项目，目标技术栈为
    记录初版 preview 后未完成任务，并把真实音频采集与 RNNoise 降噪列为第一优先级。
 10. [09-camera-pip-plan.md](09-camera-pip-plan.md)
    记录摄像头 sidecar 与画中画恢复开发后的需求、架构和验收计划。
+11. [10-windows-cursor-stability-and-segmenting.md](10-windows-cursor-stability-and-segmenting.md)
+   记录 Windows 鼠标闪烁根因、DDA 捕获、全部屏幕合成、分片写盘和最终合并策略。
+12. [11-whiteboard-excalidraw-integration-plan.md](11-whiteboard-excalidraw-integration-plan.md)
+   记录 Excalidraw 画板调研、画板胶囊、录制标注 overlay、录制包写入和导出合成计划。
+13. [12-annotation-overlay-platform-smoke.md](12-annotation-overlay-platform-smoke.md)
+   固定录制标注 overlay 的真实桌面验收矩阵、证据目录和通过标准，区分导出合成 smoke 与透明窗口实机验收。
 
 ## 当前硬性决策
 
@@ -36,6 +42,8 @@ RecordingFreedom 是一个全新的录制软件重构项目，目标技术栈为
 - 后续画中画摄像头从 v1 数据模型开始预留，先录 webcam sidecar，不把摄像头硬烘焙进屏幕视频。
 - 当前已生成 Wails v3 React 工程骨架，并实现第一版胶囊 UI Shell 与 mock `.rfrec` 包创建服务。
 - 初版 preview 后的未完成任务以 `08-unfinished-task-plan-audio-first.md` 为执行清单，优先推进真实系统声音、麦克风采集和 RNNoise 降噪。
+- 画板能力采用 Excalidraw React 组件作为画布核心，但由 RecordingFreedom 自己负责胶囊 UI、透明 overlay、点击穿透、录制包写入和导出合成。
+- 录制标注 overlay 不能只靠 `annotation-export-smoke` 宣称完成；真实平台完成状态必须按 `12-annotation-overlay-platform-smoke.md` 保存 evidence、来源矩阵、元素级标注事件、绘制/穿透 hit-region 诊断、1 分钟/5 分钟 `.rfrec`、`annotations/overlay-diagnostics.jsonl` 和真实导出视频，并通过矩阵验收。
 
 ## 外部技术依据
 
