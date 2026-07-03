@@ -57,7 +57,7 @@ import {
   fallbackCapabilities,
   fallbackStorageStatus,
 } from './services/mockBackend'
-import {cancelRegionSelector, cancelSelectedRegion, completeRegionSelection, exportRecordingPackage, hidePipOverlay, hideRegionFrame, hideScreenIndicator, hideSettingsWindow, loadBootstrap, loadSettings, logClientEvent, openRecordingPackage, openVideoDirectory, patchAudioState, patchSettingsPreferences, pauseRecording, preflightAudioOnlyRecording, preflightRecording, quitApplication, readPipPreviewImage, recoverRecordingPackage, restoreCapsuleWindow, resumeRecording, saveSettings, setCapsuleWindowExpanded, setCapsuleWindowHitRegions, setDataRoot, showPipOverlay, showRegionSelector, showScreenIndicator, startAudioOnlyRecording, startMicrophoneLevelMonitor, startRecording, stopMicrophoneLevelMonitor, stopRecording, subscribeAudioLevel, subscribeAudioState, subscribeRecordingStatus, subscribeRegionSelection, subscribeSettingsChanged, updatePipOverlay, updateSelectedRegion, type AudioControlState, type AudioLevelUpdate, type AudioStatePatch, type CapsuleWindowExpandDirection, type CapsuleWindowHitRegion, type PIPOverlayCamera, type PIPOverlayState, type RecordingRecovery, type RecordingStatusUpdate, type RegionSelectionSession, type SettingsPreferencesPatch} from './services/recorderBackend'
+import {cancelRegionSelector, cancelSelectedRegion, completeRegionSelection, exportRecordingPackage, hidePipOverlay, hideRegionFrame, hideScreenIndicator, hideSettingsWindow, loadBootstrap, loadSettings, logClientEvent, openRecordingPackage, openVideoDirectory, patchAudioState, patchSettingsPreferences, pauseRecording, preflightAudioOnlyRecording, preflightRecording, quitApplication, readPipPreviewImage, recoverRecordingPackage, restoreCapsuleWindow, resumeRecording, saveSettings, setCapsuleWindowExpanded, setCapsuleWindowHitRegions, setDataRoot, showPipOverlay, showRegionSelector, showScreenIndicator, startAudioOnlyRecording, startMicrophoneLevelMonitor, startRecording, stopMicrophoneLevelMonitor, stopRecording, subscribeAudioLevel, subscribeAudioState, subscribeCapsuleWindowMoveEnded, subscribeRecordingStatus, subscribeRegionSelection, subscribeSettingsChanged, updatePipOverlay, updateSelectedRegion, type AudioControlState, type AudioLevelUpdate, type AudioStatePatch, type CapsuleWindowExpandDirection, type CapsuleWindowHitRegion, type PIPOverlayCamera, type PIPOverlayState, type RecordingRecovery, type RecordingStatusUpdate, type RegionSelectionSession, type SettingsPreferencesPatch} from './services/recorderBackend'
 
 const sourceIcon = {
   screen: Monitor,
@@ -360,6 +360,8 @@ function App() {
   const settingsPanelRef = useRef<HTMLElement | null>(null)
   const closePromptRef = useRef<HTMLElement | null>(null)
   const capsuleHitRegionSignatureRef = useRef('')
+  const forceCapsuleHitRegionPublishRef = useRef<(() => void) | null>(null)
+  const capsuleDragCandidateRef = useRef(false)
   const floatingPointerInsideAtRef = useRef(0)
   const floatingPointerInsideRef = useRef(false)
   const countdownTimerRef = useRef<number | null>(null)
@@ -1020,8 +1022,9 @@ function App() {
     if (isSettingsWindow) return
     let disposed = false
     let frame = 0
+    let pendingForce = false
 
-    const publish = () => {
+    const publish = (force = false) => {
       if (disposed) return
       const viewportWidth = window.innerWidth || document.documentElement.clientWidth || 0
       const viewportHeight = window.innerHeight || document.documentElement.clientHeight || 0
@@ -1035,24 +1038,32 @@ function App() {
       ].filter((region): region is CapsuleWindowHitRegion => region !== null)
       const request = {
         enabled: regions.length > 0,
+        force,
         viewportWidth,
         viewportHeight,
         devicePixelRatio: window.devicePixelRatio || 1,
         regions,
       }
       const signature = capsuleHitRegionRequestSignature(request)
-      if (signature === capsuleHitRegionSignatureRef.current) return
+      if (!force && signature === capsuleHitRegionSignatureRef.current) return
       capsuleHitRegionSignatureRef.current = signature
       void setCapsuleWindowHitRegions(request)
     }
 
-    const schedule = () => {
+    const schedule = (force = false) => {
+      pendingForce = pendingForce || force
       if (frame) window.cancelAnimationFrame(frame)
-      frame = window.requestAnimationFrame(publish)
+      frame = window.requestAnimationFrame(() => {
+        const forceCurrent = pendingForce
+        pendingForce = false
+        publish(forceCurrent)
+      })
     }
 
     schedule()
-    const resizeObserver = typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(schedule)
+    forceCapsuleHitRegionPublishRef.current = () => schedule(true)
+    const scheduleNormal = () => schedule()
+    const resizeObserver = typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(scheduleNormal)
     ;[
       shellRef.current,
       capsuleRef.current,
@@ -1065,23 +1076,85 @@ function App() {
     const shellElement = shellRef.current
     const mutationObserver = typeof MutationObserver === 'undefined' || !shellElement
       ? null
-      : new MutationObserver(schedule)
+      : new MutationObserver(scheduleNormal)
     if (shellElement) mutationObserver?.observe(shellElement, {
       childList: true,
       subtree: true,
       attributes: true,
       attributeFilter: ['aria-expanded', 'class', 'style'],
     })
-    window.addEventListener('resize', schedule)
+    window.addEventListener('resize', scheduleNormal)
 
     return () => {
       disposed = true
+      forceCapsuleHitRegionPublishRef.current = null
       if (frame) window.cancelAnimationFrame(frame)
       resizeObserver?.disconnect()
       mutationObserver?.disconnect()
-      window.removeEventListener('resize', schedule)
+      window.removeEventListener('resize', scheduleNormal)
     }
   }, [activePanel, capsuleExpanded, capsuleExpandedHeight, closePromptOpen, isSettingsWindow, settingsOpen, sourcePickerView])
+
+  useEffect(() => {
+    if (isSettingsWindow) return
+    let disposed = false
+    let settleTimer = 0
+    let forceTimer = 0
+
+    const clearTimers = () => {
+      if (settleTimer) window.clearTimeout(settleTimer)
+      if (forceTimer) window.clearTimeout(forceTimer)
+      settleTimer = 0
+      forceTimer = 0
+    }
+    const stabilize = (reason: string) => {
+      clearTimers()
+      settleTimer = window.setTimeout(() => {
+        if (disposed) return
+        void logClientEvent('capsule-window', 'stabilize', {reason, expanded: capsuleExpanded, compact: capsuleWindowCompact})
+        void setCapsuleWindowExpanded(capsuleExpanded, capsuleExpandedHeight, 'auto', capsuleWindowCompact)
+          .then((direction) => {
+            if (!disposed) setCapsuleExpandDirection(direction)
+          })
+          .finally(() => {
+            if (disposed) return
+            forceCapsuleHitRegionPublishRef.current?.()
+            forceTimer = window.setTimeout(() => {
+              if (!disposed) forceCapsuleHitRegionPublishRef.current?.()
+            }, 140)
+          })
+      }, 90)
+    }
+    const isCapsuleDragTarget = (event: PointerEvent) => {
+      const target = event.target
+      if (!(target instanceof Element)) return false
+      if (target.closest('.grabber')) return true
+      return Boolean(target.closest('.capsule')) && !Boolean(target.closest('button, select, input, textarea, label, [role="button"], [role="option"], .select-menu-list'))
+    }
+    const onPointerDown = (event: PointerEvent) => {
+      capsuleDragCandidateRef.current = isCapsuleDragTarget(event)
+    }
+    const onPointerEnd = () => {
+      if (!capsuleDragCandidateRef.current) return
+      capsuleDragCandidateRef.current = false
+      stabilize('pointer-end')
+    }
+
+    const unsubscribeMoveEnded = subscribeCapsuleWindowMoveEnded(() => stabilize('window-end-move'))
+    document.addEventListener('pointerdown', onPointerDown, true)
+    document.addEventListener('pointerup', onPointerEnd, true)
+    document.addEventListener('pointercancel', onPointerEnd, true)
+
+    return () => {
+      disposed = true
+      clearTimers()
+      unsubscribeMoveEnded()
+      document.removeEventListener('pointerdown', onPointerDown, true)
+      document.removeEventListener('pointerup', onPointerEnd, true)
+      document.removeEventListener('pointercancel', onPointerEnd, true)
+      capsuleDragCandidateRef.current = false
+    }
+  }, [capsuleExpanded, capsuleExpandedHeight, capsuleWindowCompact, isSettingsWindow])
 
   useEffect(() => {
     if (recordingMode === 'audio' && activePanel === 'camera') {

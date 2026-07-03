@@ -81,6 +81,7 @@ export interface CapsuleWindowHitRegion {
 
 export interface CapsuleWindowHitRegionsRequest {
     "enabled": boolean;
+    "force"?: boolean;
     "viewportWidth": number;
     "viewportHeight": number;
     "devicePixelRatio": number;

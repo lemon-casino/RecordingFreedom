@@ -157,19 +157,32 @@ let lastCapsuleHitRegionsSignature = ''
 
 export async function setCapsuleWindowHitRegions(req: {
   enabled: boolean
+  force?: boolean
   viewportWidth: number
   viewportHeight: number
   devicePixelRatio: number
   regions: CapsuleWindowHitRegion[]
 }): Promise<void> {
   const signature = capsuleHitRegionsSignature(req)
-  if (signature === lastCapsuleHitRegionsSignature) return
+  if (!req.force && signature === lastCapsuleHitRegionsSignature) return
   try {
     await RecordingFreedomService.SetCapsuleWindowHitRegions(req as BoundCapsuleWindowHitRegionsRequest)
     lastCapsuleHitRegionsSignature = signature
   } catch (error) {
     console.info('Using browser capsule hit-region fallback:', error)
   }
+}
+
+export function subscribeCapsuleWindowMoveEnded(handler: () => void): () => void {
+  const eventNames = [
+    'windows:WindowEndMove',
+    'windows:WindowEndResize',
+  ]
+  const disposers = eventNames.map((eventName) => Events.On(eventName, (event) => {
+    if (event.sender && event.sender !== 'capsule-recorder') return
+    handler()
+  }))
+  return () => disposers.forEach((dispose) => dispose())
 }
 
 export async function restoreCapsuleWindow(focus = true): Promise<void> {

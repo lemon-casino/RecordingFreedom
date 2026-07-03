@@ -18,6 +18,7 @@ type CapsuleWindowHitRegion struct {
 
 type CapsuleWindowHitRegionsRequest struct {
 	Enabled          bool                     `json:"enabled"`
+	Force            bool                     `json:"force,omitempty"`
 	ViewportWidth    float64                  `json:"viewportWidth"`
 	ViewportHeight   float64                  `json:"viewportHeight"`
 	DevicePixelRatio float64                  `json:"devicePixelRatio"`
@@ -38,7 +39,7 @@ type capsuleWindowHitRegions struct {
 
 func (s *RecordingFreedomService) SetCapsuleWindowHitRegions(req CapsuleWindowHitRegionsRequest) error {
 	state, changed := s.capsuleHitRegions.Update(req)
-	if !changed {
+	if !changed && !req.Force {
 		return nil
 	}
 	return s.applyCapsuleWindowRegion(state)

@@ -276,6 +276,20 @@ input:disabled,
   --capsule-width: 324px;
 }
 
+.rf-shell.is-collapsed .recorder-stage {
+  min-height: 80px;
+}
+
+.rf-shell.is-collapsed .capsule {
+  height: 64px;
+  min-height: 64px;
+}
+
+.rf-shell.is-recording-compact .recorder-stage,
+.rf-shell.is-recording-compact .capsule {
+  transition: border-color 180ms ease, box-shadow 180ms ease, gap 180ms ease;
+}
+
 .capsule {
   display: flex;
   align-items: center;

@@ -99,3 +99,28 @@ func TestCapsuleHitRegionsUpdateSkipsUnchangedState(t *testing.T) {
 		t.Fatalf("repeated disabled update changed = true, want false")
 	}
 }
+
+func TestCapsuleHitRegionsForceDoesNotChangeGeometrySignature(t *testing.T) {
+	var regions capsuleWindowHitRegions
+	request := CapsuleWindowHitRegionsRequest{
+		Enabled:        true,
+		ViewportWidth:  760,
+		ViewportHeight: 96,
+		Regions: []CapsuleWindowHitRegion{
+			{X: 18, Y: 8, Width: 704, Height: 64, Kind: "pill", Radius: 999},
+		},
+	}
+	state, changed := regions.Update(request)
+	if !changed {
+		t.Fatalf("first update changed = false, want true")
+	}
+	forced := request
+	forced.Force = true
+	next, changed := regions.Update(forced)
+	if changed {
+		t.Fatalf("forced update changed geometry = true, want false")
+	}
+	if !capsuleHitRegionStatesEqual(state, next) {
+		t.Fatalf("forced state = %#v, want unchanged %#v", next, state)
+	}
+}
