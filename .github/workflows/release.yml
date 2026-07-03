@@ -78,7 +78,22 @@ jobs:
 
       - name: Test Go packages
         working-directory: ${{ env.APP_DIR }}
-        run: go test -tags gtk3 ./...
+        shell: bash
+        run: |
+          set -o pipefail
+          go test -tags gtk3 ./... 2>&1 | tee go-test.log
+          status="${PIPESTATUS[0]}"
+          if [ "${status}" -ne 0 ]; then
+            {
+              echo "### Go test failure"
+              echo '```text'
+              tail -200 go-test.log
+              echo '```'
+            } >> "${GITHUB_STEP_SUMMARY}"
+            message="$(tail -50 go-test.log | tr '\n' ' ' | sed 's/%/%25/g; s/\r/%0D/g')"
+            echo "::error title=Go test failed::${message}"
+            exit "${status}"
+          fi
 
       - name: Test RNNoise native DSP
         working-directory: ${{ env.APP_DIR }}

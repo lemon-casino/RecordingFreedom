@@ -58,6 +58,9 @@ var releaseConfigChecks = []configCheck{
 			"npm run test:e2e",
 			"Clean frontend e2e artifacts before Go tests",
 			"rm -rf frontend/test-results frontend/playwright-report",
+			"tee go-test.log",
+			"GITHUB_STEP_SUMMARY",
+			"Go test failed",
 		},
 	},
 	{
@@ -104,6 +107,9 @@ var releaseConfigChecks = []configCheck{
 			"npm run test:e2e",
 			"Clean frontend e2e artifacts before Go tests",
 			"rm -rf frontend/test-results frontend/playwright-report",
+			"tee go-test.log",
+			"GITHUB_STEP_SUMMARY",
+			"Go test failed",
 		},
 	},
 	{
