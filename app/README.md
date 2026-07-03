@@ -8,7 +8,7 @@ Current state:
 - The capsule recorder UI, tray entry, independent settings window, global Simplified Chinese / English language switching, screen indicator, and region selector are implemented.
 - Go backend services provide app data discovery, `.rfrec` package creation, preflight checks, recovery scanning, storage health, Windows WASAPI audio capture, RNNoise native DSP build coverage, and desktop dependency diagnostics under app-managed `data/video`.
 - Native video code paths are now wired for macOS ScreenCaptureKit and Windows FFmpeg desktop capture. Windows short smoke covers screen/all-screens/region/window plus system-audio/microphone mux into `screen.mp4`; Windows camera sidecar now uses FFmpeg DirectShow and writes `webcam.mp4`, but still needs real-camera smoke and long-recording validation.
-- Linux PipeWire capture, macOS/Linux camera sidecar, PIP export, signed installers, and notarization remain queued.
+- Linux PipeWire capture, macOS/Linux camera sidecar, PIP export, signed Windows installers, macOS notarization, and Linux packages remain queued. Windows preview releases include an unsigned NSIS setup installer and a portable zip.
 
 ## Development
 
@@ -108,6 +108,14 @@ Verify a published Windows preview portable zip from GitHub Releases:
 ```
 
 The release verifier downloads the Windows x64 portable zip and SHA256SUMS, checks the hash, then verifies the zip contains a x64 GUI `recordingfreedom.exe`, x64 FFmpeg/FFprobe, and the FFmpeg third-party notice. This is an artifact integrity check; real screen/region/window capture still needs the no-GUI video smoke commands below on the target desktop.
+
+Verify a locally produced Windows setup installer:
+
+```powershell
+..\scripts\verify-windows-installer.ps1 -InstallerPath .\bin\RecordingFreedom-amd64-installer.exe
+```
+
+The setup verifier silently installs to a temporary directory, checks that the installed app includes the executable plus `tools\ffmpeg.exe`, `tools\ffprobe.exe`, `tools\THIRD_PARTY_FFMPEG.txt`, and an uninstaller, then removes the test install.
 
 The current Windows portable preview includes target-machine smoke tools. After unzipping the portable zip on a Windows desktop, run:
 

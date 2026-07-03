@@ -1984,7 +1984,7 @@ function App() {
             detail={capabilityDetail(capability, copy)}
           />
         ))}
-        <SettingLine title={copy.settings.release} value="GitHub Actions Windows portable" />
+        <SettingLine title={copy.settings.release} value="GitHub Actions Windows portable + setup" />
       </div>
     </section>
   )

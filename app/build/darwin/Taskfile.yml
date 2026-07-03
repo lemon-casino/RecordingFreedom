@@ -133,12 +133,28 @@ tasks:
     cmds:
       - mkdir -p "{{.BIN_DIR}}/{{.APP_NAME}}.app/Contents/MacOS"
       - mkdir -p "{{.BIN_DIR}}/{{.APP_NAME}}.app/Contents/Resources"
+      - mkdir -p "{{.BIN_DIR}}/{{.APP_NAME}}.app/Contents/MacOS/tools"
       - cp build/darwin/icons.icns "{{.BIN_DIR}}/{{.APP_NAME}}.app/Contents/Resources"
       - |
         if [ -f build/darwin/Assets.car ]; then
           cp build/darwin/Assets.car "{{.BIN_DIR}}/{{.APP_NAME}}.app/Contents/Resources"
         fi
       - cp "{{.BIN_DIR}}/{{.APP_NAME}}" "{{.BIN_DIR}}/{{.APP_NAME}}.app/Contents/MacOS"
+      - |
+        if [ -x tools/ffmpeg ]; then
+          cp tools/ffmpeg "{{.BIN_DIR}}/{{.APP_NAME}}.app/Contents/MacOS/tools/ffmpeg"
+        else
+          echo "Missing executable tools/ffmpeg; macOS release bundles must include FFmpeg beside the app executable under Contents/MacOS/tools." >&2
+          exit 1
+        fi
+      - |
+        if [ -x tools/ffprobe ]; then
+          cp tools/ffprobe "{{.BIN_DIR}}/{{.APP_NAME}}.app/Contents/MacOS/tools/ffprobe"
+        else
+          echo "Missing executable tools/ffprobe; macOS release bundles must include FFprobe beside the app executable under Contents/MacOS/tools." >&2
+          exit 1
+        fi
+      - cp tools/THIRD_PARTY_FFMPEG.txt "{{.BIN_DIR}}/{{.APP_NAME}}.app/Contents/MacOS/tools/THIRD_PARTY_FFMPEG.txt"
       - cp build/darwin/Info.plist "{{.BIN_DIR}}/{{.APP_NAME}}.app/Contents"
       - task: '{{if eq OS "darwin"}}codesign:adhoc{{else}}codesign:skip{{end}}'
 

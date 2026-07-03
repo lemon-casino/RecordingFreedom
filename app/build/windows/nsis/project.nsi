@@ -93,6 +93,14 @@ Section
 
     !insertmacro wails.files
 
+    !ifdef ARG_RECORDINGFREEDOM_TOOLS_DIR
+        SetOutPath "$INSTDIR\tools"
+        File "${ARG_RECORDINGFREEDOM_TOOLS_DIR}\ffmpeg.exe"
+        File "${ARG_RECORDINGFREEDOM_TOOLS_DIR}\ffprobe.exe"
+        File "${ARG_RECORDINGFREEDOM_TOOLS_DIR}\THIRD_PARTY_FFMPEG.txt"
+        SetOutPath $INSTDIR
+    !endif
+
     CreateShortcut "$SMPROGRAMS\${INFO_PRODUCTNAME}.lnk" "$INSTDIR\${PRODUCT_EXECUTABLE}"
     CreateShortCut "$DESKTOP\${INFO_PRODUCTNAME}.lnk" "$INSTDIR\${PRODUCT_EXECUTABLE}"
 

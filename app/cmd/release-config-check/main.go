@@ -71,9 +71,12 @@ var releaseConfigChecks = []configCheck{
 	},
 	{
 		File: ".github/workflows/release.yml",
-		Name: "Release stages verified Windows portable zip",
+		Name: "Release stages verified Windows portable zip and installer",
 		Needles: []string{
 			"./scripts/ensure-windows-ffmpeg.ps1",
+			"Install Windows installer tooling",
+			"Build Windows installer",
+			"setup.exe",
 			"tools/ffmpeg.exe",
 			"tools/ffprobe.exe",
 			"tools/THIRD_PARTY_FFMPEG.txt",
@@ -82,6 +85,41 @@ var releaseConfigChecks = []configCheck{
 			"tools/audio-smoke.exe",
 			"tools/run-windows-portable-smoke.ps1",
 			"./scripts/verify-windows-portable.ps1",
+			"./scripts/verify-windows-installer.ps1",
+		},
+	},
+	{
+		File: "app/build/windows/nsis/project.nsi",
+		Name: "Windows installer includes bundled FFmpeg tools",
+		Needles: []string{
+			"ARG_RECORDINGFREEDOM_TOOLS_DIR",
+			`$INSTDIR\tools`,
+			"ffmpeg.exe",
+			"ffprobe.exe",
+			"THIRD_PARTY_FFMPEG.txt",
+		},
+	},
+	{
+		File: "scripts/verify-windows-installer.ps1",
+		Name: "Windows installer verifies installed FFmpeg layout",
+		Needles: []string{
+			"RecordingFreedom.exe",
+			"recordingfreedom.exe",
+			"tools",
+			"ffmpeg.exe",
+			"ffprobe.exe",
+			"THIRD_PARTY_FFMPEG.txt",
+			"uninstall.exe",
+		},
+	},
+	{
+		File: "app/build/darwin/Taskfile.yml",
+		Name: "macOS app bundle requires bundled FFmpeg tools",
+		Needles: []string{
+			"Contents/MacOS/tools",
+			"tools/ffmpeg",
+			"tools/ffprobe",
+			"THIRD_PARTY_FFMPEG.txt",
 		},
 	},
 	{

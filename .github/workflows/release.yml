@@ -136,10 +136,30 @@ jobs:
         shell: pwsh
         run: ./scripts/ensure-windows-ffmpeg.ps1
 
+      - name: Install Windows installer tooling
+        shell: pwsh
+        run: |
+          choco install nsis -y --no-progress
+          "C:\Program Files (x86)\NSIS" | Out-File -FilePath $env:GITHUB_PATH -Append
+
       - name: Build app
         working-directory: ${{ env.APP_DIR }}
         shell: bash
         run: CGO_ENABLED=1 wails3 task windows:build EXTRA_TAGS="${RNNOISE_TAG}" CGO_ENABLED=1
+
+      - name: Build Windows installer
+        shell: pwsh
+        run: |
+          $root = (Resolve-Path ".").Path
+          wails3 generate webview2bootstrapper -dir "$root\${{ env.APP_DIR }}\build\windows\nsis"
+          Push-Location "${{ env.APP_DIR }}\build\windows\nsis"
+          & makensis `
+            -DWAILS_INSTALL_SCOPE=user `
+            -DREQUEST_EXECUTION_LEVEL=user `
+            "-DARG_RECORDINGFREEDOM_TOOLS_DIR=$root\${{ env.APP_DIR }}\tools" `
+            "-DARG_WAILS_AMD64_BINARY=$root\${{ env.APP_DIR }}\bin\recordingfreedom.exe" `
+            project.nsi
+          Pop-Location
 
       - name: Build Windows portable smoke tools
         working-directory: ${{ env.APP_DIR }}
@@ -176,6 +196,12 @@ jobs:
           cp "scripts/run-windows-portable-smoke.ps1" "${portable_dir}/tools/run-windows-portable-smoke.ps1"
           powershell -NoProfile -Command "Compress-Archive -Path '${portable_dir}/*' -DestinationPath 'release-out/RecordingFreedom-${{ matrix.name }}-${{ github.ref_name }}-portable.zip' -Force"
           rm -rf "${portable_dir}"
+          installer_path="$(find "${APP_DIR}/bin" -maxdepth 1 -iname "*installer.exe" | head -n 1)"
+          if [ -z "${installer_path}" ]; then
+            echo "No Windows installer was produced under ${APP_DIR}/bin." >&2
+            exit 1
+          fi
+          cp "${installer_path}" "release-out/RecordingFreedom-${{ matrix.name }}-${{ github.ref_name }}-setup.exe"
           artifact_count="$(find release-out -maxdepth 1 -type f ! -name "SHA256SUMS-*" | wc -l | tr -d ' ')"
           if [ "${artifact_count}" -eq 0 ]; then
             echo "No release artifact was staged." >&2
@@ -196,6 +222,10 @@ jobs:
       - name: Verify Windows portable artifact
         shell: pwsh
         run: ./scripts/verify-windows-portable.ps1 -ZipPath "release-out/RecordingFreedom-${{ matrix.name }}-${{ github.ref_name }}-portable.zip"
+
+      - name: Verify Windows installer artifact
+        shell: pwsh
+        run: ./scripts/verify-windows-installer.ps1 -InstallerPath "release-out/RecordingFreedom-${{ matrix.name }}-${{ github.ref_name }}-setup.exe"
 
       - name: Upload release artifact
         uses: actions/upload-artifact@v5
@@ -241,17 +271,17 @@ jobs:
           - Explicit mock .rfrec package flow for UI/package validation.
           - No-GUI preview smoke for settings, storage, preflight, mock start/pause/resume/stop, ready manifest, RNNoise/camera/PIP manifest contract, and recovery scan.
           - Developer audio smoke for Windows WASAPI microphone and system-loopback capture.
-          - Windows FFmpeg desktop video writer contract for screen/all-screen/region/locked-window capture; enabled WASAPI system audio and microphone tracks are muxed into the final screen.mp4 at stop, and the Windows preview artifact is staged as a portable zip with tools/ffmpeg.exe plus desktop-doctor/video-smoke/audio-smoke diagnostics.
+          - Windows FFmpeg desktop video writer contract for screen/all-screen/region/locked-window capture; enabled WASAPI system audio and microphone tracks are muxed into the final screen.mp4 at stop, and the Windows preview artifacts are staged as a portable zip plus an NSIS setup installer. Both include tools/ffmpeg.exe and tools/ffprobe.exe; the portable zip also includes desktop-doctor/video-smoke/audio-smoke diagnostics.
           - Windows clean-machine portable smoke entrypoint at tools/run-windows-portable-smoke.ps1.
           - RNNoise native DSP is compiled into release artifacts with the rnnoise_native cgo build tag; desktop-doctor -require-rnnoise is a release build gate.
           - Camera sidecar and PIP contract: structured camera.pip settings/manifest/export plan, transparent draggable/resizable PIP overlay, WebView camera preview best-effort device matching, Windows DirectShow / macOS AVFoundation / Linux v4l2 FFmpeg sidecar writer paths, Wails ExportRecordingPackage(), cmd/pip-export-smoke, and FFmpeg PIP export that verifies the final MP4 by decoding one video frame before installing it.
-          - Windows Wails portable artifact only. macOS and Linux artifact production is temporarily disabled in GitHub Actions until their smoke/release gates are ready to run again.
+          - Windows Wails portable and setup installer artifacts. macOS and Linux artifact production is temporarily disabled in GitHub Actions until their complete app bundles and smoke/release gates are ready to run again.
 
           Not included yet:
           - End-to-end verified native recording on every desktop platform. macOS ScreenCaptureKit display/window/single-display region capture is wired in code but still needs real-device smoke validation; Windows portable artifacts include the clean-machine smoke runner but still need the downloaded artifact to be executed on a target desktop; PipeWire media writer is not complete.
           - Cross-platform long-recording audio sync validation. Windows local smoke has passed 1 minute, 5 minute, and 20 minute recording with stop-time mux into screen.mp4; macOS system audio is wired through ScreenCaptureKit mux and still needs real-device smoke before macOS artifacts are re-enabled; Linux audio capture is queued before Linux artifacts are re-enabled.
           - Cross-platform real-camera acceptance. The sidecar/PIP code path is implemented, but real device smoke is still required for preview matching, Windows/macOS/Linux camera sidecar recording, screen + camera + audio combinations, pause/resume timing, and long-recording sync.
-          - Signed installers, notarization, or Linux packages.
+          - Signed Windows installers, macOS notarization, or Linux packages.
           NOTES
 
           release_flags=(--title "${title}" --notes-file release-notes.md)
