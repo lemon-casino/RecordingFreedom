@@ -56,6 +56,8 @@ var releaseConfigChecks = []configCheck{
 			"Install Playwright Chromium",
 			"Run frontend e2e",
 			"npm run test:e2e",
+			"Clean frontend e2e artifacts before Go tests",
+			"rm -rf frontend/test-results frontend/playwright-report",
 		},
 	},
 	{
@@ -100,6 +102,8 @@ var releaseConfigChecks = []configCheck{
 			"Install Playwright Chromium",
 			"Run frontend e2e",
 			"npm run test:e2e",
+			"Clean frontend e2e artifacts before Go tests",
+			"rm -rf frontend/test-results frontend/playwright-report",
 		},
 	},
 	{

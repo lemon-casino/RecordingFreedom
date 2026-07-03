@@ -73,6 +73,10 @@ jobs:
         working-directory: ${{ env.APP_DIR }}/frontend
         run: npm run test:e2e
 
+      - name: Clean frontend e2e artifacts before Go tests
+        working-directory: ${{ env.APP_DIR }}
+        run: rm -rf frontend/test-results frontend/playwright-report
+
       - name: Test Go packages
         working-directory: ${{ env.APP_DIR }}
         run: go test -tags gtk3 ./...

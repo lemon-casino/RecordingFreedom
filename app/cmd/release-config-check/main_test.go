@@ -132,6 +132,8 @@ func workflowFixture(name string) string {
 	builder.WriteString("Install Playwright Chromium\n")
 	builder.WriteString("Run frontend e2e\n")
 	builder.WriteString("npm run test:e2e\n")
+	builder.WriteString("Clean frontend e2e artifacts before Go tests\n")
+	builder.WriteString("rm -rf frontend/test-results frontend/playwright-report\n")
 	builder.WriteString("Build Windows portable smoke tools\n")
 	builder.WriteString("bin\\desktop-doctor.exe\n")
 	builder.WriteString("bin\\video-smoke.exe\n")
