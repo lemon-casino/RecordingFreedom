@@ -1,6 +1,8 @@
 import {Application, Events, Screens, Window as WailsWindow} from '@wailsio/runtime'
 import {RecordingFreedomService} from '../../bindings/github.com/lemon-casino/RecordingFreedom/app'
 import {
+  type AudioState as BoundAudioState,
+  type AudioStatePatchRequest as BoundAudioStatePatchRequest,
   type BootstrapState as BoundBootstrapState,
   type CapsuleWindowHitRegionsRequest as BoundCapsuleWindowHitRegionsRequest,
   type ExportRecordingResult as BoundExportRecordingResult,
@@ -88,6 +90,26 @@ export type AudioLevelUpdate = {
   peak: number
   active: boolean
   error?: string
+}
+
+export type AudioControlState = {
+  system: boolean
+  systemDeviceId?: string
+  microphone: boolean
+  microphoneDeviceId?: string
+  noiseSuppression: boolean
+  microphoneGain: number
+}
+
+export type AudioStatePatch = {
+  system?: boolean
+  systemDeviceId?: string
+  microphone?: boolean
+  microphoneDeviceId?: string
+  noiseSuppression?: boolean
+  microphoneGain?: number
+  clearSystemDevice?: boolean
+  clearMicrophoneDevice?: boolean
 }
 
 export type RecorderBootstrap = {
@@ -467,6 +489,37 @@ export function subscribeAudioLevel(handler: (event: AudioLevelUpdate) => void):
   } catch (error) {
     console.info('Desktop microphone level events unavailable:', error)
     return () => {}
+  }
+}
+
+export function subscribeAudioState(handler: (event: AudioControlState) => void): () => void {
+  try {
+    return Events.On('audio.state', (event) => {
+      handler(fromBoundAudioState(event.data as BoundAudioState))
+    })
+  } catch (error) {
+    console.info('Desktop audio state events unavailable:', error)
+    return () => {}
+  }
+}
+
+export async function patchAudioState(patch: AudioStatePatch): Promise<AudioControlState> {
+  try {
+    return fromBoundAudioState(await RecordingFreedomService.PatchAudioState(toBoundAudioStatePatch(patch)))
+  } catch (error) {
+    console.info('Using browser audio state patch fallback:', error)
+    const current = loadBrowserSettings()
+    const nextAudio = applyBrowserAudioPatch(current.audio, patch)
+    const next = {...current, audio: nextAudio, updatedAt: new Date().toISOString()}
+    window.localStorage?.setItem(browserSettingsKey, JSON.stringify(next))
+    return {
+      system: nextAudio.system,
+      systemDeviceId: nextAudio.systemDeviceId,
+      microphone: nextAudio.microphone,
+      microphoneDeviceId: nextAudio.microphoneDeviceId,
+      noiseSuppression: nextAudio.microphone && nextAudio.noiseSuppression,
+      microphoneGain: nextAudio.microphoneGain,
+    }
   }
 }
 
@@ -1065,6 +1118,44 @@ function fromBoundMediaDevice(device: BoundMediaDevice): MediaDevice {
     rnnoiseEligible: device.rnnoiseEligible,
     sidecarEligible: device.sidecarEligible,
   }
+}
+
+function fromBoundAudioState(state: BoundAudioState): AudioControlState {
+  return {
+    system: state.system,
+    systemDeviceId: state.systemDeviceId,
+    microphone: state.microphone,
+    microphoneDeviceId: state.microphoneDeviceId,
+    noiseSuppression: state.microphone && state.noiseSuppression,
+    microphoneGain: state.microphoneGain || 1,
+  }
+}
+
+function toBoundAudioStatePatch(patch: AudioStatePatch): BoundAudioStatePatchRequest {
+  return {
+    system: patch.system,
+    systemDeviceId: patch.systemDeviceId,
+    microphone: patch.microphone,
+    microphoneDeviceId: patch.microphoneDeviceId,
+    noiseSuppression: patch.noiseSuppression,
+    microphoneGain: patch.microphoneGain,
+    clearSystemDevice: patch.clearSystemDevice,
+    clearMicrophoneDevice: patch.clearMicrophoneDevice,
+  }
+}
+
+function applyBrowserAudioPatch(audio: AppSettings['audio'], patch: AudioStatePatch): AppSettings['audio'] {
+  const next = {...audio}
+  if (patch.system !== undefined) next.system = patch.system
+  if (patch.clearSystemDevice) next.systemDeviceId = undefined
+  if (patch.systemDeviceId !== undefined) next.systemDeviceId = patch.systemDeviceId
+  if (patch.microphone !== undefined) next.microphone = patch.microphone
+  if (patch.clearMicrophoneDevice) next.microphoneDeviceId = undefined
+  if (patch.microphoneDeviceId !== undefined) next.microphoneDeviceId = patch.microphoneDeviceId
+  if (patch.noiseSuppression !== undefined) next.noiseSuppression = patch.noiseSuppression
+  if (patch.microphoneGain !== undefined) next.microphoneGain = patch.microphoneGain
+  if (!next.microphone) next.noiseSuppression = false
+  return next
 }
 
 function fromBoundCapabilities(capabilities: BoundCaptureCapabilities): CaptureCapabilities {

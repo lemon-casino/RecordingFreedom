@@ -38,6 +38,26 @@ export interface AudioLevelEvent {
     "error"?: string;
 }
 
+export interface AudioState {
+    "system": boolean;
+    "systemDeviceId"?: string;
+    "microphone": boolean;
+    "microphoneDeviceId"?: string;
+    "noiseSuppression": boolean;
+    "microphoneGain": number;
+}
+
+export interface AudioStatePatchRequest {
+    "system"?: boolean | null;
+    "systemDeviceId"?: string | null;
+    "microphone"?: boolean | null;
+    "microphoneDeviceId"?: string | null;
+    "noiseSuppression"?: boolean | null;
+    "microphoneGain"?: number | null;
+    "clearSystemDevice"?: boolean;
+    "clearMicrophoneDevice"?: boolean;
+}
+
 export interface BootstrapState {
     "appData": appdata$0.Info;
     "storage": appdata$0.StorageStatus;

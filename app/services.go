@@ -562,7 +562,24 @@ func (s *RecordingFreedomService) SaveSettings(next settings.Settings) (settings
 	}
 	s.refreshTrayLocale(saved.Locale)
 	s.emitSettingsChanged(saved)
+	s.emitAudioState(saved.Audio)
 	return saved, nil
+}
+
+func (s *RecordingFreedomService) PatchAudioState(patch AudioStatePatchRequest) (AudioState, error) {
+	currentSettings, err := s.settings.Load()
+	if err != nil {
+		return AudioState{}, err
+	}
+	currentSettings.Audio = applyAudioStatePatch(currentSettings.Audio, patch)
+	saved, err := s.settings.Save(currentSettings)
+	if err != nil {
+		return AudioState{}, err
+	}
+	s.emitSettingsChanged(saved)
+	state := audioStateFromSettings(saved.Audio)
+	s.emitAudioState(saved.Audio)
+	return state, nil
 }
 
 func (s *RecordingFreedomService) SetDataRoot(rootDir string) (appdata.Info, error) {
@@ -584,6 +601,7 @@ func (s *RecordingFreedomService) SetDataRoot(rootDir string) (appdata.Info, err
 	}
 	s.refreshTrayLocale(saved.Locale)
 	s.emitSettingsChanged(saved)
+	s.emitAudioState(saved.Audio)
 	return info, nil
 }
 
@@ -862,4 +880,11 @@ func (s *RecordingFreedomService) emitSettingsChanged(next settings.Settings) {
 		return
 	}
 	s.app.Event.Emit("settings.changed", next)
+}
+
+func (s *RecordingFreedomService) emitAudioState(audio settings.AudioSettings) {
+	if s.app == nil {
+		return
+	}
+	s.app.Event.Emit("audio.state", audioStateFromSettings(audio))
 }

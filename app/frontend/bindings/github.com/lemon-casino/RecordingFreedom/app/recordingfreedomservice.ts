@@ -95,6 +95,10 @@ export function OpenVideoDirectory(): $CancellablePromise<appdata$0.Info> {
     return $Call.ByID(1462702352);
 }
 
+export function PatchAudioState(patch: $models.AudioStatePatchRequest): $CancellablePromise<$models.AudioState> {
+    return $Call.ByID(680645443, patch);
+}
+
 export function PauseRecording(): $CancellablePromise<recording$0.Session> {
     return $Call.ByID(2282766307);
 }

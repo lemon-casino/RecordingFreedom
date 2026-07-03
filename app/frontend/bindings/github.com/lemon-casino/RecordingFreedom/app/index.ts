@@ -8,6 +8,8 @@ export {
 
 export type {
     AudioLevelEvent,
+    AudioState,
+    AudioStatePatchRequest,
     BootstrapState,
     CapsuleWindowHitRegion,
     CapsuleWindowHitRegionsRequest,

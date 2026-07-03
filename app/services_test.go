@@ -184,6 +184,73 @@ func TestSetDataRootRejectsActiveRecording(t *testing.T) {
 	}
 }
 
+func TestPatchAudioStatePersistsAudioControls(t *testing.T) {
+	data := appdata.NewService(t.TempDir())
+	service := &RecordingFreedomService{
+		appData:  data,
+		settings: settings.NewService(data),
+	}
+	systemOn := true
+	systemDevice := "system-audio:display"
+	micOn := true
+	micDevice := "microphone:studio"
+	rnnoiseOn := true
+	gain := 1.5
+
+	state, err := service.PatchAudioState(AudioStatePatchRequest{
+		System:             &systemOn,
+		SystemDeviceID:     &systemDevice,
+		Microphone:         &micOn,
+		MicrophoneDeviceID: &micDevice,
+		NoiseSuppression:   &rnnoiseOn,
+		MicrophoneGain:     &gain,
+	})
+	if err != nil {
+		t.Fatalf("PatchAudioState() error = %v", err)
+	}
+	if !state.System || state.SystemDeviceID != systemDevice || !state.Microphone || state.MicrophoneDeviceID != micDevice || !state.NoiseSuppression || state.MicrophoneGain != gain {
+		t.Fatalf("audio state = %#v, want patched audio controls", state)
+	}
+	saved, err := service.GetSettings()
+	if err != nil {
+		t.Fatalf("GetSettings() error = %v", err)
+	}
+	if saved.Audio.SystemDeviceID != systemDevice || saved.Audio.MicrophoneDeviceID != micDevice || !saved.Audio.NoiseSuppression {
+		t.Fatalf("saved audio = %#v, want patched audio settings", saved.Audio)
+	}
+}
+
+func TestPatchAudioStateDisablesRNNoiseWithMicrophone(t *testing.T) {
+	data := appdata.NewService(t.TempDir())
+	service := &RecordingFreedomService{
+		appData:  data,
+		settings: settings.NewService(data),
+	}
+	micOn := true
+	rnnoiseOn := true
+	if _, err := service.PatchAudioState(AudioStatePatchRequest{
+		Microphone:       &micOn,
+		NoiseSuppression: &rnnoiseOn,
+	}); err != nil {
+		t.Fatalf("PatchAudioState(enable) error = %v", err)
+	}
+	micOff := false
+	state, err := service.PatchAudioState(AudioStatePatchRequest{Microphone: &micOff})
+	if err != nil {
+		t.Fatalf("PatchAudioState(disable) error = %v", err)
+	}
+	if state.Microphone || state.NoiseSuppression {
+		t.Fatalf("audio state = %#v, want microphone and rnnoise disabled", state)
+	}
+	saved, err := service.GetSettings()
+	if err != nil {
+		t.Fatalf("GetSettings() error = %v", err)
+	}
+	if saved.Audio.Microphone || saved.Audio.NoiseSuppression {
+		t.Fatalf("saved audio = %#v, want microphone and rnnoise disabled", saved.Audio)
+	}
+}
+
 func TestOpenVideoDirectoryUsesManagedDataVideo(t *testing.T) {
 	data := appdata.NewService(t.TempDir())
 	service := &RecordingFreedomService{appData: data}

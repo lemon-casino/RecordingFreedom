@@ -19,6 +19,7 @@ declare module "@wailsio/runtime" {
     namespace Events {
         interface CustomEvents {
             "audio.level": main$0.AudioLevelEvent;
+            "audio.state": main$0.AudioState;
             "capture.region.selected": main$0.RegionSelectionResult;
             "recording.status": recording$0.StatusEvent;
             "settings.changed": settings$0.Settings;

@@ -53,7 +53,7 @@ import {
   fallbackCapabilities,
   fallbackStorageStatus,
 } from './services/mockBackend'
-import {cancelRegionSelector, cancelSelectedRegion, completeRegionSelection, exportRecordingPackage, hidePipOverlay, hideRegionFrame, hideScreenIndicator, hideSettingsWindow, loadBootstrap, loadSettings, logClientEvent, openRecordingPackage, openVideoDirectory, pauseRecording, preflightAudioOnlyRecording, preflightRecording, quitApplication, readPipPreviewImage, recoverRecordingPackage, restoreCapsuleWindow, resumeRecording, saveSettings, setCapsuleWindowExpanded, setCapsuleWindowHitRegions, setDataRoot, showPipOverlay, showRegionSelector, showScreenIndicator, startAudioOnlyRecording, startMicrophoneLevelMonitor, startRecording, stopMicrophoneLevelMonitor, stopRecording, subscribeAudioLevel, subscribeRecordingStatus, subscribeRegionSelection, subscribeSettingsChanged, updatePipOverlay, updateSelectedRegion, type AudioLevelUpdate, type CapsuleWindowExpandDirection, type CapsuleWindowHitRegion, type PIPOverlayCamera, type PIPOverlayState, type RecordingRecovery, type RecordingStatusUpdate, type RegionSelectionSession} from './services/recorderBackend'
+import {cancelRegionSelector, cancelSelectedRegion, completeRegionSelection, exportRecordingPackage, hidePipOverlay, hideRegionFrame, hideScreenIndicator, hideSettingsWindow, loadBootstrap, loadSettings, logClientEvent, openRecordingPackage, openVideoDirectory, patchAudioState, pauseRecording, preflightAudioOnlyRecording, preflightRecording, quitApplication, readPipPreviewImage, recoverRecordingPackage, restoreCapsuleWindow, resumeRecording, saveSettings, setCapsuleWindowExpanded, setCapsuleWindowHitRegions, setDataRoot, showPipOverlay, showRegionSelector, showScreenIndicator, startAudioOnlyRecording, startMicrophoneLevelMonitor, startRecording, stopMicrophoneLevelMonitor, stopRecording, subscribeAudioLevel, subscribeAudioState, subscribeRecordingStatus, subscribeRegionSelection, subscribeSettingsChanged, updatePipOverlay, updateSelectedRegion, type AudioControlState, type AudioLevelUpdate, type AudioStatePatch, type CapsuleWindowExpandDirection, type CapsuleWindowHitRegion, type PIPOverlayCamera, type PIPOverlayState, type RecordingRecovery, type RecordingStatusUpdate, type RegionSelectionSession} from './services/recorderBackend'
 
 const sourceIcon = {
   screen: Monitor,
@@ -358,8 +358,11 @@ function App() {
   const countdownTimerRef = useRef<number | null>(null)
   const countdownTokenRef = useRef(0)
   const cameraPreviewGenerationRef = useRef(0)
+  const audioPatchTokenRef = useRef(0)
+  const localAudioIntentUntilRef = useRef(0)
   const localCameraIntentUntilRef = useRef(0)
   const localPipIntentUntilRef = useRef(0)
+  const selectedSystemAudioRef = useRef(selectedSystemAudio)
   const selectedMicRef = useRef(selectedMic)
   const systemAudioRef = useRef(systemAudio)
   const microphoneRef = useRef(microphone)
@@ -419,7 +422,7 @@ function App() {
         captureCursor,
         countdownSeconds,
       },
-      audio: {
+      audio: persistedSettingsRef.current?.audio ?? {
         system: systemAudio,
         systemDeviceId: selectedSystemAudio || undefined,
         microphone,
@@ -665,11 +668,95 @@ function App() {
   const markLocalCameraIntent = () => {
     localCameraIntentUntilRef.current = Date.now() + 5000
   }
+  const markLocalAudioIntent = () => {
+    localAudioIntentUntilRef.current = Date.now() + 5000
+  }
   const markLocalPipIntent = () => {
     localPipIntentUntilRef.current = Date.now() + 5000
   }
+  const hasLocalAudioIntent = () => Date.now() < localAudioIntentUntilRef.current
   const hasLocalCameraIntent = () => Date.now() < localCameraIntentUntilRef.current
   const hasLocalPipIntent = () => Date.now() < localPipIntentUntilRef.current
+  const mergeAudioIntoSettingsCache = (audio: AudioControlState) => {
+    const apply = (settings: AppSettings | null): AppSettings | null => {
+      if (!settings) return settings
+      return {
+        ...settings,
+        audio: {
+          system: audio.system,
+          systemDeviceId: audio.systemDeviceId,
+          microphone: audio.microphone,
+          microphoneDeviceId: audio.microphoneDeviceId,
+          noiseSuppression: audio.microphone && audio.noiseSuppression,
+          microphoneGain: audio.microphoneGain || 1,
+        },
+      }
+    }
+    currentSettingsRef.current = apply(currentSettingsRef.current)
+    persistedSettingsRef.current = apply(persistedSettingsRef.current)
+  }
+  const applyAudioControlState = (audio: AudioControlState) => {
+    const nextNoiseSuppression = audio.microphone && audio.noiseSuppression
+    systemAudioRef.current = audio.system
+    microphoneRef.current = audio.microphone
+    noiseSuppressionRef.current = nextNoiseSuppression
+    setSystemAudio(audio.system)
+    setMicrophone(audio.microphone)
+    setNoiseSuppression(nextNoiseSuppression)
+    if (audio.systemDeviceId) {
+      selectedSystemAudioRef.current = audio.systemDeviceId
+      setSelectedSystemAudio(audio.systemDeviceId)
+    }
+    if (audio.microphoneDeviceId) {
+      selectedMicRef.current = audio.microphoneDeviceId
+      setSelectedMic(audio.microphoneDeviceId)
+    }
+    if (!audio.microphone) {
+      setMicMonitorError(null)
+      setMicMonitorActive(false)
+      setMicLevel(0)
+      setMicPeak(0)
+    }
+    mergeAudioIntoSettingsCache(audio)
+  }
+  const optimisticAudioState = (patch: AudioStatePatch): AudioControlState => {
+    const nextMicrophone = patch.microphone ?? microphoneRef.current
+    const nextNoiseSuppression = nextMicrophone ? (patch.noiseSuppression ?? noiseSuppressionRef.current) : false
+    return {
+      system: patch.system ?? systemAudioRef.current,
+      systemDeviceId: patch.clearSystemDevice ? undefined : (patch.systemDeviceId ?? selectedSystemAudioRef.current),
+      microphone: nextMicrophone,
+      microphoneDeviceId: patch.clearMicrophoneDevice ? undefined : (patch.microphoneDeviceId ?? selectedMicRef.current),
+      noiseSuppression: nextNoiseSuppression,
+      microphoneGain: patch.microphoneGain ?? currentSettingsRef.current?.audio.microphoneGain ?? 1,
+    }
+  }
+  const commitAudioStatePatch = (patch: AudioStatePatch) => {
+    markLocalAudioIntent()
+    const token = audioPatchTokenRef.current + 1
+    audioPatchTokenRef.current = token
+    const optimistic = optimisticAudioState(patch)
+    applyAudioControlState(optimistic)
+    void patchAudioState(patch)
+      .then((state) => {
+        if (token === audioPatchTokenRef.current) {
+          applyAudioControlState(state)
+        }
+      })
+      .catch((error) => {
+        console.error('Failed to patch audio state:', error)
+        void loadSettings()
+          .then((settings) => applyAudioControlState({
+            system: settings.audio.system,
+            systemDeviceId: settings.audio.systemDeviceId,
+            microphone: settings.audio.microphone,
+            microphoneDeviceId: settings.audio.microphoneDeviceId,
+            noiseSuppression: settings.audio.noiseSuppression,
+            microphoneGain: settings.audio.microphoneGain,
+          }))
+          .catch((loadError) => console.error('Failed to reload audio settings:', loadError))
+      })
+  }
   const applySettingsState = (nextSettings: AppSettings, nextMedia?: MediaInventory, nextSources?: CaptureSource[], options: ApplySettingsOptions = {}) => {
     const effectiveSettings = options.preservePipConfig && currentSettingsRef.current
       ? {
@@ -728,15 +815,20 @@ function App() {
     if (cameraList) setAvailableCameras(cameraList)
     if (!options.preserveAudioSelection) {
       if (effectiveSettings.audio.systemDeviceId && (!systemAudioList || systemAudioList.some((device) => device.id === effectiveSettings.audio.systemDeviceId))) {
+        selectedSystemAudioRef.current = effectiveSettings.audio.systemDeviceId
         setSelectedSystemAudio(effectiveSettings.audio.systemDeviceId)
       } else if (systemAudioList?.[0]) {
+        selectedSystemAudioRef.current = systemAudioList[0].id
         setSelectedSystemAudio(systemAudioList[0].id)
       }
       if (effectiveSettings.audio.microphoneDeviceId && (!microphoneList || microphoneList.some((device) => device.id === effectiveSettings.audio.microphoneDeviceId))) {
+        selectedMicRef.current = effectiveSettings.audio.microphoneDeviceId
         setSelectedMic(effectiveSettings.audio.microphoneDeviceId)
       } else if (microphoneList?.[0]) {
+        selectedMicRef.current = microphoneList[0].id
         setSelectedMic(microphoneList[0].id)
       } else if (microphoneList) {
+        selectedMicRef.current = ''
         setSelectedMic('')
       }
     }
@@ -765,6 +857,10 @@ function App() {
   useEffect(() => {
     document.documentElement.lang = locale
   }, [locale])
+
+  useEffect(() => {
+    selectedSystemAudioRef.current = selectedSystemAudio
+  }, [selectedSystemAudio])
 
   useEffect(() => {
     selectedMicRef.current = selectedMic
@@ -1016,12 +1112,30 @@ function App() {
 
   useEffect(() => subscribeRecordingStatus(applyRecordingStatus), [])
 
+  useEffect(() => subscribeAudioState((audio) => {
+    void logClientEvent('audio', 'state', {
+      system: audio.system,
+      systemDeviceId: audio.systemDeviceId ?? '',
+      microphone: audio.microphone,
+      microphoneDeviceId: audio.microphoneDeviceId ?? '',
+      noiseSuppression: audio.noiseSuppression,
+    })
+    applyAudioControlState(audio)
+  }), [])
+
   useEffect(() => subscribeSettingsChanged((settings) => {
     const incomingCameraOff = !settings.camera.enabled
+    const preserveAudioEnabled = !isSettingsWindow && hasLocalAudioIntent()
     const preserveCameraEnabled = !isSettingsWindow && hasLocalCameraIntent()
+    const preserveAudioSelection = preserveAudioEnabled
     const preservePipConfig = !isSettingsWindow && hasLocalPipIntent()
     void logClientEvent('settings', 'changed', {
       window: isSettingsWindow ? 'settings' : 'recorder',
+      systemAudio: settings.audio.system,
+      microphone: settings.audio.microphone,
+      noiseSuppression: settings.audio.noiseSuppression,
+      preserveAudioEnabled,
+      preserveAudioSelection,
       cameraEnabled: settings.camera.enabled,
       currentCamera: cameraRef.current,
       pipPreset: settings.camera.pipPreset,
@@ -1032,6 +1146,8 @@ function App() {
       stopCameraPreview('settings-camera-off')
     }
     applySettingsState(settings, undefined, undefined, {
+      preserveAudioEnabled,
+      preserveAudioSelection,
       preserveCameraEnabled,
       preserveCameraSelection: preserveCameraEnabled,
       preservePipConfig,
@@ -1894,32 +2010,30 @@ function App() {
 
             {activePanel === 'audio' && (
               <div className="menu-stack">
-                <SwitchRow label={copy.panels.systemAudio} checked={systemAudio} disabled={recordingConfigLocked} onChange={setSystemAudio} />
+                <SwitchRow label={copy.panels.systemAudio} checked={systemAudio} disabled={recordingConfigLocked} onChange={(value) => commitAudioStatePatch({system: value})} />
                 <label className="field-label" htmlFor="system-audio-device">{copy.panels.systemAudioDevice}</label>
                 <SelectMenu
                   id="system-audio-device"
                   value={selectedSystemAudio}
                   disabled={recordingConfigLocked}
                   options={availableSystemAudio.map((device) => ({value: device.id, label: mediaDeviceName(device, copy), disabled: device.available === false}))}
-                  onChange={setSelectedSystemAudio}
+                  onChange={(value) => commitAudioStatePatch({systemDeviceId: value})}
                 />
                 <SwitchRow
                   label={copy.panels.microphone}
                   checked={microphone && hasAvailableMicrophone}
                   disabled={recordingConfigLocked || !hasAvailableMicrophone}
                   onChange={(value) => {
-                    setMicrophone(value)
-                    if (!value) {
-                      setNoiseSuppression(false)
-                      setMicMonitorError(null)
-                    }
+                    commitAudioStatePatch(value
+                      ? {microphone: true, microphoneDeviceId: selectedMic || availableMicrophones.find((device) => device.available !== false)?.id}
+                      : {microphone: false, noiseSuppression: false})
                   }}
                 />
                 <SwitchRow
                   label={copy.panels.rnnoise}
                   checked={rnnoiseActive}
                   disabled={recordingConfigLocked || !microphone || selectedMicrophoneDevice?.rnnoiseEligible === false}
-                  onChange={setNoiseSuppression}
+                  onChange={(value) => commitAudioStatePatch({noiseSuppression: value && microphoneRef.current})}
                 />
                 <label className="field-label" htmlFor="mic-device">{copy.panels.microphoneDevice}</label>
                 <SelectMenu
@@ -1929,7 +2043,7 @@ function App() {
                   options={availableMicrophones.length === 0
                     ? [{value: '', label: copy.panels.noMicrophones, disabled: true}]
                     : availableMicrophones.map((device) => ({value: device.id, label: mediaDeviceName(device, copy), disabled: device.available === false}))}
-                  onChange={setSelectedMic}
+                  onChange={(value) => commitAudioStatePatch({microphoneDeviceId: value})}
                 />
                 <div
                   className={`meter ${micMonitorActive ? 'live' : ''} ${micMonitorError ? 'error' : ''}`}

@@ -25,6 +25,7 @@ func init() {
 	application.RegisterEvent[recording.StatusEvent]("recording.status")
 	application.RegisterEvent[RegionSelectionResult]("capture.region.selected")
 	application.RegisterEvent[settings.Settings]("settings.changed")
+	application.RegisterEvent[AudioState]("audio.state")
 	application.RegisterEvent[AudioLevelEvent]("audio.level")
 }
 
