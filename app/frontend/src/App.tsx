@@ -361,6 +361,8 @@ function App() {
   const closePromptRef = useRef<HTMLElement | null>(null)
   const capsuleHitRegionSignatureRef = useRef('')
   const forceCapsuleHitRegionPublishRef = useRef<(() => void) | null>(null)
+  const capsuleWindowLayoutChangingRef = useRef(false)
+  const capsuleWindowLayoutTokenRef = useRef(0)
   const capsuleDragCandidateRef = useRef(false)
   const floatingPointerInsideAtRef = useRef(0)
   const floatingPointerInsideRef = useRef(false)
@@ -1012,10 +1014,41 @@ function App() {
     setMicPeak(update.active ? update.peak : 0)
   }), [])
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (isSettingsWindow) return
+    const token = capsuleWindowLayoutTokenRef.current + 1
+    capsuleWindowLayoutTokenRef.current = token
+    capsuleWindowLayoutChangingRef.current = true
+    let disposed = false
+    let forceTimer = 0
+    let secondForceTimer = 0
+    const forceStableRegion = () => {
+      if (disposed || token !== capsuleWindowLayoutTokenRef.current) return
+      capsuleWindowLayoutChangingRef.current = false
+      forceCapsuleHitRegionPublishRef.current?.()
+      forceTimer = window.setTimeout(() => {
+        if (disposed || token !== capsuleWindowLayoutTokenRef.current) return
+        forceCapsuleHitRegionPublishRef.current?.()
+      }, 80)
+      secondForceTimer = window.setTimeout(() => {
+        if (disposed || token !== capsuleWindowLayoutTokenRef.current) return
+        forceCapsuleHitRegionPublishRef.current?.()
+      }, 220)
+    }
     void setCapsuleWindowExpanded(capsuleExpanded, capsuleExpandedHeight, 'auto', capsuleWindowCompact)
-      .then(setCapsuleExpandDirection)
+      .then((direction) => {
+        if (!disposed && token === capsuleWindowLayoutTokenRef.current) setCapsuleExpandDirection(direction)
+      })
+      .finally(() => {
+        window.requestAnimationFrame(() => {
+          window.requestAnimationFrame(forceStableRegion)
+        })
+      })
+    return () => {
+      disposed = true
+      if (forceTimer) window.clearTimeout(forceTimer)
+      if (secondForceTimer) window.clearTimeout(secondForceTimer)
+    }
   }, [capsuleExpanded, capsuleExpandedHeight, capsuleWindowCompact, isSettingsWindow])
 
   useLayoutEffect(() => {
@@ -1026,6 +1059,7 @@ function App() {
 
     const publish = (force = false) => {
       if (disposed) return
+      if (!force && capsuleWindowLayoutChangingRef.current) return
       const viewportWidth = window.innerWidth || document.documentElement.clientWidth || 0
       const viewportHeight = window.innerHeight || document.documentElement.clientHeight || 0
       const regions = [
