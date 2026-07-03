@@ -9,6 +9,7 @@ import type {
   RecordingPreflightStatus,
   RecordingQuality,
   RecordingState,
+  ThemeCode,
 } from './services/mockBackend'
 
 export type StatusMessageKey =
@@ -34,6 +35,7 @@ export type SourceSelectionMessageKey = 'regionSelecting' | 'regionSelected' | '
 
 export type RecorderCopy = {
   localeNames: Record<LocaleCode, string>
+  themeNames: Record<ThemeCode, string>
   aria: {
     settingsDialog: string
     settingsShell: string
@@ -108,6 +110,8 @@ export type RecorderCopy = {
     appData: string
     settingsFile: string
     language: string
+    theme: string
+    themeDetail: string
     recordingBackend: string
     recordingBackendDetail: string
     preflight: string
@@ -228,6 +232,14 @@ const zhCN: RecorderCopy = {
     'zh-CN': '简体中文',
     en: 'English',
   },
+  themeNames: {
+    'night-teal': '暗夜青',
+    'mountain-green': '远山绿',
+    'sky-blue': '天空蓝',
+    'sunset-yellow': '落晖黄',
+    'ink-purple': '烟墨紫',
+    'sage-gray': '草木灰',
+  },
   aria: {
     settingsDialog: '设置',
     settingsShell: 'RecordingFreedom 设置',
@@ -333,6 +345,8 @@ const zhCN: RecorderCopy = {
     appData: '当前存储根目录',
     settingsFile: '设置文件',
     language: '语言',
+    theme: '主题',
+    themeDetail: '立即应用到胶囊、设置页和下拉列表，并会在下次启动时保留。',
     recordingBackend: '录制后端',
     recordingBackendDetail: '当前会使用这里显示的原生后端进行真实采集；开始录制前仍会执行预检，阻塞不可用的来源、媒体设备或存储状态。',
     preflight: '预检',
@@ -584,6 +598,14 @@ const en: RecorderCopy = {
     'zh-CN': '简体中文',
     en: 'English',
   },
+  themeNames: {
+    'night-teal': 'Night Teal',
+    'mountain-green': 'Mountain Green',
+    'sky-blue': 'Sky Blue',
+    'sunset-yellow': 'Sunset Yellow',
+    'ink-purple': 'Ink Purple',
+    'sage-gray': 'Sage Gray',
+  },
   aria: {
     settingsDialog: 'Settings',
     settingsShell: 'RecordingFreedom settings',
@@ -689,6 +711,8 @@ const en: RecorderCopy = {
     appData: 'Current storage root',
     settingsFile: 'Settings',
     language: 'Language',
+    theme: 'Theme',
+    themeDetail: 'Applies immediately to the capsule, settings, and dropdown menus, and is kept after restart.',
     recordingBackend: 'Recording backend',
     recordingBackendDetail: 'Real capture will use the native backend shown here; preflight still blocks unavailable sources, media devices, or storage before recording starts.',
     preflight: 'Preflight',

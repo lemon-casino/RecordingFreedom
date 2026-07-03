@@ -42,6 +42,9 @@ func TestLoadMissingSettingsReturnsDefaults(t *testing.T) {
 	if !got.Window.MinimizeToTray {
 		t.Fatal("default settings should minimize to tray")
 	}
+	if got.Window.Theme != ThemeNightTeal {
+		t.Fatalf("default theme = %q, want %q", got.Window.Theme, ThemeNightTeal)
+	}
 }
 
 func TestSaveAndLoadSettings(t *testing.T) {
@@ -85,7 +88,7 @@ func TestSaveAndLoadSettings(t *testing.T) {
 				EdgeFeather: 0.22,
 			},
 		},
-		Window: WindowSettings{MinimizeToTray: true},
+		Window: WindowSettings{MinimizeToTray: true, Theme: ThemeSunsetYellow},
 	})
 	if err != nil {
 		t.Fatalf("Save() error = %v", err)
@@ -122,6 +125,9 @@ func TestSaveAndLoadSettings(t *testing.T) {
 	if loaded.Camera.PIP.Position.X != 0.25 || loaded.Camera.PIP.Position.Y != 0.75 || loaded.Camera.PIP.Scale != pip.MaximumScale || loaded.Camera.PIP.EdgeFeather != 0.22 {
 		t.Fatalf("pip layout settings were not persisted: %#v", loaded.Camera.PIP)
 	}
+	if loaded.Window.Theme != ThemeSunsetYellow {
+		t.Fatalf("theme = %q, want %q", loaded.Window.Theme, ThemeSunsetYellow)
+	}
 }
 
 func TestSaveNormalizesInvalidSettings(t *testing.T) {
@@ -132,6 +138,7 @@ func TestSaveNormalizesInvalidSettings(t *testing.T) {
 		Recording: RecordingSettings{Quality: "cinema", FPS: 120, CountdownSeconds: -4},
 		Audio:     AudioSettings{MicrophoneGain: -2},
 		Camera:    CameraSettings{PIPPreset: "top-right", PIP: pip.Config{Shape: pip.Shape("triangle"), Scale: 3, EdgeFeather: 2}},
+		Window:    WindowSettings{Theme: Theme("neon")},
 	})
 	if err != nil {
 		t.Fatalf("Save() error = %v", err)
@@ -150,6 +157,9 @@ func TestSaveNormalizesInvalidSettings(t *testing.T) {
 	}
 	if saved.Camera.PIP.Shape != pip.DefaultShape || saved.Camera.PIP.Scale != pip.MaximumScale || saved.Camera.PIP.EdgeFeather != pip.MaximumEdgeFeather {
 		t.Fatalf("normalized pip = %#v, want default shape and clamped ratios", saved.Camera.PIP)
+	}
+	if saved.Window.Theme != ThemeNightTeal {
+		t.Fatalf("invalid theme normalized to %q, want %q", saved.Window.Theme, ThemeNightTeal)
 	}
 }
 

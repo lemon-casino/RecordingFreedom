@@ -99,6 +99,10 @@ export function PatchAudioState(patch: $models.AudioStatePatchRequest): $Cancell
     return $Call.ByID(680645443, patch);
 }
 
+export function PatchSettingsPreferences(patch: $models.SettingsPreferencesPatchRequest): $CancellablePromise<settings$0.Settings> {
+    return $Call.ByID(2494029929, patch);
+}
+
 export function PauseRecording(): $CancellablePromise<recording$0.Session> {
     return $Call.ByID(2282766307);
 }

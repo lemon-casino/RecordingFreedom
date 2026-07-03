@@ -15,6 +15,7 @@ import {
   type RegionSelectionSession as BoundRegionSelectionSession,
   type ScreenIndicatorRequest as BoundScreenIndicatorRequest,
   type ScreenIndicatorResult as BoundScreenIndicatorResult,
+  type SettingsPreferencesPatchRequest as BoundSettingsPreferencesPatchRequest,
 } from '../../bindings/github.com/lemon-casino/RecordingFreedom/app/models'
 import {
   type Capabilities as BoundCaptureCapabilities,
@@ -44,6 +45,7 @@ import {
   fallbackStorageStatus,
   mediaInventory as fallbackMediaInventory,
   normalizeLocale,
+  normalizeTheme,
   sources as fallbackSources,
   type AppSettings,
   type AudioOnlyRecordingRequest,
@@ -110,6 +112,14 @@ export type AudioStatePatch = {
   microphoneGain?: number
   clearSystemDevice?: boolean
   clearMicrophoneDevice?: boolean
+}
+
+export type SettingsPreferencesPatch = {
+  theme?: AppSettings['window']['theme']
+  recordingQuality?: AppSettings['recording']['quality']
+  recordingFps?: number
+  captureCursor?: boolean
+  countdownSeconds?: number
 }
 
 export type RecorderBootstrap = {
@@ -520,6 +530,18 @@ export async function patchAudioState(patch: AudioStatePatch): Promise<AudioCont
       noiseSuppression: nextAudio.microphone && nextAudio.noiseSuppression,
       microphoneGain: nextAudio.microphoneGain,
     }
+  }
+}
+
+export async function patchSettingsPreferences(patch: SettingsPreferencesPatch): Promise<AppSettings> {
+  try {
+    return fromBoundSettings(await RecordingFreedomService.PatchSettingsPreferences(toBoundSettingsPreferencesPatch(patch)))
+  } catch (error) {
+    console.info('Using browser settings preference patch fallback:', error)
+    const current = loadBrowserSettings()
+    const next = applyBrowserSettingsPreferencesPatch(current, patch)
+    window.localStorage?.setItem(browserSettingsKey, JSON.stringify(next))
+    return next
   }
 }
 
@@ -1144,6 +1166,34 @@ function toBoundAudioStatePatch(patch: AudioStatePatch): BoundAudioStatePatchReq
   }
 }
 
+function toBoundSettingsPreferencesPatch(patch: SettingsPreferencesPatch): BoundSettingsPreferencesPatchRequest {
+  return {
+    theme: patch.theme as BoundSettingsPreferencesPatchRequest['theme'],
+    recordingQuality: patch.recordingQuality,
+    recordingFps: patch.recordingFps,
+    captureCursor: patch.captureCursor,
+    countdownSeconds: patch.countdownSeconds,
+  }
+}
+
+function applyBrowserSettingsPreferencesPatch(settings: AppSettings, patch: SettingsPreferencesPatch): AppSettings {
+  return {
+    ...settings,
+    recording: {
+      ...settings.recording,
+      quality: patch.recordingQuality ?? settings.recording.quality,
+      fps: patch.recordingFps ?? settings.recording.fps,
+      captureCursor: patch.captureCursor ?? settings.recording.captureCursor,
+      countdownSeconds: patch.countdownSeconds ?? settings.recording.countdownSeconds,
+    },
+    window: {
+      ...settings.window,
+      theme: patch.theme ?? settings.window.theme,
+    },
+    updatedAt: new Date().toISOString(),
+  }
+}
+
 function applyBrowserAudioPatch(audio: AppSettings['audio'], patch: AudioStatePatch): AppSettings['audio'] {
   const next = {...audio}
   if (patch.system !== undefined) next.system = patch.system
@@ -1229,6 +1279,7 @@ function fromBoundSettings(settings: BoundSettings): AppSettings {
     },
     window: {
       minimizeToTray: settings.window.minimizeToTray,
+      theme: normalizeTheme(settings.window.theme),
     },
     updatedAt: typeof settings.updatedAt === 'string' ? settings.updatedAt : undefined,
   }
@@ -1267,6 +1318,7 @@ function toBoundSettings(settings: AppSettings): BoundSettings {
     },
     window: {
       minimizeToTray: settings.window.minimizeToTray,
+      theme: settings.window.theme as BoundSettings['window']['theme'],
     },
     updatedAt: settings.updatedAt ?? new Date(0).toISOString(),
   }
@@ -1292,7 +1344,7 @@ function loadBrowserSettings(): AppSettings {
       pip: fromBoundPipConfig(next.camera.pip, next.camera.pipPreset),
     }
     camera.pipPreset = camera.pip.preset
-    return {...next, camera, locale: normalizeLocale(next.locale)}
+    return {...next, camera, locale: normalizeLocale(next.locale), window: {...next.window, theme: normalizeTheme(next.window.theme)}}
   } catch {
     return defaultSettings
   }

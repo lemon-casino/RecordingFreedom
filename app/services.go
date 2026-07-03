@@ -86,6 +86,7 @@ type RecordingFreedomService struct {
 	pipOverlay        *application.WebviewWindow
 	trayLocale        func(settings.Locale)
 	capsuleHitRegions capsuleWindowHitRegions
+	settingsMu        sync.Mutex
 	regionMu          sync.Mutex
 	regionSession     *RegionSelectionSession
 	selectedRegionDIP application.Rect
@@ -548,12 +549,18 @@ func defaultOpenPath(path string) error {
 }
 
 func (s *RecordingFreedomService) SaveSettings(next settings.Settings) (settings.Settings, error) {
+	s.settingsMu.Lock()
+	defer s.settingsMu.Unlock()
 	if err := s.applyDataRootFromSettings(next); err != nil {
 		return settings.Settings{}, err
 	}
 	info, err := s.appData.Info()
 	if err != nil {
 		return settings.Settings{}, err
+	}
+	if currentSettings, err := s.settings.Load(); err == nil {
+		next.Recording = currentSettings.Recording
+		next.Window.Theme = currentSettings.Window.Theme
 	}
 	next.Storage.DataRootDir = info.RootDir
 	saved, err := s.settings.Save(next)
@@ -567,6 +574,8 @@ func (s *RecordingFreedomService) SaveSettings(next settings.Settings) (settings
 }
 
 func (s *RecordingFreedomService) PatchAudioState(patch AudioStatePatchRequest) (AudioState, error) {
+	s.settingsMu.Lock()
+	defer s.settingsMu.Unlock()
 	currentSettings, err := s.settings.Load()
 	if err != nil {
 		return AudioState{}, err
@@ -590,6 +599,8 @@ func (s *RecordingFreedomService) SetDataRoot(rootDir string) (appdata.Info, err
 	if err != nil {
 		return appdata.Info{}, err
 	}
+	s.settingsMu.Lock()
+	defer s.settingsMu.Unlock()
 	currentSettings, err := s.settings.Load()
 	if err != nil {
 		return appdata.Info{}, err

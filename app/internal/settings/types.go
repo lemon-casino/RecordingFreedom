@@ -16,6 +16,17 @@ const (
 	LocaleEN   Locale = "en"
 )
 
+type Theme string
+
+const (
+	ThemeNightTeal     Theme = "night-teal"
+	ThemeMountainGreen Theme = "mountain-green"
+	ThemeSkyBlue       Theme = "sky-blue"
+	ThemeSunsetYellow  Theme = "sunset-yellow"
+	ThemeInkPurple     Theme = "ink-purple"
+	ThemeSageGray      Theme = "sage-gray"
+)
+
 type Settings struct {
 	SchemaVersion int               `json:"schemaVersion"`
 	Locale        Locale            `json:"locale"`
@@ -56,5 +67,6 @@ type CameraSettings struct {
 }
 
 type WindowSettings struct {
-	MinimizeToTray bool `json:"minimizeToTray"`
+	MinimizeToTray bool  `json:"minimizeToTray"`
+	Theme          Theme `json:"theme"`
 }

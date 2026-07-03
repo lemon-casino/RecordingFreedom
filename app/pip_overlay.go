@@ -135,6 +135,8 @@ func (s *RecordingFreedomService) persistCameraPIPConfig(config pip.Config) erro
 	if s.settings == nil {
 		return nil
 	}
+	s.settingsMu.Lock()
+	defer s.settingsMu.Unlock()
 	current, err := s.settings.Load()
 	if err != nil {
 		return err

@@ -60,6 +60,21 @@ export interface StorageSettings {
     "dataRootDir"?: string;
 }
 
+export enum Theme {
+    /**
+     * The Go zero value for the underlying type of the enum.
+     */
+    $zero = "",
+
+    ThemeNightTeal = "night-teal",
+    ThemeMountainGreen = "mountain-green",
+    ThemeSkyBlue = "sky-blue",
+    ThemeSunsetYellow = "sunset-yellow",
+    ThemeInkPurple = "ink-purple",
+    ThemeSageGray = "sage-gray",
+};
+
 export interface WindowSettings {
     "minimizeToTray": boolean;
+    "theme": Theme;
 }

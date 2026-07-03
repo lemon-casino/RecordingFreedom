@@ -26,5 +26,6 @@ export type {
     RegionSelectionResult,
     RegionSelectionSession,
     ScreenIndicatorRequest,
-    ScreenIndicatorResult
+    ScreenIndicatorResult,
+    SettingsPreferencesPatchRequest
 } from "./models.js";

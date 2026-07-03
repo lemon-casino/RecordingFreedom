@@ -15,6 +15,7 @@ import (
 	"github.com/lemon-casino/RecordingFreedom/app/internal/pip"
 	"github.com/lemon-casino/RecordingFreedom/app/internal/preflight"
 	"github.com/lemon-casino/RecordingFreedom/app/internal/recording"
+	"github.com/lemon-casino/RecordingFreedom/app/internal/recordingprofile"
 	"github.com/lemon-casino/RecordingFreedom/app/internal/recpackage"
 	"github.com/lemon-casino/RecordingFreedom/app/internal/settings"
 )
@@ -248,6 +249,73 @@ func TestPatchAudioStateDisablesRNNoiseWithMicrophone(t *testing.T) {
 	}
 	if saved.Audio.Microphone || saved.Audio.NoiseSuppression {
 		t.Fatalf("saved audio = %#v, want microphone and rnnoise disabled", saved.Audio)
+	}
+}
+
+func TestPatchSettingsPreferencesPersistsRecordingAndTheme(t *testing.T) {
+	data := appdata.NewService(t.TempDir())
+	service := &RecordingFreedomService{
+		appData:  data,
+		settings: settings.NewService(data),
+	}
+	theme := settings.ThemeSageGray
+	quality := recordingprofile.QualityHigh
+	fps := 60
+	captureCursor := false
+	countdown := 5
+
+	saved, err := service.PatchSettingsPreferences(SettingsPreferencesPatchRequest{
+		Theme:            &theme,
+		RecordingQuality: &quality,
+		RecordingFPS:     &fps,
+		CaptureCursor:    &captureCursor,
+		CountdownSeconds: &countdown,
+	})
+	if err != nil {
+		t.Fatalf("PatchSettingsPreferences() error = %v", err)
+	}
+	if saved.Window.Theme != theme || saved.Recording.Quality != quality || saved.Recording.FPS != fps || saved.Recording.CaptureCursor || saved.Recording.CountdownSeconds != countdown {
+		t.Fatalf("saved preferences = theme %q recording %#v, want patched preferences", saved.Window.Theme, saved.Recording)
+	}
+	loaded, err := service.GetSettings()
+	if err != nil {
+		t.Fatalf("GetSettings() error = %v", err)
+	}
+	if loaded.Window.Theme != theme || loaded.Recording.Quality != quality || loaded.Recording.FPS != fps || loaded.Recording.CaptureCursor || loaded.Recording.CountdownSeconds != countdown {
+		t.Fatalf("loaded preferences = theme %q recording %#v, want patched preferences", loaded.Window.Theme, loaded.Recording)
+	}
+}
+
+func TestSaveSettingsDoesNotOverwritePatchedPreferences(t *testing.T) {
+	data := appdata.NewService(t.TempDir())
+	service := &RecordingFreedomService{
+		appData:  data,
+		settings: settings.NewService(data),
+	}
+	theme := settings.ThemeSunsetYellow
+	quality := recordingprofile.QualityHigh
+	fps := 60
+	if _, err := service.PatchSettingsPreferences(SettingsPreferencesPatchRequest{
+		Theme:            &theme,
+		RecordingQuality: &quality,
+		RecordingFPS:     &fps,
+	}); err != nil {
+		t.Fatalf("PatchSettingsPreferences() error = %v", err)
+	}
+	stale := settings.Default()
+	stale.Locale = settings.LocaleEN
+	stale.Window.Theme = settings.ThemeSkyBlue
+	stale.Recording.Quality = recordingprofile.QualityStandard
+	stale.Recording.FPS = 24
+	saved, err := service.SaveSettings(stale)
+	if err != nil {
+		t.Fatalf("SaveSettings(stale) error = %v", err)
+	}
+	if saved.Locale != settings.LocaleEN {
+		t.Fatalf("locale = %q, want SaveSettings to still persist unrelated settings", saved.Locale)
+	}
+	if saved.Window.Theme != theme || saved.Recording.Quality != quality || saved.Recording.FPS != fps {
+		t.Fatalf("SaveSettings overwrote patched preferences: theme %q recording %#v", saved.Window.Theme, saved.Recording)
 	}
 }
 

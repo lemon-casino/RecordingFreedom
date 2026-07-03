@@ -104,6 +104,7 @@ func Default() Settings {
 		},
 		Window: WindowSettings{
 			MinimizeToTray: true,
+			Theme:          ThemeNightTeal,
 		},
 	}
 }
@@ -135,12 +136,24 @@ func normalize(value Settings) Settings {
 	}
 	value.Camera.PIP = pip.NormalizeConfigForPreset(value.Camera.PIPPreset, value.Camera.PIP)
 	value.Camera.PIPPreset = string(value.Camera.PIP.Preset)
+	if value.Window.Theme == "" || !validTheme(value.Window.Theme) {
+		value.Window.Theme = defaults.Window.Theme
+	}
 	return value
 }
 
 func validLocale(locale Locale) bool {
 	switch locale {
 	case LocaleZhCN, LocaleEN:
+		return true
+	default:
+		return false
+	}
+}
+
+func validTheme(theme Theme) bool {
+	switch theme {
+	case ThemeNightTeal, ThemeMountainGreen, ThemeSkyBlue, ThemeSunsetYellow, ThemeInkPurple, ThemeSageGray:
 		return true
 	default:
 		return false

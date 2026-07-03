@@ -30,8 +30,11 @@ import {
   fallbackAppData,
   localeOptions,
   normalizeLocale,
+  normalizeTheme,
   sources,
   systemAudioDevices,
+  themeOptions,
+  themeSwatches,
   type AppDataInfo,
   type AppSettings,
   type AppStorageStatus,
@@ -50,10 +53,11 @@ import {
   type RecordingPreflight,
   type RecordingQuality,
   type RecordingState,
+  type ThemeCode,
   fallbackCapabilities,
   fallbackStorageStatus,
 } from './services/mockBackend'
-import {cancelRegionSelector, cancelSelectedRegion, completeRegionSelection, exportRecordingPackage, hidePipOverlay, hideRegionFrame, hideScreenIndicator, hideSettingsWindow, loadBootstrap, loadSettings, logClientEvent, openRecordingPackage, openVideoDirectory, patchAudioState, pauseRecording, preflightAudioOnlyRecording, preflightRecording, quitApplication, readPipPreviewImage, recoverRecordingPackage, restoreCapsuleWindow, resumeRecording, saveSettings, setCapsuleWindowExpanded, setCapsuleWindowHitRegions, setDataRoot, showPipOverlay, showRegionSelector, showScreenIndicator, startAudioOnlyRecording, startMicrophoneLevelMonitor, startRecording, stopMicrophoneLevelMonitor, stopRecording, subscribeAudioLevel, subscribeAudioState, subscribeRecordingStatus, subscribeRegionSelection, subscribeSettingsChanged, updatePipOverlay, updateSelectedRegion, type AudioControlState, type AudioLevelUpdate, type AudioStatePatch, type CapsuleWindowExpandDirection, type CapsuleWindowHitRegion, type PIPOverlayCamera, type PIPOverlayState, type RecordingRecovery, type RecordingStatusUpdate, type RegionSelectionSession} from './services/recorderBackend'
+import {cancelRegionSelector, cancelSelectedRegion, completeRegionSelection, exportRecordingPackage, hidePipOverlay, hideRegionFrame, hideScreenIndicator, hideSettingsWindow, loadBootstrap, loadSettings, logClientEvent, openRecordingPackage, openVideoDirectory, patchAudioState, patchSettingsPreferences, pauseRecording, preflightAudioOnlyRecording, preflightRecording, quitApplication, readPipPreviewImage, recoverRecordingPackage, restoreCapsuleWindow, resumeRecording, saveSettings, setCapsuleWindowExpanded, setCapsuleWindowHitRegions, setDataRoot, showPipOverlay, showRegionSelector, showScreenIndicator, startAudioOnlyRecording, startMicrophoneLevelMonitor, startRecording, stopMicrophoneLevelMonitor, stopRecording, subscribeAudioLevel, subscribeAudioState, subscribeRecordingStatus, subscribeRegionSelection, subscribeSettingsChanged, updatePipOverlay, updateSelectedRegion, type AudioControlState, type AudioLevelUpdate, type AudioStatePatch, type CapsuleWindowExpandDirection, type CapsuleWindowHitRegion, type PIPOverlayCamera, type PIPOverlayState, type RecordingRecovery, type RecordingStatusUpdate, type RegionSelectionSession, type SettingsPreferencesPatch} from './services/recorderBackend'
 
 const sourceIcon = {
   screen: Monitor,
@@ -269,6 +273,8 @@ type SourceSelectionMessageState = {
 }
 
 type ApplySettingsOptions = {
+  preserveRecordingSettings?: boolean
+  preserveTheme?: boolean
   preserveAudioEnabled?: boolean
   preserveAudioSelection?: boolean
   preserveCameraEnabled?: boolean
@@ -328,6 +334,7 @@ function App() {
   const [pipScale, setPipScale] = useState(pipDefaultScale)
   const [pipEdgeFeather, setPipEdgeFeather] = useState(0.16)
   const [locale, setLocale] = useState<LocaleCode>('zh-CN')
+  const [theme, setTheme] = useState<ThemeCode>('night-teal')
   const [lastPackage, setLastPackage] = useState<string>(previewPackagePath)
   const [lastBackend, setLastBackend] = useState<string>('ui-preview')
   const [lastStatusMessage, setLastStatusMessage] = useState<StatusMessageState>({key: 'waiting'})
@@ -359,7 +366,9 @@ function App() {
   const countdownTokenRef = useRef(0)
   const cameraPreviewGenerationRef = useRef(0)
   const audioPatchTokenRef = useRef(0)
+  const preferencePatchTokenRef = useRef(0)
   const localAudioIntentUntilRef = useRef(0)
+  const localPreferenceIntentUntilRef = useRef(0)
   const localCameraIntentUntilRef = useRef(0)
   const localPipIntentUntilRef = useRef(0)
   const selectedSystemAudioRef = useRef(selectedSystemAudio)
@@ -438,6 +447,7 @@ function App() {
       },
       window: {
         minimizeToTray: true,
+        theme,
       },
     }
     if (!isSettingsWindow || !persistedSettingsRef.current) return nextSettings
@@ -456,9 +466,24 @@ function App() {
       },
       window: {
         minimizeToTray: true,
+        theme,
       },
     }
-  }, [appData.rootDir, camera, captureCursor, countdownSeconds, isSettingsWindow, locale, microphone, noiseSuppression, pipEdgeFeather, pipMirror, pipPosition, pipPreset, pipScale, pipShape, recordingFPS, recordingQuality, selectedCamera, selectedMic, selectedSource.id, selectedSource.type, selectedSystemAudio, systemAudio])
+  }, [appData.rootDir, camera, captureCursor, countdownSeconds, isSettingsWindow, locale, microphone, noiseSuppression, pipEdgeFeather, pipMirror, pipPosition, pipPreset, pipScale, pipShape, recordingFPS, recordingQuality, selectedCamera, selectedMic, selectedSource.id, selectedSource.type, selectedSystemAudio, systemAudio, theme])
+  const settingsAutosaveKey = useMemo(() => JSON.stringify({
+    locale,
+    sourceId: selectedSource.id,
+    sourceType: selectedSource.type,
+    dataRootDir: appData.rootDir,
+    camera,
+    selectedCamera,
+    pipPreset,
+    pipShape,
+    pipMirror,
+    pipPosition,
+    pipScale,
+    pipEdgeFeather,
+  }), [appData.rootDir, camera, locale, pipEdgeFeather, pipMirror, pipPosition, pipPreset, pipScale, pipShape, selectedCamera, selectedSource.id, selectedSource.type])
   const capabilityRows = useMemo(() => [
     capabilities.sourceEnumeration,
     capabilities.screenRecording,
@@ -671,12 +696,78 @@ function App() {
   const markLocalAudioIntent = () => {
     localAudioIntentUntilRef.current = Date.now() + 5000
   }
+  const markLocalPreferenceIntent = () => {
+    localPreferenceIntentUntilRef.current = Date.now() + 5000
+  }
   const markLocalPipIntent = () => {
     localPipIntentUntilRef.current = Date.now() + 5000
   }
   const hasLocalAudioIntent = () => Date.now() < localAudioIntentUntilRef.current
+  const hasLocalPreferenceIntent = () => Date.now() < localPreferenceIntentUntilRef.current
   const hasLocalCameraIntent = () => Date.now() < localCameraIntentUntilRef.current
   const hasLocalPipIntent = () => Date.now() < localPipIntentUntilRef.current
+  const settingsWithPreferencePatch = (settings: AppSettings | null, patch: SettingsPreferencesPatch): AppSettings | null => {
+    if (!settings) return settings
+    return {
+      ...settings,
+      recording: {
+        ...settings.recording,
+        quality: patch.recordingQuality ?? settings.recording.quality,
+        fps: patch.recordingFps ?? settings.recording.fps,
+        captureCursor: patch.captureCursor ?? settings.recording.captureCursor,
+        countdownSeconds: patch.countdownSeconds ?? settings.recording.countdownSeconds,
+      },
+      window: {
+        ...settings.window,
+        theme: patch.theme ?? settings.window.theme,
+      },
+    }
+  }
+  const applyLocalPreferencePatch = (patch: SettingsPreferencesPatch) => {
+    if (patch.theme !== undefined) setTheme(normalizeTheme(patch.theme))
+    if (patch.recordingQuality !== undefined) setRecordingQuality(normalizeRecordingQuality(patch.recordingQuality))
+    if (patch.recordingFps !== undefined) setRecordingFPS(fpsOptions.includes(patch.recordingFps) ? patch.recordingFps : 30)
+    if (patch.captureCursor !== undefined) setCaptureCursor(patch.captureCursor)
+    if (patch.countdownSeconds !== undefined) setCountdownSeconds(countdownOptions.includes(patch.countdownSeconds) ? patch.countdownSeconds : 0)
+    currentSettingsRef.current = settingsWithPreferencePatch(currentSettingsRef.current, patch)
+    persistedSettingsRef.current = settingsWithPreferencePatch(persistedSettingsRef.current, patch)
+  }
+  const commitSettingsPreferencePatch = (patch: SettingsPreferencesPatch) => {
+    markLocalPreferenceIntent()
+    const token = preferencePatchTokenRef.current + 1
+    preferencePatchTokenRef.current = token
+    applyLocalPreferencePatch(patch)
+    void logClientEvent('settings-preferences', 'patch-request', {
+      theme: patch.theme ?? '',
+      recordingQuality: patch.recordingQuality ?? '',
+      recordingFps: patch.recordingFps ?? '',
+      captureCursor: patch.captureCursor ?? '',
+      countdownSeconds: patch.countdownSeconds ?? '',
+    })
+    void patchSettingsPreferences(patch)
+      .then((settings) => {
+        if (token !== preferencePatchTokenRef.current) return
+        localPreferenceIntentUntilRef.current = Date.now() + 3000
+        void logClientEvent('settings-preferences', 'patch-success', {
+          theme: settings.window.theme,
+          recordingQuality: settings.recording.quality,
+          recordingFps: settings.recording.fps,
+          captureCursor: settings.recording.captureCursor,
+          countdownSeconds: settings.recording.countdownSeconds,
+        })
+        applySettingsState(settings, undefined, undefined, {
+          preserveRecordingSettings: hasLocalPreferenceIntent(),
+          preserveTheme: hasLocalPreferenceIntent(),
+        })
+      })
+      .catch((error) => {
+        console.error('Failed to patch settings preferences:', error)
+        void logClientEvent('settings-preferences', 'patch-error', {}, readableError(error))
+        void loadSettings()
+          .then((settings) => applySettingsState(settings))
+          .catch((loadError) => console.error('Failed to reload settings preferences:', loadError))
+      })
+  }
   const mergeAudioIntoSettingsCache = (audio: AudioControlState) => {
     const apply = (settings: AppSettings | null): AppSettings | null => {
       if (!settings) return settings
@@ -758,25 +849,42 @@ function App() {
       })
   }
   const applySettingsState = (nextSettings: AppSettings, nextMedia?: MediaInventory, nextSources?: CaptureSource[], options: ApplySettingsOptions = {}) => {
-    const effectiveSettings = options.preservePipConfig && currentSettingsRef.current
-      ? {
-          ...nextSettings,
-          camera: {
-            ...nextSettings.camera,
-            pipPreset: currentSettingsRef.current.camera.pipPreset,
-            pip: currentSettingsRef.current.camera.pip,
-          },
-        }
-      : nextSettings
+    let effectiveSettings = nextSettings
+    if ((options.preserveRecordingSettings || options.preserveTheme || options.preservePipConfig) && currentSettingsRef.current) {
+      effectiveSettings = {
+        ...effectiveSettings,
+        recording: options.preserveRecordingSettings
+          ? currentSettingsRef.current.recording
+          : effectiveSettings.recording,
+        window: options.preserveTheme
+          ? {
+              ...effectiveSettings.window,
+              theme: currentSettingsRef.current.window.theme,
+            }
+          : effectiveSettings.window,
+        camera: options.preservePipConfig
+          ? {
+              ...effectiveSettings.camera,
+              pipPreset: currentSettingsRef.current.camera.pipPreset,
+              pip: currentSettingsRef.current.camera.pip,
+            }
+          : effectiveSettings.camera,
+      }
+    }
     persistedSettingsRef.current = effectiveSettings
     const systemAudioList = nextMedia?.systemAudio
     const microphoneList = nextMedia?.microphones
     const cameraList = nextMedia?.cameras
     setLocale(normalizeLocale(effectiveSettings.locale))
-    setRecordingQuality(normalizeRecordingQuality(effectiveSettings.recording.quality))
-    setRecordingFPS(fpsOptions.includes(effectiveSettings.recording.fps) ? effectiveSettings.recording.fps : 30)
-    setCaptureCursor(effectiveSettings.recording.captureCursor)
-    setCountdownSeconds(countdownOptions.includes(effectiveSettings.recording.countdownSeconds) ? effectiveSettings.recording.countdownSeconds : 0)
+    if (!options.preserveTheme) {
+      setTheme(normalizeTheme(effectiveSettings.window.theme))
+    }
+    if (!options.preserveRecordingSettings) {
+      setRecordingQuality(normalizeRecordingQuality(effectiveSettings.recording.quality))
+      setRecordingFPS(fpsOptions.includes(effectiveSettings.recording.fps) ? effectiveSettings.recording.fps : 30)
+      setCaptureCursor(effectiveSettings.recording.captureCursor)
+      setCountdownSeconds(countdownOptions.includes(effectiveSettings.recording.countdownSeconds) ? effectiveSettings.recording.countdownSeconds : 0)
+    }
     const nextHasAvailableMicrophone = !microphoneList || microphoneList.some((device) => device.available !== false)
     const nextSystemAudioEnabled = options.preserveAudioEnabled
       ? systemAudioRef.current
@@ -857,6 +965,10 @@ function App() {
   useEffect(() => {
     document.documentElement.lang = locale
   }, [locale])
+
+  useEffect(() => {
+    document.documentElement.dataset.theme = theme
+  }, [theme])
 
   useEffect(() => {
     selectedSystemAudioRef.current = selectedSystemAudio
@@ -1092,7 +1204,7 @@ function App() {
         .catch((error) => console.error('Failed to save settings:', error))
     }, 300)
     return () => window.clearTimeout(saveTimer)
-  }, [currentSettings, settingsLoaded])
+  }, [settingsAutosaveKey, settingsLoaded])
 
   useEffect(() => {
     if (state !== 'recording') {
@@ -1125,6 +1237,7 @@ function App() {
 
   useEffect(() => subscribeSettingsChanged((settings) => {
     const incomingCameraOff = !settings.camera.enabled
+    const preservePreferences = hasLocalPreferenceIntent()
     const preserveAudioEnabled = !isSettingsWindow && hasLocalAudioIntent()
     const preserveCameraEnabled = !isSettingsWindow && hasLocalCameraIntent()
     const preserveAudioSelection = preserveAudioEnabled
@@ -1134,6 +1247,10 @@ function App() {
       systemAudio: settings.audio.system,
       microphone: settings.audio.microphone,
       noiseSuppression: settings.audio.noiseSuppression,
+      recordingQuality: settings.recording.quality,
+      recordingFps: settings.recording.fps,
+      theme: settings.window.theme,
+      preservePreferences,
       preserveAudioEnabled,
       preserveAudioSelection,
       cameraEnabled: settings.camera.enabled,
@@ -1146,6 +1263,8 @@ function App() {
       stopCameraPreview('settings-camera-off')
     }
     applySettingsState(settings, undefined, undefined, {
+      preserveRecordingSettings: preservePreferences,
+      preserveTheme: preservePreferences,
       preserveAudioEnabled,
       preserveAudioSelection,
       preserveCameraEnabled,
@@ -1681,6 +1800,13 @@ function App() {
           options={localeOptions.map((code) => ({value: code, label: copy.localeNames[code]}))}
           onChange={(value) => setLocale(normalizeLocale(value))}
         />
+        <SettingSelect
+          title={copy.settings.theme}
+          value={theme}
+          options={themeOptions.map((code) => ({value: code, label: copy.themeNames[code], swatch: themeSwatches[code]}))}
+          detail={copy.settings.themeDetail}
+          onChange={(value) => commitSettingsPreferencePatch({theme: normalizeTheme(value)})}
+        />
         <SettingLine
           title={copy.settings.recordingBackend}
           value={lastBackend}
@@ -1717,20 +1843,20 @@ function App() {
           value={recordingQuality}
           options={recordingQualityOptions.map((quality) => ({value: quality, label: copy.recordingQualityLabels[quality]}))}
           detail={copy.settings.qualityDetail}
-          onChange={(value) => setRecordingQuality(normalizeRecordingQuality(value))}
+          onChange={(value) => commitSettingsPreferencePatch({recordingQuality: normalizeRecordingQuality(value)})}
         />
         <SettingSelect
           title={copy.settings.fps}
           value={String(recordingFPS)}
           options={fpsOptions.map((fps) => ({value: String(fps), label: `${fps} ${copy.settings.fps}`}))}
-          onChange={(value) => setRecordingFPS(Number(value))}
+          onChange={(value) => commitSettingsPreferencePatch({recordingFps: Number(value)})}
         />
-        <SettingToggle title={copy.settings.captureCursor} checked={captureCursor} onChange={setCaptureCursor} />
+        <SettingToggle title={copy.settings.captureCursor} checked={captureCursor} onChange={(value) => commitSettingsPreferencePatch({captureCursor: value})} />
         <SettingSelect
           title={copy.settings.countdown}
           value={String(countdownSeconds)}
           options={countdownOptions.map((seconds) => ({value: String(seconds), label: seconds === 0 ? copy.common.off : `${seconds}s`}))}
-          onChange={(value) => setCountdownSeconds(Number(value))}
+          onChange={(value) => commitSettingsPreferencePatch({countdownSeconds: Number(value)})}
         />
         <SettingLine
           title={copy.settings.recovery}
@@ -2277,6 +2403,7 @@ function PIPOverlayWindow() {
   const [cameraError, setCameraError] = useState<string | null>(null)
   const [previewImageDataUrl, setPreviewImageDataUrl] = useState<string | null>(null)
   const [overlayLocale, setOverlayLocale] = useState<LocaleCode>(navigator.language.toLowerCase().startsWith('zh') ? 'zh-CN' : 'en')
+  const [overlayTheme, setOverlayTheme] = useState<ThemeCode>('night-teal')
   const copy = copyByLocale[overlayLocale]
   const logPipCameraEvent = (event: string, fields: Record<string, unknown> = {}) => {
     void logClientEvent('pip-camera', event, fields)
@@ -2368,13 +2495,21 @@ function PIPOverlayWindow() {
 
   useEffect(() => {
     void loadSettings()
-      .then((settings) => setOverlayLocale(normalizeLocale(settings.locale)))
+      .then((settings) => {
+        setOverlayLocale(normalizeLocale(settings.locale))
+        setOverlayTheme(normalizeTheme(settings.window.theme))
+      })
       .catch((error) => console.info('Using PIP overlay language fallback:', error))
   }, [])
 
   useEffect(() => subscribeSettingsChanged((settings) => {
     setOverlayLocale(normalizeLocale(settings.locale))
+    setOverlayTheme(normalizeTheme(settings.window.theme))
   }), [])
+
+  useEffect(() => {
+    document.documentElement.dataset.theme = overlayTheme
+  }, [overlayTheme])
 
   useEffect(() => {
     const onState = (event: Event) => {
@@ -3022,6 +3157,7 @@ function RegionOverlayWindow() {
   const [invalid, setInvalid] = useState(false)
   const shellRef = useRef<HTMLElement | null>(null)
   const [overlayLocale, setOverlayLocale] = useState<LocaleCode>(navigator.language.toLowerCase().startsWith('zh') ? 'zh-CN' : 'en')
+  const [overlayTheme, setOverlayTheme] = useState<ThemeCode>('night-teal')
   const copy = copyByLocale[overlayLocale]
   const minimumWidth = session?.minimumWidth ?? 64
   const minimumHeight = session?.minimumHeight ?? 64
@@ -3049,13 +3185,21 @@ function RegionOverlayWindow() {
 
   useEffect(() => {
     void loadSettings()
-      .then((settings) => setOverlayLocale(normalizeLocale(settings.locale)))
+      .then((settings) => {
+        setOverlayLocale(normalizeLocale(settings.locale))
+        setOverlayTheme(normalizeTheme(settings.window.theme))
+      })
       .catch((error) => console.info('Using region overlay language fallback:', error))
   }, [])
 
   useEffect(() => subscribeSettingsChanged((settings) => {
     setOverlayLocale(normalizeLocale(settings.locale))
+    setOverlayTheme(normalizeTheme(settings.window.theme))
   }), [])
+
+  useEffect(() => {
+    document.documentElement.dataset.theme = overlayTheme
+  }, [overlayTheme])
 
   useEffect(() => {
     const onSession = (event: Event) => {
@@ -3240,6 +3384,7 @@ type SelectMenuOption = {
   value: string
   label: string
   disabled?: boolean
+  swatch?: string
 }
 
 function SelectMenu({
@@ -3356,7 +3501,10 @@ function SelectMenu({
           setOpen((value) => !value)
         }}
       >
-        <span>{selected?.label ?? ''}</span>
+        <span className="select-menu-label">
+          {selected?.swatch && <i className="select-menu-swatch" style={{background: selected.swatch}} aria-hidden="true" />}
+          <span>{selected?.label ?? ''}</span>
+        </span>
         <ChevronDown size={16} />
       </button>
       {open && (
@@ -3378,7 +3526,10 @@ function SelectMenu({
                 selectOption(option)
               }}
             >
-              <span>{option.label}</span>
+              <span className="select-menu-label">
+                {option.swatch && <i className="select-menu-swatch" style={{background: option.swatch}} aria-hidden="true" />}
+                <span>{option.label}</span>
+              </span>
               {option.value === value && <Check size={15} />}
             </button>
           ))}
@@ -3645,7 +3796,7 @@ function SettingSelect({
 }: {
   title: string
   value: string
-  options: Array<{value: string; label: string}>
+  options: SelectMenuOption[]
   detail?: string
   onChange: (value: string) => void
 }) {

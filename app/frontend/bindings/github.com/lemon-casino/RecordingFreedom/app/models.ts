@@ -185,3 +185,11 @@ export interface ScreenIndicatorResult {
     "sourceBounds": RegionRect;
     "windowBounds": RegionRect;
 }
+
+export interface SettingsPreferencesPatchRequest {
+    "theme"?: settings$0.Theme | null;
+    "recordingQuality"?: string | null;
+    "recordingFps"?: number | null;
+    "captureCursor"?: boolean | null;
+    "countdownSeconds"?: number | null;
+}

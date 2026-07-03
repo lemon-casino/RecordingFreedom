@@ -2,6 +2,7 @@ export type CaptureSourceType = 'screen' | 'all-screens' | 'region' | 'window' |
 export type RecordingMode = 'video' | 'audio'
 export type RecordingState = 'idle' | 'preparing' | 'recording' | 'paused' | 'stopping' | 'ready' | 'failed'
 export type LocaleCode = 'zh-CN' | 'en'
+export type ThemeCode = 'night-teal' | 'mountain-green' | 'sky-blue' | 'sunset-yellow' | 'ink-purple' | 'sage-gray'
 export type CaptureCapabilityStatus = 'available' | 'queued' | 'blocked' | 'unsupported'
 export type CaptureCapabilityPermission = 'not-required' | 'unknown' | 'screen-recording' | 'microphone' | 'camera'
 export type PIPPreset = 'off' | 'bottom-right' | 'bottom-left' | 'free'
@@ -141,6 +142,7 @@ export type AppSettings = {
   }
   window: {
     minimizeToTray: boolean
+    theme: ThemeCode
   }
   updatedAt?: string
 }
@@ -414,9 +416,22 @@ export const fallbackStorageStatus: AppStorageStatus = {
 }
 
 export const localeOptions: LocaleCode[] = ['zh-CN', 'en']
+export const themeOptions: ThemeCode[] = ['night-teal', 'mountain-green', 'sky-blue', 'sunset-yellow', 'ink-purple', 'sage-gray']
+export const themeSwatches: Record<ThemeCode, string> = {
+  'night-teal': '#11b7a7',
+  'mountain-green': '#57c785',
+  'sky-blue': '#38bdf8',
+  'sunset-yellow': '#f0b84b',
+  'ink-purple': '#a78bfa',
+  'sage-gray': '#a7b3a1',
+}
 
 export function normalizeLocale(value: unknown): LocaleCode {
   return value === 'en' || value === 'zh-CN' ? value : 'zh-CN'
+}
+
+export function normalizeTheme(value: unknown): ThemeCode {
+  return themeOptions.includes(value as ThemeCode) ? value as ThemeCode : 'night-teal'
 }
 
 export const microphoneDevices = mediaInventory.microphones
@@ -461,6 +476,7 @@ export const defaultSettings: AppSettings = {
   },
   window: {
     minimizeToTray: true,
+    theme: 'night-teal',
   },
 }
 
