@@ -1,6 +1,8 @@
 package main
 
 import (
+	"context"
+	"encoding/binary"
 	"encoding/json"
 	"os"
 	"path/filepath"
@@ -8,6 +10,7 @@ import (
 	"testing"
 
 	"github.com/lemon-casino/RecordingFreedom/app/internal/appdata"
+	"github.com/lemon-casino/RecordingFreedom/app/internal/audio"
 	"github.com/lemon-casino/RecordingFreedom/app/internal/recording"
 	"github.com/lemon-casino/RecordingFreedom/app/internal/recpackage"
 )
@@ -195,8 +198,77 @@ func mustJSONLine(t *testing.T, line string) map[string]any {
 func newAnnotationOverlayTestService(t *testing.T) *RecordingFreedomService {
 	t.Helper()
 	data := appdata.NewService(t.TempDir())
+	audioSession := &annotationOverlayAudioSession{}
 	return &RecordingFreedomService{
-		appData:  data,
-		recorder: recording.NewServiceWithBackend(data, recording.NewMockBackend(recpackage.NewService())),
+		appData: data,
+		recorder: recording.NewServiceWithOptions(data, recording.ServiceOptions{
+			Backend: recording.NewMockBackend(recpackage.NewService()),
+			AudioOnlyRuntimeOptions: recording.AudioOnlyRuntimeOptions{
+				AudioSessionFactory: func(config audio.CaptureConfig, suppressor audio.NoiseSuppressor) (recording.NativeAudioSession, error) {
+					if suppressor != nil {
+						t.Fatalf("suppressor = %#v, want nil", suppressor)
+					}
+					audioSession.path = config.MicrophoneAudioPath
+					return audioSession, nil
+				},
+				PostStopProcessor: func(runtime *recording.AudioOnlyRuntime) error {
+					return os.WriteFile(runtime.Plan.AudioOnlyPath, annotationOverlayMinimalMP4("soun"), 0o644)
+				},
+			},
+		}),
 	}
+}
+
+type annotationOverlayAudioSession struct {
+	path string
+}
+
+func (s *annotationOverlayAudioSession) Start(context.Context) error {
+	return nil
+}
+
+func (s *annotationOverlayAudioSession) Pause() error {
+	return nil
+}
+
+func (s *annotationOverlayAudioSession) Resume() error {
+	return nil
+}
+
+func (s *annotationOverlayAudioSession) Stop() error {
+	if strings.TrimSpace(s.path) == "" {
+		return nil
+	}
+	return os.WriteFile(s.path, make([]byte, 64), 0o644)
+}
+
+func (s *annotationOverlayAudioSession) Diagnostics() audio.Diagnostics {
+	return audio.Diagnostics{
+		Backend: recording.BackendAudioOnlyNative,
+		Microphone: audio.StreamDiagnostics{
+			Enabled:        true,
+			SampleRate:     audio.RNNoiseSampleRate,
+			SamplesWritten: 48000,
+			EndOffsetMs:    1000,
+			DurationMs:     1000,
+		},
+	}
+}
+
+func annotationOverlayMinimalMP4(handlerType string) []byte {
+	payload := make([]byte, 0, 12)
+	payload = append(payload, 0, 0, 0, 0)
+	payload = append(payload, 0, 0, 0, 0)
+	payload = append(payload, []byte(handlerType)...)
+	data := annotationOverlayMP4Box("ftyp", []byte("isom0000"))
+	data = append(data, annotationOverlayMP4Box("moov", annotationOverlayMP4Box("trak", annotationOverlayMP4Box("mdia", annotationOverlayMP4Box("hdlr", payload))))...)
+	return data
+}
+
+func annotationOverlayMP4Box(kind string, payload []byte) []byte {
+	box := make([]byte, 8+len(payload))
+	binary.BigEndian.PutUint32(box[0:4], uint32(len(box)))
+	copy(box[4:8], []byte(kind))
+	copy(box[8:], payload)
+	return box
 }

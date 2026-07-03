@@ -24,15 +24,14 @@ type Service struct {
 	pauseStartedAt   time.Time
 }
 
+type ServiceOptions struct {
+	Backend                 Backend
+	AudioOnlyRuntimeOptions AudioOnlyRuntimeOptions
+}
+
 func NewService(appData *appdata.Service) *Service {
 	packages := recpackage.NewService()
-	return &Service{
-		appData:          appData,
-		packages:         packages,
-		backend:          DefaultBackend(packages),
-		audioOnlyBackend: NewAudioOnlyRuntimeBackend(packages, AudioOnlyRuntimeOptions{}),
-		state:            StateIdle,
-	}
+	return newService(appData, packages, DefaultBackend(packages), AudioOnlyRuntimeOptions{})
 }
 
 func NewServiceWithBackend(appData *appdata.Service, backend Backend) *Service {
@@ -40,11 +39,30 @@ func NewServiceWithBackend(appData *appdata.Service, backend Backend) *Service {
 	if backend == nil {
 		backend = NewMockBackend(packages)
 	}
+	return newService(appData, packages, backend, AudioOnlyRuntimeOptions{})
+}
+
+func NewServiceWithOptions(appData *appdata.Service, options ServiceOptions) *Service {
+	packages := recpackage.NewService()
+	backend := options.Backend
+	if backend == nil {
+		backend = DefaultBackend(packages)
+	}
+	return newService(appData, packages, backend, options.AudioOnlyRuntimeOptions)
+}
+
+func newService(appData *appdata.Service, packages *recpackage.Service, backend Backend, audioOnlyOptions AudioOnlyRuntimeOptions) *Service {
+	if packages == nil {
+		packages = recpackage.NewService()
+	}
+	if backend == nil {
+		backend = DefaultBackend(packages)
+	}
 	return &Service{
 		appData:          appData,
 		packages:         packages,
 		backend:          backend,
-		audioOnlyBackend: NewAudioOnlyRuntimeBackend(packages, AudioOnlyRuntimeOptions{}),
+		audioOnlyBackend: NewAudioOnlyRuntimeBackend(packages, audioOnlyOptions),
 		state:            StateIdle,
 	}
 }
