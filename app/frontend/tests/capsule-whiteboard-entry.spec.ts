@@ -7,6 +7,7 @@ test('capsule whiteboard opens board before recording and annotation during vide
 
   const whiteboardButton = page.getByRole('button', {name: 'Open whiteboard'})
   await expect(whiteboardButton).toBeVisible()
+  await expect(whiteboardButton.getByText('Board')).toBeVisible()
 
   await whiteboardButton.click()
   await expectWhiteboardLaunch(page, 'whiteboard', '/#/whiteboard')
@@ -56,11 +57,19 @@ test('capsule whiteboard remains available as a board during audio recording', a
   await expect(whiteboardButton).toHaveAttribute('aria-pressed', 'true')
 })
 
-async function openRecorderShell(page: Page, options: {microphone?: boolean; systemAudio?: boolean} = {}) {
-  await page.addInitScript(({settingsKey, microphone, systemAudio}) => {
+test('capsule shows a labeled whiteboard entry before recording in Chinese', async ({page}) => {
+  await openRecorderShell(page, {locale: 'zh-CN'})
+
+  const whiteboardButton = page.getByRole('button', {name: '打开画板'})
+  await expect(whiteboardButton).toBeVisible()
+  await expect(whiteboardButton.getByText('画板')).toBeVisible()
+})
+
+async function openRecorderShell(page: Page, options: {locale?: 'zh-CN' | 'en'; microphone?: boolean; systemAudio?: boolean} = {}) {
+  await page.addInitScript(({settingsKey, locale, microphone, systemAudio}) => {
     window.localStorage.setItem(settingsKey, JSON.stringify({
       schemaVersion: 1,
-      locale: 'en',
+      locale,
       source: {lastSourceType: 'screen'},
       storage: {dataRootDir: 'browser-preview'},
       recording: {
@@ -112,7 +121,7 @@ async function openRecorderShell(page: Page, options: {microphone?: boolean; sys
       }
       return {focus: () => undefined} as Window
     }) as typeof window.open
-  }, {settingsKey: browserSettingsKey, microphone: options.microphone === true, systemAudio: options.systemAudio === true})
+  }, {settingsKey: browserSettingsKey, locale: options.locale ?? 'en', microphone: options.microphone === true, systemAudio: options.systemAudio === true})
   await page.goto('/')
 }
 

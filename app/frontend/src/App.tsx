@@ -2254,6 +2254,7 @@ function App() {
             onClick={openWhiteboard}
           >
             <PenLine size={18} />
+            <span className="whiteboard-label">{copy.whiteboard.open}</span>
           </button>
 
           <div className="time-chip" aria-live="polite">
