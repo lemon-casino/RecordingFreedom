@@ -122,6 +122,7 @@ func (s *Service) Plan(req Request) (Plan, error) {
 		}
 		plan.AnnotationInputPath = annotationInput
 		plan.AnnotationsVisible = true
+		plan.AnnotationRect = annotationOverlayRect(manifest)
 		eventsPath, timeline, warnings, err := s.annotationTimeline(packageDir, manifest.Annotations, req.PrepareAnnotationAssets, annotationCanvasSize(manifest, canvas))
 		if err != nil {
 			return Plan{}, err
@@ -664,4 +665,25 @@ func annotationCanvasSize(manifest recpackage.Manifest, fallback pip.Size) pip.S
 		return fallback
 	}
 	return canvasFromManifest(manifest)
+}
+
+func annotationOverlayRect(manifest recpackage.Manifest) pip.Rect {
+	if manifest.Annotations == nil || manifest.Annotations.Target.Geometry == nil ||
+		manifest.Annotations.Target.Geometry.Width <= 0 || manifest.Annotations.Target.Geometry.Height <= 0 {
+		return pip.Rect{Visible: false}
+	}
+	target := manifest.Annotations.Target.Geometry
+	x := 0
+	y := 0
+	if manifest.Source.Geometry != nil {
+		x = target.X - manifest.Source.Geometry.X
+		y = target.Y - manifest.Source.Geometry.Y
+	}
+	return pip.Rect{
+		X:       x,
+		Y:       y,
+		Width:   target.Width,
+		Height:  target.Height,
+		Visible: true,
+	}
 }

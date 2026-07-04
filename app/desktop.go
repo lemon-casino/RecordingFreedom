@@ -88,19 +88,20 @@ func createSettingsWindow(app *application.App) *application.WebviewWindow {
 
 func createWhiteboardWindow(app *application.App) *application.WebviewWindow {
 	window := app.Window.NewWithOptions(application.WebviewWindowOptions{
-		Name:          "whiteboard",
-		Title:         "RecordingFreedom Whiteboard",
-		Width:         1120,
-		Height:        760,
-		MinWidth:      760,
-		MinHeight:     520,
-		Hidden:        true,
-		Frameless:     true,
-		AlwaysOnTop:   true,
-		HideOnEscape:  true,
-		DisableResize: false,
+		Name:           "whiteboard",
+		Title:          "RecordingFreedom Whiteboard",
+		Width:          1120,
+		Height:         760,
+		MinWidth:       760,
+		MinHeight:      520,
+		Hidden:         true,
+		Frameless:      true,
+		AlwaysOnTop:    true,
+		HideOnEscape:   true,
+		DisableResize:  false,
+		BackgroundType: application.BackgroundTypeTransparent,
 		Mac: application.MacWindow{
-			Backdrop: application.MacBackdropTranslucent,
+			Backdrop: application.MacBackdropTransparent,
 			TitleBar: application.MacTitleBar{
 				AppearsTransparent: true,
 				Hide:               true,
@@ -112,9 +113,10 @@ func createWhiteboardWindow(app *application.App) *application.WebviewWindow {
 			DisableFramelessWindowDecorations: true,
 		},
 		Linux: application.LinuxWindow{
-			Icon: appIcon,
+			Icon:                appIcon,
+			WindowIsTranslucent: true,
 		},
-		BackgroundColour: application.NewRGB(11, 15, 19),
+		BackgroundColour: application.NewRGBA(0, 0, 0, 0),
 		URL:              "/#/whiteboard",
 	})
 

@@ -32,6 +32,7 @@ type Plan struct {
 	AnnotationRenderMode    string                       `json:"annotationRenderMode,omitempty"`
 	AnnotationElementScenes []AnnotationElementScenePlan `json:"annotationElementScenes,omitempty"`
 	AnnotationSummary       *AnnotationTimelineSummary   `json:"annotationSummary,omitempty"`
+	AnnotationRect          pip.Rect                     `json:"annotationRect,omitempty"`
 	AnnotationsVisible      bool                         `json:"annotationsVisible"`
 	PIPPreset               string                       `json:"pipPreset"`
 	PIPConfig               pip.Config                   `json:"pipConfig"`

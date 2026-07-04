@@ -317,6 +317,7 @@ export type RegionSelectionSession = {
   minimumWidth: number
   minimumHeight: number
   displayCount: number
+  purpose?: 'capture' | 'annotation'
 }
 
 export type RegionSelectionResult = {
@@ -815,6 +816,33 @@ export async function showAnnotationOverlay(): Promise<AnnotationOverlayState> {
     emitBrowserWhiteboardVisibility({visible: true, mode: 'annotation'})
     const popup = window.open('/#/annotation-overlay', 'recordingfreedom-annotation-overlay', 'width=1280,height=720')
     popup?.focus()
+    return browserAnnotationOverlayState()
+  }
+}
+
+export async function showAnnotationRegionSelector(): Promise<RegionSelectionSession> {
+  try {
+    return fromBoundRegionSelectionSession(await RecordingFreedomService.ShowAnnotationRegionSelector())
+  } catch (error) {
+    if (isWailsDesktopRuntime()) throw error
+    console.info('Using browser annotation region selector fallback:', error)
+    return {
+      id: `browser-annotation-region-${Date.now()}`,
+      bounds: {x: 0, y: 0, width: window.innerWidth, height: window.innerHeight},
+      minimumWidth: 64,
+      minimumHeight: 64,
+      displayCount: 1,
+      purpose: 'annotation',
+    }
+  }
+}
+
+export async function completeAnnotationRegionSelection(request: RegionSelectionSession['bounds']): Promise<AnnotationOverlayState> {
+  try {
+    return fromBoundAnnotationOverlayState(await RecordingFreedomService.CompleteAnnotationRegionSelection(toBoundRegionSelectionRequest(request)))
+  } catch (error) {
+    if (isWailsDesktopRuntime()) throw error
+    console.info('Using browser annotation region completion fallback:', error)
     return browserAnnotationOverlayState()
   }
 }
@@ -1420,6 +1448,7 @@ function fromBoundRegionSelectionSession(session: BoundRegionSelectionSession): 
     minimumWidth: session.minimumWidth,
     minimumHeight: session.minimumHeight,
     displayCount: session.displayCount,
+    purpose: session.purpose === 'annotation' ? 'annotation' : 'capture',
   }
 }
 

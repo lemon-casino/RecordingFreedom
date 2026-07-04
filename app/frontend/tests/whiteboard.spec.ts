@@ -56,6 +56,7 @@ test.describe('whiteboard capsule localization and themes', () => {
       await expect(page.locator('html')).toHaveAttribute('data-theme', scenario.theme)
       await expect(page.locator('.whiteboard-shell')).toHaveAttribute('data-theme', scenario.theme)
       await expectNoHorizontalOverflow(page)
+      await expectRoundedWhiteboardCorners(page)
 
       const screenshot = await page.locator('.whiteboard-capsule').screenshot()
       expect(screenshot.length).toBeGreaterThan(10_000)
@@ -129,4 +130,48 @@ async function expectNoHorizontalOverflow(page: Page) {
   expect(overflow.body).toBeLessThanOrEqual(1)
   expect(overflow.root).toBeLessThanOrEqual(1)
   expect(overflow.capsule).toBeLessThanOrEqual(1)
+}
+
+async function expectRoundedWhiteboardCorners(page: Page) {
+  await expect(page.locator('.whiteboard-canvas .excalidraw')).toBeVisible()
+
+  const corners = await page.evaluate(() => {
+    const read = (selector: string) => {
+      const element = document.querySelector(selector)
+      if (!element) return null
+      const style = window.getComputedStyle(element)
+      return {
+        background: style.backgroundColor,
+        borderTopLeftRadius: style.borderTopLeftRadius,
+        borderTopRightRadius: style.borderTopRightRadius,
+        borderBottomRightRadius: style.borderBottomRightRadius,
+        borderBottomLeftRadius: style.borderBottomLeftRadius,
+        clipPath: style.clipPath,
+        overflowX: style.overflowX,
+        overflowY: style.overflowY,
+      }
+    }
+
+    return {
+      body: read('body'),
+      shell: read('.whiteboard-shell'),
+      canvas: read('.whiteboard-canvas'),
+      excalidraw: read('.whiteboard-canvas .excalidraw'),
+    }
+  })
+
+  expect(corners.body?.background).toBe('rgba(0, 0, 0, 0)')
+  expect(corners.shell?.borderTopLeftRadius).toBe('24px')
+  expect(corners.shell?.borderTopRightRadius).toBe('24px')
+  expect(corners.shell?.borderBottomRightRadius).toBe('24px')
+  expect(corners.shell?.borderBottomLeftRadius).toBe('24px')
+  expect(corners.shell?.overflowX).toBe('hidden')
+  expect(corners.canvas?.borderTopLeftRadius).toBe('22px')
+  expect(corners.canvas?.borderTopRightRadius).toBe('22px')
+  expect(corners.canvas?.borderBottomRightRadius).toBe('22px')
+  expect(corners.canvas?.borderBottomLeftRadius).toBe('22px')
+  expect(corners.canvas?.clipPath).not.toBe('none')
+  expect(corners.canvas?.overflowX).toBe('hidden')
+  expect(corners.excalidraw?.borderTopLeftRadius).toBe('22px')
+  expect(corners.excalidraw?.overflowX).toBe('hidden')
 }

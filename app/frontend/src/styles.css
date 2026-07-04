@@ -1690,7 +1690,7 @@ input {
 
 body.rf-whiteboard-window {
   overflow: hidden;
-  background: var(--settings-bg);
+  background: transparent;
   user-select: none;
 }
 
@@ -1723,6 +1723,8 @@ body.rf-annotation-render-window {
 .whiteboard-loading {
   display: grid;
   place-items: center;
+  overflow: hidden;
+  border-radius: 24px;
   background: var(--settings-bg);
 }
 
@@ -1744,8 +1746,12 @@ body.rf-annotation-render-window {
   grid-template-rows: auto minmax(0, 1fr) auto;
   gap: 8px;
   padding: 10px;
-  background: transparent;
+  border-radius: 24px;
+  background: var(--settings-bg);
+  overflow: hidden;
+  isolation: isolate;
   --wails-draggable: drag;
+  --whiteboard-canvas-radius: 22px;
 }
 
 .whiteboard-capsule {
@@ -1936,16 +1942,27 @@ body.rf-annotation-render-window {
   min-height: 0;
   overflow: hidden;
   border: 1px solid var(--line);
-  border-radius: 18px;
+  border-radius: var(--whiteboard-canvas-radius);
   background: rgba(12, 16, 21, 0.92);
   box-shadow: var(--shadow-panel);
+  clip-path: inset(0 round var(--whiteboard-canvas-radius));
+  contain: paint;
   --wails-draggable: no-drag;
 }
 
 .whiteboard-canvas .excalidraw {
+  width: 100%;
   height: 100%;
   min-height: 0;
+  overflow: hidden;
+  border-radius: inherit;
+  background: inherit;
   --wails-draggable: no-drag;
+}
+
+.whiteboard-canvas .excalidraw .App {
+  overflow: hidden;
+  border-radius: inherit;
 }
 
 .whiteboard-status {

@@ -115,6 +115,8 @@ type RecordingFreedomService struct {
 	whiteboardVisible     bool
 	annotationMu          sync.Mutex
 	annotationToken       uint64
+	annotationSessionID   string
+	annotationRegionDIP   application.Rect
 	annotationRenderMu    sync.Mutex
 	annotationRenderBatch *annotationRenderBatch
 	regionMu              sync.Mutex

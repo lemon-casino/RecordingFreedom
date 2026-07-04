@@ -130,6 +130,29 @@ func TestFFmpegArgsAnnotationStartsAtTimelineOffset(t *testing.T) {
 	}
 }
 
+func TestFFmpegArgsAnnotationUsesSelectedRegionOffset(t *testing.T) {
+	plan := testPlan(t, false)
+	annotationPath := filepath.Join(plan.PackageDir, "annotations", "exports", "annotation.png")
+	if err := os.MkdirAll(filepath.Dir(annotationPath), 0o755); err != nil {
+		t.Fatalf("mkdir annotations: %v", err)
+	}
+	if err := os.WriteFile(annotationPath, []byte("png media"), 0o644); err != nil {
+		t.Fatalf("write annotation: %v", err)
+	}
+	plan.AnnotationInputPath = annotationPath
+	plan.AnnotationRect = pip.Rect{X: 120, Y: 100, Width: 640, Height: 360, Visible: true}
+	plan.AnnotationsVisible = true
+
+	args, err := FFmpegArgs(plan, filepath.Join(plan.PackageDir, "exports", "tmp.mp4"), Options{})
+	if err != nil {
+		t.Fatalf("FFmpegArgs(annotation offset) error = %v", err)
+	}
+	filter := argAfter(args, "-filter_complex")
+	if !strings.Contains(filter, "[base][annotation]overlay=120:100:eof_action=pass:repeatlast=1") {
+		t.Fatalf("filter = %q, want annotation overlay at selected region offset", filter)
+	}
+}
+
 func TestFFmpegArgsAnnotationSnapshotSegments(t *testing.T) {
 	plan := testPlan(t, false)
 	firstSnapshot := filepath.Join(plan.PackageDir, "annotations", "snapshots", "annotation-000001.png")

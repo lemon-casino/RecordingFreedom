@@ -13,6 +13,7 @@ import (
 	"github.com/lemon-casino/RecordingFreedom/app/internal/audio"
 	"github.com/lemon-casino/RecordingFreedom/app/internal/recording"
 	"github.com/lemon-casino/RecordingFreedom/app/internal/recpackage"
+	"github.com/wailsapp/wails/v3/pkg/application"
 )
 
 func TestAnnotationOverlayStateUsesActiveVideoRecordingGeometry(t *testing.T) {
@@ -24,6 +25,7 @@ func TestAnnotationOverlayStateUsesActiveVideoRecordingGeometry(t *testing.T) {
 		DisplayIndex: 2,
 		NativeID:     "display-2",
 	}
+	annotationBounds := applicationRect(-1820, 148, 640, 360)
 	for _, tc := range []struct {
 		name       string
 		sourceID   string
@@ -45,6 +47,7 @@ func TestAnnotationOverlayStateUsesActiveVideoRecordingGeometry(t *testing.T) {
 			if err != nil {
 				t.Fatalf("StartRecording() error = %v", err)
 			}
+			service.setAnnotationRegionDIP(session.ID, annotationBounds)
 
 			state, err := service.annotationOverlayState()
 			if err != nil {
@@ -53,19 +56,39 @@ func TestAnnotationOverlayStateUsesActiveVideoRecordingGeometry(t *testing.T) {
 			if state.PackageDir != session.PackageDir || state.ManifestPath != session.Manifest {
 				t.Fatalf("state package = %q/%q, want %q/%q", state.PackageDir, state.ManifestPath, session.PackageDir, session.Manifest)
 			}
-			if state.WindowBounds.X != geometry.X || state.WindowBounds.Y != geometry.Y || state.WindowBounds.Width != geometry.Width || state.WindowBounds.Height != geometry.Height {
-				t.Fatalf("window bounds = %#v, want recording geometry %#v", state.WindowBounds, geometry)
+			if state.WindowBounds.X != annotationBounds.X || state.WindowBounds.Y != annotationBounds.Y || state.WindowBounds.Width != annotationBounds.Width || state.WindowBounds.Height != annotationBounds.Height {
+				t.Fatalf("window bounds = %#v, want annotation geometry %#v", state.WindowBounds, annotationBounds)
 			}
-			if state.CanvasBounds.X != 0 || state.CanvasBounds.Y != 0 || state.CanvasBounds.Width != geometry.Width || state.CanvasBounds.Height != geometry.Height {
-				t.Fatalf("canvas bounds = %#v, want local canvas %dx%d", state.CanvasBounds, geometry.Width, geometry.Height)
+			if state.CanvasBounds.X != 0 || state.CanvasBounds.Y != 0 || state.CanvasBounds.Width != annotationBounds.Width || state.CanvasBounds.Height != annotationBounds.Height {
+				t.Fatalf("canvas bounds = %#v, want local canvas %dx%d", state.CanvasBounds, annotationBounds.Width, annotationBounds.Height)
 			}
-			if state.Target.Type != string(tc.sourceType) || state.Target.ID != tc.sourceID || state.Target.Geometry == nil {
-				t.Fatalf("target = %#v, want source type/id with geometry", state.Target)
+			if state.Target.Type != annotationRegionTargetType || state.Target.ID != annotationRegionTargetID || state.Target.Geometry == nil {
+				t.Fatalf("target = %#v, want selected annotation target", state.Target)
 			}
-			if got := *state.Target.Geometry; got.X != geometry.X || got.Y != geometry.Y || got.Width != geometry.Width || got.Height != geometry.Height || got.DisplayIndex != geometry.DisplayIndex || got.NativeID != geometry.NativeID {
-				t.Fatalf("target geometry = %#v, want %#v", got, geometry)
+			if got := *state.Target.Geometry; got.X != annotationBounds.X || got.Y != annotationBounds.Y || got.Width != annotationBounds.Width || got.Height != annotationBounds.Height {
+				t.Fatalf("target geometry = %#v, want %#v", got, annotationBounds)
 			}
 		})
+	}
+}
+
+func TestAnnotationOverlayStateRequiresSelectedAnnotationRegion(t *testing.T) {
+	service := newAnnotationOverlayTestService(t)
+	if _, err := service.recorder.StartRecording(recording.StartRequest{
+		SourceID:   "screen:primary",
+		SourceType: recording.SourceScreen,
+		SourceGeometry: &recording.SourceGeometry{
+			X:      0,
+			Y:      0,
+			Width:  1280,
+			Height: 720,
+		},
+	}); err != nil {
+		t.Fatalf("StartRecording() error = %v", err)
+	}
+
+	if _, err := service.annotationOverlayState(); err == nil || !strings.Contains(err.Error(), "selected annotation region") {
+		t.Fatalf("annotationOverlayState() error = %v, want selected annotation region error", err)
 	}
 }
 
@@ -84,13 +107,18 @@ func TestAnnotationOverlayStateAllowsPausedVideoRecording(t *testing.T) {
 	if _, err := service.recorder.Pause(); err != nil {
 		t.Fatalf("Pause() error = %v", err)
 	}
+	session, ok := service.recorder.ActiveSession()
+	if !ok {
+		t.Fatal("ActiveSession() = false")
+	}
+	service.setAnnotationRegionDIP(session.ID, applicationRect(10, 20, 640, 360))
 
 	state, err := service.annotationOverlayState()
 	if err != nil {
 		t.Fatalf("annotationOverlayState() error = %v", err)
 	}
-	if state.WindowBounds.Width != 1280 || state.WindowBounds.Height != 720 {
-		t.Fatalf("window bounds = %#v, want paused video geometry", state.WindowBounds)
+	if state.WindowBounds.X != 10 || state.WindowBounds.Y != 20 || state.WindowBounds.Width != 640 || state.WindowBounds.Height != 360 {
+		t.Fatalf("window bounds = %#v, want paused annotation geometry", state.WindowBounds)
 	}
 }
 
@@ -221,6 +249,10 @@ func newAnnotationOverlayTestService(t *testing.T) *RecordingFreedomService {
 
 type annotationOverlayAudioSession struct {
 	path string
+}
+
+func applicationRect(x int, y int, width int, height int) application.Rect {
+	return application.Rect{X: x, Y: y, Width: width, Height: height}
 }
 
 func (s *annotationOverlayAudioSession) Start(context.Context) error {

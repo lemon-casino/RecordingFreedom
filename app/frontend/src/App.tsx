@@ -59,7 +59,7 @@ import {
   fallbackCapabilities,
   fallbackStorageStatus,
 } from './services/mockBackend'
-import {cancelRegionSelector, cancelSelectedRegion, completeRegionSelection, exportRecordingPackage, hidePipOverlay, hideRegionFrame, hideScreenIndicator, hideSettingsWindow, loadBootstrap, loadSettings, logClientEvent, openRecordingPackage, openVideoDirectory, patchAudioState, patchSettingsPreferences, patchWhiteboardSettings, pauseRecording, preflightAudioOnlyRecording, preflightRecording, previewExportRecordingPackage, quitApplication, readAnnotationPreviewImage, readPipPreviewImage, recoverRecordingPackage, restoreCapsuleWindow, resumeRecording, saveSettings, setCapsuleWindowExpanded, setCapsuleWindowHitRegions, setDataRoot, showAnnotationOverlay, showPipOverlay, showRegionSelector, showScreenIndicator, showWhiteboardWindow, startAudioOnlyRecording, startMicrophoneLevelMonitor, startRecording, stopMicrophoneLevelMonitor, stopRecording, subscribeAudioLevel, subscribeAudioState, subscribeCapsuleWindowMoveEnded, subscribeRecordingStatus, subscribeRegionSelection, subscribeSettingsChanged, subscribeWhiteboardVisibility, updatePipOverlay, updateSelectedRegion, type AudioControlState, type AudioLevelUpdate, type AudioStatePatch, type CapsuleWindowExpandDirection, type CapsuleWindowHitRegion, type PIPOverlayCamera, type PIPOverlayState, type RecordingExportPlan, type RecordingRecovery, type RecordingStatusUpdate, type RegionSelectionSession, type SettingsPreferencesPatch, type WhiteboardSettingsPatch, type WhiteboardVisibilityUpdate} from './services/recorderBackend'
+import {cancelRegionSelector, cancelSelectedRegion, completeAnnotationRegionSelection, completeRegionSelection, exportRecordingPackage, hidePipOverlay, hideRegionFrame, hideScreenIndicator, hideSettingsWindow, loadBootstrap, loadSettings, logClientEvent, openRecordingPackage, openVideoDirectory, patchAudioState, patchSettingsPreferences, patchWhiteboardSettings, pauseRecording, preflightAudioOnlyRecording, preflightRecording, previewExportRecordingPackage, quitApplication, readAnnotationPreviewImage, readPipPreviewImage, recoverRecordingPackage, restoreCapsuleWindow, resumeRecording, saveSettings, setCapsuleWindowExpanded, setCapsuleWindowHitRegions, setDataRoot, showAnnotationOverlay, showAnnotationRegionSelector, showPipOverlay, showRegionSelector, showScreenIndicator, showWhiteboardWindow, startAudioOnlyRecording, startMicrophoneLevelMonitor, startRecording, stopMicrophoneLevelMonitor, stopRecording, subscribeAudioLevel, subscribeAudioState, subscribeCapsuleWindowMoveEnded, subscribeRecordingStatus, subscribeRegionSelection, subscribeSettingsChanged, subscribeWhiteboardVisibility, updatePipOverlay, updateSelectedRegion, type AudioControlState, type AudioLevelUpdate, type AudioStatePatch, type CapsuleWindowExpandDirection, type CapsuleWindowHitRegion, type PIPOverlayCamera, type PIPOverlayState, type RecordingExportPlan, type RecordingRecovery, type RecordingStatusUpdate, type RegionSelectionSession, type SettingsPreferencesPatch, type WhiteboardSettingsPatch, type WhiteboardVisibilityUpdate} from './services/recorderBackend'
 
 const AnnotationOverlayWindow = lazy(() => import('./AnnotationOverlayWindow'))
 const AnnotationRenderWindow = lazy(() => import('./AnnotationRenderWindow'))
@@ -206,6 +206,15 @@ function normalizedClientRect(startX: number, startY: number, currentX: number, 
   const width = Math.round(Math.abs(currentX - startX))
   const height = Math.round(Math.abs(currentY - startY))
   return {x, y, width, height}
+}
+
+function clampedClientPoint(clientX: number, clientY: number) {
+  const maxX = Math.max(0, (window.innerWidth || 1) - 1)
+  const maxY = Math.max(0, (window.innerHeight || 1) - 1)
+  return {
+    x: clampNumber(clientX, 0, maxX),
+    y: clampNumber(clientY, 0, maxY),
+  }
 }
 
 function elementHitRegion(
@@ -1954,6 +1963,23 @@ function App() {
     setClosePromptOpen(true)
   }
 
+  const openRecordingWhiteboard = async () => {
+    try {
+      await showAnnotationOverlay()
+      return
+    } catch (error) {
+      const message = readableError(error)
+      if (!message.includes('selected annotation region')) {
+        throw error
+      }
+      void logClientEvent('whiteboard', 'annotation-region-required', {
+        state,
+        recordingMode,
+      }, message)
+    }
+    await showAnnotationRegionSelector()
+  }
+
   const openWhiteboard = () => {
     setActivePanel(null)
     setSettingsOpen(false)
@@ -1965,7 +1991,7 @@ function App() {
         return
       }
       try {
-        await showAnnotationOverlay()
+        await openRecordingWhiteboard()
       } catch (error) {
         console.error('Failed to open recording annotation overlay:', error)
         void logClientEvent('whiteboard', 'annotation-open-fallback', {
@@ -3543,6 +3569,7 @@ function RegionOverlayWindow() {
   const selectedRect = drag ? normalizedClientRect(drag.startX, drag.startY, drag.currentX, drag.currentY) : null
   const isEditingRegion = editFrame?.mode === 'edit'
   const isRecordingRegion = editFrame?.mode === 'recording'
+  const isAnnotationRegionSelection = session?.purpose === 'annotation'
   const overlayOrigin = editFrame?.overlayBounds ?? session?.bounds ?? {x: 0, y: 0, width: 0, height: 0}
   const editableRect = isEditingRegion ? {
     x: editFrame.bounds.x - overlayOrigin.x,
@@ -3613,6 +3640,10 @@ function RegionOverlayWindow() {
       window.setTimeout(() => setInvalid(false), 360)
       return
     }
+    if (isAnnotationRegionSelection) {
+      await completeAnnotationRegionSelection(rect)
+      return
+    }
     await completeRegionSelection(rect)
   }
 
@@ -3627,16 +3658,18 @@ function RegionOverlayWindow() {
       onPointerCancel={isEditingRegion ? editDrag.completeEdit : undefined}
       onPointerMoveCapture={(event) => {
         if (isEditingRegion || isRecordingRegion) return
-        setCursor({x: event.clientX, y: event.clientY})
+        const point = clampedClientPoint(event.clientX, event.clientY)
+        setCursor(point)
         if (drag) {
-          setDrag({...drag, currentX: event.clientX, currentY: event.clientY})
+          setDrag({...drag, currentX: point.x, currentY: point.y})
         }
       }}
       onPointerDown={(event) => {
         if (isEditingRegion || isRecordingRegion) return
         if (event.button !== 0) return
         event.currentTarget.setPointerCapture(event.pointerId)
-        setDrag({startX: event.clientX, startY: event.clientY, currentX: event.clientX, currentY: event.clientY})
+        const point = clampedClientPoint(event.clientX, event.clientY)
+        setDrag({startX: point.x, startY: point.y, currentX: point.x, currentY: point.y})
         setInvalid(false)
       }}
       onPointerUp={(event) => {
@@ -3649,13 +3682,14 @@ function RegionOverlayWindow() {
         if (event.currentTarget.hasPointerCapture(event.pointerId)) {
           event.currentTarget.releasePointerCapture(event.pointerId)
         }
-        const rect = normalizedClientRect(drag.startX, drag.startY, event.clientX, event.clientY)
+        const point = clampedClientPoint(event.clientX, event.clientY)
+        const rect = normalizedClientRect(drag.startX, drag.startY, point.x, point.y)
         setDrag(null)
         void completeSelection(rect)
       }}
       onPointerLeave={(event) => {
         if (isEditingRegion || isRecordingRegion) return
-        setCursor({x: event.clientX, y: event.clientY})
+        setCursor(clampedClientPoint(event.clientX, event.clientY))
       }}
     >
       <div className="region-overlay-scrim" />

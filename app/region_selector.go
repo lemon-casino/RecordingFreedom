@@ -12,8 +12,10 @@ import (
 )
 
 const (
-	minRegionWidth  = 64
-	minRegionHeight = 64
+	minRegionWidth                   = 64
+	minRegionHeight                  = 64
+	regionSelectionPurposeCapture    = "capture"
+	regionSelectionPurposeAnnotation = "annotation"
 )
 
 type RegionRect struct {
@@ -29,6 +31,7 @@ type RegionSelectionSession struct {
 	MinimumWidth  int        `json:"minimumWidth"`
 	MinimumHeight int        `json:"minimumHeight"`
 	DisplayCount  int        `json:"displayCount"`
+	Purpose       string     `json:"purpose,omitempty"`
 }
 
 type RegionSelectionRequest struct {
@@ -67,6 +70,7 @@ func (s *RecordingFreedomService) ShowRegionSelector() (RegionSelectionSession, 
 		MinimumWidth:  minRegionWidth,
 		MinimumHeight: minRegionHeight,
 		DisplayCount:  displayCount,
+		Purpose:       regionSelectionPurposeCapture,
 	}
 
 	s.regionMu.Lock()
@@ -94,6 +98,9 @@ func (s *RecordingFreedomService) CompleteRegionSelection(req RegionSelectionReq
 	s.regionMu.Unlock()
 	if session == nil {
 		return RegionSelectionResult{}, errors.New("no active region selection session")
+	}
+	if session.Purpose != "" && session.Purpose != regionSelectionPurposeCapture {
+		return RegionSelectionResult{}, errors.New("active region selection session is not for capture")
 	}
 
 	relative := normalizeRegionSelection(req)
@@ -144,8 +151,10 @@ func (s *RecordingFreedomService) CancelRegionSelection() RegionSelectionResult 
 	if session != nil {
 		result.SessionID = session.ID
 	}
-	s.clearSelectedRegionDIP()
-	s.emitRegionSelection(result)
+	if session == nil || session.Purpose == "" || session.Purpose == regionSelectionPurposeCapture {
+		s.clearSelectedRegionDIP()
+		s.emitRegionSelection(result)
+	}
 	if s.regionOverlay != nil {
 		s.regionOverlay.Hide()
 	}

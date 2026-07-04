@@ -80,6 +80,7 @@ export interface Plan {
     "annotationRenderMode"?: string;
     "annotationElementScenes"?: AnnotationElementScenePlan[] | null;
     "annotationSummary"?: AnnotationTimelineSummary | null;
+    "annotationRect"?: pip$0.Rect;
     "annotationsVisible": boolean;
     "pipPreset": string;
     "pipConfig": pip$0.Config;

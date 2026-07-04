@@ -226,7 +226,7 @@ func composeFilter(plan exportplan.Plan) (string, error) {
 				annotationLabel := fmt.Sprintf("annotation%d", index)
 				outputLabel := fmt.Sprintf("withannotation%d", index)
 				parts = append(parts, fmt.Sprintf("[%d:v]format=rgba[%s]", nextInputIndex, annotationLabel))
-				parts = append(parts, fmt.Sprintf("[%s][%s]%s[%s]", current, annotationLabel, annotationSegmentOverlayFilter(segment), outputLabel))
+				parts = append(parts, fmt.Sprintf("[%s][%s]%s[%s]", current, annotationLabel, annotationSegmentOverlayFilter(segment, plan.AnnotationRect), outputLabel))
 				current = outputLabel
 				nextInputIndex++
 			}
@@ -235,7 +235,7 @@ func composeFilter(plan exportplan.Plan) (string, error) {
 				return "", errors.New("visible annotation export requires an annotation input")
 			}
 			parts = append(parts, fmt.Sprintf("[%d:v]format=rgba[annotation]", nextInputIndex))
-			parts = append(parts, fmt.Sprintf("[%s][annotation]%s[withannotations]", current, annotationOverlayFilter(plan.AnnotationStartMs)))
+			parts = append(parts, fmt.Sprintf("[%s][annotation]%s[withannotations]", current, annotationOverlayFilter(plan.AnnotationStartMs, plan.AnnotationRect)))
 			current = "withannotations"
 		}
 	}
@@ -262,16 +262,18 @@ func annotationInputPaths(plan exportplan.Plan) []string {
 	return paths
 }
 
-func annotationOverlayFilter(startOffsetMs int64) string {
-	filter := "overlay=0:0:eof_action=pass:repeatlast=1"
+func annotationOverlayFilter(startOffsetMs int64, rect pip.Rect) string {
+	x, y := annotationOverlayXY(rect)
+	filter := fmt.Sprintf("overlay=%d:%d:eof_action=pass:repeatlast=1", x, y)
 	if startOffsetMs <= 0 {
 		return filter
 	}
 	return fmt.Sprintf("%s:enable='gte(t,%.3f)'", filter, float64(startOffsetMs)/1000)
 }
 
-func annotationSegmentOverlayFilter(segment exportplan.AnnotationSnapshotPlan) string {
-	filter := "overlay=0:0:eof_action=pass:repeatlast=1"
+func annotationSegmentOverlayFilter(segment exportplan.AnnotationSnapshotPlan, rect pip.Rect) string {
+	x, y := annotationOverlayXY(rect)
+	filter := fmt.Sprintf("overlay=%d:%d:eof_action=pass:repeatlast=1", x, y)
 	startSeconds := float64(maxInt64(0, segment.StartOffsetMs)) / 1000
 	if segment.EndOffsetMs > segment.StartOffsetMs {
 		endSeconds := float64(segment.EndOffsetMs) / 1000
@@ -281,6 +283,13 @@ func annotationSegmentOverlayFilter(segment exportplan.AnnotationSnapshotPlan) s
 		return filter
 	}
 	return fmt.Sprintf("%s:enable='gte(t,%.3f)'", filter, startSeconds)
+}
+
+func annotationOverlayXY(rect pip.Rect) (int, int) {
+	if !rect.Visible {
+		return 0, 0
+	}
+	return rect.X, rect.Y
 }
 
 func maxInt64(a int64, b int64) int64 {

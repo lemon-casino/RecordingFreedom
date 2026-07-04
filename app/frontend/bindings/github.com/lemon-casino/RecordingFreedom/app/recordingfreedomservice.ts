@@ -47,6 +47,10 @@ export function ClaimAnnotationRenderJob(): $CancellablePromise<$models.Annotati
     return $Call.ByID(3090640534);
 }
 
+export function CompleteAnnotationRegionSelection(req: $models.RegionSelectionRequest): $CancellablePromise<$models.AnnotationOverlayState> {
+    return $Call.ByID(1407637282, req);
+}
+
 export function CompleteAnnotationRenderJob(result: $models.AnnotationRenderJobResult): $CancellablePromise<void> {
     return $Call.ByID(1422662043, result);
 }
@@ -197,6 +201,10 @@ export function SetDataRoot(rootDir: string): $CancellablePromise<appdata$0.Info
 
 export function ShowAnnotationOverlay(): $CancellablePromise<$models.AnnotationOverlayState> {
     return $Call.ByID(2906956594);
+}
+
+export function ShowAnnotationRegionSelector(): $CancellablePromise<$models.RegionSelectionSession> {
+    return $Call.ByID(1624388907);
 }
 
 export function ShowPIPOverlay(req: $models.PIPOverlayRequest): $CancellablePromise<$models.PIPOverlayState> {

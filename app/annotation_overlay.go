@@ -18,6 +18,8 @@ import (
 const (
 	maxAnnotationEventBatchBytes = 512 * 1024
 	maxAnnotationEventBatchLines = 512
+	annotationRegionTargetType   = "annotation-region"
+	annotationRegionTargetID     = "annotation:region"
 )
 
 type AnnotationOverlayState struct {
@@ -130,6 +132,96 @@ func (s *RecordingFreedomService) SetAnnotationOverlayHitRegions(req CapsuleWind
 		}
 	}
 	return nil
+}
+
+func (s *RecordingFreedomService) ShowAnnotationRegionSelector() (RegionSelectionSession, error) {
+	if s.recorder == nil {
+		return RegionSelectionSession{}, errors.New("recorder service is not initialized")
+	}
+	if s.app == nil || s.regionOverlay == nil {
+		return RegionSelectionSession{}, errors.New("region overlay window is not configured")
+	}
+	session, ok := s.recorder.ActiveSession()
+	if !ok || session.RecordingMode != recpackage.RecordingModeScreen {
+		return RegionSelectionSession{}, errors.New("annotation region selection requires an active screen recording")
+	}
+	bounds := s.annotationSelectionBounds(session.Manifest)
+	displayCount := 0
+	if s.app != nil {
+		_, displayCount = regionOverlayBounds(s.app.Screen.GetAll())
+	}
+	selection := RegionSelectionSession{
+		ID:            fmt.Sprintf("annotation-region-%d", time.Now().UnixNano()),
+		Bounds:        regionRectFromAppRect(bounds),
+		MinimumWidth:  minRegionWidth,
+		MinimumHeight: minRegionHeight,
+		DisplayCount:  displayCount,
+		Purpose:       regionSelectionPurposeAnnotation,
+	}
+
+	s.regionMu.Lock()
+	s.regionSession = &selection
+	s.regionMu.Unlock()
+
+	s.regionOverlay.SetIgnoreMouseEvents(false)
+	s.regionOverlay.SetAlwaysOnTop(true)
+	s.regionOverlay.SetBounds(bounds)
+	s.regionOverlay.Show()
+	s.regionOverlay.SetBounds(bounds)
+	s.regionOverlay.Focus()
+	if payload, err := json.Marshal(selection); err == nil {
+		s.regionOverlay.ExecJS(fmt.Sprintf(
+			"window.__RF_REGION_SESSION__=%s;window.dispatchEvent(new CustomEvent('rf-region-session',{detail:window.__RF_REGION_SESSION__}));",
+			string(payload),
+		))
+	}
+	s.logEvent("annotation-overlay", "region-selector-show", map[string]string{
+		"sessionId": session.ID,
+		"bounds":    fmt.Sprintf("%d,%d %dx%d", bounds.X, bounds.Y, bounds.Width, bounds.Height),
+	})
+	return selection, nil
+}
+
+func (s *RecordingFreedomService) CompleteAnnotationRegionSelection(req RegionSelectionRequest) (AnnotationOverlayState, error) {
+	if s.recorder == nil {
+		return AnnotationOverlayState{}, errors.New("recorder service is not initialized")
+	}
+	recordingSession, ok := s.recorder.ActiveSession()
+	if !ok || recordingSession.RecordingMode != recpackage.RecordingModeScreen {
+		return AnnotationOverlayState{}, errors.New("annotation region selection requires an active screen recording")
+	}
+
+	s.regionMu.Lock()
+	selection := s.regionSession
+	if selection != nil && selection.Purpose == regionSelectionPurposeAnnotation {
+		s.regionSession = nil
+	} else {
+		selection = nil
+	}
+	s.regionMu.Unlock()
+	if selection == nil {
+		return AnnotationOverlayState{}, errors.New("no active annotation region selection session")
+	}
+
+	relative := normalizeRegionSelection(req)
+	if relative.Width < selection.MinimumWidth || relative.Height < selection.MinimumHeight {
+		return AnnotationOverlayState{}, fmt.Errorf("selected annotation region must be at least %d x %d", selection.MinimumWidth, selection.MinimumHeight)
+	}
+	absoluteDIP := application.Rect{
+		X:      selection.Bounds.X + relative.X,
+		Y:      selection.Bounds.Y + relative.Y,
+		Width:  relative.Width,
+		Height: relative.Height,
+	}
+	s.setAnnotationRegionDIP(recordingSession.ID, absoluteDIP)
+	if s.regionOverlay != nil {
+		s.regionOverlay.Hide()
+	}
+	s.logEvent("annotation-overlay", "region-selected", map[string]string{
+		"sessionId": recordingSession.ID,
+		"bounds":    fmt.Sprintf("%d,%d %dx%d", absoluteDIP.X, absoluteDIP.Y, absoluteDIP.Width, absoluteDIP.Height),
+	})
+	return s.ShowAnnotationOverlay()
 }
 
 func (s *RecordingFreedomService) LoadAnnotationCapture() (WhiteboardSceneResult, error) {
@@ -389,14 +481,9 @@ func (s *RecordingFreedomService) annotationOverlayState() (AnnotationOverlaySta
 	if err != nil {
 		return AnnotationOverlayState{}, err
 	}
-	windowBounds := s.annotationWindowBounds(manifest)
-	target := recpackage.ManifestAnnotationTarget{
-		Type: manifest.Source.Type,
-		ID:   manifest.Source.ID,
-	}
-	if manifest.Source.Geometry != nil {
-		geometry := *manifest.Source.Geometry
-		target.Geometry = &geometry
+	windowBounds, target, ok := s.annotationTargetWindowBounds(session.ID, manifest)
+	if !ok {
+		return AnnotationOverlayState{}, errors.New("annotation overlay requires a selected annotation region")
 	}
 	return AnnotationOverlayState{
 		PackageDir:   session.PackageDir,
@@ -411,12 +498,12 @@ func (s *RecordingFreedomService) annotationOverlayState() (AnnotationOverlaySta
 }
 
 func (s *RecordingFreedomService) annotationWindowBounds(manifest recpackage.Manifest) application.Rect {
-	if manifest.Source.Geometry != nil && manifest.Source.Geometry.Width > 0 && manifest.Source.Geometry.Height > 0 {
+	if manifest.Annotations != nil && manifest.Annotations.Target.Geometry != nil && manifest.Annotations.Target.Geometry.Width > 0 && manifest.Annotations.Target.Geometry.Height > 0 {
 		return application.Rect{
-			X:      manifest.Source.Geometry.X,
-			Y:      manifest.Source.Geometry.Y,
-			Width:  manifest.Source.Geometry.Width,
-			Height: manifest.Source.Geometry.Height,
+			X:      manifest.Annotations.Target.Geometry.X,
+			Y:      manifest.Annotations.Target.Geometry.Y,
+			Width:  manifest.Annotations.Target.Geometry.Width,
+			Height: manifest.Annotations.Target.Geometry.Height,
 		}
 	}
 	if s.app != nil {
@@ -424,6 +511,68 @@ func (s *RecordingFreedomService) annotationWindowBounds(manifest recpackage.Man
 		return bounds
 	}
 	return application.Rect{Width: 1280, Height: 720}
+}
+
+func (s *RecordingFreedomService) annotationTargetWindowBounds(sessionID string, manifest recpackage.Manifest) (application.Rect, recpackage.ManifestAnnotationTarget, bool) {
+	if bounds, ok := s.annotationRegionDIPForSession(sessionID); ok {
+		target := annotationRegionTargetFromRect(bounds)
+		return bounds, target, true
+	}
+	if manifest.Annotations != nil && manifest.Annotations.Target.Geometry != nil && manifest.Annotations.Target.Geometry.Width > 0 && manifest.Annotations.Target.Geometry.Height > 0 {
+		geometry := *manifest.Annotations.Target.Geometry
+		target := manifest.Annotations.Target
+		return application.Rect{X: geometry.X, Y: geometry.Y, Width: geometry.Width, Height: geometry.Height}, target, true
+	}
+	return application.Rect{}, recpackage.ManifestAnnotationTarget{}, false
+}
+
+func (s *RecordingFreedomService) annotationSelectionBounds(manifestPath string) application.Rect {
+	if strings.TrimSpace(manifestPath) != "" {
+		if manifest, err := recpackage.NewService().ReadManifest(manifestPath); err == nil {
+			if manifest.Source.Geometry != nil && manifest.Source.Geometry.Width > 0 && manifest.Source.Geometry.Height > 0 {
+				geometry := manifest.Source.Geometry
+				return application.Rect{X: geometry.X, Y: geometry.Y, Width: geometry.Width, Height: geometry.Height}
+			}
+		}
+	}
+	if s.app != nil {
+		bounds, _ := regionOverlayBounds(s.app.Screen.GetAll())
+		return bounds
+	}
+	return application.Rect{Width: 1280, Height: 720}
+}
+
+func (s *RecordingFreedomService) setAnnotationRegionDIP(sessionID string, bounds application.Rect) {
+	s.annotationMu.Lock()
+	defer s.annotationMu.Unlock()
+	s.annotationSessionID = sessionID
+	s.annotationRegionDIP = bounds
+}
+
+func (s *RecordingFreedomService) annotationRegionDIPForSession(sessionID string) (application.Rect, bool) {
+	s.annotationMu.Lock()
+	defer s.annotationMu.Unlock()
+	if sessionID == "" || s.annotationSessionID != sessionID {
+		return application.Rect{}, false
+	}
+	if s.annotationRegionDIP.Width <= 0 || s.annotationRegionDIP.Height <= 0 {
+		return application.Rect{}, false
+	}
+	return s.annotationRegionDIP, true
+}
+
+func annotationRegionTargetFromRect(bounds application.Rect) recpackage.ManifestAnnotationTarget {
+	geometry := recpackage.ManifestSourceGeometry{
+		X:      bounds.X,
+		Y:      bounds.Y,
+		Width:  bounds.Width,
+		Height: bounds.Height,
+	}
+	return recpackage.ManifestAnnotationTarget{
+		Type:     annotationRegionTargetType,
+		ID:       annotationRegionTargetID,
+		Geometry: &geometry,
+	}
 }
 
 func (s *RecordingFreedomService) broadcastAnnotationOverlayState(state AnnotationOverlayState) {

@@ -242,6 +242,7 @@ export interface RegionSelectionSession {
     "minimumWidth": number;
     "minimumHeight": number;
     "displayCount": number;
+    "purpose"?: string;
 }
 
 export interface ScreenIndicatorRequest {

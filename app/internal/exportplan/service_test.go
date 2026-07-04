@@ -114,6 +114,39 @@ func TestPlanIncludesAnnotationSnapshot(t *testing.T) {
 	}
 }
 
+func TestAnnotationOverlayRectUsesTargetOffsetInsideRecordingSource(t *testing.T) {
+	manifest := recpackage.Manifest{
+		Source: recpackage.ManifestSource{
+			Type: "screen",
+			ID:   "screen:2",
+			Geometry: &recpackage.ManifestSourceGeometry{
+				X:      -1920,
+				Y:      48,
+				Width:  1440,
+				Height: 900,
+			},
+		},
+		Annotations: &recpackage.ManifestAnnotations{
+			Enabled: true,
+			Target: recpackage.ManifestAnnotationTarget{
+				Type: "annotation-region",
+				ID:   "annotation:region",
+				Geometry: &recpackage.ManifestSourceGeometry{
+					X:      -1800,
+					Y:      148,
+					Width:  640,
+					Height: 360,
+				},
+			},
+		},
+	}
+
+	got := annotationOverlayRect(manifest)
+	if !got.Visible || got.X != 120 || got.Y != 100 || got.Width != 640 || got.Height != 360 {
+		t.Fatalf("annotation rect = %#v, want selected region offset inside source", got)
+	}
+}
+
 func TestPlanIncludesAnnotationTimelineFromElementEvents(t *testing.T) {
 	videoDir := t.TempDir()
 	packageDir := createReadyPackage(t, videoDir, readyPackageOptions{

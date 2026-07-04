@@ -20,6 +20,7 @@ import (
 	"github.com/lemon-casino/RecordingFreedom/app/internal/recordingprofile"
 	"github.com/lemon-casino/RecordingFreedom/app/internal/recpackage"
 	"github.com/lemon-casino/RecordingFreedom/app/internal/settings"
+	"github.com/wailsapp/wails/v3/pkg/application"
 )
 
 func TestBootstrapIncludesStorageStatus(t *testing.T) {
@@ -415,6 +416,8 @@ func TestSaveAnnotationCaptureWritesActivePackageAnnotations(t *testing.T) {
 	if err != nil {
 		t.Fatalf("StartRecording() error = %v", err)
 	}
+	annotationBounds := application.Rect{X: 80, Y: 90, Width: 640, Height: 360}
+	service.setAnnotationRegionDIP(session.ID, annotationBounds)
 
 	result, err := service.SaveAnnotationCapture(AnnotationCaptureRequest{
 		SceneJSON:       `{"type":"excalidraw","elements":[],"appState":{},"files":{}}`,
@@ -444,8 +447,13 @@ func TestSaveAnnotationCaptureWritesActivePackageAnnotations(t *testing.T) {
 	if manifest.Annotations == nil || !manifest.Annotations.Enabled || manifest.Annotations.SnapshotPath != recpackage.AnnotationSnapshotFile || manifest.Annotations.DiagnosticsPath != recpackage.AnnotationOverlayDiagnosticsFile {
 		t.Fatalf("manifest annotations = %#v, want enabled snapshot contract", manifest.Annotations)
 	}
-	if manifest.Annotations.Target.Type != "screen" || manifest.Annotations.Target.ID != "screen:primary" || manifest.Annotations.Target.Geometry == nil || manifest.Annotations.Target.Geometry.Width != 1280 {
-		t.Fatalf("annotation target = %#v, want active source target", manifest.Annotations.Target)
+	if manifest.Annotations.Target.Type != annotationRegionTargetType || manifest.Annotations.Target.ID != annotationRegionTargetID ||
+		manifest.Annotations.Target.Geometry == nil ||
+		manifest.Annotations.Target.Geometry.X != annotationBounds.X ||
+		manifest.Annotations.Target.Geometry.Y != annotationBounds.Y ||
+		manifest.Annotations.Target.Geometry.Width != annotationBounds.Width ||
+		manifest.Annotations.Target.Geometry.Height != annotationBounds.Height {
+		t.Fatalf("annotation target = %#v, want selected annotation region", manifest.Annotations.Target)
 	}
 	loaded, err := service.LoadAnnotationCapture()
 	if err != nil {
@@ -485,13 +493,15 @@ func TestSaveAnnotationCaptureUsesRecordingOffsetAfterPauseResume(t *testing.T) 
 		appData:  data,
 		recorder: recording.NewServiceWithBackend(data, recording.NewMockBackend(recpackage.NewService())),
 	}
-	if _, err := service.StartRecording(recording.StartRequest{
+	session, err := service.StartRecording(recording.StartRequest{
 		SourceID:   "screen:primary",
 		SourceType: recording.SourceScreen,
 		Recording:  recordingprofile.Default(),
-	}); err != nil {
+	})
+	if err != nil {
 		t.Fatalf("StartRecording() error = %v", err)
 	}
+	service.setAnnotationRegionDIP(session.ID, application.Rect{X: 0, Y: 0, Width: 800, Height: 450})
 	if _, err := service.recorder.Pause(); err != nil {
 		t.Fatalf("Pause() error = %v", err)
 	}
@@ -549,6 +559,7 @@ func TestSaveAnnotationCaptureUsesWhiteboardCapturePolicy(t *testing.T) {
 	if err != nil {
 		t.Fatalf("StartRecording() error = %v", err)
 	}
+	service.setAnnotationRegionDIP(session.ID, application.Rect{X: 0, Y: 0, Width: 800, Height: 450})
 	if _, err := service.SaveAnnotationCapture(AnnotationCaptureRequest{
 		SceneJSON:       `{"type":"excalidraw","elements":[],"appState":{},"files":{}}`,
 		SnapshotDataURL: "data:image/png;base64," + base64.StdEncoding.EncodeToString([]byte("png")),
