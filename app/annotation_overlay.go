@@ -224,6 +224,32 @@ func (s *RecordingFreedomService) CompleteAnnotationRegionSelection(req RegionSe
 	return s.ShowAnnotationOverlay()
 }
 
+func (s *RecordingFreedomService) ReselectAnnotationRegion() (RegionSelectionSession, error) {
+	if s.recorder == nil {
+		return RegionSelectionSession{}, errors.New("recorder service is not initialized")
+	}
+	session, ok := s.recorder.ActiveSession()
+	if !ok || session.RecordingMode != recpackage.RecordingModeScreen {
+		return RegionSelectionSession{}, errors.New("annotation region selection requires an active screen recording")
+	}
+	if err := s.clearAnnotationCaptureForSession(session); err != nil {
+		return RegionSelectionSession{}, err
+	}
+	s.clearAnnotationRegionDIP(session.ID)
+	if err := s.HideAnnotationOverlay(); err != nil {
+		return RegionSelectionSession{}, err
+	}
+	selection, err := s.ShowAnnotationRegionSelector()
+	if err != nil {
+		return RegionSelectionSession{}, err
+	}
+	s.logEvent("annotation-overlay", "region-reselect", map[string]string{
+		"sessionId":  session.ID,
+		"packageDir": session.PackageDir,
+	})
+	return selection, nil
+}
+
 func (s *RecordingFreedomService) LoadAnnotationCapture() (WhiteboardSceneResult, error) {
 	if s.recorder == nil {
 		return WhiteboardSceneResult{}, errors.New("recorder service is not initialized")
@@ -542,11 +568,64 @@ func (s *RecordingFreedomService) annotationSelectionBounds(manifestPath string)
 	return application.Rect{Width: 1280, Height: 720}
 }
 
+func (s *RecordingFreedomService) clearAnnotationCaptureForSession(session recording.Session) error {
+	if session.PackageDir == "" || session.Manifest == "" {
+		return errors.New("annotation reset requires an active recording package")
+	}
+	annotationsDir, err := annotationPackageChildDir(session.PackageDir, recpackage.AnnotationsDir)
+	if err != nil {
+		return err
+	}
+	if err := os.RemoveAll(annotationsDir); err != nil {
+		return err
+	}
+	_, err = recpackage.NewService().ClearAnnotations(session.Manifest)
+	return err
+}
+
+func annotationPackageChildDir(packageDir string, relative string) (string, error) {
+	if strings.TrimSpace(packageDir) == "" {
+		return "", errors.New("recording package directory is required")
+	}
+	if filepath.IsAbs(relative) || strings.TrimSpace(relative) == "" {
+		return "", fmt.Errorf("package child path %q is not relative", relative)
+	}
+	cleanRelative := filepath.Clean(relative)
+	if cleanRelative == "." || strings.HasPrefix(cleanRelative, ".."+string(filepath.Separator)) || cleanRelative == ".." {
+		return "", fmt.Errorf("package child path %q escapes the recording package", relative)
+	}
+	packageAbs, err := filepath.Abs(packageDir)
+	if err != nil {
+		return "", err
+	}
+	childAbs, err := filepath.Abs(filepath.Join(packageAbs, cleanRelative))
+	if err != nil {
+		return "", err
+	}
+	relToPackage, err := filepath.Rel(packageAbs, childAbs)
+	if err != nil {
+		return "", err
+	}
+	if relToPackage == "." || strings.HasPrefix(relToPackage, ".."+string(filepath.Separator)) || relToPackage == ".." || filepath.IsAbs(relToPackage) {
+		return "", fmt.Errorf("package child path %q escapes the recording package", relative)
+	}
+	return childAbs, nil
+}
+
 func (s *RecordingFreedomService) setAnnotationRegionDIP(sessionID string, bounds application.Rect) {
 	s.annotationMu.Lock()
 	defer s.annotationMu.Unlock()
 	s.annotationSessionID = sessionID
 	s.annotationRegionDIP = bounds
+}
+
+func (s *RecordingFreedomService) clearAnnotationRegionDIP(sessionID string) {
+	s.annotationMu.Lock()
+	defer s.annotationMu.Unlock()
+	if sessionID == "" || s.annotationSessionID == sessionID {
+		s.annotationSessionID = ""
+		s.annotationRegionDIP = application.Rect{}
+	}
 }
 
 func (s *RecordingFreedomService) annotationRegionDIPForSession(sessionID string) (application.Rect, bool) {

@@ -838,19 +838,32 @@ export async function showAnnotationRegionSelector(): Promise<RegionSelectionSes
 }
 
 export async function completeAnnotationRegionSelection(request: RegionSelectionSession['bounds']): Promise<AnnotationOverlayState> {
-  try {
-    return fromBoundAnnotationOverlayState(await RecordingFreedomService.CompleteAnnotationRegionSelection(toBoundRegionSelectionRequest(request)))
-  } catch (error) {
+	try {
+		return fromBoundAnnotationOverlayState(await RecordingFreedomService.CompleteAnnotationRegionSelection(toBoundRegionSelectionRequest(request)))
+	} catch (error) {
     if (isWailsDesktopRuntime()) throw error
     console.info('Using browser annotation region completion fallback:', error)
     return browserAnnotationOverlayState()
-  }
+	}
+}
+
+export async function reselectAnnotationRegion(): Promise<RegionSelectionSession> {
+	try {
+		return fromBoundRegionSelectionSession(await RecordingFreedomService.ReselectAnnotationRegion())
+	} catch (error) {
+		if (isWailsDesktopRuntime()) throw error
+		console.info('Using browser annotation region reselect fallback:', error)
+		window.localStorage?.removeItem(browserAnnotationSceneKey)
+		const session = await showAnnotationRegionSelector()
+		;(window as Window & {__RF_LAST_ANNOTATION_REGION_RESELECT__?: RegionSelectionSession}).__RF_LAST_ANNOTATION_REGION_RESELECT__ = session
+		return session
+	}
 }
 
 export async function hideAnnotationOverlay(): Promise<void> {
-  try {
-    await RecordingFreedomService.HideAnnotationOverlay()
-  } catch (error) {
+	try {
+		await RecordingFreedomService.HideAnnotationOverlay()
+	} catch (error) {
     console.info('Using browser annotation overlay hide fallback:', error)
     emitBrowserWhiteboardVisibility({visible: false, mode: 'annotation'})
     window.close()

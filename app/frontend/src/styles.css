@@ -2048,7 +2048,7 @@ body.rf-annotation-overlay-window {
   display: inline-flex;
   align-items: center;
   gap: 5px;
-  max-width: min(calc(100vw - 28px), 720px);
+  max-width: min(calc(100vw - 28px), 780px);
   min-height: 42px;
   padding: 5px;
   border: 1px solid var(--line);

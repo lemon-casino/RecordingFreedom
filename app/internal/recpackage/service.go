@@ -306,6 +306,18 @@ func (s *Service) PatchAnnotations(manifestPath string, annotations ManifestAnno
 	return s.ReadManifest(manifestPath)
 }
 
+func (s *Service) ClearAnnotations(manifestPath string) (Manifest, error) {
+	manifest, err := s.ReadManifest(manifestPath)
+	if err != nil {
+		return Manifest{}, err
+	}
+	manifest.Annotations = nil
+	if err := s.WriteManifest(manifestPath, manifest); err != nil {
+		return Manifest{}, err
+	}
+	return s.ReadManifest(manifestPath)
+}
+
 func (s *Service) PatchCameraPIP(manifestPath string, config pip.Config) (Manifest, error) {
 	manifest, err := s.ReadManifest(manifestPath)
 	if err != nil {

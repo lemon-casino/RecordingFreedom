@@ -225,6 +225,7 @@ export type RecorderCopy = {
     clearConfirm: string
     undo: string
     redo: string
+    reselectRegion: string
     select: string
     hand: string
     pen: string
@@ -518,8 +519,9 @@ const zhCN: RecorderCopy = {
     exportFailed: '导出失败',
     clear: '清空',
     clearConfirm: '再次点击清空',
-    undo: '撤销',
+    undo: '上一步',
     redo: '重做',
+    reselectRegion: '重新选择画板区域',
     select: '选择',
     hand: '拖动画布',
     pen: '画笔',
@@ -946,6 +948,7 @@ const en: RecorderCopy = {
     clearConfirm: 'Click again to clear',
     undo: 'Undo',
     redo: 'Redo',
+    reselectRegion: 'Reselect board area',
     select: 'Select',
     hand: 'Hand',
     pen: 'Pen',

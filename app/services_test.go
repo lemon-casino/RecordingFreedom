@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
@@ -484,6 +485,55 @@ func TestSaveAnnotationCaptureWritesActivePackageAnnotations(t *testing.T) {
 	}
 	if !strings.Contains(string(diagnosticsData), `"type":"save-capture"`) || !strings.Contains(string(diagnosticsData), `"windowBounds"`) {
 		t.Fatalf("overlay diagnostics = %s, want save-capture bounds evidence", diagnosticsData)
+	}
+}
+
+func TestClearAnnotationCaptureForSessionRemovesArtifactsAndRegion(t *testing.T) {
+	data := appdata.NewService(t.TempDir())
+	service := &RecordingFreedomService{
+		appData:  data,
+		recorder: recording.NewServiceWithBackend(data, recording.NewMockBackend(recpackage.NewService())),
+	}
+	session, err := service.StartRecording(recording.StartRequest{
+		SourceID:   "screen:primary",
+		SourceType: recording.SourceScreen,
+		SourceGeometry: &recording.SourceGeometry{
+			Width:  1280,
+			Height: 720,
+		},
+		Recording: recordingprofile.Default(),
+	})
+	if err != nil {
+		t.Fatalf("StartRecording() error = %v", err)
+	}
+	service.setAnnotationRegionDIP(session.ID, application.Rect{X: 80, Y: 90, Width: 640, Height: 360})
+	result, err := service.SaveAnnotationCapture(AnnotationCaptureRequest{
+		SceneJSON:       `{"type":"excalidraw","elements":[{"id":"a","type":"freedraw"}],"appState":{},"files":{}}`,
+		SnapshotDataURL: "data:image/png;base64," + base64.StdEncoding.EncodeToString([]byte("png")),
+	})
+	if err != nil {
+		t.Fatalf("SaveAnnotationCapture() error = %v", err)
+	}
+	if _, err := os.Stat(result.ScenePath); err != nil {
+		t.Fatalf("annotation scene missing before clear: %v", err)
+	}
+
+	if err := service.clearAnnotationCaptureForSession(session); err != nil {
+		t.Fatalf("clearAnnotationCaptureForSession() error = %v", err)
+	}
+	service.clearAnnotationRegionDIP(session.ID)
+	if _, err := os.Stat(filepath.Join(session.PackageDir, recpackage.AnnotationsDir)); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("annotations dir stat error = %v, want not exist", err)
+	}
+	manifest, err := recpackage.NewService().ReadManifest(session.Manifest)
+	if err != nil {
+		t.Fatalf("ReadManifest() error = %v", err)
+	}
+	if manifest.Annotations != nil {
+		t.Fatalf("manifest annotations = %#v, want nil after clear", manifest.Annotations)
+	}
+	if _, ok := service.annotationRegionDIPForSession(session.ID); ok {
+		t.Fatal("annotation region still present after clear")
 	}
 }
 

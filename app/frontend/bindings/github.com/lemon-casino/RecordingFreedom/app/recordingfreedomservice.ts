@@ -163,6 +163,10 @@ export function RecoverRecordingPackage(packageDir: string): $CancellablePromise
     return $Call.ByID(919661591, packageDir);
 }
 
+export function ReselectAnnotationRegion(): $CancellablePromise<$models.RegionSelectionSession> {
+    return $Call.ByID(2985632494);
+}
+
 export function ResumeRecording(): $CancellablePromise<recording$0.Session> {
     return $Call.ByID(2366067120);
 }

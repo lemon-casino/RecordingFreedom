@@ -165,6 +165,37 @@ func TestPatchAnnotationsWritesRelativeManifestContract(t *testing.T) {
 	}
 }
 
+func TestClearAnnotationsRemovesManifestAnnotations(t *testing.T) {
+	service := NewService()
+	pkg, err := service.CreateMock(t.TempDir(), CreateMockRequest{
+		Source: ManifestSource{
+			Type: "screen",
+			ID:   "screen:primary",
+		},
+	})
+	if err != nil {
+		t.Fatalf("CreateMock() error = %v", err)
+	}
+	if _, err := service.PatchAnnotations(pkg.ManifestPath, ManifestAnnotations{}); err != nil {
+		t.Fatalf("PatchAnnotations() error = %v", err)
+	}
+
+	manifest, err := service.ClearAnnotations(pkg.ManifestPath)
+	if err != nil {
+		t.Fatalf("ClearAnnotations() error = %v", err)
+	}
+	if manifest.Annotations != nil {
+		t.Fatalf("annotations = %#v, want nil after clear", manifest.Annotations)
+	}
+	reloaded, err := service.ReadManifest(pkg.ManifestPath)
+	if err != nil {
+		t.Fatalf("ReadManifest() error = %v", err)
+	}
+	if reloaded.Annotations != nil {
+		t.Fatalf("reloaded annotations = %#v, want nil after clear", reloaded.Annotations)
+	}
+}
+
 func TestWriteManifestRejectsEscapingAnnotationPath(t *testing.T) {
 	service := NewService()
 	err := service.WriteManifest(filepath.Join(t.TempDir(), ManifestFile), Manifest{

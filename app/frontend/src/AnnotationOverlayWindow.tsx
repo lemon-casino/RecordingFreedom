@@ -6,8 +6,10 @@ import {
   MousePointer2,
   PenLine,
   RectangleHorizontal,
+  RefreshCcw,
   Save,
   Type,
+  Undo2,
   X,
 } from 'lucide-react'
 import {useCallback, useEffect, useLayoutEffect, useRef, useState} from 'react'
@@ -16,7 +18,7 @@ import type {ExcalidrawImperativeAPI} from '@excalidraw/excalidraw/types'
 import '@excalidraw/excalidraw/index.css'
 import {copyByLocale} from './i18n'
 import {defaultSettings, normalizeLocale, normalizeTheme, type AppSettings, type LocaleCode, type ThemeCode, type WhiteboardTool} from './services/mockBackend'
-import {hideAnnotationOverlay, loadAnnotationCapture, loadSettings, patchWhiteboardSettings, saveAnnotationCapture, setAnnotationOverlayHitRegions, subscribeSettingsChanged, type AnnotationOverlayState, type CapsuleWindowHitRegion} from './services/recorderBackend'
+import {hideAnnotationOverlay, loadAnnotationCapture, loadSettings, patchWhiteboardSettings, reselectAnnotationRegion, saveAnnotationCapture, setAnnotationOverlayHitRegions, subscribeSettingsChanged, type AnnotationOverlayState, type CapsuleWindowHitRegion} from './services/recorderBackend'
 
 const annotationTools: Array<{tool: WhiteboardTool; icon: typeof PenLine; label: 'select' | 'pen' | 'arrow' | 'line' | 'rectangle' | 'ellipse' | 'text' | 'eraser'}> = [
   {tool: 'selection', icon: MousePointer2, label: 'select'},
@@ -64,6 +66,7 @@ function AnnotationOverlayWindow() {
   const canvasRef = useRef<HTMLElement | null>(null)
   const copy = copyByLocale[locale]
   const canvasReceivesInput = annotationCanvasReceivesInput(activeTool)
+  const overlayKey = annotationOverlayKey(overlayState)
 
   function resetAnnotationElementTracking(scene: any) {
     elementSignatureRef.current = elementSignatureMap(scene?.elements ?? [])
@@ -170,7 +173,7 @@ function AnnotationOverlayWindow() {
     return () => {
       cancelled = true
     }
-  }, [overlayState?.packageDir])
+  }, [overlayKey])
 
   useEffect(() => {
     document.documentElement.lang = locale
@@ -317,6 +320,52 @@ function AnnotationOverlayWindow() {
     }
   }
 
+  const resetLocalAnnotationScene = () => {
+    if (saveTimerRef.current !== null) {
+      window.clearTimeout(saveTimerRef.current)
+      saveTimerRef.current = null
+    }
+    pendingElementEventsRef.current.clear()
+    lastSceneRef.current = ''
+    setDirty(false)
+    const scene = defaultAnnotationScene({
+      ...defaultSettings,
+      whiteboard: {
+        ...defaultSettings.whiteboard,
+        lastStrokeColor: strokeColor,
+        lastStrokeWidth: strokeWidth,
+        lastOpacity: opacity,
+      },
+    })
+    resetAnnotationElementTracking(scene)
+    apiRef.current?.resetScene()
+    window.setTimeout(() => applyStyle(strokeColor, strokeWidth, opacity), 0)
+  }
+
+  const reselectRegion = async () => {
+    try {
+      resetLocalAnnotationScene()
+      await reselectAnnotationRegion()
+    } catch (error) {
+      console.error('Failed to reselect annotation region:', error)
+    }
+  }
+
+  const undoAnnotationStep = () => {
+    const target = document.querySelector<HTMLElement>('.annotation-overlay-canvas .excalidraw') ?? document.querySelector<HTMLElement>('.annotation-overlay-canvas')
+    if (!target) return
+    target.focus({preventScroll: true})
+    const isMac = /Mac|iPhone|iPad|iPod/i.test(window.navigator.platform)
+    target.dispatchEvent(new KeyboardEvent('keydown', {
+      key: 'z',
+      code: 'KeyZ',
+      ctrlKey: !isMac,
+      metaKey: isMac,
+      bubbles: true,
+      cancelable: true,
+    }))
+  }
+
   if (!initialData) {
     return (
       <main className="annotation-overlay-shell" data-theme={theme}>
@@ -345,6 +394,12 @@ function AnnotationOverlayWindow() {
             </button>
           ))}
         </div>
+        <button type="button" aria-label={copy.whiteboard.undo} title={copy.whiteboard.undo} onClick={undoAnnotationStep}>
+          <Undo2 size={16} />
+        </button>
+        <button type="button" aria-label={copy.whiteboard.reselectRegion} title={copy.whiteboard.reselectRegion} onClick={() => void reselectRegion()}>
+          <RefreshCcw size={16} />
+        </button>
         <button type="button" aria-label={copy.whiteboard.save} title={copy.whiteboard.save} onClick={() => void saveCurrentAnnotation()}>
           <Save size={16} />
           <span>{saving ? copy.whiteboard.saved : dirty ? copy.whiteboard.unsaved : copy.whiteboard.ready}</span>
@@ -363,7 +418,7 @@ function AnnotationOverlayWindow() {
         }}
       >
         <Excalidraw
-          key={overlayState?.packageDir ?? 'annotation-overlay'}
+          key={overlayKey}
           initialData={initialData}
           langCode={locale}
           theme="dark"
@@ -448,6 +503,20 @@ function safeParseScene(sceneJson: string) {
   } catch {
     return null
   }
+}
+
+function annotationOverlayKey(state: AnnotationOverlayState | null) {
+  if (!state) return 'annotation-overlay'
+  const geometry = state.target.geometry ?? state.windowBounds
+  return [
+    state.packageDir || 'annotation-overlay',
+    state.target.type || 'target',
+    state.target.id || 'unknown',
+    geometry.x,
+    geometry.y,
+    geometry.width,
+    geometry.height,
+  ].join(':')
 }
 
 function elementSignatureMap(elements: readonly unknown[]) {

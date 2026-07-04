@@ -1,6 +1,7 @@
 import {expect, test, type Page} from '@playwright/test'
 
 const browserSettingsKey = 'recordingfreedom.settings.v1'
+const browserAnnotationSceneKey = 'recordingfreedom.annotation.scene.v1'
 
 test('annotation overlay narrows hit regions in pass-through mode', async ({page}) => {
   await openAnnotationOverlay(page)
@@ -21,6 +22,31 @@ test('annotation overlay narrows hit regions in pass-through mode', async ({page
   await expect(shell).toHaveClass(/is-drawing/)
   await expect(canvas).toHaveCSS('pointer-events', 'auto')
   await expectAnnotationHitRegions(page, 'drawing')
+})
+
+test('annotation overlay exposes undo and region reselect controls', async ({page}) => {
+  await openAnnotationOverlay(page)
+
+  await expect(page.getByRole('button', {name: 'Undo'})).toBeVisible()
+  await expect(page.getByRole('button', {name: 'Reselect board area'})).toBeVisible()
+  await page.evaluate((sceneKey) => {
+    window.localStorage.setItem(sceneKey, '{"type":"excalidraw","elements":[{"id":"old"}],"appState":{},"files":{}}')
+  }, browserAnnotationSceneKey)
+
+  await page.getByRole('button', {name: 'Reselect board area'}).click()
+
+  await expect.poll(async () => page.evaluate((sceneKey) => {
+    const session = (window as Window & {
+      __RF_LAST_ANNOTATION_REGION_RESELECT__?: {purpose?: string}
+    }).__RF_LAST_ANNOTATION_REGION_RESELECT__
+    return {
+      scene: window.localStorage.getItem(sceneKey),
+      purpose: session?.purpose,
+    }
+  }, browserAnnotationSceneKey)).toEqual({
+    scene: null,
+    purpose: 'annotation',
+  })
 })
 
 async function openAnnotationOverlay(page: Page) {
