@@ -9,7 +9,10 @@ import {
   FlipHorizontal,
   FolderOpen,
   Gauge,
+  History,
+  Image as ImageIcon,
   Languages,
+  Lock,
   Maximize2,
   Move,
   MousePointer2,
@@ -19,11 +22,14 @@ import {
   Play,
   Radio,
   Settings,
+  ScrollText,
   Square,
   Video,
   Volume2,
   Wand2,
   X,
+  Pin,
+  Unlock,
 } from 'lucide-react'
 import {Suspense, lazy, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type PointerEvent as ReactPointerEvent, type ReactNode} from 'react'
 import {copyByLocale, type RecorderCopy, type RecoveryMessageKey, type SourceSelectionMessageKey, type StatusMessageKey, type StorageMessageKey} from './i18n'
@@ -34,6 +40,7 @@ import {
   localeOptions,
   normalizeLocale,
   normalizeTheme,
+  shortcutActions,
   sources,
   systemAudioDevices,
   themeOptions,
@@ -56,11 +63,14 @@ import {
   type RecordingPreflight,
   type RecordingQuality,
   type RecordingState,
+  type ShortcutAction,
+  type ShortcutSettings,
+  type ScreenshotItem,
   type ThemeCode,
   fallbackCapabilities,
   fallbackStorageStatus,
 } from './services/mockBackend'
-import {cancelRegionSelector, cancelSelectedRegion, completeAnnotationRegionSelection, completeRegionSelection, exportRecordingPackage, hidePipOverlay, hideRegionFrame, hideScreenIndicator, hideSettingsWindow, loadBootstrap, loadSettings, logClientEvent, openRecordingPackage, openVideoDirectory, patchAudioState, patchSettingsPreferences, patchWhiteboardSettings, pauseRecording, preflightAudioOnlyRecording, preflightRecording, previewExportRecordingPackage, quitApplication, readAnnotationPreviewImage, readPipPreviewImage, recoverRecordingPackage, restoreCapsuleWindow, resumeRecording, saveSettings, setCapsuleWindowExpanded, setCapsuleWindowHitRegions, setDataRoot, showAnnotationOverlay, showAnnotationRegionSelector, showPipOverlay, showRegionSelector, showScreenIndicator, showWhiteboardWindow, snapCapsuleWindowToEdge, startAudioOnlyRecording, startMicrophoneLevelMonitor, startRecording, stopMicrophoneLevelMonitor, stopRecording, subscribeAudioLevel, subscribeAudioState, subscribeCapsuleWindowMoveEnded, subscribeRecordingStatus, subscribeRegionSelection, subscribeSettingsChanged, subscribeWhiteboardVisibility, updatePipOverlay, updateSelectedRegion, type AudioControlState, type AudioLevelUpdate, type AudioStatePatch, type CapsuleWindowDockSide, type CapsuleWindowExpandDirection, type CapsuleWindowHitRegion, type PIPOverlayCamera, type PIPOverlayState, type RecordingExportPlan, type RecordingRecovery, type RecordingStatusUpdate, type RegionSelectionSession, type SettingsPreferencesPatch, type WhiteboardSettingsPatch, type WhiteboardVisibilityUpdate} from './services/recorderBackend'
+import {cancelRegionSelector, cancelSelectedRegion, completeAnnotationRegionSelection, completeRegionSelection, completeScreenshotRegionSelection, exportRecordingPackage, hidePinnedScreenshot, hidePipOverlay, hideRegionFrame, hideScreenIndicator, hideSettingsWindow, listScreenshots, loadBootstrap, loadPinnedScreenshot, loadSettings, logClientEvent, openRecordingPackage, openScreenshot, openScreenshotInWhiteboard, openVideoDirectory, patchAudioState, patchScreenshotItem, patchSettingsPreferences, patchShortcutSettings, patchWhiteboardSettings, pauseRecording, preflightAudioOnlyRecording, preflightRecording, previewExportRecordingPackage, quitApplication, readAnnotationPreviewImage, readPipPreviewImage, recoverRecordingPackage, restoreCapsuleWindow, resumeRecording, saveSettings, setCapsuleWindowExpanded, setCapsuleWindowHitRegions, setDataRoot, showAnnotationOverlay, showAnnotationRegionSelector, showPinnedScreenshot, showPipOverlay, showRegionSelector, showScreenIndicator, showScreenshotRegionSelector, showWhiteboardWindow, snapCapsuleWindowToEdge, startAudioOnlyRecording, startMicrophoneLevelMonitor, startRecording, startScrollingScreenshot, stopMicrophoneLevelMonitor, stopRecording, subscribeAudioLevel, subscribeAudioState, subscribeCapsuleWindowMoveEnded, subscribeRecordingStatus, subscribeRegionSelection, subscribeScreenshotCaptured, subscribeScreenshotPin, subscribeSettingsChanged, subscribeShortcutTriggered, subscribeWhiteboardVisibility, updatePipOverlay, updateSelectedRegion, type AudioControlState, type AudioLevelUpdate, type AudioStatePatch, type CapsuleWindowDockSide, type CapsuleWindowExpandDirection, type CapsuleWindowHitRegion, type PIPOverlayCamera, type PIPOverlayState, type RecordingExportPlan, type RecordingRecovery, type RecordingStatusUpdate, type RegionSelectionSession, type ScreenshotPinState, type SettingsPreferencesPatch, type ShortcutSettingsPatch, type WhiteboardSettingsPatch, type WhiteboardVisibilityUpdate} from './services/recorderBackend'
 
 const AnnotationOverlayWindow = lazy(() => import('./AnnotationOverlayWindow'))
 const AnnotationRenderWindow = lazy(() => import('./AnnotationRenderWindow'))
@@ -87,7 +97,7 @@ const recordingQualityOptions: RecordingQuality[] = ['standard', 'balanced', 'hi
 const fpsOptions = [24, 30, 60]
 const countdownOptions = [0, 3, 5, 10]
 const previewPackagePath = 'data/video/recording-preview.rfrec'
-type ActivePanel = 'source' | 'audio' | 'camera' | 'language'
+type ActivePanel = 'source' | 'audio' | 'camera' | 'language' | 'board'
 
 function normalizePipPreset(value: PIPPreset): PIPPreset {
   return allPipPresetOptions.includes(value) ? value : 'bottom-right'
@@ -313,6 +323,7 @@ function App() {
   const isRegionOverlayWindow = route === '/region-overlay'
   const isScreenIndicatorWindow = route === '/screen-indicator'
   const isPipOverlayWindow = route === '/pip-overlay'
+  const isScreenshotPinWindow = route === '/screenshot-pin'
   const isWhiteboardWindow = route === '/whiteboard'
   const isAnnotationOverlayWindow = route === '/annotation-overlay'
   const isAnnotationRendererWindow = route === '/annotation-renderer'
@@ -338,6 +349,9 @@ function App() {
   }
   if (isPipOverlayWindow) {
     return <PIPOverlayWindow />
+  }
+  if (isScreenshotPinWindow) {
+    return <ScreenshotPinWindow />
   }
   if (isWhiteboardWindow) {
     return (
@@ -385,6 +399,11 @@ function App() {
   const [pipEdgeFeather, setPipEdgeFeather] = useState(0.16)
   const [locale, setLocale] = useState<LocaleCode>('zh-CN')
   const [theme, setTheme] = useState<ThemeCode>('night-teal')
+  const [shortcuts, setShortcuts] = useState<ShortcutSettings>(defaultSettings.shortcuts)
+  const [shortcutCapture, setShortcutCapture] = useState<ShortcutAction | null>(null)
+  const [shortcutError, setShortcutError] = useState('')
+  const [screenshots, setScreenshots] = useState<ScreenshotItem[]>([])
+  const [screenshotMessage, setScreenshotMessage] = useState('')
   const [includeAnnotationsInExport, setIncludeAnnotationsInExport] = useState(true)
   const [lastPackage, setLastPackage] = useState<string>(previewPackagePath)
   const [lastBackend, setLastBackend] = useState<string>('ui-preview')
@@ -428,6 +447,7 @@ function App() {
   const audioPatchTokenRef = useRef(0)
   const preferencePatchTokenRef = useRef(0)
   const whiteboardPatchTokenRef = useRef(0)
+  const shortcutPatchTokenRef = useRef(0)
   const exportPlanTokenRef = useRef(0)
   const localAudioIntentUntilRef = useRef(0)
   const localPreferenceIntentUntilRef = useRef(0)
@@ -440,6 +460,14 @@ function App() {
   const microphoneRef = useRef(microphone)
   const noiseSuppressionRef = useRef(noiseSuppression)
   const cameraRef = useRef(camera)
+  const shortcutCaptureRef = useRef<ShortcutAction | null>(null)
+  const shortcutActionsRef = useRef<Record<ShortcutAction, () => void>>({
+    toggleRecording: () => undefined,
+    togglePause: () => undefined,
+    toggleCamera: () => undefined,
+    openWhiteboard: () => undefined,
+    openScreenshot: () => undefined,
+  })
   const currentSettingsRef = useRef<AppSettings | null>(null)
   const persistedSettingsRef = useRef<AppSettings | null>(null)
   const rnnoiseActive = microphone && noiseSuppression
@@ -469,6 +497,7 @@ function App() {
   const SourceIcon = recordingMode === 'audio' ? Volume2 : sourceIcon[selectedSource.type]
   const sourceTitle = recordingMode === 'audio' ? copy.recordingModes.audio : sourceTypeLabel(selectedSource, copy)
   const sourceSubtitle = recordingMode === 'audio' ? audioOnlySourceMeta(systemAudio, microphone, copy) : sourceName(selectedSource, copy)
+  const titleWithShortcut = (label: string, action: ShortcutAction) => `${label} · ${formatShortcutForDisplay(shortcuts[action])}`
   const currentSettings = useMemo<AppSettings>(() => {
     const rawPipConfig = normalizePipConfig({
       preset: pipPreset,
@@ -513,6 +542,7 @@ function App() {
         ...(persistedSettingsRef.current?.whiteboard ?? defaultSettings.whiteboard),
         capturePolicy: annotationCapturePolicy(includeAnnotationsInExport),
       },
+      shortcuts,
       window: {
         minimizeToTray: true,
         theme,
@@ -536,12 +566,13 @@ function App() {
         ...persistedSettingsRef.current.whiteboard,
         capturePolicy: annotationCapturePolicy(includeAnnotationsInExport),
       },
+      shortcuts,
       window: {
         minimizeToTray: true,
         theme,
       },
     }
-  }, [appData.rootDir, camera, captureCursor, countdownSeconds, includeAnnotationsInExport, isSettingsWindow, locale, microphone, noiseSuppression, pipEdgeFeather, pipMirror, pipPosition, pipPreset, pipScale, pipShape, recordingFPS, recordingQuality, selectedCamera, selectedMic, selectedSource.id, selectedSource.type, selectedSystemAudio, systemAudio, theme])
+  }, [appData.rootDir, camera, captureCursor, countdownSeconds, includeAnnotationsInExport, isSettingsWindow, locale, microphone, noiseSuppression, pipEdgeFeather, pipMirror, pipPosition, pipPreset, pipScale, pipShape, recordingFPS, recordingQuality, selectedCamera, selectedMic, selectedSource.id, selectedSource.type, selectedSystemAudio, shortcuts, systemAudio, theme])
   const settingsAutosaveKey = useMemo(() => JSON.stringify({
     locale,
     sourceId: selectedSource.id,
@@ -920,6 +951,57 @@ function App() {
           .catch((loadError) => console.error('Failed to reload whiteboard settings:', loadError))
       })
   }
+  const settingsWithShortcutPatch = (settings: AppSettings | null, patch: ShortcutSettingsPatch): AppSettings | null => {
+    if (!settings) return settings
+    return {
+      ...settings,
+      shortcuts: {
+        ...settings.shortcuts,
+        ...patch,
+      },
+    }
+  }
+  const applyLocalShortcutPatch = (patch: ShortcutSettingsPatch) => {
+    setShortcuts((current) => ({...current, ...patch}))
+    currentSettingsRef.current = settingsWithShortcutPatch(currentSettingsRef.current, patch)
+    persistedSettingsRef.current = settingsWithShortcutPatch(persistedSettingsRef.current, patch)
+  }
+  const commitShortcutSettingsPatch = (action: ShortcutAction, accelerator: string) => {
+    const conflict = shortcutActions.find((candidate) => (
+      candidate !== action &&
+      shortcutIdentity(shortcuts[candidate]) === shortcutIdentity(accelerator)
+    ))
+    if (conflict) {
+      setShortcutError(copy.settings.shortcutConflict(copy.settings.shortcutActionLabels[conflict]))
+      return
+    }
+    const patch = {[action]: accelerator} as ShortcutSettingsPatch
+    const token = shortcutPatchTokenRef.current + 1
+    shortcutPatchTokenRef.current = token
+    setShortcutCapture(null)
+    setShortcutError('')
+    applyLocalShortcutPatch(patch)
+    void logClientEvent('shortcuts', 'patch-request', {
+      action,
+      accelerator,
+    })
+    void patchShortcutSettings(patch)
+      .then((settings) => {
+        if (token !== shortcutPatchTokenRef.current) return
+        persistedSettingsRef.current = settings
+        currentSettingsRef.current = settings
+        setShortcuts(settings.shortcuts)
+      })
+      .catch((error) => {
+        const message = readableError(error)
+        setShortcutError(message || copy.settings.shortcutInvalid)
+        console.error('Failed to patch shortcut settings:', error)
+        void logClientEvent('shortcuts', 'patch-error', {action, accelerator}, message)
+        void loadSettings()
+          .then((settings) => applySettingsState(settings))
+          .catch((loadError) => console.error('Failed to reload shortcut settings:', loadError))
+      })
+  }
   const mergeAudioIntoSettingsCache = (audio: AudioControlState) => {
     const apply = (settings: AppSettings | null): AppSettings | null => {
       if (!settings) return settings
@@ -1028,6 +1110,7 @@ function App() {
     }
     persistedSettingsRef.current = effectiveSettings
     setIncludeAnnotationsInExport(effectiveSettings.whiteboard.capturePolicy !== 'preview-only')
+    setShortcuts(effectiveSettings.shortcuts ?? defaultSettings.shortcuts)
     const systemAudioList = nextMedia?.systemAudio
     const microphoneList = nextMedia?.microphones
     const cameraList = nextMedia?.cameras
@@ -1149,6 +1232,10 @@ function App() {
   useEffect(() => {
     cameraRef.current = camera
   }, [camera])
+
+  useEffect(() => {
+    shortcutCaptureRef.current = shortcutCapture
+  }, [shortcutCapture])
 
   useEffect(() => {
     capsuleDockSideRef.current = capsuleDockSide
@@ -1399,7 +1486,7 @@ function App() {
 
   useEffect(() => {
     if (!recordingConfigLocked) return
-    if (activePanel === 'source' || activePanel === 'audio' || activePanel === 'camera') {
+    if (activePanel === 'source' || activePanel === 'audio' || activePanel === 'camera' || activePanel === 'board') {
       setActivePanel(null)
     }
   }, [activePanel, recordingConfigLocked])
@@ -1499,6 +1586,25 @@ function App() {
   useEffect(() => subscribeWhiteboardVisibility((event) => {
     setWhiteboardVisibility(event.visible ? event : null)
   }), [])
+
+  useEffect(() => {
+    let cancelled = false
+    void listScreenshots()
+      .then((items) => {
+        if (!cancelled) setScreenshots(items)
+      })
+      .catch((error) => {
+        console.error('Failed to load screenshot history:', error)
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [])
+
+  useEffect(() => subscribeScreenshotCaptured((item) => {
+    setScreenshots((current) => [item, ...current.filter((entry) => entry.id !== item.id)].slice(0, 200))
+    setScreenshotMessage(copy.screenshot.captured(item.width, item.height))
+  }), [copy])
 
   useEffect(() => subscribeAudioState((audio) => {
     void logClientEvent('audio', 'state', {
@@ -2020,6 +2126,107 @@ function App() {
     })()
   }
 
+  const openBoardTools = () => {
+    if (isRecording) {
+      openWhiteboard()
+      return
+    }
+    togglePanel('board')
+  }
+
+  const beginScreenshotCapture = () => {
+    if (isRecording) return
+    setActivePanel(null)
+    setSettingsOpen(false)
+    setClosePromptOpen(false)
+    setScreenshotMessage(copy.screenshot.selecting)
+    void showScreenshotRegionSelector()
+      .catch((error) => {
+        const message = readableError(error)
+        console.error('Failed to show screenshot selector:', error)
+        setScreenshotMessage(message || copy.screenshot.captureFailed)
+      })
+  }
+
+  const beginScrollingScreenshot = () => {
+    if (isRecording) return
+    setScreenshotMessage(copy.screenshot.scrollingPreparing)
+    void startScrollingScreenshot()
+      .then(() => setScreenshotMessage(copy.screenshot.scrollingStarted))
+      .catch((error) => {
+        const message = readableError(error)
+        console.error('Failed to start scrolling screenshot:', error)
+        setScreenshotMessage(message || copy.screenshot.scrollingUnavailable)
+      })
+  }
+
+  const openScreenshotFile = (item: ScreenshotItem) => {
+    void openScreenshot(item.id)
+      .catch((error) => {
+        console.error('Failed to open screenshot:', error)
+        setScreenshotMessage(readableError(error))
+      })
+  }
+
+  const annotateScreenshot = (item: ScreenshotItem) => {
+    setActivePanel(null)
+    void openScreenshotInWhiteboard(item.id)
+      .catch((error) => {
+        console.error('Failed to open screenshot in whiteboard:', error)
+        setScreenshotMessage(readableError(error))
+      })
+  }
+
+  const pinScreenshot = (item: ScreenshotItem) => {
+    void showPinnedScreenshot(item.id)
+      .then(() => listScreenshots())
+      .then(setScreenshots)
+      .catch((error) => {
+        console.error('Failed to pin screenshot:', error)
+        setScreenshotMessage(readableError(error))
+      })
+  }
+
+  const toggleScreenshotFixed = (item: ScreenshotItem) => {
+    void patchScreenshotItem(item.id, {fixed: !item.fixed})
+      .then(setScreenshots)
+      .then(() => {
+        if (!item.fixed) return showPinnedScreenshot(item.id).then(() => undefined)
+        return undefined
+      })
+      .catch((error) => {
+        console.error('Failed to toggle screenshot fixed state:', error)
+        setScreenshotMessage(readableError(error))
+      })
+  }
+
+  const toggleCameraFromShortcut = () => {
+    if (recordingConfigLocked || recordingMode !== 'video') {
+      void logClientEvent('shortcuts', 'camera-ignored', {
+        recordingConfigLocked,
+        recordingMode,
+      })
+      return
+    }
+    setActivePanel(null)
+    setSettingsOpen(false)
+    setClosePromptOpen(false)
+    setCameraEnabled(!cameraRef.current)
+  }
+
+  shortcutActionsRef.current = {
+    toggleRecording: toggleRecord,
+    togglePause,
+    toggleCamera: toggleCameraFromShortcut,
+    openWhiteboard,
+    openScreenshot: beginScreenshotCapture,
+  }
+
+  useEffect(() => subscribeShortcutTriggered((event) => {
+    if (isSettingsWindow || shortcutCaptureRef.current) return
+    shortcutActionsRef.current[event.action]?.()
+  }), [isSettingsWindow])
+
   const confirmCloseApplication = async () => {
     if (closeBusy) return
     setCloseBusy(true)
@@ -2128,6 +2335,30 @@ function App() {
           detail={copy.settings.themeDetail}
           onChange={(value) => commitSettingsPreferencePatch({theme: normalizeTheme(value)})}
         />
+        <SettingLine
+          title={copy.settings.shortcuts}
+          value={copy.settings.shortcutSummary}
+          detail={shortcutError || copy.settings.shortcutDetail}
+        />
+        {shortcutActions.map((action) => (
+          <SettingShortcut
+            key={action}
+            title={copy.settings.shortcutActionLabels[action]}
+            value={formatShortcutForDisplay(shortcuts[action])}
+            detail={shortcutCapture === action ? copy.settings.shortcutHint : undefined}
+            actionLabel={shortcutCapture === action ? copy.settings.shortcutRecording : copy.settings.shortcutRecord}
+            capturing={shortcutCapture === action}
+            onStart={() => {
+              setShortcutError('')
+              setShortcutCapture(action)
+            }}
+            onCancel={() => {
+              setShortcutCapture(null)
+              setShortcutError('')
+            }}
+            onCapture={(accelerator) => commitShortcutSettingsPatch(action, accelerator)}
+          />
+        ))}
         <SettingLine
           title={copy.settings.recordingBackend}
           value={lastBackend}
@@ -2269,7 +2500,7 @@ function App() {
                 className={`icon-button ${recordingMode === 'video' && camera ? 'is-on' : ''}`}
                 type="button"
                 aria-label={copy.aria.openCameraSettings}
-                title={copy.panels.cameraSidecar}
+                title={titleWithShortcut(copy.panels.cameraSidecar, 'toggleCamera')}
                 disabled={recordingConfigLocked || recordingMode === 'audio'}
                 onClick={() => togglePanel('camera')}
               >
@@ -2282,6 +2513,7 @@ function App() {
             className={`record-button ${state}`}
             type="button"
             aria-label={state === 'recording' || state === 'paused' ? copy.aria.stopRecording : copy.aria.startRecording}
+            title={titleWithShortcut(state === 'recording' || state === 'paused' ? copy.aria.stopRecording : copy.aria.startRecording, 'toggleRecording')}
             onClick={toggleRecord}
           >
             {state === 'recording' || state === 'paused' ? <Square size={20} /> : <CircleDot size={22} />}
@@ -2290,13 +2522,14 @@ function App() {
           <button
             className={`icon-button soft whiteboard-open-button ${whiteboardButtonActive ? 'selected' : ''}`}
             type="button"
-            aria-label={copy.aria.openWhiteboard}
+            aria-label={isRecording ? copy.aria.openWhiteboard : copy.screenshot.tools}
             aria-pressed={whiteboardButtonActive}
-            title={copy.aria.openWhiteboard}
-            onClick={openWhiteboard}
+            title={isRecording ? titleWithShortcut(copy.aria.openWhiteboard, 'openWhiteboard') : `${copy.screenshot.tools} · ${formatShortcutForDisplay(shortcuts.openScreenshot)} / ${formatShortcutForDisplay(shortcuts.openWhiteboard)}`}
+            aria-expanded={!isRecording && activePanel === 'board'}
+            onClick={openBoardTools}
           >
             <PenLine size={18} />
-            <span className="whiteboard-label">{copy.whiteboard.open}</span>
+            <span className="whiteboard-label">{isRecording ? copy.whiteboard.open : copy.screenshot.toolsShort}</span>
           </button>
 
           {canOpenLastPackage && !isRecording && (
@@ -2321,7 +2554,7 @@ function App() {
             className="icon-button soft pause-button"
             type="button"
             aria-label={state === 'paused' ? copy.aria.resumeRecording : copy.aria.pauseRecording}
-            title={state === 'paused' ? copy.aria.resumeRecording : copy.aria.pauseRecording}
+            title={titleWithShortcut(state === 'paused' ? copy.aria.resumeRecording : copy.aria.pauseRecording, 'togglePause')}
             disabled={state !== 'recording' && state !== 'paused'}
             onClick={togglePause}
           >
@@ -2644,6 +2877,76 @@ function App() {
               </div>
             )}
 
+            {activePanel === 'board' && (
+              <div className="menu-stack board-tools-menu">
+                <div className="board-tool-actions">
+                  <button type="button" className="menu-row selected" onClick={beginScreenshotCapture}>
+                    <ImageIcon size={18} />
+                    <span>
+                      <strong>{copy.screenshot.region}</strong>
+                      <small>{formatShortcutForDisplay(shortcuts.openScreenshot)}</small>
+                    </span>
+                  </button>
+                  <button type="button" className="menu-row" onClick={beginScrollingScreenshot}>
+                    <ScrollText size={18} />
+                    <span>
+                      <strong>{copy.screenshot.scrolling}</strong>
+                      <small>{copy.screenshot.scrollingDetail}</small>
+                    </span>
+                  </button>
+                  <button type="button" className="menu-row" onClick={openWhiteboard}>
+                    <PenLine size={18} />
+                    <span>
+                      <strong>{copy.whiteboard.open}</strong>
+                      <small>{formatShortcutForDisplay(shortcuts.openWhiteboard)}</small>
+                    </span>
+                  </button>
+                </div>
+                <div className="screenshot-history-header">
+                  <span>
+                    <History size={15} />
+                    <strong>{copy.screenshot.history}</strong>
+                  </span>
+                  <small>{screenshotMessage || copy.screenshot.historyDetail}</small>
+                </div>
+                <div className="screenshot-history-list">
+                  {screenshots.length > 0 ? screenshots.slice(0, 6).map((item) => (
+                    <div className="screenshot-history-row" key={item.id}>
+                      <button type="button" className="screenshot-history-main" onClick={() => openScreenshotFile(item)}>
+                        <ImageIcon size={17} />
+                        <span>
+                          <strong>{screenshotDisplayName(item)}</strong>
+                          <small>{screenshotMeta(item, copy)}</small>
+                        </span>
+                      </button>
+                      <div className="screenshot-history-actions">
+                        <button type="button" aria-label={copy.screenshot.annotate} title={copy.screenshot.annotate} onClick={() => annotateScreenshot(item)}>
+                          <PenLine size={15} />
+                        </button>
+                        <button type="button" aria-label={copy.screenshot.pin} title={copy.screenshot.pin} onClick={() => pinScreenshot(item)}>
+                          <Pin size={15} />
+                        </button>
+                        <button
+                          type="button"
+                          className={item.fixed ? 'selected' : ''}
+                          aria-label={item.fixed ? copy.screenshot.unfix : copy.screenshot.fix}
+                          title={item.fixed ? copy.screenshot.unfix : copy.screenshot.fix}
+                          onClick={() => toggleScreenshotFixed(item)}
+                        >
+                          {item.fixed ? <Lock size={15} /> : <Unlock size={15} />}
+                        </button>
+                      </div>
+                    </div>
+                  )) : (
+                    <div className="source-empty">
+                      <ImageIcon size={18} />
+                      <span>{copy.screenshot.empty}</span>
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+
             {activePanel === 'language' && (
               <div className="menu-grid compact">
                 {localeOptions.map((code) => (
@@ -2721,6 +3024,74 @@ function ScreenIndicatorWindow() {
   return (
     <main className="screen-indicator-shell" aria-hidden="true">
       <span>{label || '1'}</span>
+    </main>
+  )
+}
+
+function ScreenshotPinWindow() {
+  const pinWindow = window as Window & {__RF_SCREENSHOT_PIN__?: ScreenshotPinState}
+  const [pinState, setPinState] = useState<ScreenshotPinState | undefined>(pinWindow.__RF_SCREENSHOT_PIN__)
+  const [locale, setLocale] = useState<LocaleCode>(navigator.language.toLowerCase().startsWith('zh') ? 'zh-CN' : 'en')
+  const [theme, setTheme] = useState<ThemeCode>('night-teal')
+  const copy = copyByLocale[locale]
+  const item = pinState?.item
+
+  useEffect(() => {
+    document.body.classList.add('rf-screenshot-pin-window')
+    return () => document.body.classList.remove('rf-screenshot-pin-window')
+  }, [])
+
+  useEffect(() => {
+    void Promise.all([loadSettings(), loadPinnedScreenshot()])
+      .then(([settings, state]) => {
+        setLocale(normalizeLocale(settings.locale))
+        setTheme(normalizeTheme(settings.window.theme))
+        setPinState(state)
+      })
+      .catch((error) => console.info('Using screenshot pin fallback:', error))
+    const unsubscribeSettings = subscribeSettingsChanged((settings) => {
+      setLocale(normalizeLocale(settings.locale))
+      setTheme(normalizeTheme(settings.window.theme))
+    })
+    const unsubscribePin = subscribeScreenshotPin((state) => {
+      setPinState(state)
+    })
+    return () => {
+      unsubscribeSettings()
+      unsubscribePin()
+    }
+  }, [])
+
+  useEffect(() => {
+    document.documentElement.lang = locale
+    document.documentElement.dataset.theme = theme
+  }, [locale, theme])
+
+  if (!pinState?.visible || !pinState.dataUrl || !item) {
+    return (
+      <main className="screenshot-pin-shell empty" data-theme={theme}>
+        <span>{copy.screenshot.empty}</span>
+      </main>
+    )
+  }
+
+  return (
+    <main className={`screenshot-pin-shell ${pinState.fixed ? 'fixed' : ''}`} data-theme={theme}>
+      <section className="screenshot-pin-toolbar">
+        <span>
+          <ImageIcon size={15} />
+          <strong>{screenshotDisplayName(item)}</strong>
+        </span>
+        <div>
+          <button type="button" aria-label={pinState.fixed ? copy.screenshot.fixed : copy.screenshot.pin} title={pinState.fixed ? copy.screenshot.fixed : copy.screenshot.pin}>
+            {pinState.fixed ? <Lock size={15} /> : <Pin size={15} />}
+          </button>
+          <button type="button" aria-label={copy.common.close} title={copy.common.close} onClick={() => void hidePinnedScreenshot()}>
+            <X size={16} />
+          </button>
+        </div>
+      </section>
+      <img src={pinState.dataUrl} alt={copy.screenshot.pinned} draggable={false} />
     </main>
   )
 }
@@ -3598,6 +3969,7 @@ function RegionOverlayWindow() {
   const isEditingRegion = editFrame?.mode === 'edit'
   const isRecordingRegion = editFrame?.mode === 'recording'
   const isAnnotationRegionSelection = session?.purpose === 'annotation'
+  const isScreenshotRegionSelection = session?.purpose === 'screenshot'
   const overlayOrigin = editFrame?.overlayBounds ?? session?.bounds ?? {x: 0, y: 0, width: 0, height: 0}
   const editableRect = isEditingRegion ? {
     x: editFrame.bounds.x - overlayOrigin.x,
@@ -3670,6 +4042,10 @@ function RegionOverlayWindow() {
     }
     if (isAnnotationRegionSelection) {
       await completeAnnotationRegionSelection(rect)
+      return
+    }
+    if (isScreenshotRegionSelection) {
+      await completeScreenshotRegionSelection(rect)
       return
     }
     await completeRegionSelection(rect)
@@ -4232,6 +4608,26 @@ function mediaDeviceName(device: MediaDevice, copy: RecorderCopy) {
   return copy.mediaDeviceNames[device.id] ?? device.name
 }
 
+function screenshotDisplayName(item: ScreenshotItem) {
+  const date = new Date(item.createdAt)
+  if (Number.isNaN(date.getTime())) return item.id
+  return `${date.toLocaleDateString()} ${date.toLocaleTimeString([], {hour: '2-digit', minute: '2-digit'})}`
+}
+
+function screenshotMeta(item: ScreenshotItem, copy: RecorderCopy) {
+  const size = item.width > 0 && item.height > 0 ? `${item.width} x ${item.height}` : copy.common.status
+  const mode = item.mode === 'scrolling'
+    ? copy.screenshot.scrolling
+    : item.mode === 'full'
+      ? copy.screenshot.full
+      : copy.screenshot.region
+  const flags = [
+    item.pinned ? copy.screenshot.pinned : '',
+    item.fixed ? copy.screenshot.fixed : '',
+  ].filter(Boolean)
+  return [mode, size, ...flags].join(' · ')
+}
+
 function selectPreferredCameraDevice(devices: MediaDevice[] | undefined, preferredId?: string): MediaDevice | undefined {
   if (!devices || devices.length === 0) return undefined
   const preferred = preferredId ? devices.find((device) => device.id === preferredId) : undefined
@@ -4409,6 +4805,59 @@ function SettingTextAction({
   )
 }
 
+function SettingShortcut({
+  title,
+  value,
+  detail,
+  actionLabel,
+  capturing,
+  onStart,
+  onCancel,
+  onCapture,
+}: {
+  title: string
+  value: string
+  detail?: string
+  actionLabel: string
+  capturing: boolean
+  onStart: () => void
+  onCancel: () => void
+  onCapture: (accelerator: string) => void
+}) {
+  const buttonRef = useRef<HTMLButtonElement | null>(null)
+  useEffect(() => {
+    if (capturing) buttonRef.current?.focus()
+  }, [capturing])
+  return (
+    <div className={`setting-line setting-shortcut ${capturing ? 'is-capturing' : ''}`}>
+      <span>{title}</span>
+      <div className="setting-shortcut-row">
+        <kbd>{capturing ? '...' : value}</kbd>
+        <button
+          ref={buttonRef}
+          className="setting-action shortcut-capture-button"
+          type="button"
+          onClick={capturing ? onCancel : onStart}
+          onKeyDown={(event) => {
+            if (!capturing) return
+            event.preventDefault()
+            event.stopPropagation()
+            if (event.key === 'Escape') {
+              onCancel()
+              return
+            }
+            const accelerator = shortcutFromKeyboardEvent(event.nativeEvent)
+            if (accelerator) onCapture(accelerator)
+          }}
+        >
+          {actionLabel}
+        </button>
+      </div>
+      {detail && <small>{detail}</small>}
+    </div>
+  )
+}
+
 function SettingToggle({title, checked, detail, onChange}: {title: string; checked: boolean; detail?: string; onChange: (value: boolean) => void}) {
   return (
     <div className="setting-line setting-control">
@@ -4416,6 +4865,79 @@ function SettingToggle({title, checked, detail, onChange}: {title: string; check
       {detail && <small>{detail}</small>}
     </div>
   )
+}
+
+function shortcutFromKeyboardEvent(event: KeyboardEvent): string | null {
+  const key = normalizeKeyboardShortcutKey(event.key)
+  if (!key) return null
+  const modifiers: string[] = []
+  const macLike = isMacLikePlatform()
+  if (event.metaKey || (!macLike && event.ctrlKey)) modifiers.push('CmdOrCtrl')
+  if (macLike && event.ctrlKey) modifiers.push('Ctrl')
+  if (event.altKey) modifiers.push('OptionOrAlt')
+  if (event.shiftKey) modifiers.push('Shift')
+  const uniqueModifiers = Array.from(new Set(modifiers))
+  if (uniqueModifiers.length === 0) return null
+  if (uniqueModifiers.length === 1 && uniqueModifiers[0] === 'Shift' && isPrintableShortcutKey(key)) return null
+  return [...uniqueModifiers, key].join('+')
+}
+
+function normalizeKeyboardShortcutKey(key: string): string | null {
+  if (!key || key === 'Control' || key === 'Shift' || key === 'Alt' || key === 'Meta') return null
+  if (key === ' ') return 'Space'
+  if (key === '+') return 'Plus'
+  if (key.length === 1) return key.toUpperCase()
+  if (key.startsWith('Arrow')) return key.replace('Arrow', '')
+  if (/^F\d{1,2}$/i.test(key)) return key.toUpperCase()
+  const aliases: Record<string, string> = {
+    Escape: 'Escape',
+    Esc: 'Escape',
+    Enter: 'Enter',
+    Return: 'Enter',
+    Backspace: 'Backspace',
+    Delete: 'Delete',
+    Tab: 'Tab',
+    Home: 'Home',
+    End: 'End',
+    PageUp: 'Page Up',
+    PageDown: 'Page Down',
+  }
+  return aliases[key] ?? null
+}
+
+function isMacLikePlatform(): boolean {
+  const platform = navigator.platform?.toLowerCase() ?? ''
+  return platform.includes('mac') || /mac os|iphone|ipad/.test(navigator.userAgent.toLowerCase())
+}
+
+function isPrintableShortcutKey(key: string): boolean {
+  return key.length === 1 || key === 'Space' || key === 'Plus'
+}
+
+function formatShortcutForDisplay(shortcut: string): string {
+  return shortcut
+    .split('+')
+    .filter(Boolean)
+    .map((part) => {
+      if (part === 'CmdOrCtrl') return isMacLikePlatform() ? 'Cmd' : 'Ctrl'
+      if (part === 'OptionOrAlt') return isMacLikePlatform() ? 'Option' : 'Alt'
+      return part
+    })
+    .join(' + ')
+}
+
+function shortcutIdentity(shortcut: string): string {
+  return shortcut
+    .split('+')
+    .filter(Boolean)
+    .map((part, index, parts) => {
+      if (index === parts.length - 1) return part.toLowerCase()
+      if (part === 'CmdOrCtrl') return isMacLikePlatform() ? 'cmd' : 'ctrl'
+      if (part === 'OptionOrAlt') return 'alt'
+      return part.toLowerCase()
+    })
+    .sort()
+    .join('+')
 }
 
 export default App

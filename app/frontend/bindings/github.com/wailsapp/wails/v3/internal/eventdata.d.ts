@@ -22,7 +22,10 @@ declare module "@wailsio/runtime" {
             "audio.state": main$0.AudioState;
             "capture.region.selected": main$0.RegionSelectionResult;
             "recording.status": recording$0.StatusEvent;
+            "screenshot.captured": main$0.ScreenshotCapturedEvent;
+            "screenshot.pin": main$0.ScreenshotPinEvent;
             "settings.changed": settings$0.Settings;
+            "shortcut.triggered": main$0.ShortcutTriggeredEvent;
             "whiteboard.visibility": main$0.WhiteboardVisibilityEvent;
         }
     }

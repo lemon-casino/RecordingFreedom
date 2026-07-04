@@ -48,6 +48,9 @@ func TestLoadMissingSettingsReturnsDefaults(t *testing.T) {
 	if got.Whiteboard.LastOpacity != 100 {
 		t.Fatalf("default whiteboard opacity = %d, want 100", got.Whiteboard.LastOpacity)
 	}
+	if got.Shortcuts.ToggleRecording != "CmdOrCtrl+Shift+R" || got.Shortcuts.OpenWhiteboard != "CmdOrCtrl+Shift+B" {
+		t.Fatalf("default shortcuts = %#v, want recording and whiteboard defaults", got.Shortcuts)
+	}
 }
 
 func TestSaveAndLoadSettings(t *testing.T) {
@@ -100,6 +103,12 @@ func TestSaveAndLoadSettings(t *testing.T) {
 			LastOpacity:     65,
 			CapturePolicy:   "export-compose",
 		},
+		Shortcuts: ShortcutSettings{
+			ToggleRecording: "cmdorctrl + shift + r",
+			TogglePause:     "CmdOrCtrl+Alt+P",
+			ToggleCamera:    "CmdOrCtrl+Shift+C",
+			OpenWhiteboard:  "CmdOrCtrl+Shift+B",
+		},
 		Window: WindowSettings{MinimizeToTray: true, Theme: ThemeSunsetYellow},
 	})
 	if err != nil {
@@ -143,6 +152,9 @@ func TestSaveAndLoadSettings(t *testing.T) {
 	if loaded.Window.Theme != ThemeSunsetYellow {
 		t.Fatalf("theme = %q, want %q", loaded.Window.Theme, ThemeSunsetYellow)
 	}
+	if loaded.Shortcuts.ToggleRecording != "CmdOrCtrl+Shift+R" || loaded.Shortcuts.TogglePause != "CmdOrCtrl+OptionOrAlt+P" {
+		t.Fatalf("shortcuts were not normalized and persisted: %#v", loaded.Shortcuts)
+	}
 }
 
 func TestSaveNormalizesInvalidSettings(t *testing.T) {
@@ -159,6 +171,12 @@ func TestSaveNormalizesInvalidSettings(t *testing.T) {
 			LastStrokeWidth: "giant",
 			LastOpacity:     120,
 			CapturePolicy:   "capture-window",
+		},
+		Shortcuts: ShortcutSettings{
+			ToggleRecording: "",
+			TogglePause:     "R",
+			ToggleCamera:    "Shift+C",
+			OpenWhiteboard:  "CmdOrCtrl+Shift+B",
 		},
 		Window: WindowSettings{Theme: Theme("neon")},
 	})
@@ -185,6 +203,27 @@ func TestSaveNormalizesInvalidSettings(t *testing.T) {
 	}
 	if saved.Whiteboard.LastMode != "board" || saved.Whiteboard.LastTool != "freedraw" || saved.Whiteboard.LastStrokeWidth != "medium" || saved.Whiteboard.LastOpacity != 100 || saved.Whiteboard.CapturePolicy != "export-compose" {
 		t.Fatalf("normalized whiteboard = %#v, want defaults with opacity clamped", saved.Whiteboard)
+	}
+	if saved.Shortcuts != DefaultShortcuts() {
+		t.Fatalf("invalid shortcuts normalized to %#v, want defaults %#v", saved.Shortcuts, DefaultShortcuts())
+	}
+}
+
+func TestValidateShortcutsRejectsDuplicatesAndPlainKeys(t *testing.T) {
+	duplicates := DefaultShortcuts()
+	duplicates.TogglePause = duplicates.ToggleRecording
+	if _, err := ValidateShortcuts(duplicates); err == nil {
+		t.Fatal("ValidateShortcuts() should reject duplicate shortcuts")
+	}
+	plain := DefaultShortcuts()
+	plain.ToggleRecording = "R"
+	if _, err := ValidateShortcuts(plain); err == nil {
+		t.Fatal("ValidateShortcuts() should reject plain letter shortcuts")
+	}
+	shiftOnly := DefaultShortcuts()
+	shiftOnly.ToggleRecording = "Shift+R"
+	if _, err := ValidateShortcuts(shiftOnly); err == nil {
+		t.Fatal("ValidateShortcuts() should reject shift-only printable shortcuts")
 	}
 }
 

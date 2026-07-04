@@ -339,6 +339,51 @@ func createPIPOverlayWindow(app *application.App) *application.WebviewWindow {
 	return window
 }
 
+func createScreenshotPinWindow(app *application.App) *application.WebviewWindow {
+	window := app.Window.NewWithOptions(application.WebviewWindowOptions{
+		Name:             "screenshot-pin",
+		Title:            "RecordingFreedom Pinned Screenshot",
+		Width:            640,
+		Height:           420,
+		MinWidth:         220,
+		MinHeight:        180,
+		Frameless:        true,
+		AlwaysOnTop:      true,
+		Hidden:           true,
+		HideOnEscape:     true,
+		DisableResize:    false,
+		BackgroundType:   application.BackgroundTypeTransparent,
+		BackgroundColour: application.NewRGBA(0, 0, 0, 0),
+		Mac: application.MacWindow{
+			Backdrop: application.MacBackdropTransparent,
+			TitleBar: application.MacTitleBar{
+				AppearsTransparent: true,
+				Hide:               true,
+				HideTitle:          true,
+				FullSizeContent:    true,
+			},
+			CollectionBehavior: application.MacWindowCollectionBehaviorCanJoinAllSpaces |
+				application.MacWindowCollectionBehaviorFullScreenAuxiliary,
+			WindowLevel: application.MacWindowLevelFloating,
+		},
+		Windows: application.WindowsWindow{
+			DisableFramelessWindowDecorations: true,
+		},
+		Linux: application.LinuxWindow{
+			Icon:                appIcon,
+			WindowIsTranslucent: true,
+		},
+		URL: "/#/screenshot-pin",
+	})
+
+	window.RegisterHook(events.Common.WindowClosing, func(e *application.WindowEvent) {
+		window.Hide()
+		e.Cancel()
+	})
+
+	return window
+}
+
 func mediaPreviewPermissions() map[application.PermissionType]application.Permission {
 	return map[application.PermissionType]application.Permission{
 		application.PermissionCamera:     application.PermissionAllow,

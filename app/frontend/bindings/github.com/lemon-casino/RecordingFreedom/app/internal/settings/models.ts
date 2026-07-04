@@ -48,8 +48,30 @@ export interface Settings {
     "audio": AudioSettings;
     "camera": CameraSettings;
     "whiteboard": WhiteboardSettings;
+    "shortcuts": ShortcutSettings;
     "window": WindowSettings;
     "updatedAt": time$0.Time;
+}
+
+export enum ShortcutAction {
+    /**
+     * The Go zero value for the underlying type of the enum.
+     */
+    $zero = "",
+
+    ShortcutActionToggleRecording = "toggleRecording",
+    ShortcutActionTogglePause = "togglePause",
+    ShortcutActionToggleCamera = "toggleCamera",
+    ShortcutActionOpenWhiteboard = "openWhiteboard",
+    ShortcutActionOpenScreenshot = "openScreenshot",
+};
+
+export interface ShortcutSettings {
+    "toggleRecording": string;
+    "togglePause": string;
+    "toggleCamera": string;
+    "openWhiteboard": string;
+    "openScreenshot": string;
 }
 
 export interface SourceSettings {

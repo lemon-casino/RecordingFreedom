@@ -107,6 +107,7 @@ type RecordingFreedomService struct {
 	regionOverlay         *application.WebviewWindow
 	screenIndicator       *application.WebviewWindow
 	pipOverlay            *application.WebviewWindow
+	screenshotPinWindow   *application.WebviewWindow
 	trayLocale            func(settings.Locale)
 	capsuleHitRegions     capsuleWindowHitRegions
 	annotationHitRegions  capsuleWindowHitRegions
@@ -129,6 +130,11 @@ type RecordingFreedomService struct {
 	micLevelDevice        string
 	micLevelToken         uint64
 	logMu                 sync.Mutex
+	shortcutMu            sync.Mutex
+	registeredShortcuts   map[settings.ShortcutAction]string
+	screenshotMu          sync.Mutex
+	screenshotPinState    ScreenshotPinState
+	whiteboardScreenshot  ScreenshotWhiteboardContext
 }
 
 func NewRecordingFreedomService() *RecordingFreedomService {
@@ -173,6 +179,10 @@ func (s *RecordingFreedomService) setScreenIndicatorWindow(window *application.W
 
 func (s *RecordingFreedomService) setPIPOverlayWindow(window *application.WebviewWindow) {
 	s.pipOverlay = window
+}
+
+func (s *RecordingFreedomService) setScreenshotPinWindow(window *application.WebviewWindow) {
+	s.screenshotPinWindow = window
 }
 
 func (s *RecordingFreedomService) setTrayLocaleUpdater(update func(settings.Locale)) {
@@ -733,6 +743,7 @@ func (s *RecordingFreedomService) SaveSettings(next settings.Settings) (settings
 	if currentSettings, err := s.settings.Load(); err == nil {
 		next.Recording = currentSettings.Recording
 		next.Window.Theme = currentSettings.Window.Theme
+		next.Shortcuts = currentSettings.Shortcuts
 	}
 	next.Storage.DataRootDir = info.RootDir
 	saved, err := s.settings.Save(next)

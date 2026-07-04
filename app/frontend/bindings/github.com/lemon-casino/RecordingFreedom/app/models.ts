@@ -239,6 +239,7 @@ export interface RegionSelectionResult {
 export interface RegionSelectionSession {
     "id": string;
     "bounds": RegionRect;
+    "captureBounds"?: RegionRect | null;
     "minimumWidth": number;
     "minimumHeight": number;
     "displayCount": number;
@@ -257,12 +258,93 @@ export interface ScreenIndicatorResult {
     "windowBounds": RegionRect;
 }
 
+export interface ScreenshotCaptureRequest {
+    "mode"?: string;
+    "region"?: RegionRect | null;
+}
+
+export interface ScreenshotCaptureResult {
+    "item": ScreenshotItem;
+}
+
+export interface ScreenshotCapturedEvent {
+    "item": ScreenshotItem;
+}
+
+export interface ScreenshotHistoryResult {
+    "items": ScreenshotItem[] | null;
+}
+
+export interface ScreenshotImageRequest {
+    "id"?: string;
+    "path"?: string;
+    "thumbnail"?: boolean;
+}
+
+export interface ScreenshotImageResult {
+    "available": boolean;
+    "dataUrl"?: string;
+    "path"?: string;
+    "bytes"?: number;
+}
+
+export interface ScreenshotItem {
+    "id": string;
+    "path": string;
+    "thumbnailPath"?: string;
+    "createdAt": string;
+    "width": number;
+    "height": number;
+    "mode": string;
+    "region"?: RegionRect | null;
+    "pinned": boolean;
+    "fixed": boolean;
+}
+
+export interface ScreenshotItemPatchRequest {
+    "id": string;
+    "pinned"?: boolean | null;
+    "fixed"?: boolean | null;
+}
+
+export interface ScreenshotPinEvent {
+    "visible": boolean;
+    "item"?: ScreenshotItem;
+    "fixed": boolean;
+}
+
+export interface ScreenshotPinState {
+    "visible": boolean;
+    "item"?: ScreenshotItem;
+    "dataUrl"?: string;
+    "fixed": boolean;
+}
+
+export interface ScreenshotWhiteboardContext {
+    "available": boolean;
+    "item"?: ScreenshotItem;
+    "dataUrl"?: string;
+}
+
 export interface SettingsPreferencesPatchRequest {
     "theme"?: settings$0.Theme | null;
     "recordingQuality"?: string | null;
     "recordingFps"?: number | null;
     "captureCursor"?: boolean | null;
     "countdownSeconds"?: number | null;
+}
+
+export interface ShortcutSettingsPatchRequest {
+    "toggleRecording"?: string | null;
+    "togglePause"?: string | null;
+    "toggleCamera"?: string | null;
+    "openWhiteboard"?: string | null;
+    "openScreenshot"?: string | null;
+}
+
+export interface ShortcutTriggeredEvent {
+    "action": settings$0.ShortcutAction;
+    "accelerator": string;
 }
 
 export interface WhiteboardExportRequest {

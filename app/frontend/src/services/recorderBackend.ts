@@ -23,7 +23,17 @@ import {
   type RegionSelectionSession as BoundRegionSelectionSession,
   type ScreenIndicatorRequest as BoundScreenIndicatorRequest,
   type ScreenIndicatorResult as BoundScreenIndicatorResult,
+  type ScreenshotCaptureRequest as BoundScreenshotCaptureRequest,
+  type ScreenshotCaptureResult as BoundScreenshotCaptureResult,
+  type ScreenshotHistoryResult as BoundScreenshotHistoryResult,
+  type ScreenshotImageRequest as BoundScreenshotImageRequest,
+  type ScreenshotImageResult as BoundScreenshotImageResult,
+  type ScreenshotItem as BoundScreenshotItem,
+  type ScreenshotItemPatchRequest as BoundScreenshotItemPatchRequest,
+  type ScreenshotPinState as BoundScreenshotPinState,
+  type ScreenshotWhiteboardContext as BoundScreenshotWhiteboardContext,
   type SettingsPreferencesPatchRequest as BoundSettingsPreferencesPatchRequest,
+  type ShortcutSettingsPatchRequest as BoundShortcutSettingsPatchRequest,
   type WhiteboardExportRequest as BoundWhiteboardExportRequest,
   type WhiteboardExportResult as BoundWhiteboardExportResult,
   type WhiteboardSceneRequest as BoundWhiteboardSceneRequest,
@@ -61,7 +71,9 @@ import {
   fallbackStorageStatus,
   mediaInventory as fallbackMediaInventory,
   normalizeLocale,
+  normalizeShortcutSettings,
   normalizeTheme,
+  shortcutActions,
   sources as fallbackSources,
   type AppSettings,
   type AudioOnlyRecordingRequest,
@@ -75,6 +87,9 @@ import {
   type MockRecordingRequest,
   type PIPConfig,
   type RecordingPreflight,
+  type ShortcutAction,
+  type ShortcutSettings,
+  type ScreenshotItem,
 } from './mockBackend'
 
 export type RecordingSession = {
@@ -136,6 +151,33 @@ export type SettingsPreferencesPatch = {
   recordingFps?: number
   captureCursor?: boolean
   countdownSeconds?: number
+}
+
+export type ShortcutSettingsPatch = Partial<ShortcutSettings>
+
+export type ShortcutTriggeredUpdate = {
+  action: ShortcutAction
+  accelerator: string
+}
+
+export type ScreenshotImage = {
+  available: boolean
+  dataUrl?: string
+  path?: string
+  bytes?: number
+}
+
+export type ScreenshotPinState = {
+  visible: boolean
+  item?: ScreenshotItem
+  dataUrl?: string
+  fixed: boolean
+}
+
+export type ScreenshotWhiteboardContext = {
+  available: boolean
+  item?: ScreenshotItem
+  dataUrl?: string
 }
 
 export type WhiteboardScene = {
@@ -221,7 +263,12 @@ export type CapsuleWindowHitRegion = {
 const browserSettingsKey = 'recordingfreedom.settings.v1'
 const browserWhiteboardSceneKey = 'recordingfreedom.whiteboard.scene.v1'
 const browserAnnotationSceneKey = 'recordingfreedom.annotation.scene.v1'
+const browserScreenshotHistoryKey = 'recordingfreedom.screenshots.history.v1'
+const browserScreenshotPinStateKey = 'recordingfreedom.screenshots.pin.v1'
+const browserScreenshotWhiteboardKey = 'recordingfreedom.screenshots.whiteboard.v1'
 const browserWhiteboardVisibilityEvent = 'rf-whiteboard-visibility'
+const browserScreenshotCapturedEvent = 'rf-screenshot-captured'
+const browserScreenshotPinEvent = 'rf-screenshot-pin'
 const capsuleWindowWidth = 760
 const capsuleWindowCompactWidth = 380
 const capsuleWindowCollapsedHeight = 96
@@ -329,10 +376,11 @@ export async function logClientEvent(component: string, event: string, fields: R
 export type RegionSelectionSession = {
   id: string
   bounds: {x: number; y: number; width: number; height: number}
+  captureBounds?: {x: number; y: number; width: number; height: number}
   minimumWidth: number
   minimumHeight: number
   displayCount: number
-  purpose?: 'capture' | 'annotation'
+  purpose?: 'capture' | 'annotation' | 'screenshot'
 }
 
 export type RegionSelectionResult = {
@@ -1033,6 +1081,57 @@ export function subscribeAudioState(handler: (event: AudioControlState) => void)
   }
 }
 
+export function subscribeShortcutTriggered(handler: (event: ShortcutTriggeredUpdate) => void): () => void {
+  try {
+    return Events.On('shortcut.triggered', (event) => {
+      handler(fromShortcutTriggeredEvent(event.data))
+    })
+  } catch (error) {
+    console.info('Desktop shortcut events unavailable:', error)
+    return () => {}
+  }
+}
+
+export function subscribeScreenshotCaptured(handler: (item: ScreenshotItem) => void): () => void {
+  let disposeDesktop = () => {}
+  try {
+    disposeDesktop = Events.On('screenshot.captured', (event) => {
+      const record = event.data && typeof event.data === 'object' ? event.data as {item?: BoundScreenshotItem} : {}
+      if (record.item) handler(fromBoundScreenshotItem(record.item))
+    })
+  } catch (error) {
+    console.info('Desktop screenshot captured events unavailable:', error)
+  }
+  const onBrowserEvent = (event: Event) => {
+    const item = (event as CustomEvent<ScreenshotItem>).detail
+    if (item) handler(item)
+  }
+  window.addEventListener(browserScreenshotCapturedEvent, onBrowserEvent)
+  return () => {
+    disposeDesktop()
+    window.removeEventListener(browserScreenshotCapturedEvent, onBrowserEvent)
+  }
+}
+
+export function subscribeScreenshotPin(handler: (state: ScreenshotPinState) => void): () => void {
+  let disposeDesktop = () => {}
+  try {
+    disposeDesktop = Events.On('screenshot.pin', (event) => {
+      handler(fromBoundScreenshotPinState(event.data as BoundScreenshotPinState))
+    })
+  } catch (error) {
+    console.info('Desktop screenshot pin events unavailable:', error)
+  }
+  const onBrowserEvent = (event: Event) => {
+    handler(fromBrowserScreenshotPinState((event as CustomEvent<ScreenshotPinState>).detail))
+  }
+  window.addEventListener(browserScreenshotPinEvent, onBrowserEvent)
+  return () => {
+    disposeDesktop()
+    window.removeEventListener(browserScreenshotPinEvent, onBrowserEvent)
+  }
+}
+
 export async function patchAudioState(patch: AudioStatePatch): Promise<AudioControlState> {
   try {
     return fromBoundAudioState(await RecordingFreedomService.PatchAudioState(toBoundAudioStatePatch(patch)))
@@ -1060,6 +1159,18 @@ export async function patchSettingsPreferences(patch: SettingsPreferencesPatch):
     console.info('Using browser settings preference patch fallback:', error)
     const current = loadBrowserSettings()
     const next = applyBrowserSettingsPreferencesPatch(current, patch)
+    window.localStorage?.setItem(browserSettingsKey, JSON.stringify(next))
+    return next
+  }
+}
+
+export async function patchShortcutSettings(patch: ShortcutSettingsPatch): Promise<AppSettings> {
+  try {
+    return fromBoundSettings(await RecordingFreedomService.PatchShortcutSettings(patch as BoundShortcutSettingsPatchRequest))
+  } catch (error) {
+    if (isWailsDesktopRuntime()) throw error
+    console.info('Using browser shortcut settings fallback:', error)
+    const next = applyBrowserShortcutPatch(loadBrowserSettings(), patch)
     window.localStorage?.setItem(browserSettingsKey, JSON.stringify(next))
     return next
   }
@@ -1151,6 +1262,52 @@ export async function completeAnnotationRegionSelection(request: RegionSelection
     if (isWailsDesktopRuntime()) throw error
     console.info('Using browser annotation region completion fallback:', error)
     return browserAnnotationOverlayState()
+  }
+}
+
+export async function showScreenshotRegionSelector(): Promise<RegionSelectionSession> {
+  try {
+    return fromBoundRegionSelectionSession(await RecordingFreedomService.ShowScreenshotRegionSelector())
+  } catch (error) {
+    if (isWailsDesktopRuntime()) throw error
+    console.info('Using browser screenshot region selector fallback:', error)
+    return {
+      id: `browser-screenshot-${Date.now()}`,
+      bounds: {x: 0, y: 0, width: window.innerWidth, height: window.innerHeight},
+      captureBounds: {x: 0, y: 0, width: window.innerWidth, height: window.innerHeight},
+      minimumWidth: 64,
+      minimumHeight: 64,
+      displayCount: 1,
+      purpose: 'screenshot',
+    }
+  }
+}
+
+export async function completeScreenshotRegionSelection(request: RegionSelectionSession['bounds']): Promise<ScreenshotItem> {
+  try {
+    const result = await RecordingFreedomService.CompleteScreenshotRegionSelection(toBoundRegionSelectionRequest(request))
+    return fromBoundScreenshotCaptureResult(result as BoundScreenshotCaptureResult).item
+  } catch (error) {
+    if (isWailsDesktopRuntime()) throw error
+    console.info('Using browser screenshot completion fallback:', error)
+    const item = createBrowserScreenshotItem('region', request)
+    saveBrowserScreenshotHistory([item, ...loadBrowserScreenshotHistory()])
+    window.dispatchEvent(new CustomEvent(browserScreenshotCapturedEvent, {detail: item}))
+    return item
+  }
+}
+
+export async function captureScreenshot(request: {mode?: string; region?: RegionSelectionSession['bounds']} = {}): Promise<ScreenshotItem> {
+  try {
+    const result = await RecordingFreedomService.CaptureScreenshot(request as unknown as BoundScreenshotCaptureRequest)
+    return fromBoundScreenshotCaptureResult(result as BoundScreenshotCaptureResult).item
+  } catch (error) {
+    if (isWailsDesktopRuntime()) throw error
+    console.info('Using browser screenshot capture fallback:', error)
+    const item = createBrowserScreenshotItem(request.mode ?? 'full', request.region)
+    saveBrowserScreenshotHistory([item, ...loadBrowserScreenshotHistory()])
+    window.dispatchEvent(new CustomEvent(browserScreenshotCapturedEvent, {detail: item}))
+    return item
   }
 }
 
@@ -1288,6 +1445,146 @@ export async function saveWhiteboardExport(request: {format: 'png' | 'svg' | 'ex
       outputPath: `browser-preview/data/whiteboards/exports/whiteboard.${request.format}`,
       bytes: (request.payload ?? request.dataUrl ?? '').length,
     }
+  }
+}
+
+export async function listScreenshots(): Promise<ScreenshotItem[]> {
+  try {
+    const result = await RecordingFreedomService.ListScreenshots()
+    return fromBoundScreenshotHistory(result as BoundScreenshotHistoryResult)
+  } catch (error) {
+    if (isWailsDesktopRuntime()) throw error
+    console.info('Using browser screenshot history fallback:', error)
+    return loadBrowserScreenshotHistory()
+  }
+}
+
+export async function readScreenshotImage(id: string, thumbnail = false): Promise<ScreenshotImage> {
+  try {
+    return fromBoundScreenshotImage(await RecordingFreedomService.ReadScreenshotImage({id, thumbnail} as BoundScreenshotImageRequest))
+  } catch (error) {
+    if (isWailsDesktopRuntime()) throw error
+    console.info('Using browser screenshot image fallback:', error)
+    const item = loadBrowserScreenshotHistory().find((entry) => entry.id === id)
+    return {
+      available: Boolean(item),
+      dataUrl: browserScreenshotDataUrl(item),
+      path: item?.path,
+      bytes: browserScreenshotDataUrl(item)?.length ?? 0,
+    }
+  }
+}
+
+export async function openScreenshot(id: string): Promise<ScreenshotItem | null> {
+  try {
+    return fromBoundScreenshotItem(await RecordingFreedomService.OpenScreenshot({id} as BoundScreenshotImageRequest))
+  } catch (error) {
+    if (isWailsDesktopRuntime()) throw error
+    console.info('Using browser screenshot open fallback:', error)
+    return loadBrowserScreenshotHistory().find((item) => item.id === id) ?? null
+  }
+}
+
+export async function patchScreenshotItem(id: string, patch: {pinned?: boolean; fixed?: boolean}): Promise<ScreenshotItem[]> {
+  try {
+    const result = await RecordingFreedomService.PatchScreenshotItem({id, ...patch} as BoundScreenshotItemPatchRequest)
+    return fromBoundScreenshotHistory(result as BoundScreenshotHistoryResult)
+  } catch (error) {
+    if (isWailsDesktopRuntime()) throw error
+    console.info('Using browser screenshot patch fallback:', error)
+    const next = loadBrowserScreenshotHistory().map((item) => item.id === id
+      ? {
+        ...item,
+        pinned: patch.fixed === true ? true : patch.pinned ?? item.pinned,
+        fixed: patch.pinned === false ? false : patch.fixed ?? item.fixed,
+      }
+      : item)
+    saveBrowserScreenshotHistory(next)
+    return next
+  }
+}
+
+export async function showPinnedScreenshot(id: string): Promise<ScreenshotPinState> {
+  try {
+    return fromBoundScreenshotPinState(await RecordingFreedomService.ShowPinnedScreenshot(id))
+  } catch (error) {
+    if (isWailsDesktopRuntime()) throw error
+    console.info('Using browser screenshot pin fallback:', error)
+    let items = await patchScreenshotItem(id, {pinned: true})
+    const item = items.find((entry) => entry.id === id)
+    const state = fromBrowserScreenshotPinState({
+      visible: Boolean(item),
+      item,
+      dataUrl: browserScreenshotDataUrl(item),
+      fixed: item?.fixed === true,
+    })
+    window.localStorage?.setItem(browserScreenshotPinStateKey, JSON.stringify(state))
+    window.dispatchEvent(new CustomEvent(browserScreenshotPinEvent, {detail: state}))
+    return state
+  }
+}
+
+export async function hidePinnedScreenshot(): Promise<void> {
+  try {
+    await RecordingFreedomService.HidePinnedScreenshot()
+  } catch (error) {
+    if (isWailsDesktopRuntime()) throw error
+    console.info('Using browser screenshot pin hide fallback:', error)
+    const state = {visible: false, fixed: false}
+    window.localStorage?.setItem(browserScreenshotPinStateKey, JSON.stringify(state))
+    window.dispatchEvent(new CustomEvent(browserScreenshotPinEvent, {detail: state}))
+  }
+}
+
+export async function loadPinnedScreenshot(): Promise<ScreenshotPinState> {
+  try {
+    return fromBoundScreenshotPinState(await RecordingFreedomService.LoadPinnedScreenshot())
+  } catch (error) {
+    if (isWailsDesktopRuntime()) throw error
+    console.info('Using browser screenshot pin state fallback:', error)
+    return fromBrowserScreenshotPinState(safeJSON(window.localStorage?.getItem(browserScreenshotPinStateKey)))
+  }
+}
+
+export async function openScreenshotInWhiteboard(id: string): Promise<ScreenshotWhiteboardContext> {
+  try {
+    return fromBoundScreenshotWhiteboardContext(await RecordingFreedomService.OpenScreenshotInWhiteboard(id))
+  } catch (error) {
+    if (isWailsDesktopRuntime()) throw error
+    console.info('Using browser screenshot whiteboard fallback:', error)
+    const item = loadBrowserScreenshotHistory().find((entry) => entry.id === id)
+    const context: ScreenshotWhiteboardContext = {
+      available: Boolean(item),
+      item,
+      dataUrl: browserScreenshotDataUrl(item),
+    }
+    window.localStorage?.setItem(browserScreenshotWhiteboardKey, JSON.stringify(context))
+    const popup = window.open('/#/whiteboard', 'recordingfreedom-whiteboard', 'width=1120,height=760')
+    popup?.focus()
+    emitBrowserWhiteboardVisibility({visible: true, mode: 'whiteboard'})
+    return context
+  }
+}
+
+export async function consumeScreenshotWhiteboardContext(): Promise<ScreenshotWhiteboardContext> {
+  try {
+    return fromBoundScreenshotWhiteboardContext(await RecordingFreedomService.ConsumeScreenshotWhiteboardContext())
+  } catch (error) {
+    if (isWailsDesktopRuntime()) throw error
+    console.info('Using browser screenshot whiteboard context fallback:', error)
+    const context = fromBrowserScreenshotWhiteboardContext(safeJSON(window.localStorage?.getItem(browserScreenshotWhiteboardKey)))
+    window.localStorage?.removeItem(browserScreenshotWhiteboardKey)
+    return context
+  }
+}
+
+export async function startScrollingScreenshot(): Promise<void> {
+  try {
+    await RecordingFreedomService.StartScrollingScreenshot()
+  } catch (error) {
+    if (isWailsDesktopRuntime()) throw error
+    console.info('Using browser scrolling screenshot fallback:', error)
+    throw error
   }
 }
 
@@ -1489,7 +1786,17 @@ export async function saveSettings(settings: AppSettings): Promise<AppSettings> 
     return fromBoundSettings(await RecordingFreedomService.SaveSettings(toBoundSettings(settings)))
   } catch (error) {
     console.info('Using browser mock settings save:', error)
-    const next = {...settings, updatedAt: new Date().toISOString()}
+    const current = loadBrowserSettings()
+    const next = {
+      ...settings,
+      recording: current.recording,
+      shortcuts: current.shortcuts,
+      window: {
+        ...settings.window,
+        theme: current.window.theme,
+      },
+      updatedAt: new Date().toISOString(),
+    }
     window.localStorage?.setItem(browserSettingsKey, JSON.stringify(next))
     return next
   }
@@ -1765,10 +2072,16 @@ function fromBoundRegionSelectionSession(session: BoundRegionSelectionSession): 
       width: session.bounds.width,
       height: session.bounds.height,
     },
+    captureBounds: session.captureBounds ? {
+      x: session.captureBounds.x,
+      y: session.captureBounds.y,
+      width: session.captureBounds.width,
+      height: session.captureBounds.height,
+    } : undefined,
     minimumWidth: session.minimumWidth,
     minimumHeight: session.minimumHeight,
     displayCount: session.displayCount,
-    purpose: session.purpose === 'annotation' ? 'annotation' : 'capture',
+    purpose: session.purpose === 'annotation' || session.purpose === 'screenshot' ? session.purpose : 'capture',
   }
 }
 
@@ -1850,6 +2163,57 @@ function fromBoundWhiteboardExport(result: BoundWhiteboardExportResult): Whitebo
     format: result.format === 'svg' || result.format === 'excalidraw' ? result.format : 'png',
     outputPath: result.outputPath,
     bytes: result.bytes,
+  }
+}
+
+function fromBoundScreenshotCaptureResult(result: BoundScreenshotCaptureResult): {item: ScreenshotItem} {
+  return {
+    item: fromBoundScreenshotItem(result.item),
+  }
+}
+
+function fromBoundScreenshotHistory(result: BoundScreenshotHistoryResult): ScreenshotItem[] {
+  return (result.items ?? []).map(fromBoundScreenshotItem)
+}
+
+function fromBoundScreenshotItem(item: BoundScreenshotItem): ScreenshotItem {
+  return {
+    id: item.id,
+    path: item.path,
+    thumbnailPath: item.thumbnailPath,
+    createdAt: item.createdAt,
+    width: item.width,
+    height: item.height,
+    mode: item.mode || 'region',
+    region: item.region ? fromBoundRegionRect(item.region) : undefined,
+    pinned: item.pinned === true,
+    fixed: item.fixed === true,
+  }
+}
+
+function fromBoundScreenshotImage(result: BoundScreenshotImageResult): ScreenshotImage {
+  return {
+    available: result.available === true,
+    dataUrl: result.dataUrl,
+    path: result.path,
+    bytes: result.bytes,
+  }
+}
+
+function fromBoundScreenshotPinState(state: Partial<BoundScreenshotPinState> | undefined): ScreenshotPinState {
+  return {
+    visible: state?.visible === true,
+    item: state?.item ? fromBoundScreenshotItem(state.item) : undefined,
+    dataUrl: state?.dataUrl,
+    fixed: state?.fixed === true,
+  }
+}
+
+function fromBoundScreenshotWhiteboardContext(context: Partial<BoundScreenshotWhiteboardContext> | undefined): ScreenshotWhiteboardContext {
+  return {
+    available: context?.available === true,
+    item: context?.item ? fromBoundScreenshotItem(context.item) : undefined,
+    dataUrl: context?.dataUrl,
   }
 }
 
@@ -2049,6 +2413,18 @@ function applyBrowserSettingsPreferencesPatch(settings: AppSettings, patch: Sett
   }
 }
 
+function applyBrowserShortcutPatch(settings: AppSettings, patch: ShortcutSettingsPatch): AppSettings {
+  const nextShortcuts = normalizeShortcutSettings({
+    ...settings.shortcuts,
+    ...patch,
+  })
+  return {
+    ...settings,
+    shortcuts: nextShortcuts,
+    updatedAt: new Date().toISOString(),
+  }
+}
+
 function applyBrowserWhiteboardPatch(settings: AppSettings, patch: WhiteboardSettingsPatch): AppSettings {
   return {
     ...settings,
@@ -2144,6 +2520,7 @@ function fromBoundSettings(settings: BoundSettings): AppSettings {
       pip: fromBoundPipConfig((settings.camera as BoundSettings['camera'] & {pip?: PIPConfig}).pip, settings.camera.pipPreset as AppSettings['camera']['pipPreset']),
     },
     whiteboard: fromBoundWhiteboardSettings((settings as BoundSettings & {whiteboard?: Partial<AppSettings['whiteboard']>}).whiteboard),
+    shortcuts: normalizeShortcutSettings((settings as BoundSettings & {shortcuts?: Partial<ShortcutSettings>}).shortcuts),
     window: {
       minimizeToTray: settings.window.minimizeToTray,
       theme: normalizeTheme(settings.window.theme),
@@ -2184,11 +2561,106 @@ function toBoundSettings(settings: AppSettings): BoundSettings {
       pip: settings.camera.pip as unknown as BoundSettings['camera']['pip'],
     },
     whiteboard: settings.whiteboard as unknown as BoundSettings['whiteboard'],
+    shortcuts: settings.shortcuts as unknown as BoundSettings['shortcuts'],
     window: {
       minimizeToTray: settings.window.minimizeToTray,
       theme: settings.window.theme as BoundSettings['window']['theme'],
     },
     updatedAt: settings.updatedAt ?? new Date(0).toISOString(),
+  }
+}
+
+function loadBrowserScreenshotHistory(): ScreenshotItem[] {
+  const parsed = safeJSON(window.localStorage?.getItem(browserScreenshotHistoryKey))
+  if (!Array.isArray(parsed)) return []
+  return parsed.map(fromBrowserScreenshotItem).filter((item): item is ScreenshotItem => item !== null)
+}
+
+function saveBrowserScreenshotHistory(items: ScreenshotItem[]) {
+  const unique = new Map<string, ScreenshotItem>()
+  for (const item of items) {
+    if (!item.id || unique.has(item.id)) continue
+    unique.set(item.id, item)
+  }
+  window.localStorage?.setItem(browserScreenshotHistoryKey, JSON.stringify(Array.from(unique.values()).slice(0, 200)))
+}
+
+function createBrowserScreenshotItem(mode: string, region?: RegionSelectionSession['bounds']): ScreenshotItem {
+  const createdAt = new Date().toISOString()
+  const width = Math.max(64, Math.round(region?.width ?? window.innerWidth ?? 1280))
+  const height = Math.max(64, Math.round(region?.height ?? window.innerHeight ?? 720))
+  const id = `browser-screenshot-${Date.now()}`
+  return {
+    id,
+    path: `browser-preview/data/screenshots/${id}.png`,
+    thumbnailPath: `browser-preview/data/screenshots/thumbnails/${id}.png`,
+    createdAt,
+    width,
+    height,
+    mode,
+    region: region ? {
+      x: Math.round(region.x),
+      y: Math.round(region.y),
+      width,
+      height,
+    } : undefined,
+    pinned: false,
+    fixed: false,
+  }
+}
+
+function fromBrowserScreenshotItem(value: unknown): ScreenshotItem | null {
+  const record = value && typeof value === 'object' ? value as Partial<ScreenshotItem> : {}
+  if (typeof record.id !== 'string' || typeof record.path !== 'string') return null
+  return {
+    id: record.id,
+    path: record.path,
+    thumbnailPath: typeof record.thumbnailPath === 'string' ? record.thumbnailPath : undefined,
+    createdAt: typeof record.createdAt === 'string' ? record.createdAt : new Date().toISOString(),
+    width: typeof record.width === 'number' ? record.width : 1280,
+    height: typeof record.height === 'number' ? record.height : 720,
+    mode: typeof record.mode === 'string' ? record.mode : 'region',
+    region: record.region,
+    pinned: record.pinned === true,
+    fixed: record.fixed === true,
+  }
+}
+
+function browserScreenshotDataUrl(item: ScreenshotItem | undefined | null): string | undefined {
+  if (!item) return undefined
+  const width = Math.max(64, Math.min(800, item.width || 480))
+  const height = Math.max(64, Math.min(600, item.height || 320))
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}"><defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#151b24"/><stop offset="1" stop-color="#263445"/></linearGradient></defs><rect width="100%" height="100%" fill="url(#g)"/><rect x="18" y="18" width="${width - 36}" height="${height - 36}" rx="18" fill="none" stroke="#ef4444" stroke-width="4"/><text x="32" y="54" fill="#f8fafc" font-family="Inter, Arial" font-size="18">RecordingFreedom screenshot preview</text><text x="32" y="84" fill="#9ca3af" font-family="Inter, Arial" font-size="13">${item.id}</text></svg>`
+  return `data:image/svg+xml;base64,${window.btoa(unescape(encodeURIComponent(svg)))}`
+}
+
+function fromBrowserScreenshotPinState(value: unknown): ScreenshotPinState {
+  const record = value && typeof value === 'object' ? value as Partial<ScreenshotPinState> : {}
+  const item = fromBrowserScreenshotItem(record.item)
+  return {
+    visible: record.visible === true,
+    item: item ?? undefined,
+    dataUrl: typeof record.dataUrl === 'string' ? record.dataUrl : browserScreenshotDataUrl(item),
+    fixed: record.fixed === true,
+  }
+}
+
+function fromBrowserScreenshotWhiteboardContext(value: unknown): ScreenshotWhiteboardContext {
+  const record = value && typeof value === 'object' ? value as Partial<ScreenshotWhiteboardContext> : {}
+  const item = fromBrowserScreenshotItem(record.item)
+  return {
+    available: record.available === true && Boolean(item),
+    item: item ?? undefined,
+    dataUrl: typeof record.dataUrl === 'string' ? record.dataUrl : browserScreenshotDataUrl(item),
+  }
+}
+
+function safeJSON(value: string | null | undefined): unknown {
+  if (!value) return null
+  try {
+    return JSON.parse(value)
+  } catch {
+    return null
   }
 }
 
@@ -2206,6 +2678,7 @@ function loadBrowserSettings(): AppSettings {
       audio: {...defaultSettings.audio, ...parsed.audio},
       camera: {...defaultSettings.camera, ...parsed.camera},
       whiteboard: {...defaultSettings.whiteboard, ...parsed.whiteboard},
+      shortcuts: normalizeShortcutSettings(parsed.shortcuts),
       window: {...defaultSettings.window, ...parsed.window},
     }
     const camera = {
@@ -2213,7 +2686,7 @@ function loadBrowserSettings(): AppSettings {
       pip: fromBoundPipConfig(next.camera.pip, next.camera.pipPreset),
     }
     camera.pipPreset = camera.pip.preset
-    return {...next, camera, locale: normalizeLocale(next.locale), window: {...next.window, theme: normalizeTheme(next.window.theme)}}
+    return {...next, camera, locale: normalizeLocale(next.locale), shortcuts: normalizeShortcutSettings(next.shortcuts), window: {...next.window, theme: normalizeTheme(next.window.theme)}}
   } catch {
     return defaultSettings
   }
@@ -2443,6 +2916,15 @@ function fromWhiteboardVisibilityEvent(value: unknown): WhiteboardVisibilityUpda
   return {
     visible: record.visible === true,
     mode: record.mode === 'annotation' ? 'annotation' : 'whiteboard',
+  }
+}
+
+function fromShortcutTriggeredEvent(value: unknown): ShortcutTriggeredUpdate {
+  const record = value && typeof value === 'object' ? value as Record<string, unknown> : {}
+  const action = shortcutActions.includes(record.action as ShortcutAction) ? record.action as ShortcutAction : 'toggleRecording'
+  return {
+    action,
+    accelerator: typeof record.accelerator === 'string' ? record.accelerator : '',
   }
 }
 

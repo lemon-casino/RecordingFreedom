@@ -22,7 +22,7 @@ import type {ExcalidrawImperativeAPI} from '@excalidraw/excalidraw/types'
 import '@excalidraw/excalidraw/index.css'
 import {copyByLocale} from './i18n'
 import {defaultSettings, normalizeLocale, normalizeTheme, type AppSettings, type LocaleCode, type ThemeCode, type WhiteboardStrokeWidth, type WhiteboardTool} from './services/mockBackend'
-import {hideWhiteboardWindow, loadSettings, loadWhiteboardScene, patchWhiteboardSettings, saveWhiteboardExport, saveWhiteboardScene, subscribeSettingsChanged} from './services/recorderBackend'
+import {consumeScreenshotWhiteboardContext, hideWhiteboardWindow, loadSettings, loadWhiteboardScene, patchWhiteboardSettings, saveWhiteboardExport, saveWhiteboardScene, subscribeSettingsChanged, type ScreenshotWhiteboardContext} from './services/recorderBackend'
 
 type SaveState = 'ready' | 'dirty' | 'saving' | 'saved' | 'failed'
 
@@ -76,14 +76,16 @@ function WhiteboardWindow() {
 
   useEffect(() => {
     let cancelled = false
-    void Promise.all([loadSettings(), loadWhiteboardScene()])
-      .then(([settings, scene]) => {
+    void Promise.all([loadSettings(), loadWhiteboardScene(), consumeScreenshotWhiteboardContext()])
+      .then(([settings, scene, screenshot]) => {
         if (cancelled) return
         applySettings(settings)
-        const parsed = scene.available && scene.sceneJson ? safeParseScene(scene.sceneJson) : null
+        const parsed = screenshot.available && screenshot.dataUrl
+          ? screenshotScene(settings, screenshot)
+          : scene.available && scene.sceneJson ? safeParseScene(scene.sceneJson) : null
         setInitialData(parsed ?? defaultScene(settings))
-        if (scene.sceneJson) lastSceneRef.current = scene.sceneJson
-        setStatusText(scene.available ? copy.whiteboard.ready : copy.whiteboard.unsaved)
+        if (!screenshot.available && scene.sceneJson) lastSceneRef.current = scene.sceneJson
+        setStatusText(screenshot.available ? copy.whiteboard.unsaved : scene.available ? copy.whiteboard.ready : copy.whiteboard.unsaved)
       })
       .catch((error) => {
         console.error('Failed to load whiteboard:', error)
@@ -430,6 +432,65 @@ function defaultScene(settings: AppSettings) {
     },
     elements: [],
     files: {},
+  }
+}
+
+function screenshotScene(settings: AppSettings, context: ScreenshotWhiteboardContext) {
+  const item = context.item
+  const width = Math.max(1, item?.width ?? 1280)
+  const height = Math.max(1, item?.height ?? 720)
+  const maxWidth = 1400
+  const scale = width > maxWidth ? maxWidth / width : 1
+  const sceneWidth = Math.round(width * scale)
+  const sceneHeight = Math.round(height * scale)
+  const fileId = `rf-screenshot-${item?.id ?? Date.now()}`
+  return {
+    appState: {
+      viewBackgroundColor: '#111827',
+      currentItemStrokeColor: settings.whiteboard.lastStrokeColor || '#ef4444',
+      currentItemStrokeWidthKey: settings.whiteboard.lastStrokeWidth || 'medium',
+      currentItemOpacity: normalizeOpacity(settings.whiteboard.lastOpacity),
+      scrollX: 80,
+      scrollY: 80,
+    },
+    elements: [{
+      id: `${fileId}-image`,
+      type: 'image',
+      x: 0,
+      y: 0,
+      width: sceneWidth,
+      height: sceneHeight,
+      angle: 0,
+      strokeColor: 'transparent',
+      backgroundColor: 'transparent',
+      fillStyle: 'solid',
+      strokeWidth: 1,
+      strokeStyle: 'solid',
+      roughness: 0,
+      opacity: 100,
+      groupIds: [],
+      frameId: null,
+      roundness: null,
+      seed: 1,
+      version: 1,
+      versionNonce: 1,
+      isDeleted: false,
+      boundElements: null,
+      updated: Date.now(),
+      link: null,
+      locked: true,
+      status: 'saved',
+      fileId,
+      scale: [1, 1],
+    }],
+    files: {
+      [fileId]: {
+        id: fileId,
+        dataURL: context.dataUrl,
+        mimeType: 'image/png',
+        created: Date.now(),
+      },
+    },
   }
 }
 

@@ -207,6 +207,11 @@ body.rf-pip-overlay-window {
   user-select: none;
 }
 
+body.rf-screenshot-pin-window {
+  background: transparent;
+  user-select: none;
+}
+
 button,
 select,
 input {
@@ -849,6 +854,12 @@ body.rf-recorder-window .select-menu-list {
   width: 360px;
 }
 
+.popover.panel-board {
+  left: 252px;
+  width: 430px;
+  max-height: min(468px, calc(100vh - 118px));
+}
+
 .rf-shell.dock-left .popover,
 .rf-shell.dock-right .popover {
   top: 8px;
@@ -896,6 +907,111 @@ body.rf-recorder-window .select-menu-list {
   gap: 6px;
   min-width: 0;
   width: 100%;
+}
+
+.board-tools-menu {
+  gap: 10px;
+}
+
+.board-tool-actions {
+  display: grid;
+  gap: 6px;
+}
+
+.screenshot-history-header {
+  display: grid;
+  gap: 4px;
+  padding: 4px 6px 0;
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.screenshot-history-header > span {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--text);
+}
+
+.screenshot-history-header strong {
+  font-size: 12px;
+}
+
+.screenshot-history-list {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+}
+
+.screenshot-history-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  padding: 4px;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.045);
+}
+
+.screenshot-history-main {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  min-width: 0;
+  flex: 1;
+  min-height: 42px;
+  padding: 7px 8px;
+  border: 0;
+  border-radius: 13px;
+  background: transparent;
+  color: var(--text);
+  text-align: left;
+}
+
+.screenshot-history-main:hover {
+  background: rgba(255, 255, 255, 0.07);
+}
+
+.screenshot-history-main span {
+  display: grid;
+  min-width: 0;
+}
+
+.screenshot-history-main strong,
+.screenshot-history-main small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.screenshot-history-main small {
+  color: var(--muted);
+  font-size: 10.5px;
+}
+
+.screenshot-history-actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.screenshot-history-actions button {
+  display: inline-grid;
+  width: 30px;
+  height: 30px;
+  place-items: center;
+  border: 1px solid transparent;
+  border-radius: 12px;
+  background: transparent;
+  color: var(--muted);
+}
+
+.screenshot-history-actions button:hover,
+.screenshot-history-actions button.selected {
+  border-color: rgba(17, 183, 167, 0.26);
+  background: rgba(17, 183, 167, 0.12);
+  color: var(--accent-readable);
 }
 
 .menu-grid > *,
@@ -1746,6 +1862,46 @@ input {
 .setting-control .switch-row {
   min-height: 32px;
   padding: 0;
+}
+
+.setting-shortcut {
+  gap: 8px;
+}
+
+.setting-shortcut-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(78px, auto);
+  gap: 8px;
+  align-items: center;
+  min-width: 0;
+}
+
+.setting-shortcut kbd {
+  display: inline-flex;
+  align-items: center;
+  min-width: 0;
+  min-height: 34px;
+  padding: 0 12px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.055);
+  color: var(--text);
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 850;
+  line-height: 1.2;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.setting-shortcut.is-capturing {
+  border-color: var(--accent-border);
+  background: var(--accent-option);
+}
+
+.shortcut-capture-button {
+  min-width: 78px;
 }
 
 .status-badge {
@@ -2682,6 +2838,89 @@ body.rf-annotation-overlay-window {
   text-shadow:
     1px 0 0 rgba(17, 183, 167, 0.8),
     -1px 0 0 rgba(245, 158, 11, 0.75);
+}
+
+.screenshot-pin-shell {
+  position: fixed;
+  inset: 0;
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  gap: 8px;
+  padding: 8px;
+  color: var(--text);
+  background: transparent;
+  --wails-draggable: drag;
+}
+
+.screenshot-pin-shell.empty {
+  place-items: center;
+  border-radius: 20px;
+  background: var(--panel-strong);
+  color: var(--muted);
+}
+
+.screenshot-pin-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  min-width: 0;
+  min-height: 34px;
+  padding: 4px 6px 4px 10px;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  background: var(--panel-strong);
+  box-shadow: var(--shadow-tight);
+  backdrop-filter: blur(18px) saturate(150%);
+}
+
+.screenshot-pin-toolbar span {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.screenshot-pin-toolbar strong {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 12px;
+}
+
+.screenshot-pin-toolbar div {
+  display: flex;
+  gap: 4px;
+}
+
+.screenshot-pin-toolbar button {
+  display: inline-grid;
+  width: 28px;
+  height: 28px;
+  place-items: center;
+  border: 1px solid transparent;
+  border-radius: 11px;
+  background: transparent;
+  color: var(--muted);
+  --wails-draggable: no-drag;
+}
+
+.screenshot-pin-toolbar button:hover {
+  border-color: var(--accent-border);
+  background: var(--accent-option);
+  color: var(--accent-readable);
+}
+
+.screenshot-pin-shell > img {
+  min-width: 0;
+  min-height: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  border: 1px solid var(--line-strong);
+  border-radius: 18px;
+  background: rgba(0, 0, 0, 0.28);
+  box-shadow: var(--shadow-panel);
 }
 
 .pip-overlay-shell {

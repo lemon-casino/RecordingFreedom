@@ -43,6 +43,10 @@ export function CancelSelectedRegion(): $CancellablePromise<$models.RegionSelect
     return $Call.ByID(1279436437);
 }
 
+export function CaptureScreenshot(req: $models.ScreenshotCaptureRequest): $CancellablePromise<$models.ScreenshotCaptureResult> {
+    return $Call.ByID(3383706216, req);
+}
+
 export function ClaimAnnotationRenderJob(): $CancellablePromise<$models.AnnotationRenderJobClaim> {
     return $Call.ByID(3090640534);
 }
@@ -57,6 +61,14 @@ export function CompleteAnnotationRenderJob(result: $models.AnnotationRenderJobR
 
 export function CompleteRegionSelection(req: $models.RegionSelectionRequest): $CancellablePromise<$models.RegionSelectionResult> {
     return $Call.ByID(1962254349, req);
+}
+
+export function CompleteScreenshotRegionSelection(req: $models.RegionSelectionRequest): $CancellablePromise<$models.ScreenshotCaptureResult> {
+    return $Call.ByID(167393633, req);
+}
+
+export function ConsumeScreenshotWhiteboardContext(): $CancellablePromise<$models.ScreenshotWhiteboardContext> {
+    return $Call.ByID(3553890718);
 }
 
 export function ExportRecordingPackage(req: $models.ExportRecordingRequest): $CancellablePromise<$models.ExportRecordingResult> {
@@ -79,6 +91,10 @@ export function HidePIPOverlay(): $CancellablePromise<void> {
     return $Call.ByID(2267008089);
 }
 
+export function HidePinnedScreenshot(): $CancellablePromise<void> {
+    return $Call.ByID(371308924);
+}
+
 export function HideRegionFrame(): $CancellablePromise<void> {
     return $Call.ByID(1481407147);
 }
@@ -99,12 +115,20 @@ export function ListMediaDevices(): $CancellablePromise<devices$0.MediaInventory
     return $Call.ByID(2412119741);
 }
 
+export function ListScreenshots(): $CancellablePromise<$models.ScreenshotHistoryResult> {
+    return $Call.ByID(3235644791);
+}
+
 export function ListSources(): $CancellablePromise<devices$0.CaptureSource[] | null> {
     return $Call.ByID(3137910140);
 }
 
 export function LoadAnnotationCapture(): $CancellablePromise<$models.WhiteboardSceneResult> {
     return $Call.ByID(2840498151);
+}
+
+export function LoadPinnedScreenshot(): $CancellablePromise<$models.ScreenshotPinState> {
+    return $Call.ByID(1332827708);
 }
 
 export function LoadWhiteboardScene(): $CancellablePromise<$models.WhiteboardSceneResult> {
@@ -119,6 +143,14 @@ export function OpenRecordingPackage(packageDir: string): $CancellablePromise<re
     return $Call.ByID(339423795, packageDir);
 }
 
+export function OpenScreenshot(req: $models.ScreenshotImageRequest): $CancellablePromise<$models.ScreenshotItem> {
+    return $Call.ByID(3167145418, req);
+}
+
+export function OpenScreenshotInWhiteboard(id: string): $CancellablePromise<$models.ScreenshotWhiteboardContext> {
+    return $Call.ByID(1096524846, id);
+}
+
 export function OpenVideoDirectory(): $CancellablePromise<appdata$0.Info> {
     return $Call.ByID(1462702352);
 }
@@ -127,8 +159,16 @@ export function PatchAudioState(patch: $models.AudioStatePatchRequest): $Cancell
     return $Call.ByID(680645443, patch);
 }
 
+export function PatchScreenshotItem(req: $models.ScreenshotItemPatchRequest): $CancellablePromise<$models.ScreenshotHistoryResult> {
+    return $Call.ByID(4203171135, req);
+}
+
 export function PatchSettingsPreferences(patch: $models.SettingsPreferencesPatchRequest): $CancellablePromise<settings$0.Settings> {
     return $Call.ByID(2494029929, patch);
+}
+
+export function PatchShortcutSettings(patch: $models.ShortcutSettingsPatchRequest): $CancellablePromise<settings$0.Settings> {
+    return $Call.ByID(173406099, patch);
 }
 
 export function PatchWhiteboardSettings(patch: $models.WhiteboardSettingsPatchRequest): $CancellablePromise<settings$0.Settings> {
@@ -157,6 +197,10 @@ export function ReadAnnotationPreviewImage(req: $models.AnnotationPreviewImageRe
 
 export function ReadPIPPreviewImage(req: $models.PIPPreviewImageRequest): $CancellablePromise<$models.PIPPreviewImageResult> {
     return $Call.ByID(4117878330, req);
+}
+
+export function ReadScreenshotImage(req: $models.ScreenshotImageRequest): $CancellablePromise<$models.ScreenshotImageResult> {
+    return $Call.ByID(2843762551, req);
 }
 
 export function RecoverRecordingPackage(packageDir: string): $CancellablePromise<recpackage$0.RecoverySummary> {
@@ -215,12 +259,20 @@ export function ShowPIPOverlay(req: $models.PIPOverlayRequest): $CancellableProm
     return $Call.ByID(1812737360, req);
 }
 
+export function ShowPinnedScreenshot(id: string): $CancellablePromise<$models.ScreenshotPinState> {
+    return $Call.ByID(1741059049, id);
+}
+
 export function ShowRegionSelector(): $CancellablePromise<$models.RegionSelectionSession> {
     return $Call.ByID(2760023242);
 }
 
 export function ShowScreenIndicator(req: $models.ScreenIndicatorRequest): $CancellablePromise<$models.ScreenIndicatorResult> {
     return $Call.ByID(1545499612, req);
+}
+
+export function ShowScreenshotRegionSelector(): $CancellablePromise<$models.RegionSelectionSession> {
+    return $Call.ByID(872220670);
 }
 
 export function ShowSettingsWindow(): $CancellablePromise<void> {
@@ -245,6 +297,10 @@ export function StartMockRecording(req: recording$0.StartRequest): $CancellableP
 
 export function StartRecording(req: recording$0.StartRequest): $CancellablePromise<recording$0.Session> {
     return $Call.ByID(171835981, req);
+}
+
+export function StartScrollingScreenshot(): $CancellablePromise<void> {
+    return $Call.ByID(3090857805);
 }
 
 export function StopMicrophoneLevelMonitor(): $CancellablePromise<void> {

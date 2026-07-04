@@ -13,6 +13,27 @@ export type WhiteboardMode = 'board' | 'annotation'
 export type WhiteboardTool = 'selection' | 'hand' | 'freedraw' | 'laser' | 'arrow' | 'line' | 'rectangle' | 'ellipse' | 'text' | 'eraser'
 export type WhiteboardStrokeWidth = 'thin' | 'medium' | 'bold'
 export type WhiteboardCapturePolicy = 'preview-only' | 'export-compose'
+export type ShortcutAction = 'toggleRecording' | 'togglePause' | 'toggleCamera' | 'openWhiteboard' | 'openScreenshot'
+
+export type ShortcutSettings = Record<ShortcutAction, string>
+
+export type ScreenshotItem = {
+  id: string
+  path: string
+  thumbnailPath?: string
+  createdAt: string
+  width: number
+  height: number
+  mode: 'full' | 'region' | 'scrolling' | string
+  region?: {
+    x: number
+    y: number
+    width: number
+    height: number
+  }
+  pinned: boolean
+  fixed: boolean
+}
 
 export type PIPConfig = {
   preset: PIPPreset
@@ -153,6 +174,7 @@ export type AppSettings = {
     lastOpacity: number
     capturePolicy: WhiteboardCapturePolicy
   }
+  shortcuts: ShortcutSettings
   window: {
     minimizeToTray: boolean
     theme: ThemeCode
@@ -430,6 +452,14 @@ export const fallbackStorageStatus: AppStorageStatus = {
 
 export const localeOptions: LocaleCode[] = ['zh-CN', 'en']
 export const themeOptions: ThemeCode[] = ['night-teal', 'mountain-green', 'sky-blue', 'sunset-yellow', 'ink-purple', 'sage-gray']
+export const shortcutActions: ShortcutAction[] = ['toggleRecording', 'togglePause', 'toggleCamera', 'openWhiteboard', 'openScreenshot']
+export const defaultShortcuts: ShortcutSettings = {
+  toggleRecording: 'CmdOrCtrl+Shift+R',
+  togglePause: 'CmdOrCtrl+Shift+P',
+  toggleCamera: 'CmdOrCtrl+Shift+C',
+  openWhiteboard: 'CmdOrCtrl+Shift+B',
+  openScreenshot: 'CmdOrCtrl+Shift+S',
+}
 export const themeSwatches: Record<ThemeCode, string> = {
   'night-teal': '#11b7a7',
   'mountain-green': '#57c785',
@@ -445,6 +475,20 @@ export function normalizeLocale(value: unknown): LocaleCode {
 
 export function normalizeTheme(value: unknown): ThemeCode {
   return themeOptions.includes(value as ThemeCode) ? value as ThemeCode : 'night-teal'
+}
+
+export function normalizeShortcutSettings(value: Partial<ShortcutSettings> | undefined): ShortcutSettings {
+  return {
+    toggleRecording: normalizeShortcutValue(value?.toggleRecording, defaultShortcuts.toggleRecording),
+    togglePause: normalizeShortcutValue(value?.togglePause, defaultShortcuts.togglePause),
+    toggleCamera: normalizeShortcutValue(value?.toggleCamera, defaultShortcuts.toggleCamera),
+    openWhiteboard: normalizeShortcutValue(value?.openWhiteboard, defaultShortcuts.openWhiteboard),
+    openScreenshot: normalizeShortcutValue(value?.openScreenshot, defaultShortcuts.openScreenshot),
+  }
+}
+
+function normalizeShortcutValue(value: unknown, fallback: string): string {
+  return typeof value === 'string' && value.trim() ? value.trim() : fallback
 }
 
 export const microphoneDevices = mediaInventory.microphones
@@ -496,6 +540,7 @@ export const defaultSettings: AppSettings = {
     lastOpacity: 100,
     capturePolicy: 'export-compose',
   },
+  shortcuts: defaultShortcuts,
   window: {
     minimizeToTray: true,
     theme: 'night-teal',

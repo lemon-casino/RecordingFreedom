@@ -326,6 +326,55 @@ func TestPatchWhiteboardSettingsPersistsWhiteboardOnly(t *testing.T) {
 	}
 }
 
+func TestPatchShortcutSettingsPersistsShortcutsOnly(t *testing.T) {
+	data := appdata.NewService(t.TempDir())
+	service := &RecordingFreedomService{
+		appData:  data,
+		settings: settings.NewService(data),
+	}
+	theme := settings.ThemeSageGray
+	quality := recordingprofile.QualityHigh
+	if _, err := service.PatchSettingsPreferences(SettingsPreferencesPatchRequest{
+		Theme:            &theme,
+		RecordingQuality: &quality,
+	}); err != nil {
+		t.Fatalf("PatchSettingsPreferences() error = %v", err)
+	}
+	next := "CmdOrCtrl+OptionOrAlt+R"
+
+	saved, err := service.PatchShortcutSettings(ShortcutSettingsPatchRequest{
+		ToggleRecording: &next,
+	})
+	if err != nil {
+		t.Fatalf("PatchShortcutSettings() error = %v", err)
+	}
+	if saved.Shortcuts.ToggleRecording != next {
+		t.Fatalf("toggle recording shortcut = %q, want %q", saved.Shortcuts.ToggleRecording, next)
+	}
+	if saved.Window.Theme != theme || saved.Recording.Quality != quality {
+		t.Fatalf("shortcut patch changed unrelated preferences: theme %q recording %#v", saved.Window.Theme, saved.Recording)
+	}
+	loaded, err := service.GetSettings()
+	if err != nil {
+		t.Fatalf("GetSettings() error = %v", err)
+	}
+	if loaded.Shortcuts.ToggleRecording != next {
+		t.Fatalf("loaded toggle recording shortcut = %q, want %q", loaded.Shortcuts.ToggleRecording, next)
+	}
+}
+
+func TestPatchShortcutSettingsRejectsDuplicate(t *testing.T) {
+	data := appdata.NewService(t.TempDir())
+	service := &RecordingFreedomService{
+		appData:  data,
+		settings: settings.NewService(data),
+	}
+	duplicate := settings.DefaultShortcuts().TogglePause
+	if _, err := service.PatchShortcutSettings(ShortcutSettingsPatchRequest{ToggleRecording: &duplicate}); err == nil {
+		t.Fatal("PatchShortcutSettings() should reject duplicate shortcuts")
+	}
+}
+
 func TestSaveSettingsDoesNotOverwritePatchedPreferences(t *testing.T) {
 	data := appdata.NewService(t.TempDir())
 	service := &RecordingFreedomService{
@@ -335,6 +384,7 @@ func TestSaveSettingsDoesNotOverwritePatchedPreferences(t *testing.T) {
 	theme := settings.ThemeSunsetYellow
 	quality := recordingprofile.QualityHigh
 	fps := 60
+	shortcut := "CmdOrCtrl+OptionOrAlt+B"
 	if _, err := service.PatchSettingsPreferences(SettingsPreferencesPatchRequest{
 		Theme:            &theme,
 		RecordingQuality: &quality,
@@ -342,11 +392,15 @@ func TestSaveSettingsDoesNotOverwritePatchedPreferences(t *testing.T) {
 	}); err != nil {
 		t.Fatalf("PatchSettingsPreferences() error = %v", err)
 	}
+	if _, err := service.PatchShortcutSettings(ShortcutSettingsPatchRequest{OpenWhiteboard: &shortcut}); err != nil {
+		t.Fatalf("PatchShortcutSettings() error = %v", err)
+	}
 	stale := settings.Default()
 	stale.Locale = settings.LocaleEN
 	stale.Window.Theme = settings.ThemeSkyBlue
 	stale.Recording.Quality = recordingprofile.QualityStandard
 	stale.Recording.FPS = 24
+	stale.Shortcuts.OpenWhiteboard = "CmdOrCtrl+Shift+W"
 	saved, err := service.SaveSettings(stale)
 	if err != nil {
 		t.Fatalf("SaveSettings(stale) error = %v", err)
@@ -356,6 +410,9 @@ func TestSaveSettingsDoesNotOverwritePatchedPreferences(t *testing.T) {
 	}
 	if saved.Window.Theme != theme || saved.Recording.Quality != quality || saved.Recording.FPS != fps {
 		t.Fatalf("SaveSettings overwrote patched preferences: theme %q recording %#v", saved.Window.Theme, saved.Recording)
+	}
+	if saved.Shortcuts.OpenWhiteboard != shortcut {
+		t.Fatalf("SaveSettings overwrote patched shortcut: %q, want %q", saved.Shortcuts.OpenWhiteboard, shortcut)
 	}
 }
 

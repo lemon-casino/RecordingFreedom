@@ -26,12 +26,13 @@ type RegionRect struct {
 }
 
 type RegionSelectionSession struct {
-	ID            string     `json:"id"`
-	Bounds        RegionRect `json:"bounds"`
-	MinimumWidth  int        `json:"minimumWidth"`
-	MinimumHeight int        `json:"minimumHeight"`
-	DisplayCount  int        `json:"displayCount"`
-	Purpose       string     `json:"purpose,omitempty"`
+	ID            string      `json:"id"`
+	Bounds        RegionRect  `json:"bounds"`
+	CaptureBounds *RegionRect `json:"captureBounds,omitempty"`
+	MinimumWidth  int         `json:"minimumWidth"`
+	MinimumHeight int         `json:"minimumHeight"`
+	DisplayCount  int         `json:"displayCount"`
+	Purpose       string      `json:"purpose,omitempty"`
 }
 
 type RegionSelectionRequest struct {

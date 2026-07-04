@@ -36,6 +36,7 @@ type Settings struct {
 	Audio         AudioSettings      `json:"audio"`
 	Camera        CameraSettings     `json:"camera"`
 	Whiteboard    WhiteboardSettings `json:"whiteboard"`
+	Shortcuts     ShortcutSettings   `json:"shortcuts"`
 	Window        WindowSettings     `json:"window"`
 	UpdatedAt     time.Time          `json:"updatedAt"`
 }
@@ -75,6 +76,29 @@ type WhiteboardSettings struct {
 	LastStrokeWidth string `json:"lastStrokeWidth"`
 	LastOpacity     int    `json:"lastOpacity"`
 	CapturePolicy   string `json:"capturePolicy"`
+}
+
+type ShortcutAction string
+
+const (
+	ShortcutActionToggleRecording ShortcutAction = "toggleRecording"
+	ShortcutActionTogglePause     ShortcutAction = "togglePause"
+	ShortcutActionToggleCamera    ShortcutAction = "toggleCamera"
+	ShortcutActionOpenWhiteboard  ShortcutAction = "openWhiteboard"
+	ShortcutActionOpenScreenshot  ShortcutAction = "openScreenshot"
+)
+
+type ShortcutSettings struct {
+	ToggleRecording string `json:"toggleRecording"`
+	TogglePause     string `json:"togglePause"`
+	ToggleCamera    string `json:"toggleCamera"`
+	OpenWhiteboard  string `json:"openWhiteboard"`
+	OpenScreenshot  string `json:"openScreenshot"`
+}
+
+type ShortcutBinding struct {
+	Action      ShortcutAction
+	Accelerator string
 }
 
 type WindowSettings struct {

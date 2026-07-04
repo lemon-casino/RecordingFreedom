@@ -3,8 +3,11 @@ package settings
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
+	"sort"
 	"strings"
 	"time"
 
@@ -111,6 +114,7 @@ func Default() Settings {
 			LastOpacity:     100,
 			CapturePolicy:   "export-compose",
 		},
+		Shortcuts: DefaultShortcuts(),
 		Window: WindowSettings{
 			MinimizeToTray: true,
 			Theme:          ThemeNightTeal,
@@ -146,6 +150,7 @@ func normalize(value Settings) Settings {
 	value.Camera.PIP = pip.NormalizeConfigForPreset(value.Camera.PIPPreset, value.Camera.PIP)
 	value.Camera.PIPPreset = string(value.Camera.PIP.Preset)
 	value.Whiteboard = normalizeWhiteboard(value.Whiteboard, defaults.Whiteboard)
+	value.Shortcuts = normalizeShortcuts(value.Shortcuts, defaults.Shortcuts)
 	if value.Window.Theme == "" || !validTheme(value.Window.Theme) {
 		value.Window.Theme = defaults.Window.Theme
 	}
@@ -205,6 +210,319 @@ func validTheme(theme Theme) bool {
 	default:
 		return false
 	}
+}
+
+func DefaultShortcuts() ShortcutSettings {
+	return ShortcutSettings{
+		ToggleRecording: "CmdOrCtrl+Shift+R",
+		TogglePause:     "CmdOrCtrl+Shift+P",
+		ToggleCamera:    "CmdOrCtrl+Shift+C",
+		OpenWhiteboard:  "CmdOrCtrl+Shift+B",
+		OpenScreenshot:  "CmdOrCtrl+Shift+S",
+	}
+}
+
+func ValidateShortcuts(value ShortcutSettings) (ShortcutSettings, error) {
+	normalized, err := normalizeShortcutValues(value)
+	if err != nil {
+		return ShortcutSettings{}, err
+	}
+	if err := validateShortcutUniqueness(normalized); err != nil {
+		return ShortcutSettings{}, err
+	}
+	return normalized, nil
+}
+
+func ShortcutBindings(value ShortcutSettings) []ShortcutBinding {
+	normalized := normalizeShortcuts(value, DefaultShortcuts())
+	return []ShortcutBinding{
+		{Action: ShortcutActionToggleRecording, Accelerator: normalized.ToggleRecording},
+		{Action: ShortcutActionTogglePause, Accelerator: normalized.TogglePause},
+		{Action: ShortcutActionToggleCamera, Accelerator: normalized.ToggleCamera},
+		{Action: ShortcutActionOpenWhiteboard, Accelerator: normalized.OpenWhiteboard},
+		{Action: ShortcutActionOpenScreenshot, Accelerator: normalized.OpenScreenshot},
+	}
+}
+
+func normalizeShortcuts(value ShortcutSettings, defaults ShortcutSettings) ShortcutSettings {
+	normalized, err := normalizeShortcutValues(ShortcutSettings{
+		ToggleRecording: shortcutOrDefault(value.ToggleRecording, defaults.ToggleRecording),
+		TogglePause:     shortcutOrDefault(value.TogglePause, defaults.TogglePause),
+		ToggleCamera:    shortcutOrDefault(value.ToggleCamera, defaults.ToggleCamera),
+		OpenWhiteboard:  shortcutOrDefault(value.OpenWhiteboard, defaults.OpenWhiteboard),
+		OpenScreenshot:  shortcutOrDefault(value.OpenScreenshot, defaults.OpenScreenshot),
+	})
+	if err != nil {
+		return defaults
+	}
+	return resolveShortcutDuplicateDefaults(normalized, defaults)
+}
+
+func shortcutOrDefault(value string, fallback string) string {
+	if strings.TrimSpace(value) == "" {
+		return fallback
+	}
+	return value
+}
+
+func normalizeShortcutValues(value ShortcutSettings) (ShortcutSettings, error) {
+	var err error
+	if value.ToggleRecording, err = NormalizeShortcutAccelerator(value.ToggleRecording); err != nil {
+		return ShortcutSettings{}, fmt.Errorf("%s: %w", ShortcutActionToggleRecording, err)
+	}
+	if value.TogglePause, err = NormalizeShortcutAccelerator(value.TogglePause); err != nil {
+		return ShortcutSettings{}, fmt.Errorf("%s: %w", ShortcutActionTogglePause, err)
+	}
+	if value.ToggleCamera, err = NormalizeShortcutAccelerator(value.ToggleCamera); err != nil {
+		return ShortcutSettings{}, fmt.Errorf("%s: %w", ShortcutActionToggleCamera, err)
+	}
+	if value.OpenWhiteboard, err = NormalizeShortcutAccelerator(value.OpenWhiteboard); err != nil {
+		return ShortcutSettings{}, fmt.Errorf("%s: %w", ShortcutActionOpenWhiteboard, err)
+	}
+	if value.OpenScreenshot, err = NormalizeShortcutAccelerator(value.OpenScreenshot); err != nil {
+		return ShortcutSettings{}, fmt.Errorf("%s: %w", ShortcutActionOpenScreenshot, err)
+	}
+	return value, nil
+}
+
+func resolveShortcutDuplicateDefaults(value ShortcutSettings, defaults ShortcutSettings) ShortcutSettings {
+	seen := map[string]ShortcutAction{}
+	for _, binding := range ShortcutBindingsRaw(value) {
+		identity := shortcutIdentity(binding.Accelerator)
+		if identity == "" {
+			value = setShortcutValue(value, binding.Action, defaultShortcutForAction(defaults, binding.Action))
+			identity = shortcutIdentity(defaultShortcutForAction(defaults, binding.Action))
+		}
+		if _, duplicate := seen[identity]; duplicate {
+			fallback := defaultShortcutForAction(defaults, binding.Action)
+			fallbackIdentity := shortcutIdentity(fallback)
+			if _, fallbackDuplicate := seen[fallbackIdentity]; fallbackIdentity != "" && !fallbackDuplicate {
+				value = setShortcutValue(value, binding.Action, fallback)
+				seen[fallbackIdentity] = binding.Action
+			} else {
+				value = setShortcutValue(value, binding.Action, "")
+			}
+			continue
+		}
+		seen[identity] = binding.Action
+	}
+	return value
+}
+
+func validateShortcutUniqueness(value ShortcutSettings) error {
+	seen := map[string]ShortcutAction{}
+	for _, binding := range ShortcutBindingsRaw(value) {
+		identity := shortcutIdentity(binding.Accelerator)
+		if identity == "" {
+			return fmt.Errorf("%s shortcut is required", binding.Action)
+		}
+		if existing, duplicate := seen[identity]; duplicate {
+			return fmt.Errorf("%s conflicts with %s", binding.Action, existing)
+		}
+		seen[identity] = binding.Action
+	}
+	return nil
+}
+
+func ShortcutBindingsRaw(value ShortcutSettings) []ShortcutBinding {
+	return []ShortcutBinding{
+		{Action: ShortcutActionToggleRecording, Accelerator: value.ToggleRecording},
+		{Action: ShortcutActionTogglePause, Accelerator: value.TogglePause},
+		{Action: ShortcutActionToggleCamera, Accelerator: value.ToggleCamera},
+		{Action: ShortcutActionOpenWhiteboard, Accelerator: value.OpenWhiteboard},
+		{Action: ShortcutActionOpenScreenshot, Accelerator: value.OpenScreenshot},
+	}
+}
+
+func defaultShortcutForAction(defaults ShortcutSettings, action ShortcutAction) string {
+	switch action {
+	case ShortcutActionToggleRecording:
+		return defaults.ToggleRecording
+	case ShortcutActionTogglePause:
+		return defaults.TogglePause
+	case ShortcutActionToggleCamera:
+		return defaults.ToggleCamera
+	case ShortcutActionOpenWhiteboard:
+		return defaults.OpenWhiteboard
+	case ShortcutActionOpenScreenshot:
+		return defaults.OpenScreenshot
+	default:
+		return ""
+	}
+}
+
+func setShortcutValue(value ShortcutSettings, action ShortcutAction, accelerator string) ShortcutSettings {
+	switch action {
+	case ShortcutActionToggleRecording:
+		value.ToggleRecording = accelerator
+	case ShortcutActionTogglePause:
+		value.TogglePause = accelerator
+	case ShortcutActionToggleCamera:
+		value.ToggleCamera = accelerator
+	case ShortcutActionOpenWhiteboard:
+		value.OpenWhiteboard = accelerator
+	case ShortcutActionOpenScreenshot:
+		value.OpenScreenshot = accelerator
+	}
+	return value
+}
+
+func NormalizeShortcutAccelerator(value string) (string, error) {
+	parts := strings.Split(strings.TrimSpace(value), "+")
+	if len(parts) == 0 || strings.TrimSpace(value) == "" {
+		return "", errors.New("shortcut is required")
+	}
+	modifiers := map[string]bool{}
+	for _, part := range parts[:len(parts)-1] {
+		modifier, ok := normalizeShortcutModifier(part)
+		if !ok {
+			return "", fmt.Errorf("%q is not a supported modifier", strings.TrimSpace(part))
+		}
+		modifiers[modifier] = true
+	}
+	key, ok := normalizeShortcutKey(parts[len(parts)-1])
+	if !ok {
+		return "", fmt.Errorf("%q is not a supported key", strings.TrimSpace(parts[len(parts)-1]))
+	}
+	if len(modifiers) == 0 {
+		return "", errors.New("shortcut must include a modifier")
+	}
+	if len(modifiers) == 1 && modifiers["Shift"] && isPrintableShortcutKey(key) {
+		return "", errors.New("shortcut must include Ctrl, Command, Alt, or Super")
+	}
+	ordered := make([]string, 0, len(modifiers)+1)
+	for _, modifier := range []string{"CmdOrCtrl", "Ctrl", "OptionOrAlt", "Shift", "Super"} {
+		if modifiers[modifier] {
+			ordered = append(ordered, modifier)
+		}
+	}
+	ordered = append(ordered, key)
+	return strings.Join(ordered, "+"), nil
+}
+
+func normalizeShortcutModifier(value string) (string, bool) {
+	switch strings.ToLower(strings.ReplaceAll(strings.TrimSpace(value), " ", "")) {
+	case "cmdorctrl", "cmd", "command", "meta":
+		return "CmdOrCtrl", true
+	case "ctrl", "control":
+		return "Ctrl", true
+	case "optionoralt", "option", "alt":
+		return "OptionOrAlt", true
+	case "shift":
+		return "Shift", true
+	case "super", "win", "windows":
+		return "Super", true
+	default:
+		return "", false
+	}
+}
+
+func normalizeShortcutKey(value string) (string, bool) {
+	key := strings.ToLower(strings.TrimSpace(value))
+	key = strings.ReplaceAll(key, " ", "")
+	switch key {
+	case "esc":
+		key = "escape"
+	case "del":
+		key = "delete"
+	case "return":
+		key = "enter"
+	case "pageup":
+		key = "page up"
+	case "pagedown":
+		key = "page down"
+	case "plus":
+		return "Plus", true
+	}
+	if len([]rune(key)) == 1 {
+		return strings.ToUpper(key), true
+	}
+	if _, ok := shortcutNamedKeys[key]; ok {
+		return shortcutDisplayKey(key), true
+	}
+	return "", false
+}
+
+func shortcutDisplayKey(key string) string {
+	if strings.HasPrefix(key, "f") && len(key) <= 3 {
+		return strings.ToUpper(key)
+	}
+	words := strings.Fields(key)
+	for i, word := range words {
+		if word == "" {
+			continue
+		}
+		words[i] = strings.ToUpper(word[:1]) + word[1:]
+	}
+	if len(words) > 0 {
+		return strings.Join(words, " ")
+	}
+	return strings.ToUpper(key[:1]) + key[1:]
+}
+
+func isPrintableShortcutKey(key string) bool {
+	return len([]rune(key)) == 1 || key == "Plus" || key == "Space"
+}
+
+var shortcutNamedKeys = map[string]struct{}{
+	"backspace": {}, "tab": {}, "enter": {}, "escape": {}, "left": {}, "right": {}, "up": {}, "down": {},
+	"space": {}, "delete": {}, "home": {}, "end": {}, "page up": {}, "page down": {}, "numlock": {},
+	"f1": {}, "f2": {}, "f3": {}, "f4": {}, "f5": {}, "f6": {}, "f7": {}, "f8": {}, "f9": {}, "f10": {}, "f11": {}, "f12": {},
+	"f13": {}, "f14": {}, "f15": {}, "f16": {}, "f17": {}, "f18": {}, "f19": {}, "f20": {}, "f21": {}, "f22": {}, "f23": {}, "f24": {},
+	"f25": {}, "f26": {}, "f27": {}, "f28": {}, "f29": {}, "f30": {}, "f31": {}, "f32": {}, "f33": {}, "f34": {}, "f35": {},
+}
+
+func shortcutIdentity(value string) string {
+	normalized, err := NormalizeShortcutAccelerator(value)
+	if err != nil {
+		return ""
+	}
+	parts := strings.Split(normalized, "+")
+	if len(parts) == 0 {
+		return ""
+	}
+	key := strings.ToLower(parts[len(parts)-1])
+	modifiers := make([]string, 0, len(parts)-1)
+	for _, part := range parts[:len(parts)-1] {
+		if identity, ok := shortcutPlatformModifierIdentity(part); ok {
+			modifiers = append(modifiers, identity)
+		}
+	}
+	sort.Strings(modifiers)
+	modifiers = append(modifiers, key)
+	return strings.Join(modifiers, "+")
+}
+
+func shortcutPlatformModifierIdentity(value string) (string, bool) {
+	modifier, ok := normalizeShortcutModifier(value)
+	if !ok {
+		return "", false
+	}
+	switch runtime.GOOS {
+	case "darwin":
+		switch modifier {
+		case "CmdOrCtrl", "Super":
+			return "cmd", true
+		case "Ctrl":
+			return "ctrl", true
+		case "OptionOrAlt":
+			return "alt", true
+		case "Shift":
+			return "shift", true
+		}
+	default:
+		switch modifier {
+		case "CmdOrCtrl", "Ctrl":
+			return "ctrl", true
+		case "OptionOrAlt":
+			return "alt", true
+		case "Shift":
+			return "shift", true
+		case "Super":
+			return "super", true
+		}
+	}
+	return "", false
 }
 
 func replaceFile(tmp string, target string) error {

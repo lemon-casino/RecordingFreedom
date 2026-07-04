@@ -5,19 +5,23 @@ const browserSettingsKey = 'recordingfreedom.settings.v1'
 test('capsule whiteboard opens board before recording and annotation during video recording', async ({page}) => {
   await openRecorderShell(page)
 
-  const whiteboardButton = page.getByRole('button', {name: 'Open whiteboard'})
-  await expect(whiteboardButton).toBeVisible()
-  await expect(whiteboardButton.getByText('Board')).toBeVisible()
+  const toolsButton = page.getByRole('button', {name: 'Screenshot / board'})
+  await expect(toolsButton).toBeVisible()
+  await expect(toolsButton.getByText('Tools')).toBeVisible()
 
-  await whiteboardButton.click()
+  await toolsButton.click()
+  await expect(page.getByRole('dialog', {name: 'board menu'})).toBeVisible()
+  await expect(page.getByRole('button', {name: /Region screenshot/})).toBeVisible()
+  await page.getByRole('button', {name: /Board/}).click()
   await expectWhiteboardLaunch(page, 'whiteboard', '/#/whiteboard')
-  await expect(whiteboardButton).toHaveAttribute('aria-pressed', 'true')
+  await expect(toolsButton).toHaveAttribute('aria-pressed', 'true')
   await emitWhiteboardVisibility(page, {visible: false, mode: 'whiteboard'})
-  await expect(whiteboardButton).toHaveAttribute('aria-pressed', 'false')
+  await expect(toolsButton).toHaveAttribute('aria-pressed', 'false')
 
   await page.getByRole('button', {name: 'Start recording'}).click()
   await expect(page.getByRole('button', {name: 'Stop recording'})).toBeVisible()
   await expect(page.locator('.rf-shell')).toHaveClass(/is-recording-compact/)
+  const whiteboardButton = page.getByRole('button', {name: 'Open whiteboard'})
   await expect(whiteboardButton).toBeVisible()
   await expect(whiteboardButton).toBeEnabled()
 
@@ -43,12 +47,12 @@ test('capsule whiteboard remains available as a board during audio recording', a
   await page.locator('.source-pill').click()
   await page.getByRole('group', {name: 'Recording mode'}).getByRole('button', {name: 'Audio'}).click()
 
-  const whiteboardButton = page.getByRole('button', {name: 'Open whiteboard'})
-  await expect(whiteboardButton).toBeVisible()
+  await expect(page.getByRole('button', {name: 'Screenshot / board'})).toBeVisible()
 
   await page.getByRole('button', {name: 'Start recording'}).click()
   await expect(page.getByRole('button', {name: 'Stop recording'})).toBeVisible()
   await expect(page.locator('.rf-shell')).toHaveClass(/is-recording-compact/)
+  const whiteboardButton = page.getByRole('button', {name: 'Open whiteboard'})
   await expect(whiteboardButton).toBeVisible()
   await expect(whiteboardButton).toBeEnabled()
 
@@ -60,9 +64,9 @@ test('capsule whiteboard remains available as a board during audio recording', a
 test('capsule shows a labeled whiteboard entry before recording in Chinese', async ({page}) => {
   await openRecorderShell(page, {locale: 'zh-CN'})
 
-  const whiteboardButton = page.getByRole('button', {name: '打开画板'})
-  await expect(whiteboardButton).toBeVisible()
-  await expect(whiteboardButton.getByText('画板')).toBeVisible()
+  const toolsButton = page.getByRole('button', {name: '截图 / 画板'})
+  await expect(toolsButton).toBeVisible()
+  await expect(toolsButton.getByText('工具')).toBeVisible()
 })
 
 async function openRecorderShell(page: Page, options: {locale?: 'zh-CN' | 'en'; microphone?: boolean; systemAudio?: boolean} = {}) {

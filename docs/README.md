@@ -32,6 +32,8 @@ RecordingFreedom 是一个全新的录制软件重构项目，目标技术栈为
    固定录制标注 overlay 的真实桌面验收矩阵、证据目录和通过标准，区分导出合成 smoke 与透明窗口实机验收。
 14. [13-rnnoise-dynamic-module.md](13-rnnoise-dynamic-module.md)
    固定 RNNoise 源码按平台/架构编译动态原生模块、随包发布、运行时加载和 release 门禁标准。
+15. [14-screenshot-whiteboard-plan.md](14-screenshot-whiteboard-plan.md)
+   记录截图、截图历史、钉图/固定、截图进入画板，以及滚动截图的原生自动化验收路径。
 
 ## 当前硬性决策
 

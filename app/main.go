@@ -28,6 +28,9 @@ func init() {
 	application.RegisterEvent[WhiteboardVisibilityEvent]("whiteboard.visibility")
 	application.RegisterEvent[AudioState]("audio.state")
 	application.RegisterEvent[AudioLevelEvent]("audio.level")
+	application.RegisterEvent[ShortcutTriggeredEvent]("shortcut.triggered")
+	application.RegisterEvent[ScreenshotCapturedEvent]("screenshot.captured")
+	application.RegisterEvent[ScreenshotPinEvent]("screenshot.pin")
 }
 
 func main() {
@@ -62,6 +65,7 @@ func main() {
 	regionOverlayWindow := createRegionOverlayWindow(app)
 	screenIndicatorWindow := createScreenIndicatorWindow(app)
 	pipOverlayWindow := createPIPOverlayWindow(app)
+	screenshotPinWindow := createScreenshotPinWindow(app)
 	recordingFreedom.setCapsuleWindow(capsuleWindow)
 	recordingFreedom.setSettingsWindow(settingsWindow)
 	recordingFreedom.setWhiteboardWindow(whiteboardWindow)
@@ -70,11 +74,15 @@ func main() {
 	recordingFreedom.setRegionOverlayWindow(regionOverlayWindow)
 	recordingFreedom.setScreenIndicatorWindow(screenIndicatorWindow)
 	recordingFreedom.setPIPOverlayWindow(pipOverlayWindow)
-	initialLocale := settings.LocaleZhCN
+	recordingFreedom.setScreenshotPinWindow(screenshotPinWindow)
+	initialSettings := settings.Default()
 	if currentSettings, err := recordingFreedom.settings.Load(); err == nil {
-		initialLocale = currentSettings.Locale
+		initialSettings = currentSettings
 	}
-	recordingFreedom.setTrayLocaleUpdater(configureSystemTray(app, capsuleWindow, settingsWindow, initialLocale))
+	recordingFreedom.setTrayLocaleUpdater(configureSystemTray(app, capsuleWindow, settingsWindow, initialSettings.Locale))
+	if err := recordingFreedom.replaceGlobalShortcuts(initialSettings.Shortcuts); err != nil {
+		recordingFreedom.logEvent("shortcuts", "startup-register-error", map[string]string{"error": err.Error()})
+	}
 
 	if err := app.Run(); err != nil {
 		log.Fatal(err)

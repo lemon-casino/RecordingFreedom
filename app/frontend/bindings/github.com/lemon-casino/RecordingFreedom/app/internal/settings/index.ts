@@ -3,6 +3,7 @@
 
 export {
     Locale,
+    ShortcutAction,
     Theme
 } from "./models.js";
 
@@ -11,6 +12,7 @@ export type {
     CameraSettings,
     RecordingSettings,
     Settings,
+    ShortcutSettings,
     SourceSettings,
     StorageSettings,
     WhiteboardSettings,

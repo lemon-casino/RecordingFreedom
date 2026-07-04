@@ -9,6 +9,7 @@ import type {
   RecordingPreflightStatus,
   RecordingQuality,
   RecordingState,
+  ShortcutAction,
   ThemeCode,
 } from './services/mockBackend'
 
@@ -114,6 +115,15 @@ export type RecorderCopy = {
     language: string
     theme: string
     themeDetail: string
+    shortcuts: string
+    shortcutSummary: string
+    shortcutDetail: string
+    shortcutHint: string
+    shortcutRecord: string
+    shortcutRecording: string
+    shortcutInvalid: string
+    shortcutConflict: (action: string) => string
+    shortcutActionLabels: Record<ShortcutAction, string>
     recordingBackend: string
     recordingBackendDetail: string
     preflight: string
@@ -245,6 +255,30 @@ export type RecorderCopy = {
     bold: string
     unsaved: string
     ready: string
+  }
+  screenshot: {
+    tools: string
+    toolsShort: string
+    region: string
+    full: string
+    scrolling: string
+    scrollingDetail: string
+    scrollingPreparing: string
+    scrollingStarted: string
+    scrollingUnavailable: string
+    selecting: string
+    captured: (width: number, height: number) => string
+    captureFailed: string
+    history: string
+    historyDetail: string
+    empty: string
+    open: string
+    annotate: string
+    pin: string
+    pinned: string
+    fix: string
+    fixed: string
+    unfix: string
   }
   statusChips: Record<RecordingState, string>
   statusMessages: Record<StatusMessageKey, string>
@@ -411,6 +445,21 @@ const zhCN: RecorderCopy = {
     language: '语言',
     theme: '主题',
     themeDetail: '立即应用到胶囊、设置页和下拉列表，并会在下次启动时保留。',
+    shortcuts: '快捷键',
+    shortcutSummary: '全局快捷键',
+    shortcutDetail: '点击修改后按下组合键即可保存；普通单字母和仅 Shift 的组合不会生效。',
+    shortcutHint: '按下新的组合键，Esc 取消。',
+    shortcutRecord: '修改',
+    shortcutRecording: '录入中',
+    shortcutInvalid: '快捷键保存失败，请换一个组合键。',
+    shortcutConflict: (action) => `该快捷键已用于 ${action}`,
+    shortcutActionLabels: {
+      toggleRecording: '开始 / 结束录制',
+      togglePause: '暂停 / 继续',
+      toggleCamera: '开启 / 关闭摄像头',
+      openWhiteboard: '打开画板',
+      openScreenshot: '区域截图',
+    },
     recordingBackend: '录制后端',
     recordingBackendDetail: '当前会使用这里显示的原生后端进行真实采集；开始录制前仍会执行预检，阻塞不可用的来源、媒体设备或存储状态。',
     preflight: '预检',
@@ -542,6 +591,30 @@ const zhCN: RecorderCopy = {
     bold: '粗',
     unsaved: '未保存',
     ready: '可绘制',
+  },
+  screenshot: {
+    tools: '截图 / 画板',
+    toolsShort: '工具',
+    region: '区域截图',
+    full: '全屏截图',
+    scrolling: '滚动截图',
+    scrollingDetail: '需要原生滚动自动化',
+    scrollingPreparing: '正在准备滚动截图',
+    scrollingStarted: '滚动截图已开始',
+    scrollingUnavailable: '当前构建未启用滚动截图',
+    selecting: '拖动框选截图区域',
+    captured: (width, height) => `截图已保存：${width} x ${height}`,
+    captureFailed: '截图失败',
+    history: '截图历史',
+    historyDetail: '最近截图会显示在这里',
+    empty: '暂无截图历史',
+    open: '打开截图',
+    annotate: '在画板中标注',
+    pin: '钉图',
+    pinned: '已钉图',
+    fix: '固定',
+    fixed: '已固定',
+    unfix: '取消固定',
   },
   statusChips: {
     idle: '待机',
@@ -839,6 +912,21 @@ const en: RecorderCopy = {
     language: 'Language',
     theme: 'Theme',
     themeDetail: 'Applies immediately to the capsule, settings, and dropdown menus, and is kept after restart.',
+    shortcuts: 'Shortcuts',
+    shortcutSummary: 'Global shortcuts',
+    shortcutDetail: 'Click change, then press a key combination to save. Plain letters and Shift-only combos are ignored.',
+    shortcutHint: 'Press a new key combination. Esc cancels.',
+    shortcutRecord: 'Change',
+    shortcutRecording: 'Listening',
+    shortcutInvalid: 'Shortcut save failed. Choose another combination.',
+    shortcutConflict: (action) => `That shortcut is already used by ${action}`,
+    shortcutActionLabels: {
+      toggleRecording: 'Start / stop recording',
+      togglePause: 'Pause / resume',
+      toggleCamera: 'Turn camera on / off',
+      openWhiteboard: 'Open whiteboard',
+      openScreenshot: 'Region screenshot',
+    },
     recordingBackend: 'Recording backend',
     recordingBackendDetail: 'Real capture will use the native backend shown here; preflight still blocks unavailable sources, media devices, or storage before recording starts.',
     preflight: 'Preflight',
@@ -970,6 +1058,30 @@ const en: RecorderCopy = {
     bold: 'Bold',
     unsaved: 'Unsaved',
     ready: 'Ready',
+  },
+  screenshot: {
+    tools: 'Screenshot / board',
+    toolsShort: 'Tools',
+    region: 'Region screenshot',
+    full: 'Full screenshot',
+    scrolling: 'Scrolling screenshot',
+    scrollingDetail: 'Requires native scroll automation',
+    scrollingPreparing: 'Preparing scrolling screenshot',
+    scrollingStarted: 'Scrolling screenshot started',
+    scrollingUnavailable: 'Scrolling screenshot is not enabled in this build',
+    selecting: 'Drag to select screenshot area',
+    captured: (width, height) => `Screenshot saved: ${width} x ${height}`,
+    captureFailed: 'Screenshot failed',
+    history: 'Screenshot history',
+    historyDetail: 'Recent screenshots appear here',
+    empty: 'No screenshot history',
+    open: 'Open screenshot',
+    annotate: 'Annotate in whiteboard',
+    pin: 'Pin image',
+    pinned: 'Pinned',
+    fix: 'Fix',
+    fixed: 'Fixed',
+    unfix: 'Unfix',
   },
   statusChips: {
     idle: 'IDLE',
