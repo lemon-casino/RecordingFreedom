@@ -144,6 +144,7 @@ $ffprobePath = Require-File (Join-Path $toolsDir "ffprobe.exe")
 $doctorPath = Require-File (Join-Path $toolsDir "desktop-doctor.exe")
 $videoSmokePath = Require-File (Join-Path $toolsDir "video-smoke.exe")
 $audioSmokePath = Require-File (Join-Path $toolsDir "audio-smoke.exe")
+$pipSmokePath = Require-File (Join-Path $toolsDir "pip-export-smoke.exe")
 $annotationSmokePath = Require-File (Join-Path $toolsDir "annotation-export-smoke.exe")
 $annotationEvidenceCheckPath = Require-File (Join-Path $toolsDir "annotation-overlay-evidence-check.exe")
 
@@ -163,6 +164,7 @@ if (-not $SkipRNNoise) {
     $doctorArgs += "-require-rnnoise"
 }
 $steps.Add((New-Step "desktop-doctor" $doctorPath $doctorArgs))
+$steps.Add((New-Step "pip-export-pixels" $pipSmokePath @("-synthetic", "-data-dir", $DataDir, "-duration=1s", "-width=640", "-height=360", "-keep")))
 $steps.Add((New-Step "annotation-export-snapshots" $annotationSmokePath @("-data-dir", $DataDir, "-duration=$AnnotationDuration", "-segments=$AnnotationSegments", "-timeline=snapshot-segments", "-source-type=region", "-source-x=-1280", "-source-y=48", "-source-display-index=2", "-source-native-id=annotation-export-region-display", "-keep")))
 $steps.Add((New-Step "annotation-export-element-pngs" $annotationSmokePath @("-data-dir", $DataDir, "-duration=$AnnotationDuration", "-segments=$AnnotationSegments", "-timeline=element-pngs", "-source-type=window", "-source-id=window:annotation-export-smoke", "-keep")))
 if ($RunAnnotationLong) {

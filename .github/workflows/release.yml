@@ -111,6 +111,13 @@ jobs:
         working-directory: ${{ env.APP_DIR }}
         run: go run -tags gtk3 ./cmd/preview-smoke
 
+      - name: Prepare Linux FFmpeg tools for PIP export smoke
+        run: ./scripts/ensure-unix-ffmpeg.sh --platform linux --arch x64 --force
+
+      - name: Run PIP export pixel smoke
+        working-directory: ${{ env.APP_DIR }}
+        run: go run -tags gtk3 ./cmd/pip-export-smoke -synthetic -width 640 -height 360 -duration 1s
+
       - name: Verify release workflow gates
         working-directory: ${{ env.APP_DIR }}
         run: go run ./cmd/release-config-check
@@ -322,6 +329,7 @@ jobs:
           CGO_ENABLED="${cgo_enabled}" go build "${tag_args[@]}" -trimpath -ldflags "-w -s" -o "bin/desktop-doctor${ext}" "./cmd/desktop-doctor"
           CGO_ENABLED="${cgo_enabled}" go build "${tag_args[@]}" -trimpath -ldflags "-w -s" -o "bin/video-smoke${ext}" "./cmd/video-smoke"
           CGO_ENABLED="${cgo_enabled}" go build "${tag_args[@]}" -trimpath -ldflags "-w -s" -o "bin/audio-smoke${ext}" "./cmd/audio-smoke"
+          CGO_ENABLED="${cgo_enabled}" go build "${tag_args[@]}" -trimpath -ldflags "-w -s" -o "bin/pip-export-smoke${ext}" "./cmd/pip-export-smoke"
           CGO_ENABLED="${cgo_enabled}" go build "${tag_args[@]}" -trimpath -ldflags "-w -s" -o "bin/annotation-export-smoke${ext}" "./cmd/annotation-export-smoke"
           CGO_ENABLED="${cgo_enabled}" go build "${tag_args[@]}" -trimpath -ldflags "-w -s" -o "bin/annotation-overlay-evidence-check${ext}" "./cmd/annotation-overlay-evidence-check"
 
@@ -336,6 +344,16 @@ jobs:
           else
             CGO_ENABLED=1 go run -tags "${RNNOISE_TAG}" ./cmd/desktop-doctor -require-rnnoise
           fi
+
+      - name: Run PIP export pixel smoke
+        working-directory: ${{ env.APP_DIR }}
+        shell: bash
+        run: |
+          ext=""
+          if [ "${{ matrix.platform }}" = "windows" ]; then
+            ext=".exe"
+          fi
+          "./bin/pip-export-smoke${ext}" -synthetic -width 640 -height 360 -duration 1s
 
       - name: Stage release artifact
         shell: bash
@@ -354,6 +372,7 @@ jobs:
             cp "${APP_DIR}/bin/desktop-doctor.exe" "${portable_dir}/tools/desktop-doctor.exe"
             cp "${APP_DIR}/bin/video-smoke.exe" "${portable_dir}/tools/video-smoke.exe"
             cp "${APP_DIR}/bin/audio-smoke.exe" "${portable_dir}/tools/audio-smoke.exe"
+            cp "${APP_DIR}/bin/pip-export-smoke.exe" "${portable_dir}/tools/pip-export-smoke.exe"
             cp "${APP_DIR}/bin/annotation-export-smoke.exe" "${portable_dir}/tools/annotation-export-smoke.exe"
             cp "${APP_DIR}/bin/annotation-overlay-evidence-check.exe" "${portable_dir}/tools/annotation-overlay-evidence-check.exe"
             cp "scripts/run-windows-portable-smoke.ps1" "${portable_dir}/tools/run-windows-portable-smoke.ps1"
@@ -388,6 +407,7 @@ jobs:
             cp "${APP_DIR}/bin/desktop-doctor" "${portable_dir}/tools/desktop-doctor"
             cp "${APP_DIR}/bin/video-smoke" "${portable_dir}/tools/video-smoke"
             cp "${APP_DIR}/bin/audio-smoke" "${portable_dir}/tools/audio-smoke"
+            cp "${APP_DIR}/bin/pip-export-smoke" "${portable_dir}/tools/pip-export-smoke"
             cp "${APP_DIR}/bin/annotation-export-smoke" "${portable_dir}/tools/annotation-export-smoke"
             cp "${APP_DIR}/bin/annotation-overlay-evidence-check" "${portable_dir}/tools/annotation-overlay-evidence-check"
             if [ -f "${APP_DIR}/build/linux/recordingfreedom.desktop" ]; then
@@ -480,12 +500,12 @@ jobs:
           - Explicit mock .rfrec package flow for UI/package validation.
           - No-GUI smoke for settings, storage, preflight, mock start/pause/resume/stop, ready manifest, RNNoise/camera/PIP manifest contract, and recovery scan.
           - Developer audio smoke for Windows WASAPI microphone and system-loopback capture.
-          - Windows FFmpeg desktop video writer contract for screen/all-screen/region/locked-window capture; enabled WASAPI system audio and microphone tracks are muxed into the final screen.mp4 at stop, and the Windows release artifacts are staged as a portable zip plus an NSIS setup installer. Both include tools/ffmpeg.exe and tools/ffprobe.exe; the portable zip also includes desktop-doctor/video-smoke/audio-smoke/annotation-export-smoke/annotation-overlay-evidence-check diagnostics.
+          - Windows FFmpeg desktop video writer contract for screen/all-screen/region/locked-window capture; enabled WASAPI system audio and microphone tracks are muxed into the final screen.mp4 at stop, and the Windows release artifacts are staged as a portable zip plus an NSIS setup installer. Both include tools/ffmpeg.exe and tools/ffprobe.exe; the portable zip also includes desktop-doctor/video-smoke/audio-smoke/pip-export-smoke/annotation-export-smoke/annotation-overlay-evidence-check diagnostics.
           - Windows clean-machine portable smoke entrypoint at tools/run-windows-portable-smoke.ps1.
           - RNNoise native DSP is built from source as a dynamic module for every desktop artifact: Windows packages include tools/rnnoise.dll, macOS app bundles include Contents/MacOS/tools/librnnoise.dylib, and Linux portable archives include tools/librnnoise.so. The Go/Wails app uses the rnnoise_dynamic build tag and loads the module at runtime; desktop-doctor -require-rnnoise and the RNNoise dynamic DSP smoke are release gates for all desktop architectures, including Windows ARM64.
           - Full desktop build matrix is enabled for Windows x64/arm64, macOS x64/arm64, and Linux x64/arm64. Release artifacts are Windows portable zip + Windows setup.exe, macOS RecordingFreedom.app zip, and Linux portable tar.gz for each architecture.
           - macOS app bundles include Contents/MacOS/recordingfreedom, Contents/MacOS/tools/ffmpeg, Contents/MacOS/tools/ffprobe, Contents/MacOS/tools/librnnoise.dylib, icons, Info.plist permissions, and third-party notices.
-          - Linux portable archives include recordingfreedom, tools/ffmpeg, tools/ffprobe, tools/librnnoise.so, diagnostic smoke tools, a desktop file, and third-party notices.
+          - Linux portable archives include recordingfreedom, tools/ffmpeg, tools/ffprobe, tools/librnnoise.so, diagnostic smoke tools including pip-export-smoke, a desktop file, and third-party notices.
           - Whiteboard / Excalidraw board and recording annotation: the main capsule keeps a Whiteboard entry before recording, during compact video recording, while paused, and during audio-only recording. Before recording and during audio-only recording it opens the normal whiteboard; during video recording or pause it opens the annotation overlay.
           - Whiteboard scene persistence and export: normal boards save under app data, restore the latest scene, and export PNG/SVG/.excalidraw through the desktop backend.
           - Recording annotation package flow: annotation scenes, element events, overlay diagnostics, timeline snapshots, reconstructed element PNGs, and manifest metadata are written into the current .rfrec package for later recovery/export.
@@ -497,7 +517,7 @@ jobs:
           - Screenshot history maintenance: history items can be opened in their containing folder or deleted from the managed screenshot store, and region screenshot now matches recording region selection by entering an editable move/resize/cancel/save frame before writing the screenshot.
           - Screenshot/whiteboard separation: saving normal whiteboard or recording annotation content does not create screenshot history entries; only screenshot capture actions write into screenshot history.
           - Capsule docking stability: edge snap publishes the dock side before native window resize/move, clears stale collapsed positions, and suppresses programmatic move feedback so side docking and dropdown/list opening do not cause the capsule to flash through the screen center.
-          - Camera sidecar, PIP, and annotation export contract: structured camera.pip settings/manifest/export plan, transparent draggable/resizable PIP overlay, WebView camera preview best-effort device matching, Windows DirectShow / macOS AVFoundation / Linux v4l2 FFmpeg sidecar writer paths, Wails ExportRecordingPackage(), cmd/pip-export-smoke, cmd/annotation-export-smoke, cmd/annotation-overlay-evidence-check, FFmpeg PIP export verification, and FFmpeg annotation export verification that samples pixels from the final MP4.
+          - Camera sidecar, PIP, and annotation export contract: structured camera.pip settings/manifest/export plan, transparent draggable/resizable PIP overlay, WebView camera preview best-effort device matching, Windows DirectShow / macOS AVFoundation / Linux v4l2 FFmpeg sidecar writer paths, Wails ExportRecordingPackage(), cmd/pip-export-smoke, cmd/annotation-export-smoke, cmd/annotation-overlay-evidence-check, FFmpeg PIP export verification that samples the final MP4 PIP pixels, and FFmpeg annotation export verification that samples pixels from the final MP4.
 
           Not included yet:
           - End-to-end verified native recording on every desktop platform. macOS ScreenCaptureKit display/window/single-display region capture is wired in code but still needs real-device smoke validation; Windows portable artifacts include the clean-machine smoke runner but still need the downloaded artifact to be executed on a target desktop; PipeWire media writer is not complete.

@@ -1,10 +1,10 @@
 {
 	"fixed": {
-		"file_version": "0.1.5"
+		"file_version": "0.1.6"
 	},
 	"info": {
 		"0000": {
-			"ProductVersion": "0.1.5",
+			"ProductVersion": "0.1.6",
 			"CompanyName": "lemon-casino",
 			"FileDescription": "A modern capsule screen recorder built with Go, React, and Wails v3",
 			"LegalCopyright": "(c) 2026, lemon-casino",

@@ -112,6 +112,13 @@ jobs:
         working-directory: ${{ env.APP_DIR }}
         run: go run -tags gtk3 ./cmd/preview-smoke
 
+      - name: Prepare Linux FFmpeg tools for PIP export smoke
+        run: ./scripts/ensure-unix-ffmpeg.sh --platform linux --arch x64 --force
+
+      - name: Run PIP export pixel smoke
+        working-directory: ${{ env.APP_DIR }}
+        run: go run -tags gtk3 ./cmd/pip-export-smoke -synthetic -width 640 -height 360 -duration 1s
+
       - name: Verify release workflow gates
         working-directory: ${{ env.APP_DIR }}
         run: go run ./cmd/release-config-check
@@ -298,6 +305,7 @@ jobs:
           CGO_ENABLED="${cgo_enabled}" go build "${tag_args[@]}" -trimpath -ldflags "-w -s" -o "bin/desktop-doctor${ext}" "./cmd/desktop-doctor"
           CGO_ENABLED="${cgo_enabled}" go build "${tag_args[@]}" -trimpath -ldflags "-w -s" -o "bin/video-smoke${ext}" "./cmd/video-smoke"
           CGO_ENABLED="${cgo_enabled}" go build "${tag_args[@]}" -trimpath -ldflags "-w -s" -o "bin/audio-smoke${ext}" "./cmd/audio-smoke"
+          CGO_ENABLED="${cgo_enabled}" go build "${tag_args[@]}" -trimpath -ldflags "-w -s" -o "bin/pip-export-smoke${ext}" "./cmd/pip-export-smoke"
           CGO_ENABLED="${cgo_enabled}" go build "${tag_args[@]}" -trimpath -ldflags "-w -s" -o "bin/annotation-export-smoke${ext}" "./cmd/annotation-export-smoke"
           CGO_ENABLED="${cgo_enabled}" go build "${tag_args[@]}" -trimpath -ldflags "-w -s" -o "bin/annotation-overlay-evidence-check${ext}" "./cmd/annotation-overlay-evidence-check"
 
@@ -312,6 +320,16 @@ jobs:
           else
             CGO_ENABLED=1 go run -tags "${RNNOISE_TAG}" ./cmd/desktop-doctor -require-rnnoise
           fi
+
+      - name: Run PIP export pixel smoke
+        working-directory: ${{ env.APP_DIR }}
+        shell: bash
+        run: |
+          ext=""
+          if [ "${{ matrix.platform }}" = "windows" ]; then
+            ext=".exe"
+          fi
+          "./bin/pip-export-smoke${ext}" -synthetic -width 640 -height 360 -duration 1s
 
       - name: Upload build artifact
         uses: actions/upload-artifact@v5

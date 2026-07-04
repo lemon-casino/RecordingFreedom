@@ -184,6 +184,7 @@ try {
     Require-Entry -Entries $entries -Name "tools/desktop-doctor.exe" | Out-Null
     Require-Entry -Entries $entries -Name "tools/video-smoke.exe" | Out-Null
     Require-Entry -Entries $entries -Name "tools/audio-smoke.exe" | Out-Null
+    Require-Entry -Entries $entries -Name "tools/pip-export-smoke.exe" | Out-Null
     Require-Entry -Entries $entries -Name "tools/annotation-export-smoke.exe" | Out-Null
     Require-Entry -Entries $entries -Name "tools/annotation-overlay-evidence-check.exe" | Out-Null
     Require-Entry -Entries $entries -Name "tools/run-windows-portable-smoke.ps1" | Out-Null
@@ -255,6 +256,12 @@ if (-not $SkipExecutableCheck) {
         }
         Assert-PEMetadata -Path $audioSmokePath -ExpectedMachine $expectedMachine -ExpectedSubsystem 3
 
+        $pipSmokePath = Join-Path $extractDir "tools/pip-export-smoke.exe"
+        if (-not (Test-Path -LiteralPath $pipSmokePath)) {
+            throw "Extracted portable zip is missing tools/pip-export-smoke.exe"
+        }
+        Assert-PEMetadata -Path $pipSmokePath -ExpectedMachine $expectedMachine -ExpectedSubsystem 3
+
         $annotationSmokePath = Join-Path $extractDir "tools/annotation-export-smoke.exe"
         if (-not (Test-Path -LiteralPath $annotationSmokePath)) {
             throw "Extracted portable zip is missing tools/annotation-export-smoke.exe"
@@ -276,8 +283,11 @@ if (-not $SkipExecutableCheck) {
             "desktop-doctor.exe",
             "video-smoke.exe",
             "audio-smoke.exe",
+            "pip-export-smoke.exe",
             "annotation-export-smoke.exe",
             "annotation-overlay-evidence-check.exe",
+            "pip-export-pixels",
+            "-synthetic",
             "RunAnnotationLong",
             "LongAnnotationDurations",
             "LongAnnotationSegments",

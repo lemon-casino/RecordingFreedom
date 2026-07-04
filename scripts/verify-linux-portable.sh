@@ -29,6 +29,7 @@ fi
 test -x "${portable_root}/recordingfreedom"
 test -x "${portable_root}/tools/ffmpeg"
 test -x "${portable_root}/tools/ffprobe"
+test -x "${portable_root}/tools/pip-export-smoke"
 test -s "${portable_root}/tools/librnnoise.so"
 test -s "${portable_root}/tools/THIRD_PARTY_FFMPEG.txt"
 test -s "${portable_root}/tools/THIRD_PARTY_NOTICES.txt"
@@ -71,6 +72,7 @@ if command -v file >/dev/null 2>&1; then
   assert_file_arch "${portable_root}/recordingfreedom" "${arch_pattern}"
   assert_file_arch "${portable_root}/tools/ffmpeg" "${arch_pattern}"
   assert_file_arch "${portable_root}/tools/ffprobe" "${arch_pattern}"
+  assert_file_arch "${portable_root}/tools/pip-export-smoke" "${arch_pattern}"
   assert_file_arch "${portable_root}/tools/librnnoise.so" "${arch_pattern}"
 fi
 
