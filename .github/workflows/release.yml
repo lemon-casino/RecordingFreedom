@@ -133,6 +133,8 @@ jobs:
             windows_msystem: MINGW64
             windows_msys_package: mingw-w64-x86_64-gcc
             windows_cc: gcc
+            windows_cgo_cflags: ""
+            windows_cgo_ldflags: ""
             nsis_arch: AMD64
           - name: windows-arm64
             os: windows-11-arm
@@ -142,6 +144,8 @@ jobs:
             windows_msystem: CLANGARM64
             windows_msys_package: mingw-w64-clang-aarch64-clang
             windows_cc: clang
+            windows_cgo_cflags: --target=aarch64-w64-mingw32 -Wno-dll-attribute-on-redeclaration
+            windows_cgo_ldflags: --target=aarch64-w64-mingw32 -fuse-ld=lld
             nsis_arch: ARM64
           - name: macos-x64
             os: macos-15-intel
@@ -203,6 +207,12 @@ jobs:
         shell: pwsh
         run: |
           "CC=${{ matrix.windows_cc }}" | Out-File -FilePath $env:GITHUB_ENV -Append
+          if ("${{ matrix.windows_cgo_cflags }}" -ne "") {
+            "CGO_CFLAGS=${{ matrix.windows_cgo_cflags }}" | Out-File -FilePath $env:GITHUB_ENV -Append
+          }
+          if ("${{ matrix.windows_cgo_ldflags }}" -ne "") {
+            "CGO_LDFLAGS=${{ matrix.windows_cgo_ldflags }}" | Out-File -FilePath $env:GITHUB_ENV -Append
+          }
 
       - name: Install Wails v3 CLI
         working-directory: ${{ env.APP_DIR }}

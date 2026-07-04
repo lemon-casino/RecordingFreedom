@@ -42,6 +42,8 @@ var releaseConfigChecks = []configCheck{
 			"release: true",
 			"windows_msystem: CLANGARM64",
 			"mingw-w64-clang-aarch64-clang",
+			"windows_cgo_cflags: --target=aarch64-w64-mingw32",
+			"CGO_LDFLAGS=${{ matrix.windows_cgo_ldflags }}",
 		},
 	},
 	{
@@ -123,6 +125,8 @@ var releaseConfigChecks = []configCheck{
 			"release: true",
 			"windows_msystem: CLANGARM64",
 			"mingw-w64-clang-aarch64-clang",
+			"windows_cgo_cflags: --target=aarch64-w64-mingw32",
+			"CGO_LDFLAGS=${{ matrix.windows_cgo_ldflags }}",
 			"RNNoise native DSP is compiled into release artifacts",
 		},
 	},

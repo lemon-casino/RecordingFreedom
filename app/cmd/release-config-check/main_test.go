@@ -142,6 +142,8 @@ func workflowFixture(name string) string {
 	builder.WriteString("release: true\n")
 	builder.WriteString("windows_msystem: CLANGARM64\n")
 	builder.WriteString("mingw-w64-clang-aarch64-clang\n")
+	builder.WriteString("windows_cgo_cflags: --target=aarch64-w64-mingw32\n")
+	builder.WriteString("CGO_LDFLAGS=${{ matrix.windows_cgo_ldflags }}\n")
 	builder.WriteString("./scripts/ensure-windows-ffmpeg.ps1 -Architecture \"${{ matrix.ffmpeg_arch }}\"\n")
 	builder.WriteString("-require-video -require-rnnoise\n")
 	builder.WriteString("Install Playwright Chromium\n")
