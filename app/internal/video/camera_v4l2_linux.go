@@ -51,7 +51,10 @@ func v4l2CameraInputArgs(camera CameraCaptureConfig) ffmpegInputArgsBuilder {
 				"-framerate", fmt.Sprintf("%d", config.Profile.FPS),
 				"-i", camera.DeviceNativeID,
 			},
-			Engine: "v4l2-camera",
+			Engine:            "v4l2-camera",
+			PreviewImagePath:  camera.PreviewImagePath,
+			PreviewImageFPS:   8,
+			PreviewImageWidth: 360,
 		}, nil
 	}
 }

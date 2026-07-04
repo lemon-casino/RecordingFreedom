@@ -865,6 +865,7 @@ func (s *RecordingFreedomService) StartRecording(req recording.StartRequest) (re
 		})
 		return recording.Session{}, err
 	}
+	s.releasePIPOverlayMediaForRecording(req)
 	s.emitRecordingStatus(recording.StatusEvent{
 		Status:  recording.StatePreparing,
 		Backend: s.recorder.BackendID(),

@@ -52,7 +52,10 @@ func avFoundationCameraInputArgs(camera CameraCaptureConfig) ffmpegInputArgsBuil
 				"-framerate", fmt.Sprintf("%d", config.Profile.FPS),
 				"-i", avFoundationCameraInput(camera.DeviceNativeID),
 			},
-			Engine: "avfoundation-camera",
+			Engine:            "avfoundation-camera",
+			PreviewImagePath:  camera.PreviewImagePath,
+			PreviewImageFPS:   8,
+			PreviewImageWidth: 360,
 		}, nil
 	}
 }

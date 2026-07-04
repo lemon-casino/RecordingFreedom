@@ -3669,7 +3669,7 @@ function PIPOverlayWindow() {
             ) : (
               <video ref={videoRef} autoPlay muted playsInline className={cameraReady ? 'ready' : ''} />
             )}
-            {!cameraReady && !usesBackendPreviewImage && (
+            {!cameraReady && (
               <div className={`pip-camera-placeholder ${overlayState.mode} ${cameraError ? 'error' : 'pending'}`}>
                 <Camera size={24} />
                 <strong>{cameraPlaceholderTitle}</strong>
