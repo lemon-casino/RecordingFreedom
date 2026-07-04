@@ -993,16 +993,17 @@ body.rf-recorder-window .select-menu-list {
 .screenshot-history-actions {
   display: flex;
   align-items: center;
-  gap: 4px;
+  gap: 2px;
+  flex: 0 0 auto;
 }
 
 .screenshot-history-actions button {
   display: inline-grid;
-  width: 30px;
-  height: 30px;
+  width: 28px;
+  height: 28px;
   place-items: center;
   border: 1px solid transparent;
-  border-radius: 12px;
+  border-radius: 11px;
   background: transparent;
   color: var(--muted);
 }
@@ -1012,6 +1013,12 @@ body.rf-recorder-window .select-menu-list {
   border-color: rgba(17, 183, 167, 0.26);
   background: rgba(17, 183, 167, 0.12);
   color: var(--accent-readable);
+}
+
+.screenshot-history-actions button.danger:hover {
+  border-color: rgba(240, 68, 56, 0.42);
+  background: rgba(240, 68, 56, 0.16);
+  color: #ffe2df;
 }
 
 .menu-grid > *,
@@ -2198,6 +2205,12 @@ body.rf-annotation-render-window {
   padding: 0 8px;
 }
 
+.whiteboard-tools button span,
+.whiteboard-width-group button,
+.whiteboard-actions button span {
+  white-space: nowrap;
+}
+
 .whiteboard-style-group button {
   width: 24px;
   min-width: 24px;
@@ -2273,6 +2286,7 @@ body.rf-annotation-render-window {
 
 .whiteboard-actions button span {
   margin-left: 4px;
+  line-height: 1;
 }
 
 .whiteboard-canvas {
@@ -2439,8 +2453,8 @@ body.rf-annotation-overlay-window {
   z-index: 4;
   display: inline-flex;
   align-items: center;
-  gap: 5px;
-  max-width: min(calc(100vw - 28px), 780px);
+  gap: 4px;
+  max-width: min(calc(100vw - 28px), 920px);
   min-height: 42px;
   padding: 5px;
   border: 1px solid var(--line);
@@ -2453,7 +2467,8 @@ body.rf-annotation-overlay-window {
 }
 
 .annotation-capsule-title {
-  max-width: 72px;
+  flex: 0 0 auto;
+  max-width: 92px;
   overflow: hidden;
   padding: 0 8px;
   color: var(--muted);
@@ -2490,6 +2505,19 @@ body.rf-annotation-overlay-window {
   cursor: pointer;
   transition: background 160ms ease, border-color 160ms ease, color 160ms ease, transform 120ms ease;
   --wails-draggable: no-drag;
+}
+
+.annotation-capsule button span {
+  overflow: hidden;
+  max-width: 92px;
+  line-height: 1;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.annotation-capsule .annotation-save-status {
+  min-width: 76px;
+  padding: 0 10px;
 }
 
 .annotation-capsule button:hover,
@@ -2746,7 +2774,8 @@ body.rf-annotation-overlay-window {
   right: 10px;
   display: inline-flex;
   align-items: center;
-  gap: 8px;
+  gap: 6px;
+  max-width: min(360px, calc(100vw - 28px));
 }
 
 .region-edit-controls b {
@@ -2773,6 +2802,28 @@ body.rf-annotation-overlay-window {
   border-radius: var(--radius-pill);
   background: rgba(18, 22, 26, 0.72);
   color: #ffdfdc;
+}
+
+.region-edit-controls .region-edit-confirm {
+  display: inline-flex;
+  width: auto;
+  min-width: 88px;
+  justify-content: center;
+  gap: 6px;
+  padding: 0 12px;
+  border-color: rgba(255, 255, 255, 0.28);
+  background: rgba(255, 59, 59, 0.82);
+  color: #ffffff;
+  font-size: 12px;
+  font-weight: 900;
+}
+
+.region-edit-controls .region-edit-confirm span {
+  overflow: hidden;
+  max-width: 96px;
+  line-height: 1;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .region-cancel-button {

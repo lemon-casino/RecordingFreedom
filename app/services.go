@@ -123,6 +123,7 @@ type RecordingFreedomService struct {
 	regionMu              sync.Mutex
 	regionSession         *RegionSelectionSession
 	selectedRegionDIP     application.Rect
+	screenshotRegionDIP   application.Rect
 	pipOverlayMu          sync.Mutex
 	pipOverlayToken       uint64
 	micLevelMu            sync.Mutex

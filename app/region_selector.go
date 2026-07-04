@@ -54,6 +54,7 @@ type RegionFrameState struct {
 	Bounds        RegionRect `json:"bounds"`
 	OverlayBounds RegionRect `json:"overlayBounds,omitempty"`
 	Mode          string     `json:"mode"`
+	Purpose       string     `json:"purpose,omitempty"`
 }
 
 func (s *RecordingFreedomService) ShowRegionSelector() (RegionSelectionSession, error) {
@@ -96,6 +97,7 @@ func (s *RecordingFreedomService) CompleteRegionSelection(req RegionSelectionReq
 	s.regionMu.Lock()
 	session := s.regionSession
 	s.regionSession = nil
+	s.screenshotRegionDIP = application.Rect{}
 	s.regionMu.Unlock()
 	if session == nil {
 		return RegionSelectionResult{}, errors.New("no active region selection session")
@@ -230,14 +232,20 @@ func (s *RecordingFreedomService) showRegionFrame(bounds application.Rect) error
 		Bounds:        regionRectFromAppRect(bounds),
 		OverlayBounds: regionRectFromAppRect(overlayBounds),
 		Mode:          "recording",
+		Purpose:       regionSelectionPurposeCapture,
 	}
 	s.broadcastRegionFrameState(state)
 	return nil
 }
 
 func (s *RecordingFreedomService) showRegionEditor(bounds application.Rect) error {
+	_, err := s.showRegionEditorWithPurpose(bounds, regionSelectionPurposeCapture)
+	return err
+}
+
+func (s *RecordingFreedomService) showRegionEditorWithPurpose(bounds application.Rect, purpose string) (RegionFrameState, error) {
 	if bounds.Width <= 0 || bounds.Height <= 0 {
-		return nil
+		return RegionFrameState{}, nil
 	}
 	overlayBounds := application.Rect{}
 	if s.regionOverlay != nil && s.app != nil {
@@ -252,13 +260,14 @@ func (s *RecordingFreedomService) showRegionEditor(bounds application.Rect) erro
 		Bounds:        regionRectFromAppRect(bounds),
 		OverlayBounds: regionRectFromAppRect(overlayBounds),
 		Mode:          "edit",
+		Purpose:       purpose,
 	}
 	s.broadcastRegionFrameState(state)
 	if s.capsuleWindow != nil {
 		s.capsuleWindow.SetAlwaysOnTop(true)
 		s.capsuleWindow.Show()
 	}
-	return nil
+	return state, nil
 }
 
 func (s *RecordingFreedomService) broadcastRegionFrameState(state RegionFrameState) {

@@ -161,7 +161,9 @@ func (s *RecordingFreedomService) ShowScreenshotRegionSelector() (RegionSelectio
 func (s *RecordingFreedomService) CompleteScreenshotRegionSelection(req RegionSelectionRequest) (ScreenshotCaptureResult, error) {
 	s.regionMu.Lock()
 	session := s.regionSession
+	absoluteSelection := s.screenshotRegionDIP
 	s.regionSession = nil
+	s.screenshotRegionDIP = application.Rect{}
 	s.regionMu.Unlock()
 	if session == nil {
 		return ScreenshotCaptureResult{}, errors.New("no active screenshot selection session")
@@ -170,6 +172,14 @@ func (s *RecordingFreedomService) CompleteScreenshotRegionSelection(req RegionSe
 		return ScreenshotCaptureResult{}, errors.New("active region selection session is not for screenshots")
 	}
 	relative := normalizeRegionSelection(req)
+	if absoluteSelection.Width > 0 && absoluteSelection.Height > 0 {
+		relative = application.Rect{
+			X:      absoluteSelection.X - session.Bounds.X,
+			Y:      absoluteSelection.Y - session.Bounds.Y,
+			Width:  absoluteSelection.Width,
+			Height: absoluteSelection.Height,
+		}
+	}
 	if relative.Width < session.MinimumWidth || relative.Height < session.MinimumHeight {
 		return ScreenshotCaptureResult{}, fmt.Errorf("selected screenshot region must be at least %d x %d", session.MinimumWidth, session.MinimumHeight)
 	}
@@ -193,6 +203,54 @@ func (s *RecordingFreedomService) CompleteScreenshotRegionSelection(req RegionSe
 	}
 	s.emitScreenshotCaptured(item)
 	return ScreenshotCaptureResult{Item: item}, nil
+}
+
+func (s *RecordingFreedomService) BeginScreenshotRegionEdit(req RegionSelectionRequest) (RegionFrameState, error) {
+	session, err := s.activeScreenshotRegionSession()
+	if err != nil {
+		return RegionFrameState{}, err
+	}
+	relative := normalizeRegionSelection(req)
+	if relative.Width < session.MinimumWidth || relative.Height < session.MinimumHeight {
+		return RegionFrameState{}, fmt.Errorf("selected screenshot region must be at least %d x %d", session.MinimumWidth, session.MinimumHeight)
+	}
+	absolute := application.Rect{
+		X:      session.Bounds.X + relative.X,
+		Y:      session.Bounds.Y + relative.Y,
+		Width:  relative.Width,
+		Height: relative.Height,
+	}
+	return s.setScreenshotRegionEditor(absolute)
+}
+
+func (s *RecordingFreedomService) UpdateScreenshotRegionSelection(req RegionSelectionRequest) (RegionFrameState, error) {
+	if _, err := s.activeScreenshotRegionSession(); err != nil {
+		return RegionFrameState{}, err
+	}
+	absolute := normalizeRegionSelection(req)
+	if absolute.Width < minRegionWidth || absolute.Height < minRegionHeight {
+		return RegionFrameState{}, fmt.Errorf("selected screenshot region must be at least %d x %d", minRegionWidth, minRegionHeight)
+	}
+	return s.setScreenshotRegionEditor(absolute)
+}
+
+func (s *RecordingFreedomService) activeScreenshotRegionSession() (RegionSelectionSession, error) {
+	s.regionMu.Lock()
+	defer s.regionMu.Unlock()
+	if s.regionSession == nil {
+		return RegionSelectionSession{}, errors.New("no active screenshot selection session")
+	}
+	if s.regionSession.Purpose != regionSelectionPurposeScreenshot {
+		return RegionSelectionSession{}, errors.New("active region selection session is not for screenshots")
+	}
+	return *s.regionSession, nil
+}
+
+func (s *RecordingFreedomService) setScreenshotRegionEditor(bounds application.Rect) (RegionFrameState, error) {
+	s.regionMu.Lock()
+	s.screenshotRegionDIP = bounds
+	s.regionMu.Unlock()
+	return s.showRegionEditorWithPurpose(bounds, regionSelectionPurposeScreenshot)
 }
 
 func (s *RecordingFreedomService) PatchScreenshotItem(req ScreenshotItemPatchRequest) (ScreenshotHistoryResult, error) {
@@ -260,6 +318,64 @@ func (s *RecordingFreedomService) OpenScreenshot(req ScreenshotImageRequest) (Sc
 		return ScreenshotItem{}, err
 	}
 	return item, nil
+}
+
+func (s *RecordingFreedomService) OpenScreenshotDirectory(req ScreenshotImageRequest) (ScreenshotItem, error) {
+	item, err := s.screenshotItemForRequest(req)
+	if err != nil {
+		return ScreenshotItem{}, err
+	}
+	path, err := managedScreenshotPath(s, item.Path)
+	if err != nil {
+		return ScreenshotItem{}, err
+	}
+	if err := openPath(filepath.Dir(path)); err != nil {
+		return ScreenshotItem{}, err
+	}
+	return item, nil
+}
+
+func (s *RecordingFreedomService) DeleteScreenshotItem(id string) (ScreenshotHistoryResult, error) {
+	id = strings.TrimSpace(id)
+	if id == "" {
+		return ScreenshotHistoryResult{}, errors.New("screenshot id is required")
+	}
+	items, err := s.loadScreenshotHistory()
+	if err != nil {
+		return ScreenshotHistoryResult{}, err
+	}
+	remaining := make([]ScreenshotItem, 0, len(items))
+	var removed ScreenshotItem
+	for _, item := range items {
+		if item.ID == id {
+			removed = item
+			continue
+		}
+		remaining = append(remaining, item)
+	}
+	if removed.ID == "" {
+		return ScreenshotHistoryResult{}, fmt.Errorf("screenshot %q was not found", id)
+	}
+	for _, path := range uniqueScreenshotFilePaths(removed) {
+		if err := removeManagedScreenshotFile(s, path); err != nil {
+			return ScreenshotHistoryResult{}, err
+		}
+	}
+	if err := s.saveScreenshotHistory(remaining); err != nil {
+		return ScreenshotHistoryResult{}, err
+	}
+	s.screenshotMu.Lock()
+	clearWhiteboardContext := s.whiteboardScreenshot.Item.ID == id
+	pinnedDeleted := s.screenshotPinState.Visible && s.screenshotPinState.Item.ID == id
+	if clearWhiteboardContext {
+		s.whiteboardScreenshot = ScreenshotWhiteboardContext{}
+	}
+	s.screenshotMu.Unlock()
+	if pinnedDeleted {
+		_ = s.HidePinnedScreenshot()
+	}
+	s.logEvent("screenshot", "delete", map[string]string{"id": id, "path": removed.Path})
+	return ScreenshotHistoryResult{Items: remaining}, nil
 }
 
 func (s *RecordingFreedomService) ShowPinnedScreenshot(id string) (ScreenshotPinState, error) {
@@ -580,6 +696,31 @@ func managedScreenshotPath(s *RecordingFreedomService, path string) (string, err
 		return "", fmt.Errorf("screenshot path %q must be a PNG", path)
 	}
 	return target, nil
+}
+
+func uniqueScreenshotFilePaths(item ScreenshotItem) []string {
+	seen := map[string]bool{}
+	paths := make([]string, 0, 2)
+	for _, path := range []string{item.Path, item.ThumbnailPath} {
+		path = strings.TrimSpace(path)
+		if path == "" || seen[path] {
+			continue
+		}
+		seen[path] = true
+		paths = append(paths, path)
+	}
+	return paths
+}
+
+func removeManagedScreenshotFile(s *RecordingFreedomService, path string) error {
+	managed, err := managedScreenshotPath(s, path)
+	if err != nil {
+		return err
+	}
+	if err := os.Remove(managed); err != nil && !errors.Is(err, os.ErrNotExist) {
+		return err
+	}
+	return nil
 }
 
 func (s *RecordingFreedomService) screenshotHistoryPath() (string, error) {

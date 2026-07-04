@@ -24,6 +24,7 @@ import {
   Settings,
   ScrollText,
   Square,
+  Trash2,
   Video,
   Volume2,
   Wand2,
@@ -70,7 +71,7 @@ import {
   fallbackCapabilities,
   fallbackStorageStatus,
 } from './services/mockBackend'
-import {cancelRegionSelector, cancelSelectedRegion, completeAnnotationRegionSelection, completeRegionSelection, completeScreenshotRegionSelection, exportRecordingPackage, hidePinnedScreenshot, hidePipOverlay, hideRegionFrame, hideScreenIndicator, hideSettingsWindow, listScreenshots, loadBootstrap, loadPinnedScreenshot, loadSettings, logClientEvent, openRecordingPackage, openScreenshot, openScreenshotInWhiteboard, openVideoDirectory, patchAudioState, patchScreenshotItem, patchSettingsPreferences, patchShortcutSettings, patchWhiteboardSettings, pauseRecording, preflightAudioOnlyRecording, preflightRecording, previewExportRecordingPackage, quitApplication, readAnnotationPreviewImage, readPipPreviewImage, recoverRecordingPackage, restoreCapsuleWindow, resumeRecording, saveSettings, setCapsuleWindowExpanded, setCapsuleWindowHitRegions, setDataRoot, showAnnotationOverlay, showAnnotationRegionSelector, showPinnedScreenshot, showPipOverlay, showRegionSelector, showScreenIndicator, showScreenshotRegionSelector, showWhiteboardWindow, snapCapsuleWindowToEdge, startAudioOnlyRecording, startMicrophoneLevelMonitor, startRecording, startScrollingScreenshot, stopMicrophoneLevelMonitor, stopRecording, subscribeAudioLevel, subscribeAudioState, subscribeCapsuleWindowMoveEnded, subscribeRecordingStatus, subscribeRegionSelection, subscribeScreenshotCaptured, subscribeScreenshotPin, subscribeSettingsChanged, subscribeShortcutTriggered, subscribeWhiteboardVisibility, updatePipOverlay, updateSelectedRegion, type AudioControlState, type AudioLevelUpdate, type AudioStatePatch, type CapsuleWindowDockSide, type CapsuleWindowExpandDirection, type CapsuleWindowHitRegion, type PIPOverlayCamera, type PIPOverlayState, type RecordingExportPlan, type RecordingRecovery, type RecordingStatusUpdate, type RegionSelectionSession, type ScreenshotPinState, type SettingsPreferencesPatch, type ShortcutSettingsPatch, type WhiteboardSettingsPatch, type WhiteboardVisibilityUpdate} from './services/recorderBackend'
+import {beginScreenshotRegionEdit, cancelRegionSelector, cancelSelectedRegion, completeAnnotationRegionSelection, completeRegionSelection, completeScreenshotRegionSelection, deleteScreenshotItem, exportRecordingPackage, hidePinnedScreenshot, hidePipOverlay, hideRegionFrame, hideScreenIndicator, hideSettingsWindow, listScreenshots, loadBootstrap, loadPinnedScreenshot, loadSettings, logClientEvent, openRecordingPackage, openScreenshot, openScreenshotDirectory, openScreenshotInWhiteboard, openVideoDirectory, patchAudioState, patchScreenshotItem, patchSettingsPreferences, patchShortcutSettings, patchWhiteboardSettings, pauseRecording, preflightAudioOnlyRecording, preflightRecording, previewExportRecordingPackage, quitApplication, readAnnotationPreviewImage, readPipPreviewImage, recoverRecordingPackage, restoreCapsuleWindow, resumeRecording, saveSettings, setCapsuleWindowExpanded, setCapsuleWindowHitRegions, setDataRoot, showAnnotationOverlay, showAnnotationRegionSelector, showPinnedScreenshot, showPipOverlay, showRegionSelector, showScreenIndicator, showScreenshotRegionSelector, showWhiteboardWindow, snapCapsuleWindowToEdge, startAudioOnlyRecording, startMicrophoneLevelMonitor, startRecording, startScrollingScreenshot, stopMicrophoneLevelMonitor, stopRecording, subscribeAudioLevel, subscribeAudioState, subscribeCapsuleDockSide, subscribeCapsuleWindowMoveEnded, subscribeRecordingStatus, subscribeRegionSelection, subscribeScreenshotCaptured, subscribeScreenshotPin, subscribeSettingsChanged, subscribeShortcutTriggered, subscribeWhiteboardVisibility, updatePipOverlay, updateScreenshotRegionSelection, updateSelectedRegion, type AudioControlState, type AudioLevelUpdate, type AudioStatePatch, type CapsuleWindowDockSide, type CapsuleWindowExpandDirection, type CapsuleWindowHitRegion, type PIPOverlayCamera, type PIPOverlayState, type RecordingExportPlan, type RecordingRecovery, type RecordingStatusUpdate, type RegionSelectionSession, type ScreenshotPinState, type SettingsPreferencesPatch, type ShortcutSettingsPatch, type WhiteboardSettingsPatch, type WhiteboardVisibilityUpdate} from './services/recorderBackend'
 
 const AnnotationOverlayWindow = lazy(() => import('./AnnotationOverlayWindow'))
 const AnnotationRenderWindow = lazy(() => import('./AnnotationRenderWindow'))
@@ -438,6 +439,7 @@ function App() {
   const capsuleWindowLayoutChangingRef = useRef(false)
   const capsuleWindowLayoutTokenRef = useRef(0)
   const capsuleDragCandidateRef = useRef(false)
+  const capsuleProgrammaticMoveRef = useRef(false)
   const capsuleDockSideRef = useRef<CapsuleWindowDockSide>('none')
   const floatingPointerInsideAtRef = useRef(0)
   const floatingPointerInsideRef = useRef(false)
@@ -1241,6 +1243,11 @@ function App() {
     capsuleDockSideRef.current = capsuleDockSide
   }, [capsuleDockSide])
 
+  useEffect(() => subscribeCapsuleDockSide((side) => {
+    capsuleDockSideRef.current = side
+    setCapsuleDockSide(side)
+  }), [])
+
   useEffect(() => subscribeAudioLevel((update: AudioLevelUpdate) => {
     const currentMic = selectedMicRef.current
     if (update.deviceId && currentMic && update.deviceId !== currentMic) return
@@ -1262,9 +1269,19 @@ function App() {
     const token = capsuleWindowLayoutTokenRef.current + 1
     capsuleWindowLayoutTokenRef.current = token
     capsuleWindowLayoutChangingRef.current = true
+    capsuleProgrammaticMoveRef.current = true
     let disposed = false
     let forceTimer = 0
     let secondForceTimer = 0
+    let programmaticMoveTimer = 0
+    const releaseProgrammaticMove = () => {
+      if (programmaticMoveTimer) window.clearTimeout(programmaticMoveTimer)
+      programmaticMoveTimer = window.setTimeout(() => {
+        if (!disposed && token === capsuleWindowLayoutTokenRef.current) {
+          capsuleProgrammaticMoveRef.current = false
+        }
+      }, 180)
+    }
     const forceStableRegion = () => {
       if (disposed || token !== capsuleWindowLayoutTokenRef.current) return
       capsuleWindowLayoutChangingRef.current = false
@@ -1286,11 +1303,13 @@ function App() {
         window.requestAnimationFrame(() => {
           window.requestAnimationFrame(forceStableRegion)
         })
+        releaseProgrammaticMove()
       })
     return () => {
       disposed = true
       if (forceTimer) window.clearTimeout(forceTimer)
       if (secondForceTimer) window.clearTimeout(secondForceTimer)
+      if (programmaticMoveTimer) window.clearTimeout(programmaticMoveTimer)
     }
   }, [capsuleExpanded, capsuleExpandedHeight, capsuleWindowCompact, isSettingsWindow])
 
@@ -1385,10 +1404,12 @@ function App() {
       forceTimer = 0
     }
     const stabilize = (reason: string) => {
+      if (capsuleProgrammaticMoveRef.current && reason !== 'pointer-end') return
       clearTimers()
       const settleDelay = reason === 'window-did-move' ? 240 : 90
       settleTimer = window.setTimeout(() => {
         if (disposed) return
+        capsuleProgrammaticMoveRef.current = true
         void logClientEvent('capsule-window', 'stabilize', {reason, expanded: capsuleExpanded, compact: capsuleWindowCompact})
         const snapBeforeLayout = !capsuleExpanded && (reason === 'pointer-end' || reason === 'window-end-move' || reason === 'window-did-move')
         const snapTask = snapBeforeLayout
@@ -1406,7 +1427,10 @@ function App() {
             if (disposed) return
             forceCapsuleHitRegionPublishRef.current?.()
             forceTimer = window.setTimeout(() => {
-              if (!disposed) forceCapsuleHitRegionPublishRef.current?.()
+              if (!disposed) {
+                capsuleProgrammaticMoveRef.current = false
+                forceCapsuleHitRegionPublishRef.current?.()
+              }
             }, 140)
           })
       }, settleDelay)
@@ -2168,6 +2192,14 @@ function App() {
       })
   }
 
+  const openScreenshotFolder = (item: ScreenshotItem) => {
+    void openScreenshotDirectory(item.id)
+      .catch((error) => {
+        console.error('Failed to open screenshot directory:', error)
+        setScreenshotMessage(readableError(error))
+      })
+  }
+
   const annotateScreenshot = (item: ScreenshotItem) => {
     setActivePanel(null)
     void openScreenshotInWhiteboard(item.id)
@@ -2184,6 +2216,18 @@ function App() {
       .catch((error) => {
         console.error('Failed to pin screenshot:', error)
         setScreenshotMessage(readableError(error))
+      })
+  }
+
+  const deleteScreenshot = (item: ScreenshotItem) => {
+    void deleteScreenshotItem(item.id)
+      .then((items) => {
+        setScreenshots(items)
+        setScreenshotMessage(copy.screenshot.deleted)
+      })
+      .catch((error) => {
+        console.error('Failed to delete screenshot:', error)
+        setScreenshotMessage(readableError(error) || copy.screenshot.deleteFailed)
       })
   }
 
@@ -2920,6 +2964,9 @@ function App() {
                         </span>
                       </button>
                       <div className="screenshot-history-actions">
+                        <button type="button" aria-label={copy.screenshot.openFolder} title={copy.screenshot.openFolder} onClick={() => openScreenshotFolder(item)}>
+                          <FolderOpen size={15} />
+                        </button>
                         <button type="button" aria-label={copy.screenshot.annotate} title={copy.screenshot.annotate} onClick={() => annotateScreenshot(item)}>
                           <PenLine size={15} />
                         </button>
@@ -2934,6 +2981,9 @@ function App() {
                           onClick={() => toggleScreenshotFixed(item)}
                         >
                           {item.fixed ? <Lock size={15} /> : <Unlock size={15} />}
+                        </button>
+                        <button type="button" className="danger" aria-label={copy.screenshot.delete} title={copy.screenshot.delete} onClick={() => deleteScreenshot(item)}>
+                          <Trash2 size={15} />
                         </button>
                       </div>
                     </div>
@@ -3855,6 +3905,7 @@ type RegionFrameState = {
   bounds: {x: number; y: number; width: number; height: number}
   overlayBounds?: {x: number; y: number; width: number; height: number}
   mode?: 'edit' | 'recording'
+  purpose?: 'capture' | 'annotation' | 'screenshot'
 }
 
 type RegionEditAction = 'move' | 'n' | 'e' | 's' | 'w' | 'ne' | 'nw' | 'se' | 'sw'
@@ -3877,7 +3928,7 @@ function useRegionFrameState() {
   return frame
 }
 
-function useRegionEditorDrag(bounds: RegionFrameState['bounds'] | undefined) {
+function useRegionEditorDrag(bounds: RegionFrameState['bounds'] | undefined, updateRegion: (bounds: RegionFrameState['bounds']) => Promise<unknown>) {
   const editRef = useRef<{
     action: RegionEditAction
     startX: number
@@ -3906,7 +3957,7 @@ function useRegionEditorDrag(bounds: RegionFrameState['bounds'] | undefined) {
     event.preventDefault()
     const next = resizeRegionBounds(edit.bounds, edit.action, event.screenX - edit.startX, event.screenY - edit.startY)
     edit.latest = next
-    void updateSelectedRegion(next)
+    void updateRegion(next)
   }
 
   const completeEdit = (event: ReactPointerEvent<HTMLElement>) => {
@@ -3916,7 +3967,7 @@ function useRegionEditorDrag(bounds: RegionFrameState['bounds'] | undefined) {
       event.currentTarget.releasePointerCapture(event.pointerId)
     }
     editRef.current = null
-    void updateSelectedRegion(edit.latest)
+    void updateRegion(edit.latest)
   }
 
   return {beginEdit, updateEdit, completeEdit}
@@ -3954,7 +4005,11 @@ function RegionOverlayWindow() {
   const overlayWindow = window as Window & {__RF_REGION_SESSION__?: RegionSelectionSession}
   const initialSession = overlayWindow.__RF_REGION_SESSION__
   const editFrame = useRegionFrameState()
-  const editDrag = useRegionEditorDrag(editFrame?.mode === 'edit' ? editFrame.bounds : undefined)
+  const isScreenshotRegionEdit = editFrame?.mode === 'edit' && editFrame.purpose === 'screenshot'
+  const editDrag = useRegionEditorDrag(
+    editFrame?.mode === 'edit' ? editFrame.bounds : undefined,
+    isScreenshotRegionEdit ? updateScreenshotRegionSelection : updateSelectedRegion,
+  )
   const [session, setSession] = useState<RegionSelectionSession | undefined>(initialSession)
   const [drag, setDrag] = useState<{startX: number; startY: number; currentX: number; currentY: number} | null>(null)
   const [cursor, setCursor] = useState({x: -1, y: -1})
@@ -4020,7 +4075,7 @@ function RegionOverlayWindow() {
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key === 'Escape') {
         event.preventDefault()
-        void (isEditingRegion ? cancelSelectedRegion() : cancelRegionSelector())
+        void (isEditingRegion ? (isScreenshotRegionEdit ? cancelRegionSelector() : cancelSelectedRegion()) : cancelRegionSelector())
       }
     }
     window.addEventListener('keydown', onKeyDown)
@@ -4045,7 +4100,7 @@ function RegionOverlayWindow() {
       return
     }
     if (isScreenshotRegionSelection) {
-      await completeScreenshotRegionSelection(rect)
+      await beginScreenshotRegionEdit(rect)
       return
     }
     await completeRegionSelection(rect)
@@ -4157,12 +4212,25 @@ function RegionOverlayWindow() {
           ))}
           <div className="region-edit-controls">
             <b>{editableRect.width} x {editableRect.height}</b>
+            {isScreenshotRegionEdit && (
+              <button
+                className="region-edit-confirm"
+                type="button"
+                aria-label={copy.regionOverlay.saveScreenshot}
+                title={copy.regionOverlay.saveScreenshot}
+                onPointerDown={(event) => event.stopPropagation()}
+                onClick={() => void completeScreenshotRegionSelection(editFrame.bounds)}
+              >
+                <Check size={16} />
+                <span>{copy.regionOverlay.saveScreenshot}</span>
+              </button>
+            )}
             <button
               type="button"
               aria-label={copy.regionOverlay.cancel}
               title={copy.regionOverlay.cancel}
               onPointerDown={(event) => event.stopPropagation()}
-              onClick={() => void cancelSelectedRegion()}
+              onClick={() => void (isScreenshotRegionEdit ? cancelRegionSelector() : cancelSelectedRegion())}
             >
               <X size={17} />
             </button>
@@ -4175,7 +4243,7 @@ function RegionOverlayWindow() {
         aria-label={copy.regionOverlay.cancel}
         title={copy.regionOverlay.cancel}
         onPointerDown={(event) => event.stopPropagation()}
-        onClick={() => void (isEditingRegion ? cancelSelectedRegion() : cancelSelection())}
+        onClick={() => void (isEditingRegion ? (isScreenshotRegionEdit ? cancelRegionSelector() : cancelSelectedRegion()) : cancelSelection())}
       >
         <X size={22} />
       </button>}

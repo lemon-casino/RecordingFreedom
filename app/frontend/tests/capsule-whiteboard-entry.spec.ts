@@ -1,6 +1,7 @@
 import {expect, test, type Page} from '@playwright/test'
 
 const browserSettingsKey = 'recordingfreedom.settings.v1'
+const browserScreenshotHistoryKey = 'recordingfreedom.screenshots.history.v1'
 
 test('capsule whiteboard opens board before recording and annotation during video recording', async ({page}) => {
   await openRecorderShell(page)
@@ -69,54 +70,60 @@ test('capsule shows a labeled whiteboard entry before recording in Chinese', asy
   await expect(toolsButton.getByText('工具')).toBeVisible()
 })
 
-async function openRecorderShell(page: Page, options: {locale?: 'zh-CN' | 'en'; microphone?: boolean; systemAudio?: boolean} = {}) {
-  await page.addInitScript(({settingsKey, locale, microphone, systemAudio}) => {
-    window.localStorage.setItem(settingsKey, JSON.stringify({
-      schemaVersion: 1,
-      locale,
-      source: {lastSourceType: 'screen'},
-      storage: {dataRootDir: 'browser-preview'},
-      recording: {
-        quality: 'balanced',
-        fps: 30,
-        captureCursor: true,
-        countdownSeconds: 0,
-      },
-      audio: {
-        system: systemAudio,
-        systemDeviceId: 'system-audio:default',
-        microphone,
-        microphoneDeviceId: 'microphone:browser-preview',
-        noiseSuppression: false,
-        microphoneGain: 1,
-      },
-      camera: {
-        enabled: false,
-        deviceId: 'camera:default',
-        pipPreset: 'bottom-right',
-        pip: {
-          preset: 'bottom-right',
-          shape: 'circle',
-          mirror: true,
-          position: {x: 1, y: 1},
-          scale: 0.08,
-          edgeFeather: 0.16,
-        },
-      },
-      whiteboard: {
-        enabled: true,
-        lastMode: 'board',
-        lastTool: 'freedraw',
-        lastStrokeColor: '#ef4444',
-        lastStrokeWidth: 'medium',
-        lastOpacity: 100,
-        capturePolicy: 'export-compose',
-      },
-      window: {
-        minimizeToTray: true,
-        theme: 'night-teal',
-      },
-    }))
+test('screenshot history exposes folder and delete actions', async ({page}) => {
+  await openRecorderShell(page, {
+    screenshotHistory: [{
+      id: 'history-shot',
+      path: 'browser-preview/data/screenshots/history-shot.png',
+      thumbnailPath: 'browser-preview/data/screenshots/thumbnails/history-shot.png',
+      createdAt: '2026-07-04T12:00:00Z',
+      width: 420,
+      height: 260,
+      mode: 'region',
+      pinned: false,
+      fixed: false,
+    }],
+  })
+
+  await page.getByRole('button', {name: 'Screenshot / board'}).click()
+  await expect(page.getByRole('button', {name: 'Open containing folder'})).toBeVisible()
+  await page.getByRole('button', {name: 'Delete screenshot'}).click()
+  await expect(page.getByText('No screenshot history')).toBeVisible()
+  await expect.poll(async () => page.evaluate((key) => JSON.parse(window.localStorage.getItem(key) || '[]').length, browserScreenshotHistoryKey)).toBe(0)
+})
+
+test('region screenshot enters editable selection before saving', async ({page}) => {
+  await page.addInitScript(({settingsKey, settings}) => {
+    window.localStorage.setItem(settingsKey, JSON.stringify(settings))
+    ;(window as Window & {__RF_REGION_SESSION__?: unknown}).__RF_REGION_SESSION__ = {
+      id: 'screenshot-region-test',
+      bounds: {x: 0, y: 0, width: 900, height: 620},
+      captureBounds: {x: 0, y: 0, width: 900, height: 620},
+      minimumWidth: 64,
+      minimumHeight: 64,
+      displayCount: 1,
+      purpose: 'screenshot',
+    }
+  }, {settingsKey: browserSettingsKey, settings: baseBrowserSettings('en', false, false)})
+  await page.goto('/#/region-overlay')
+
+  await page.mouse.move(120, 120)
+  await page.mouse.down()
+  await page.mouse.move(420, 300)
+  await page.mouse.up()
+
+  await expect(page.locator('.region-edit-rect')).toBeVisible()
+  await expect(page.getByRole('button', {name: 'Save screenshot'})).toBeVisible()
+  await page.getByRole('button', {name: 'Save screenshot'}).click()
+  await expect.poll(async () => page.evaluate((key) => JSON.parse(window.localStorage.getItem(key) || '[]').length, browserScreenshotHistoryKey)).toBe(1)
+})
+
+async function openRecorderShell(page: Page, options: {locale?: 'zh-CN' | 'en'; microphone?: boolean; systemAudio?: boolean; screenshotHistory?: unknown[]} = {}) {
+  await page.addInitScript(({settingsKey, screenshotHistoryKey, settings, screenshotHistory}) => {
+    window.localStorage.setItem(settingsKey, JSON.stringify(settings))
+    if (screenshotHistory) {
+      window.localStorage.setItem(screenshotHistoryKey, JSON.stringify(screenshotHistory))
+    }
     window.open = ((url?: string | URL, target?: string, features?: string) => {
       ;(window as Window & {__RF_LAST_WINDOW_OPEN__?: {url: string; target?: string; features?: string}}).__RF_LAST_WINDOW_OPEN__ = {
         url: String(url ?? ''),
@@ -125,8 +132,66 @@ async function openRecorderShell(page: Page, options: {locale?: 'zh-CN' | 'en'; 
       }
       return {focus: () => undefined} as Window
     }) as typeof window.open
-  }, {settingsKey: browserSettingsKey, locale: options.locale ?? 'en', microphone: options.microphone === true, systemAudio: options.systemAudio === true})
+  }, {
+    settingsKey: browserSettingsKey,
+    screenshotHistoryKey: browserScreenshotHistoryKey,
+    settings: baseBrowserSettings(
+      options.locale ?? 'en',
+      options.microphone === true,
+      options.systemAudio === true,
+    ),
+    screenshotHistory: options.screenshotHistory,
+  })
   await page.goto('/')
+}
+
+function baseBrowserSettings(locale: 'zh-CN' | 'en', microphone: boolean, systemAudio: boolean) {
+  return {
+    schemaVersion: 1,
+    locale,
+    source: {lastSourceType: 'screen'},
+    storage: {dataRootDir: 'browser-preview'},
+    recording: {
+      quality: 'balanced',
+      fps: 30,
+      captureCursor: true,
+      countdownSeconds: 0,
+    },
+    audio: {
+      system: systemAudio,
+      systemDeviceId: 'system-audio:default',
+      microphone,
+      microphoneDeviceId: 'microphone:browser-preview',
+      noiseSuppression: false,
+      microphoneGain: 1,
+    },
+    camera: {
+      enabled: false,
+      deviceId: 'camera:default',
+      pipPreset: 'bottom-right',
+      pip: {
+        preset: 'bottom-right',
+        shape: 'circle',
+        mirror: true,
+        position: {x: 1, y: 1},
+        scale: 0.08,
+        edgeFeather: 0.16,
+      },
+    },
+    whiteboard: {
+      enabled: true,
+      lastMode: 'board',
+      lastTool: 'freedraw',
+      lastStrokeColor: '#ef4444',
+      lastStrokeWidth: 'medium',
+      lastOpacity: 100,
+      capturePolicy: 'export-compose',
+    },
+    window: {
+      minimizeToTray: true,
+      theme: 'night-teal',
+    },
+  }
 }
 
 async function expectWhiteboardLaunch(page: Page, mode: 'whiteboard' | 'annotation', url: string) {

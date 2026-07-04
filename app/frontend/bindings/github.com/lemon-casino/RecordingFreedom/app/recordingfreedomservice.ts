@@ -31,6 +31,10 @@ import * as settings$0 from "./internal/settings/models.js";
 // @ts-ignore: Unused imports
 import * as $models from "./models.js";
 
+export function BeginScreenshotRegionEdit(req: $models.RegionSelectionRequest): $CancellablePromise<$models.RegionFrameState> {
+    return $Call.ByID(1479485771, req);
+}
+
 export function Bootstrap(): $CancellablePromise<$models.BootstrapState> {
     return $Call.ByID(3811015052);
 }
@@ -69,6 +73,10 @@ export function CompleteScreenshotRegionSelection(req: $models.RegionSelectionRe
 
 export function ConsumeScreenshotWhiteboardContext(): $CancellablePromise<$models.ScreenshotWhiteboardContext> {
     return $Call.ByID(3553890718);
+}
+
+export function DeleteScreenshotItem(id: string): $CancellablePromise<$models.ScreenshotHistoryResult> {
+    return $Call.ByID(3839519758, id);
 }
 
 export function ExportRecordingPackage(req: $models.ExportRecordingRequest): $CancellablePromise<$models.ExportRecordingResult> {
@@ -145,6 +153,10 @@ export function OpenRecordingPackage(packageDir: string): $CancellablePromise<re
 
 export function OpenScreenshot(req: $models.ScreenshotImageRequest): $CancellablePromise<$models.ScreenshotItem> {
     return $Call.ByID(3167145418, req);
+}
+
+export function OpenScreenshotDirectory(req: $models.ScreenshotImageRequest): $CancellablePromise<$models.ScreenshotItem> {
+    return $Call.ByID(951793161, req);
 }
 
 export function OpenScreenshotInWhiteboard(id: string): $CancellablePromise<$models.ScreenshotWhiteboardContext> {
@@ -317,6 +329,10 @@ export function ToggleWhiteboardWindow(): $CancellablePromise<void> {
 
 export function UpdatePIPOverlay(req: $models.PIPOverlayRequest): $CancellablePromise<$models.PIPOverlayState> {
     return $Call.ByID(1829978564, req);
+}
+
+export function UpdateScreenshotRegionSelection(req: $models.RegionSelectionRequest): $CancellablePromise<$models.RegionFrameState> {
+    return $Call.ByID(445412471, req);
 }
 
 export function UpdateSelectedRegion(req: $models.RegionSelectionRequest): $CancellablePromise<$models.RegionSelectionResult> {

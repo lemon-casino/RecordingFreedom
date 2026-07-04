@@ -269,6 +269,7 @@ const browserScreenshotWhiteboardKey = 'recordingfreedom.screenshots.whiteboard.
 const browserWhiteboardVisibilityEvent = 'rf-whiteboard-visibility'
 const browserScreenshotCapturedEvent = 'rf-screenshot-captured'
 const browserScreenshotPinEvent = 'rf-screenshot-pin'
+const browserCapsuleDockSideEvent = 'rf-capsule-dock-side'
 const capsuleWindowWidth = 760
 const capsuleWindowCompactWidth = 380
 const capsuleWindowCollapsedHeight = 96
@@ -347,6 +348,17 @@ export function subscribeCapsuleWindowMoveEnded(handler: (reason: CapsuleWindowM
     handler(reason)
   }))
   return () => disposers.forEach((dispose) => dispose())
+}
+
+export function subscribeCapsuleDockSide(handler: (side: CapsuleWindowDockSide) => void): () => void {
+  const onDockSide = (event: Event) => {
+    const side = (event as CustomEvent<CapsuleWindowDockSide>).detail
+    if (side === 'left' || side === 'right' || side === 'top' || side === 'bottom' || side === 'none') {
+      handler(side)
+    }
+  }
+  window.addEventListener(browserCapsuleDockSideEvent, onDockSide)
+  return () => window.removeEventListener(browserCapsuleDockSideEvent, onDockSide)
 }
 
 export async function restoreCapsuleWindow(focus = true): Promise<void> {
@@ -582,12 +594,15 @@ export async function snapCapsuleWindowToEdge(compactCollapsed = false): Promise
     const workAreas = await capsuleWorkAreas().catch(() => [])
     const workArea = capsuleWorkAreaForPositionFromAreas(position, size, workAreas)
     const currentVisualSize = capsuleCollapsedWindowSize(compactCollapsed, lastCapsuleDockSide, workArea)
+    lastCapsuleCollapsedPosition = null
     const currentVisualPosition = capsuleVisibleCollapsedPosition(lastCapsuleDockSide, position, size, currentVisualSize, workArea)
     const dockTarget = resolveCapsuleDockTarget(currentVisualPosition, currentVisualSize, workAreas)
     const dockSide = dockTarget.side
     const targetWorkArea = dockTarget.workArea ?? workArea
-    lastCapsuleDockSide = dockSide
+    publishCapsuleDockSide(dockSide)
     lastCapsuleExpandedDirection = dockSide === 'bottom' ? 'up' : 'down'
+    await waitForAnimationFrame()
+    await waitForAnimationFrame()
     const targetSize = capsuleReservedWindowSize(compactCollapsed, dockSide, targetWorkArea)
     const targetPosition = capsuleReservedWindowPosition(dockSide, currentVisualPosition, currentVisualSize, targetSize, targetWorkArea)
     await setCapsuleWindowBoundsIfChanged(position, size, targetPosition, targetSize)
@@ -597,6 +612,16 @@ export async function snapCapsuleWindowToEdge(compactCollapsed = false): Promise
     console.info('Using browser capsule edge snap fallback:', error)
     return lastCapsuleDockSide
   }
+}
+
+function publishCapsuleDockSide(side: CapsuleWindowDockSide) {
+  if (lastCapsuleDockSide === side) return
+  lastCapsuleDockSide = side
+  window.dispatchEvent(new CustomEvent(browserCapsuleDockSideEvent, {detail: side}))
+}
+
+function waitForAnimationFrame() {
+  return new Promise<void>((resolve) => window.requestAnimationFrame(() => resolve()))
 }
 
 function resolveCapsuleExpandDirection(
@@ -1297,6 +1322,26 @@ export async function completeScreenshotRegionSelection(request: RegionSelection
   }
 }
 
+export async function beginScreenshotRegionEdit(request: RegionSelectionSession['bounds']): Promise<void> {
+  try {
+    await RecordingFreedomService.BeginScreenshotRegionEdit(toBoundRegionSelectionRequest(request))
+  } catch (error) {
+    if (isWailsDesktopRuntime()) throw error
+    console.info('Using browser screenshot region edit fallback:', error)
+    emitBrowserRegionFrame(request, 'screenshot')
+  }
+}
+
+export async function updateScreenshotRegionSelection(request: RegionSelectionSession['bounds']): Promise<void> {
+  try {
+    await RecordingFreedomService.UpdateScreenshotRegionSelection(toBoundRegionSelectionRequest(request))
+  } catch (error) {
+    if (isWailsDesktopRuntime()) throw error
+    console.info('Using browser screenshot region update fallback:', error)
+    emitBrowserRegionFrame(request, 'screenshot')
+  }
+}
+
 export async function captureScreenshot(request: {mode?: string; region?: RegionSelectionSession['bounds']} = {}): Promise<ScreenshotItem> {
   try {
     const result = await RecordingFreedomService.CaptureScreenshot(request as unknown as BoundScreenshotCaptureRequest)
@@ -1485,6 +1530,16 @@ export async function openScreenshot(id: string): Promise<ScreenshotItem | null>
   }
 }
 
+export async function openScreenshotDirectory(id: string): Promise<ScreenshotItem | null> {
+  try {
+    return fromBoundScreenshotItem(await RecordingFreedomService.OpenScreenshotDirectory({id} as BoundScreenshotImageRequest))
+  } catch (error) {
+    if (isWailsDesktopRuntime()) throw error
+    console.info('Using browser screenshot directory fallback:', error)
+    return loadBrowserScreenshotHistory().find((item) => item.id === id) ?? null
+  }
+}
+
 export async function patchScreenshotItem(id: string, patch: {pinned?: boolean; fixed?: boolean}): Promise<ScreenshotItem[]> {
   try {
     const result = await RecordingFreedomService.PatchScreenshotItem({id, ...patch} as BoundScreenshotItemPatchRequest)
@@ -1500,6 +1555,25 @@ export async function patchScreenshotItem(id: string, patch: {pinned?: boolean; 
       }
       : item)
     saveBrowserScreenshotHistory(next)
+    return next
+  }
+}
+
+export async function deleteScreenshotItem(id: string): Promise<ScreenshotItem[]> {
+  try {
+    const result = await RecordingFreedomService.DeleteScreenshotItem(id)
+    return fromBoundScreenshotHistory(result as BoundScreenshotHistoryResult)
+  } catch (error) {
+    if (isWailsDesktopRuntime()) throw error
+    console.info('Using browser screenshot delete fallback:', error)
+    const next = loadBrowserScreenshotHistory().filter((item) => item.id !== id)
+    saveBrowserScreenshotHistory(next)
+    const pinned = fromBrowserScreenshotPinState(safeJSON(window.localStorage?.getItem(browserScreenshotPinStateKey)))
+    if (pinned.item?.id === id) {
+      const state = {visible: false, fixed: false}
+      window.localStorage?.setItem(browserScreenshotPinStateKey, JSON.stringify(state))
+      window.dispatchEvent(new CustomEvent(browserScreenshotPinEvent, {detail: state}))
+    }
     return next
   }
 }
@@ -1655,6 +1729,17 @@ export async function updateSelectedRegion(request: RegionSelectionSession['boun
     console.info('Using browser selected region update fallback:', error)
     return {geometry: request, cancelled: false}
   }
+}
+
+function emitBrowserRegionFrame(bounds: RegionSelectionSession['bounds'], purpose: NonNullable<RegionSelectionSession['purpose']>) {
+  const frame = {
+    bounds,
+    overlayBounds: {x: 0, y: 0, width: window.innerWidth, height: window.innerHeight},
+    mode: 'edit',
+    purpose,
+  }
+  ;(window as Window & {__RF_REGION_FRAME__?: typeof frame}).__RF_REGION_FRAME__ = frame
+  window.dispatchEvent(new CustomEvent('rf-region-frame', {detail: frame}))
 }
 
 export async function cancelSelectedRegion(): Promise<RegionSelectionResult> {

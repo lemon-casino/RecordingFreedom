@@ -214,6 +214,13 @@ export interface PIPPreviewImageResult {
     "modifiedUnixNano"?: number;
 }
 
+export interface RegionFrameState {
+    "bounds": RegionRect;
+    "overlayBounds"?: RegionRect;
+    "mode": string;
+    "purpose"?: string;
+}
+
 export interface RegionRect {
     "x": number;
     "y": number;

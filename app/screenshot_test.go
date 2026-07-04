@@ -1,6 +1,7 @@
 package main
 
 import (
+	"os"
 	"path/filepath"
 	"testing"
 
@@ -31,6 +32,44 @@ func TestScreenshotHistoryPersistsSortedUniqueItems(t *testing.T) {
 	}
 	if got[1].Mode != "region" {
 		t.Fatalf("default mode = %q, want region", got[1].Mode)
+	}
+}
+
+func TestDeleteScreenshotItemRemovesHistoryAndFiles(t *testing.T) {
+	service := NewRecordingFreedomService()
+	service.appData = appdata.NewService(t.TempDir())
+	dir := mustScreenshotDir(t, service)
+	thumbDir := filepath.Join(dir, "thumbnails")
+	if err := os.MkdirAll(thumbDir, 0o755); err != nil {
+		t.Fatalf("MkdirAll() error = %v", err)
+	}
+	imagePath := filepath.Join(dir, "shot.png")
+	thumbPath := filepath.Join(thumbDir, "shot.png")
+	if err := os.WriteFile(imagePath, []byte("image"), 0o644); err != nil {
+		t.Fatalf("WriteFile(image) error = %v", err)
+	}
+	if err := os.WriteFile(thumbPath, []byte("thumb"), 0o644); err != nil {
+		t.Fatalf("WriteFile(thumb) error = %v", err)
+	}
+	if err := service.saveScreenshotHistory([]ScreenshotItem{
+		{ID: "shot", Path: imagePath, ThumbnailPath: thumbPath, CreatedAt: "2026-07-04T00:00:02Z", Width: 200, Height: 120, Mode: "region"},
+		{ID: "keep", Path: filepath.Join(dir, "keep.png"), CreatedAt: "2026-07-04T00:00:01Z", Width: 100, Height: 100, Mode: "region"},
+	}); err != nil {
+		t.Fatalf("saveScreenshotHistory() error = %v", err)
+	}
+
+	result, err := service.DeleteScreenshotItem("shot")
+	if err != nil {
+		t.Fatalf("DeleteScreenshotItem() error = %v", err)
+	}
+	if len(result.Items) != 1 || result.Items[0].ID != "keep" {
+		t.Fatalf("remaining history = %#v, want keep only", result.Items)
+	}
+	if _, err := os.Stat(imagePath); !os.IsNotExist(err) {
+		t.Fatalf("deleted image stat error = %v, want not exist", err)
+	}
+	if _, err := os.Stat(thumbPath); !os.IsNotExist(err) {
+		t.Fatalf("deleted thumbnail stat error = %v, want not exist", err)
 	}
 }
 

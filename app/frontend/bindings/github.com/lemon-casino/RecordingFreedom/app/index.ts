@@ -30,6 +30,7 @@ export type {
     PIPOverlayState,
     PIPPreviewImageRequest,
     PIPPreviewImageResult,
+    RegionFrameState,
     RegionRect,
     RegionSelectionRequest,
     RegionSelectionResult,

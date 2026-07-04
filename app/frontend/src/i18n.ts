@@ -273,12 +273,16 @@ export type RecorderCopy = {
     historyDetail: string
     empty: string
     open: string
+    openFolder: string
     annotate: string
     pin: string
     pinned: string
     fix: string
     fixed: string
     unfix: string
+    delete: string
+    deleted: string
+    deleteFailed: string
   }
   statusChips: Record<RecordingState, string>
   statusMessages: Record<StatusMessageKey, string>
@@ -313,6 +317,7 @@ export type RecorderCopy = {
   }
   regionOverlay: {
     cancel: string
+    saveScreenshot: string
     esc: string
   }
   strip: {
@@ -609,12 +614,16 @@ const zhCN: RecorderCopy = {
     historyDetail: '最近截图会显示在这里',
     empty: '暂无截图历史',
     open: '打开截图',
+    openFolder: '打开所在目录',
     annotate: '在画板中标注',
     pin: '钉图',
     pinned: '已钉图',
     fix: '固定',
     fixed: '已固定',
     unfix: '取消固定',
+    delete: '删除截图',
+    deleted: '截图已删除',
+    deleteFailed: '删除截图失败',
   },
   statusChips: {
     idle: '待机',
@@ -780,6 +789,7 @@ const zhCN: RecorderCopy = {
   },
   regionOverlay: {
     cancel: '取消区域选择',
+    saveScreenshot: '保存截图',
     esc: 'Esc 取消',
   },
   strip: {
@@ -1076,12 +1086,16 @@ const en: RecorderCopy = {
     historyDetail: 'Recent screenshots appear here',
     empty: 'No screenshot history',
     open: 'Open screenshot',
+    openFolder: 'Open containing folder',
     annotate: 'Annotate in whiteboard',
     pin: 'Pin image',
     pinned: 'Pinned',
     fix: 'Fix',
     fixed: 'Fixed',
     unfix: 'Unfix',
+    delete: 'Delete screenshot',
+    deleted: 'Screenshot deleted',
+    deleteFailed: 'Failed to delete screenshot',
   },
   statusChips: {
     idle: 'IDLE',
@@ -1247,6 +1261,7 @@ const en: RecorderCopy = {
   },
   regionOverlay: {
     cancel: 'Cancel region selection',
+    saveScreenshot: 'Save screenshot',
     esc: 'Esc cancel',
   },
   strip: {

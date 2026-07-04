@@ -401,7 +401,7 @@ function AnnotationOverlayWindow() {
         <button type="button" aria-label={copy.whiteboard.reselectRegion} title={copy.whiteboard.reselectRegion} onClick={() => void reselectRegion()}>
           <RefreshCcw size={16} />
         </button>
-        <button type="button" aria-label={copy.whiteboard.save} title={copy.whiteboard.save} onClick={() => void saveCurrentAnnotation()}>
+        <button className="annotation-save-status" type="button" aria-label={copy.whiteboard.save} title={copy.whiteboard.save} onClick={() => void saveCurrentAnnotation()}>
           <Save size={16} />
           <span>{saving ? copy.whiteboard.saved : dirty ? copy.whiteboard.unsaved : copy.whiteboard.ready}</span>
         </button>
