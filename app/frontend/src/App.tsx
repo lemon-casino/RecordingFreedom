@@ -1299,10 +1299,11 @@ function App() {
     }
     const stabilize = (reason: string) => {
       clearTimers()
+      const settleDelay = reason === 'window-did-move' ? 240 : 90
       settleTimer = window.setTimeout(() => {
         if (disposed) return
         void logClientEvent('capsule-window', 'stabilize', {reason, expanded: capsuleExpanded, compact: capsuleWindowCompact})
-        const snapBeforeLayout = !capsuleExpanded && (reason === 'pointer-end' || reason === 'window-end-move')
+        const snapBeforeLayout = !capsuleExpanded && (reason === 'pointer-end' || reason === 'window-end-move' || reason === 'window-did-move')
         const snapTask = snapBeforeLayout
           ? snapCapsuleWindowToEdge(capsuleWindowCompact)
           : Promise.resolve(capsuleDockSideRef.current)
@@ -1321,7 +1322,7 @@ function App() {
               if (!disposed) forceCapsuleHitRegionPublishRef.current?.()
             }, 140)
           })
-      }, 90)
+      }, settleDelay)
     }
     const isCapsuleDragTarget = (event: PointerEvent) => {
       const target = event.target
@@ -1338,7 +1339,7 @@ function App() {
       stabilize('pointer-end')
     }
 
-    const unsubscribeMoveEnded = subscribeCapsuleWindowMoveEnded(() => stabilize('window-end-move'))
+    const unsubscribeMoveEnded = subscribeCapsuleWindowMoveEnded((reason) => stabilize(reason))
     document.addEventListener('pointerdown', onPointerDown, true)
     document.addEventListener('pointerup', onPointerEnd, true)
     document.addEventListener('pointercancel', onPointerEnd, true)

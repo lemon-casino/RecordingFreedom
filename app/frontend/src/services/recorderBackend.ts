@@ -230,7 +230,9 @@ const capsuleWindowSideWidth = 96
 const capsuleWindowSideHeight = 560
 const capsuleWindowSideCompactHeight = 360
 const capsuleWindowSideExpandedWidth = 520
-const capsuleSnapThreshold = 44
+const capsuleSideSnapThreshold = 140
+const capsuleSideCenterSnapThreshold = 96
+const capsuleEdgeSnapThreshold = 48
 export type CapsuleWindowExpandDirection = 'down' | 'up'
 export type CapsuleWindowDockSide = 'none' | 'left' | 'right' | 'top' | 'bottom'
 
@@ -282,14 +284,20 @@ export async function setAnnotationOverlayHitRegions(req: {
   }
 }
 
-export function subscribeCapsuleWindowMoveEnded(handler: () => void): () => void {
-  const eventNames = [
-    'windows:WindowEndMove',
-    'windows:WindowEndResize',
+export type CapsuleWindowMoveReason = 'window-did-move' | 'window-end-move'
+
+export function subscribeCapsuleWindowMoveEnded(handler: (reason: CapsuleWindowMoveReason) => void): () => void {
+  const events: Array<{name: string; reason: CapsuleWindowMoveReason}> = [
+    {name: 'common:WindowDidMove', reason: 'window-did-move'},
+    {name: 'mac:WindowDidMove', reason: 'window-did-move'},
+    {name: 'linux:WindowDidMove', reason: 'window-did-move'},
+    {name: 'windows:WindowDidMove', reason: 'window-did-move'},
+    {name: 'windows:WindowEndMove', reason: 'window-end-move'},
+    {name: 'windows:WindowEndResize', reason: 'window-end-move'},
   ]
-  const disposers = eventNames.map((eventName) => Events.On(eventName, (event) => {
+  const disposers = events.map(({name, reason}) => Events.On(name, (event) => {
     if (event.sender && event.sender !== 'capsule-recorder') return
-    handler()
+    handler(reason)
   }))
   return () => disposers.forEach((dispose) => dispose())
 }
@@ -480,37 +488,36 @@ export async function setCapsuleWindowExpanded(
     }))
     const workArea = await capsuleWorkAreaForPosition(position, size).catch(() => null)
     const dockSide = lastCapsuleDockSide
-    const targetCollapsedSize = capsuleCollapsedWindowSize(compactCollapsed, dockSide, workArea)
+    const collapsedVisualSize = capsuleCollapsedWindowSize(compactCollapsed, dockSide, workArea)
+    const collapsedVisualPosition = capsuleVisibleCollapsedPosition(dockSide, position, size, collapsedVisualSize, workArea)
+    const reservedWindowSize = capsuleReservedWindowSize(compactCollapsed, dockSide, workArea)
     if (!expanded) {
-      const collapsedPosition = capsuleDockedWindowPosition(dockSide, position, size, targetCollapsedSize, workArea)
-      await WailsWindow.SetSize(targetCollapsedSize.width, targetCollapsedSize.height)
-      await WailsWindow.SetPosition(collapsedPosition.x, collapsedPosition.y)
+      const reservedPosition = capsuleReservedWindowPosition(dockSide, collapsedVisualPosition, collapsedVisualSize, reservedWindowSize, workArea)
+      await setCapsuleWindowBoundsIfChanged(position, size, reservedPosition, reservedWindowSize)
       await restoreCapsuleWindow(false)
       lastCapsuleCollapsedPosition = null
       return lastCapsuleExpandedDirection
     }
 
     if (isSideDock(dockSide)) {
-      const targetExpandedSize = capsuleExpandedWindowSize(expandedHeight, dockSide, workArea)
-      const expandedPosition = capsuleDockedWindowPosition(dockSide, position, size, targetExpandedSize, workArea)
+      const targetExpandedSize = capsuleReservedWindowSize(compactCollapsed, dockSide, workArea)
+      const expandedPosition = capsuleReservedWindowPosition(dockSide, collapsedVisualPosition, collapsedVisualSize, targetExpandedSize, workArea)
       lastCapsuleExpandedDirection = 'down'
-      lastCapsuleCollapsedPosition = {x: position.x, y: position.y}
-      await WailsWindow.SetSize(targetExpandedSize.width, targetExpandedSize.height)
-      await WailsWindow.SetPosition(expandedPosition.x, expandedPosition.y)
+      lastCapsuleCollapsedPosition = collapsedVisualPosition
+      await setCapsuleWindowBoundsIfChanged(position, size, expandedPosition, targetExpandedSize)
       await restoreCapsuleWindow(false)
       return 'down'
     }
 
-    const direction = resolveCapsuleExpandDirection(position.y, expandedHeight, preferredDirection, workArea)
-    const nextY = direction === 'up'
-      ? Math.max(workArea?.y ?? capsuleScreenTop(), position.y + capsuleWindowCollapsedHeight - expandedHeight)
-      : position.y
-    const expandedX = Math.round(position.x + (size.width - capsuleWindowWidth) / 2)
-    const expandedPosition = clampCapsuleWindowPosition(expandedX, nextY, capsuleWindowWidth, expandedHeight, workArea)
+    const direction = dockSide === 'bottom'
+      ? 'up'
+      : dockSide === 'top'
+        ? 'down'
+        : resolveCapsuleExpandDirection(collapsedVisualPosition.y, expandedHeight, preferredDirection, workArea)
+    const expandedPosition = capsuleReservedWindowPosition(dockSide, collapsedVisualPosition, collapsedVisualSize, reservedWindowSize, workArea, direction)
     lastCapsuleExpandedDirection = direction
-    lastCapsuleCollapsedPosition = {x: position.x, y: position.y}
-    await WailsWindow.SetSize(capsuleWindowWidth, expandedHeight)
-    await WailsWindow.SetPosition(expandedPosition.x, expandedPosition.y)
+    lastCapsuleCollapsedPosition = collapsedVisualPosition
+    await setCapsuleWindowBoundsIfChanged(position, size, expandedPosition, reservedWindowSize)
     await restoreCapsuleWindow(false)
     return direction
   } catch (error) {
@@ -524,13 +531,18 @@ export async function snapCapsuleWindowToEdge(compactCollapsed = false): Promise
     await restoreCapsuleWindow(false)
     const position = await WailsWindow.Position()
     const size = await WailsWindow.Size().catch(() => capsuleCollapsedWindowSize(compactCollapsed, lastCapsuleDockSide, null))
-    const workArea = await capsuleWorkAreaForPosition(position, size).catch(() => null)
-    const dockSide = resolveCapsuleDockSide(position, size, workArea)
+    const workAreas = await capsuleWorkAreas().catch(() => [])
+    const workArea = capsuleWorkAreaForPositionFromAreas(position, size, workAreas)
+    const currentVisualSize = capsuleCollapsedWindowSize(compactCollapsed, lastCapsuleDockSide, workArea)
+    const currentVisualPosition = capsuleVisibleCollapsedPosition(lastCapsuleDockSide, position, size, currentVisualSize, workArea)
+    const dockTarget = resolveCapsuleDockTarget(currentVisualPosition, currentVisualSize, workAreas)
+    const dockSide = dockTarget.side
+    const targetWorkArea = dockTarget.workArea ?? workArea
     lastCapsuleDockSide = dockSide
-    const targetSize = capsuleCollapsedWindowSize(compactCollapsed, dockSide, workArea)
-    const targetPosition = capsuleDockedWindowPosition(dockSide, position, size, targetSize, workArea)
-    await WailsWindow.SetSize(targetSize.width, targetSize.height)
-    await WailsWindow.SetPosition(targetPosition.x, targetPosition.y)
+    lastCapsuleExpandedDirection = dockSide === 'bottom' ? 'up' : 'down'
+    const targetSize = capsuleReservedWindowSize(compactCollapsed, dockSide, targetWorkArea)
+    const targetPosition = capsuleReservedWindowPosition(dockSide, currentVisualPosition, currentVisualSize, targetSize, targetWorkArea)
+    await setCapsuleWindowBoundsIfChanged(position, size, targetPosition, targetSize)
     await restoreCapsuleWindow(false)
     return dockSide
   } catch (error) {
@@ -553,20 +565,30 @@ function resolveCapsuleExpandDirection(
   return wouldOverflowBottom && canFitAbove ? 'up' : 'down'
 }
 
-function resolveCapsuleDockSide(
+function resolveCapsuleDockTarget(
   position: {x: number; y: number},
   size: {width: number; height: number},
-  workArea: CapsuleWorkArea | null,
-): CapsuleWindowDockSide {
-  if (!workArea) return 'none'
-  const distances: Array<{side: Exclude<CapsuleWindowDockSide, 'none'>; value: number}> = [
-    {side: 'left', value: Math.abs(position.x - workArea.x)},
-    {side: 'right', value: Math.abs(workArea.x + workArea.width - (position.x + size.width))},
-    {side: 'top', value: Math.abs(position.y - workArea.y)},
-    {side: 'bottom', value: Math.abs(workArea.y + workArea.height - (position.y + size.height))},
-  ]
-  distances.sort((a, b) => a.value - b.value)
-  return distances[0].value <= capsuleSnapThreshold ? distances[0].side : 'none'
+  workAreas: CapsuleWorkArea[],
+): CapsuleDockTarget {
+  if (!workAreas.length) return {side: 'none', workArea: null}
+  const vertical = workAreas
+    .flatMap((area) => [
+      capsuleDockCandidate('left', position, size, area),
+      capsuleDockCandidate('right', position, size, area),
+    ])
+    .filter((candidate): candidate is CapsuleDockCandidate => candidate !== null)
+  vertical.sort(compareCapsuleDockCandidates)
+  if (vertical[0]) return {side: vertical[0].side, workArea: vertical[0].workArea}
+
+  const horizontal = workAreas
+    .flatMap((area) => [
+      capsuleDockCandidate('top', position, size, area),
+      capsuleDockCandidate('bottom', position, size, area),
+    ])
+    .filter((candidate): candidate is CapsuleDockCandidate => candidate !== null)
+  horizontal.sort(compareCapsuleDockCandidates)
+  if (horizontal[0]) return {side: horizontal[0].side, workArea: horizontal[0].workArea}
+  return {side: 'none', workArea: capsuleWorkAreaForPositionFromAreas(position, size, workAreas)}
 }
 
 type CapsuleWorkArea = {
@@ -576,18 +598,43 @@ type CapsuleWorkArea = {
   height: number
 }
 
+type CapsuleDockTarget = {
+  side: CapsuleWindowDockSide
+  workArea: CapsuleWorkArea | null
+}
+
+type CapsuleDockCandidate = {
+  side: Exclude<CapsuleWindowDockSide, 'none'>
+  workArea: CapsuleWorkArea
+  distance: number
+  overlapRatio: number
+  originInside: boolean
+  centerInside: boolean
+  screenDistance: number
+}
+
 async function capsuleWorkAreaForPosition(
   position: {x: number; y: number},
   size: {width: number; height: number},
 ): Promise<CapsuleWorkArea | null> {
+  return capsuleWorkAreaForPositionFromAreas(position, size, await capsuleWorkAreas())
+}
+
+async function capsuleWorkAreas(): Promise<CapsuleWorkArea[]> {
   const screens = await Screens.GetAll()
-  if (!screens.length) return null
-  const centerX = position.x + size.width / 2
-  const centerY = position.y + size.height / 2
-  const candidates = screens
+  return screens
     .map((screen) => normalizeCapsuleWorkArea(screen.WorkArea) ?? normalizeCapsuleWorkArea(screen.Bounds))
     .filter((area): area is CapsuleWorkArea => area !== null)
+}
+
+function capsuleWorkAreaForPositionFromAreas(
+  position: {x: number; y: number},
+  size: {width: number; height: number},
+  candidates: CapsuleWorkArea[],
+): CapsuleWorkArea | null {
   if (!candidates.length) return null
+  const centerX = position.x + size.width / 2
+  const centerY = position.y + size.height / 2
   return candidates.find((area) => pointInsideWorkArea(centerX, centerY, area)) ?? nearestWorkArea(centerX, centerY, candidates)
 }
 
@@ -598,6 +645,10 @@ function normalizeCapsuleWorkArea(rect: {X: number; Y: number; Width: number; He
 
 function pointInsideWorkArea(x: number, y: number, area: CapsuleWorkArea) {
   return x >= area.x && y >= area.y && x <= area.x + area.width && y <= area.y + area.height
+}
+
+function pointInsideWorkAreaOpenEnd(x: number, y: number, area: CapsuleWorkArea) {
+  return x >= area.x && y >= area.y && x < area.x + area.width && y < area.y + area.height
 }
 
 function nearestWorkArea(x: number, y: number, areas: CapsuleWorkArea[]) {
@@ -612,6 +663,71 @@ function distanceToWorkArea(x: number, y: number, area: CapsuleWorkArea) {
   const nearestX = clampNumber(x, area.x, area.x + area.width)
   const nearestY = clampNumber(y, area.y, area.y + area.height)
   return Math.hypot(x - nearestX, y - nearestY)
+}
+
+function capsuleDockCandidate(
+  side: Exclude<CapsuleWindowDockSide, 'none'>,
+  position: {x: number; y: number},
+  size: {width: number; height: number},
+  workArea: CapsuleWorkArea,
+): CapsuleDockCandidate | null {
+  const right = position.x + size.width
+  const bottom = position.y + size.height
+  const centerX = position.x + size.width / 2
+  const centerY = position.y + size.height / 2
+  const areaRight = workArea.x + workArea.width
+  const areaBottom = workArea.y + workArea.height
+  const verticalOverlap = overlapLength(position.y, bottom, workArea.y, areaBottom)
+  const horizontalOverlap = overlapLength(position.x, right, workArea.x, areaRight)
+  const sideIsVertical = side === 'left' || side === 'right'
+  const overlapRatio = sideIsVertical
+    ? verticalOverlap / Math.max(1, Math.min(size.height, workArea.height))
+    : horizontalOverlap / Math.max(1, Math.min(size.width, workArea.width))
+  if (overlapRatio < 0.18) return null
+
+  const edgePosition = side === 'left'
+    ? workArea.x
+    : side === 'right'
+      ? areaRight
+      : side === 'top'
+        ? workArea.y
+        : areaBottom
+  const edgeDistance = side === 'left'
+    ? Math.abs(position.x - edgePosition)
+    : side === 'right'
+      ? Math.abs(right - edgePosition)
+      : side === 'top'
+        ? Math.abs(position.y - edgePosition)
+        : Math.abs(bottom - edgePosition)
+  const centerDistance = sideIsVertical
+    ? Math.abs(centerX - edgePosition)
+    : Math.abs(centerY - edgePosition)
+  const active = sideIsVertical
+    ? edgeDistance <= capsuleSideSnapThreshold || centerDistance <= capsuleSideCenterSnapThreshold
+    : edgeDistance <= capsuleEdgeSnapThreshold
+  if (!active) return null
+
+  return {
+    side,
+    workArea,
+    distance: sideIsVertical ? Math.min(edgeDistance, centerDistance + 24) : edgeDistance,
+    overlapRatio,
+    originInside: pointInsideWorkAreaOpenEnd(position.x, centerY, workArea),
+    centerInside: pointInsideWorkAreaOpenEnd(centerX, centerY, workArea),
+    screenDistance: distanceToWorkArea(centerX, centerY, workArea),
+  }
+}
+
+function compareCapsuleDockCandidates(a: CapsuleDockCandidate, b: CapsuleDockCandidate) {
+  if (Math.abs(a.distance - b.distance) > 1) return a.distance - b.distance
+  if (Math.abs(a.overlapRatio - b.overlapRatio) > 0.01) return b.overlapRatio - a.overlapRatio
+  if (a.originInside !== b.originInside) return a.originInside ? -1 : 1
+  if (a.centerInside !== b.centerInside) return a.centerInside ? -1 : 1
+  return a.screenDistance - b.screenDistance
+}
+
+function overlapLength(aStart: number, aEnd: number, bStart: number, bEnd: number) {
+  return Math.max(0, Math.min(aEnd, bEnd) - Math.max(aStart, bStart))
 }
 
 function isSideDock(side: CapsuleWindowDockSide) {
@@ -636,13 +752,16 @@ function capsuleCollapsedWindowSize(
   }
 }
 
-function capsuleExpandedWindowSize(
-  expandedHeight: number,
+function capsuleReservedWindowSize(
+  compactCollapsed: boolean,
   dockSide: CapsuleWindowDockSide,
   workArea: CapsuleWorkArea | null,
 ) {
   if (isSideDock(dockSide)) {
-    const height = Math.max(expandedHeight, capsuleWindowSideHeight)
+    const height = Math.max(
+      compactCollapsed ? capsuleWindowSideCompactHeight : capsuleWindowSideHeight,
+      capsuleWindowExpandedHeight,
+    )
     return {
       width: Math.min(capsuleWindowSideExpandedWidth, Math.max(capsuleWindowSideWidth, workArea?.width ?? capsuleWindowSideExpandedWidth)),
       height: Math.min(height, Math.max(capsuleWindowCollapsedHeight, workArea?.height ?? height)),
@@ -650,8 +769,49 @@ function capsuleExpandedWindowSize(
   }
   return {
     width: capsuleWindowWidth,
-    height: expandedHeight,
+    height: Math.min(capsuleWindowExpandedHeight, Math.max(capsuleWindowCollapsedHeight, workArea?.height ?? capsuleWindowExpandedHeight)),
   }
+}
+
+function capsuleVisibleCollapsedPosition(
+  dockSide: CapsuleWindowDockSide,
+  position: {x: number; y: number},
+  size: {width: number; height: number},
+  visualSize: {width: number; height: number},
+  workArea: CapsuleWorkArea | null,
+) {
+  if (lastCapsuleCollapsedPosition) return lastCapsuleCollapsedPosition
+  if (dockSide === 'left') {
+    return clampCapsuleWindowPosition(position.x, position.y + (size.height - visualSize.height) / 2, visualSize.width, visualSize.height, workArea)
+  }
+  if (dockSide === 'right') {
+    return clampCapsuleWindowPosition(position.x + size.width - visualSize.width, position.y + (size.height - visualSize.height) / 2, visualSize.width, visualSize.height, workArea)
+  }
+  if (dockSide === 'bottom' || lastCapsuleExpandedDirection === 'up') {
+    return clampCapsuleWindowPosition(position.x + (size.width - visualSize.width) / 2, position.y + size.height - visualSize.height, visualSize.width, visualSize.height, workArea)
+  }
+  return clampCapsuleWindowPosition(position.x + (size.width - visualSize.width) / 2, position.y, visualSize.width, visualSize.height, workArea)
+}
+
+function capsuleReservedWindowPosition(
+  dockSide: CapsuleWindowDockSide,
+  visualPosition: {x: number; y: number},
+  visualSize: {width: number; height: number},
+  reserveSize: {width: number; height: number},
+  workArea: CapsuleWorkArea | null,
+  direction: CapsuleWindowExpandDirection = lastCapsuleExpandedDirection,
+) {
+  if (dockSide === 'left' || dockSide === 'top') {
+    return capsuleDockedWindowPosition(dockSide, visualPosition, visualSize, reserveSize, workArea)
+  }
+  if (dockSide === 'right' || dockSide === 'bottom') {
+    return capsuleDockedWindowPosition(dockSide, visualPosition, visualSize, reserveSize, workArea)
+  }
+  const x = visualPosition.x + (visualSize.width - reserveSize.width) / 2
+  const y = direction === 'up'
+    ? visualPosition.y + visualSize.height - reserveSize.height
+    : visualPosition.y
+  return clampCapsuleWindowPosition(x, y, reserveSize.width, reserveSize.height, workArea)
 }
 
 function capsuleDockedWindowPosition(
@@ -697,6 +857,18 @@ function capsuleDockedWindowPosition(
     targetSize.height,
     workArea,
   )
+}
+
+async function setCapsuleWindowBoundsIfChanged(
+  currentPosition: {x: number; y: number},
+  currentSize: {width: number; height: number},
+  targetPosition: {x: number; y: number},
+  targetSize: {width: number; height: number},
+) {
+  const sizeChanged = Math.abs(currentSize.width - targetSize.width) > 1 || Math.abs(currentSize.height - targetSize.height) > 1
+  const positionChanged = Math.abs(currentPosition.x - targetPosition.x) > 1 || Math.abs(currentPosition.y - targetPosition.y) > 1
+  if (sizeChanged) await WailsWindow.SetSize(Math.round(targetSize.width), Math.round(targetSize.height))
+  if (positionChanged) await WailsWindow.SetPosition(Math.round(targetPosition.x), Math.round(targetPosition.y))
 }
 
 function clampCapsuleWindowPosition(

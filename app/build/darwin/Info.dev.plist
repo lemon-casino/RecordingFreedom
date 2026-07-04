@@ -1,36 +1,37 @@
+<?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
-    <dict>
-        <key>CFBundlePackageType</key>
-            <string>APPL</string>
-        <key>CFBundleName</key>
-            <string>RecordingFreedom</string>
-        <key>CFBundleExecutable</key>
-            <string>recordingfreedom</string>
-        <key>CFBundleIdentifier</key>
-            <string>casino.lemon.recordingfreedom</string>
-        <key>CFBundleVersion</key>
-            <string>0.1.0</string>
-        <key>CFBundleGetInfoString</key>
-            <string>RecordingFreedom desktop recorder</string>
-        <key>CFBundleShortVersionString</key>
-            <string>0.1.0</string>
-        <key>CFBundleIconFile</key>
-            <string>icons</string>
-        <key>LSMinimumSystemVersion</key>
-            <string>12.3.0</string>
-        <key>NSHighResolutionCapable</key>
-            <string>true</string>
-        <key>NSCameraUsageDescription</key>
-            <string>RecordingFreedom uses the camera only when camera sidecar or picture-in-picture recording is enabled.</string>
-        <key>NSMicrophoneUsageDescription</key>
-            <string>RecordingFreedom uses the microphone only when microphone recording is enabled.</string>
-        <key>NSHumanReadableCopyright</key>
-            <string>© 2026, lemon-casino</string>
-        <key>NSAppTransportSecurity</key>
-        <dict>
-            <key>NSAllowsLocalNetworking</key>
-            <true/>
-        </dict>
-    </dict>
+	<dict>
+		<key>CFBundleExecutable</key>
+		<string>recordingfreedom</string>
+		<key>CFBundleGetInfoString</key>
+		<string>RecordingFreedom desktop recorder</string>
+		<key>CFBundleIconFile</key>
+		<string>icons</string>
+		<key>CFBundleIdentifier</key>
+		<string>casino.lemon.recordingfreedom</string>
+		<key>CFBundleName</key>
+		<string>RecordingFreedom</string>
+		<key>CFBundlePackageType</key>
+		<string>APPL</string>
+		<key>CFBundleShortVersionString</key>
+		<string>0.1.1</string>
+		<key>CFBundleVersion</key>
+		<string>0.1.1</string>
+		<key>LSMinimumSystemVersion</key>
+		<string>12.0.0</string>
+		<key>NSAppTransportSecurity</key>
+		<dict>
+			<key>NSAllowsLocalNetworking</key>
+			<true/>
+		</dict>
+		<key>NSCameraUsageDescription</key>
+		<string>RecordingFreedom uses the camera only when camera sidecar or picture-in-picture recording is enabled.</string>
+		<key>NSHighResolutionCapable</key>
+		<string>true</string>
+		<key>NSHumanReadableCopyright</key>
+		<string>(c) 2026, lemon-casino</string>
+		<key>NSMicrophoneUsageDescription</key>
+		<string>RecordingFreedom uses the microphone only when microphone recording is enabled.</string>
+	</dict>
 </plist>

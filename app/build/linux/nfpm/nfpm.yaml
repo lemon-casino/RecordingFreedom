@@ -6,7 +6,7 @@
 name: "recordingfreedom"
 arch: ${GOARCH}
 platform: "linux"
-version: "0.1.0"
+version: "0.1.1"
 section: "default"
 priority: "extra"
 maintainer: ${GIT_COMMITTER_NAME} <${GIT_COMMITTER_EMAIL}>
@@ -23,32 +23,25 @@ contents:
     dst: "/usr/share/icons/hicolor/128x128/apps/recordingfreedom.png"
   - src: "./build/linux/recordingfreedom.desktop"
     dst: "/usr/share/applications/recordingfreedom.desktop"
-  - src: "./tools/ffmpeg"
-    dst: "/usr/local/lib/recordingfreedom/tools/ffmpeg"
-  - src: "./tools/ffprobe"
-    dst: "/usr/local/lib/recordingfreedom/tools/ffprobe"
-  - src: "./tools/THIRD_PARTY_FFMPEG.txt"
-    dst: "/usr/local/lib/recordingfreedom/tools/THIRD_PARTY_FFMPEG.txt"
-  - src: "./tools/THIRD_PARTY_NOTICES.txt"
-    dst: "/usr/local/lib/recordingfreedom/tools/THIRD_PARTY_NOTICES.txt"
 
+# Default dependencies for the GTK4 + WebKitGTK 6.0 stack (Ubuntu 24.04+ / Debian 13+)
 depends:
-  - libgtk-3-0
-  - libwebkit2gtk-4.1-0
+  - libgtk-4-1
+  - libwebkitgtk-6.0-4
 
 # Distribution-specific overrides for different package formats
 overrides:
   # RPM packages for Fedora / RHEL / AlmaLinux / Rocky Linux
   rpm:
     depends:
-      - gtk3
-      - webkit2gtk4.1
+      - gtk4
+      - webkitgtk6.0
 
   # Arch Linux packages
   archlinux:
     depends:
-      - gtk3
-      - webkit2gtk-4.1
+      - gtk4
+      - webkitgtk-6.0
 
 # scripts section to ensure desktop database is updated after install
 scripts:

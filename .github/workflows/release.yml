@@ -471,14 +471,14 @@ jobs:
 
           title="RecordingFreedom ${TAG_NAME}"
           cat > release-notes.md <<'NOTES'
-          RecordingFreedom v0.1 first desktop release.
+          RecordingFreedom desktop release.
 
           Ready to verify:
           - Capsule recorder UI shell and tray/settings windows.
           - Simplified Chinese / English global language switching.
           - Settings persistence, app-managed data/video storage, storage health, preflight, recovery scan, and capability matrix.
           - Explicit mock .rfrec package flow for UI/package validation.
-          - No-GUI preview smoke for settings, storage, preflight, mock start/pause/resume/stop, ready manifest, RNNoise/camera/PIP manifest contract, and recovery scan.
+          - No-GUI smoke for settings, storage, preflight, mock start/pause/resume/stop, ready manifest, RNNoise/camera/PIP manifest contract, and recovery scan.
           - Developer audio smoke for Windows WASAPI microphone and system-loopback capture.
           - Windows FFmpeg desktop video writer contract for screen/all-screen/region/locked-window capture; enabled WASAPI system audio and microphone tracks are muxed into the final screen.mp4 at stop, and the Windows release artifacts are staged as a portable zip plus an NSIS setup installer. Both include tools/ffmpeg.exe and tools/ffprobe.exe; the portable zip also includes desktop-doctor/video-smoke/audio-smoke/annotation-export-smoke/annotation-overlay-evidence-check diagnostics.
           - Windows clean-machine portable smoke entrypoint at tools/run-windows-portable-smoke.ps1.
@@ -499,7 +499,7 @@ jobs:
           - End-to-end verified native recording on every desktop platform. macOS ScreenCaptureKit display/window/single-display region capture is wired in code but still needs real-device smoke validation; Windows portable artifacts include the clean-machine smoke runner but still need the downloaded artifact to be executed on a target desktop; PipeWire media writer is not complete.
           - Cross-platform long-recording audio sync validation. Windows local smoke has passed 1 minute, 5 minute, and 20 minute recording with stop-time mux into screen.mp4; macOS system audio is wired through ScreenCaptureKit mux and still needs real-device smoke; Linux audio capture is queued.
           - Cross-platform real-camera acceptance. The sidecar/PIP code path is implemented, but real device smoke is still required for preview matching, Windows/macOS/Linux camera sidecar recording, screen + camera + audio combinations, pause/resume timing, and long-recording sync.
-          - Completed cross-platform annotation overlay acceptance. The preview includes the overlay entry, hit-region contracts, package writing, export planning, and FFmpeg annotation export smoke, but real Windows/macOS/Linux evidence is still required for transparent click-through, multi-monitor/high-DPI geometry, real hand-drawn annotation packages, and exported MP4 review.
+          - Completed cross-platform annotation overlay acceptance. This release includes the overlay entry, hit-region contracts, package writing, export planning, and FFmpeg annotation export smoke, but real Windows/macOS/Linux evidence is still required for transparent click-through, multi-monitor/high-DPI geometry, real hand-drawn annotation packages, and exported MP4 review.
           - Signed Windows installers, macOS notarization, or Linux deb/rpm/AppImage packages.
           NOTES
 

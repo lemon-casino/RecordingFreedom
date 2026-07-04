@@ -17,7 +17,7 @@
         PackageDisplayName="RecordingFreedom"
         PublisherName="CN=lemon-casino"
         PublisherDisplayName="lemon-casino"
-        Version="0.1.0.0"
+        Version="0.1.1.0"
         PackageDescription="A modern capsule screen recorder built with Go, React, and Wails v3">
         <Capabilities>
             <Capability Name="runFullTrust" />

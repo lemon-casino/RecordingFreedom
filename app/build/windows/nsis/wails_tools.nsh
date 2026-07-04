@@ -5,7 +5,7 @@
 !include "FileFunc.nsh"
 
 !ifndef INFO_PROJECTNAME
-    !define INFO_PROJECTNAME "RecordingFreedom"
+    !define INFO_PROJECTNAME "recordingfreedom"
 !endif
 !ifndef INFO_COMPANYNAME
     !define INFO_COMPANYNAME "lemon-casino"
@@ -14,10 +14,10 @@
     !define INFO_PRODUCTNAME "RecordingFreedom"
 !endif
 !ifndef INFO_PRODUCTVERSION
-    !define INFO_PRODUCTVERSION "0.1.0"
+    !define INFO_PRODUCTVERSION "0.1.1"
 !endif
 !ifndef INFO_COPYRIGHT
-    !define INFO_COPYRIGHT "© 2026, My Company"
+    !define INFO_COPYRIGHT "(c) 2026, lemon-casino"
 !endif
 !ifndef PRODUCT_EXECUTABLE
     !define PRODUCT_EXECUTABLE "${INFO_PROJECTNAME}.exe"
