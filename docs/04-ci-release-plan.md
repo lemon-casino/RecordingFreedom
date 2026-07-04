@@ -33,6 +33,8 @@ https://github.com/lemon-casino/RecordingFreedom.git
 
 `release.yml` 由 `v*` tag 触发。`v0.1.0` 开始作为第一版桌面 release 发布，开启 Windows x64/arm64、macOS x64/arm64 和 Linux x64/arm64 全桌面架构构建。当前仍不是签名/公证后的商业发行包：Windows 每个架构提供 portable zip 和 NSIS setup.exe，macOS 每个架构提供完整 `.app.zip`，Linux 每个架构提供 portable `.tar.gz`。
 
+RNNoise native DSP 当前作为 release gate 覆盖 Windows x64、macOS x64/arm64 和 Linux x64/arm64。Windows ARM64 产物作为原生 ARM64 录制包发布，但不启用 `rnnoise_native` cgo tag，因为当前 Go/Wails Windows ARM64 的 `import "C"` 构建路径会在 metadata 阶段失败；该架构不能在 release notes 中宣称已具备 native RNNoise。
+
 发布前门禁：
 
 - `Release Gate`：生成 bindings 并校验无差异，运行前端 build、前端 `test:e2e`、`go test ./...`、RNNoise native DSP + recording runtime 定向测试、`go run ./cmd/preview-smoke`，并运行带 `rnnoise_native` 的 `desktop-doctor -require-rnnoise`。从当前 preview 开始，发布 artifact 默认启用 RNNoise native DSP，不能再发布“按钮存在但二进制没有真降噪”的验收包；画板入口也必须满足未录制打开普通画板、视频录制/暂停中打开录制标注、音频录制中仍打开普通画板的双态验收。

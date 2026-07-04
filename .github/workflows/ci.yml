@@ -130,6 +130,8 @@ jobs:
             platform: windows
             arch: amd64
             ffmpeg_arch: x64
+            cgo_enabled: "1"
+            rnnoise_native: "true"
             windows_msystem: MINGW64
             windows_msys_package: mingw-w64-x86_64-gcc
             windows_cc: gcc
@@ -140,11 +142,8 @@ jobs:
             platform: windows
             arch: arm64
             ffmpeg_arch: arm64
-            windows_msystem: CLANGARM64
-            windows_msys_package: mingw-w64-clang-aarch64-clang
-            windows_cc: clang
-            windows_cgo_cflags: --target=aarch64-w64-mingw32 -Wno-dll-attribute-on-redeclaration
-            windows_cgo_ldflags: --target=aarch64-w64-mingw32 -fuse-ld=lld
+            cgo_enabled: "0"
+            rnnoise_native: "false"
           - name: macos-x64
             os: macos-15-intel
             platform: macos
@@ -191,7 +190,7 @@ jobs:
             file
 
       - name: Enable Windows cgo toolchain
-        if: matrix.platform == 'windows'
+        if: matrix.platform == 'windows' && matrix.cgo_enabled == '1'
         uses: msys2/setup-msys2@v2
         with:
           msystem: ${{ matrix.windows_msystem }}
@@ -201,7 +200,7 @@ jobs:
           path-type: inherit
 
       - name: Export Windows cgo compiler
-        if: matrix.platform == 'windows'
+        if: matrix.platform == 'windows' && matrix.cgo_enabled == '1'
         shell: pwsh
         run: |
           "CC=${{ matrix.windows_cc }}" | Out-File -FilePath $env:GITHUB_ENV -Append
@@ -242,7 +241,11 @@ jobs:
         shell: bash
         run: |
           if [ "${{ matrix.platform }}" = "windows" ]; then
-            CGO_ENABLED=1 wails3 task windows:build ARCH="${{ matrix.arch }}" EXTRA_TAGS="${RNNOISE_TAG}" CGO_ENABLED=1
+            tags=""
+            if [ "${{ matrix.rnnoise_native }}" = "true" ]; then
+              tags="${RNNOISE_TAG}"
+            fi
+            CGO_ENABLED="${{ matrix.cgo_enabled }}" wails3 task windows:build ARCH="${{ matrix.arch }}" EXTRA_TAGS="${tags}" CGO_ENABLED="${{ matrix.cgo_enabled }}"
           elif [ "${{ matrix.platform }}" = "macos" ]; then
             CGO_ENABLED=1 wails3 task darwin:package ARCH="${{ matrix.arch }}" EXTRA_TAGS="${RNNOISE_TAG}"
           else
@@ -257,24 +260,37 @@ jobs:
         run: |
           mkdir -p bin
           tags="${RNNOISE_TAG}"
+          cgo_enabled="1"
           ext=""
           if [ "${{ matrix.platform }}" = "linux" ]; then
             tags="gtk3 ${RNNOISE_TAG}"
           elif [ "${{ matrix.platform }}" = "windows" ]; then
             ext=".exe"
+            cgo_enabled="${{ matrix.cgo_enabled }}"
+            if [ "${{ matrix.rnnoise_native }}" != "true" ]; then
+              tags=""
+            fi
           fi
-          go build -tags "${tags}" -trimpath -ldflags "-w -s" -o "bin/desktop-doctor${ext}" "./cmd/desktop-doctor"
-          go build -tags "${tags}" -trimpath -ldflags "-w -s" -o "bin/video-smoke${ext}" "./cmd/video-smoke"
-          go build -tags "${tags}" -trimpath -ldflags "-w -s" -o "bin/audio-smoke${ext}" "./cmd/audio-smoke"
-          go build -tags "${tags}" -trimpath -ldflags "-w -s" -o "bin/annotation-export-smoke${ext}" "./cmd/annotation-export-smoke"
-          go build -tags "${tags}" -trimpath -ldflags "-w -s" -o "bin/annotation-overlay-evidence-check${ext}" "./cmd/annotation-overlay-evidence-check"
+          tag_args=()
+          if [ -n "${tags}" ]; then
+            tag_args=(-tags "${tags}")
+          fi
+          CGO_ENABLED="${cgo_enabled}" go build "${tag_args[@]}" -trimpath -ldflags "-w -s" -o "bin/desktop-doctor${ext}" "./cmd/desktop-doctor"
+          CGO_ENABLED="${cgo_enabled}" go build "${tag_args[@]}" -trimpath -ldflags "-w -s" -o "bin/video-smoke${ext}" "./cmd/video-smoke"
+          CGO_ENABLED="${cgo_enabled}" go build "${tag_args[@]}" -trimpath -ldflags "-w -s" -o "bin/audio-smoke${ext}" "./cmd/audio-smoke"
+          CGO_ENABLED="${cgo_enabled}" go build "${tag_args[@]}" -trimpath -ldflags "-w -s" -o "bin/annotation-export-smoke${ext}" "./cmd/annotation-export-smoke"
+          CGO_ENABLED="${cgo_enabled}" go build "${tag_args[@]}" -trimpath -ldflags "-w -s" -o "bin/annotation-overlay-evidence-check${ext}" "./cmd/annotation-overlay-evidence-check"
 
       - name: Run desktop dependency doctor
         working-directory: ${{ env.APP_DIR }}
         shell: bash
         run: |
           if [ "${{ matrix.platform }}" = "windows" ]; then
-            CGO_ENABLED=1 go run -tags "${RNNOISE_TAG}" ./cmd/desktop-doctor -require-video -require-rnnoise
+            if [ "${{ matrix.rnnoise_native }}" = "true" ]; then
+              CGO_ENABLED="${{ matrix.cgo_enabled }}" go run -tags "${RNNOISE_TAG}" ./cmd/desktop-doctor -require-video -require-rnnoise
+            else
+              CGO_ENABLED="${{ matrix.cgo_enabled }}" go run ./cmd/desktop-doctor -require-video
+            fi
           elif [ "${{ matrix.platform }}" = "linux" ]; then
             CGO_ENABLED=1 go run -tags "gtk3 ${RNNOISE_TAG}" ./cmd/desktop-doctor -require-rnnoise
           else
