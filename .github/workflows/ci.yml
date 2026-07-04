@@ -130,16 +130,16 @@ jobs:
             platform: windows
             arch: amd64
             ffmpeg_arch: x64
+            windows_msystem: MINGW64
             windows_msys_package: mingw-w64-x86_64-gcc
-            windows_msys_bin: C:\msys64\mingw64\bin
             windows_cc: gcc
           - name: windows-arm64
             os: windows-11-arm
             platform: windows
             arch: arm64
             ffmpeg_arch: arm64
+            windows_msystem: CLANGARM64
             windows_msys_package: mingw-w64-clang-aarch64-clang
-            windows_msys_bin: C:\msys64\clangarm64\bin
             windows_cc: clang
           - name: macos-x64
             os: macos-15-intel
@@ -188,13 +188,18 @@ jobs:
 
       - name: Enable Windows cgo toolchain
         if: matrix.platform == 'windows'
+        uses: msys2/setup-msys2@v2
+        with:
+          msystem: ${{ matrix.windows_msystem }}
+          release: true
+          update: true
+          install: ${{ matrix.windows_msys_package }}
+          path-type: inherit
+
+      - name: Export Windows cgo compiler
+        if: matrix.platform == 'windows'
         shell: pwsh
         run: |
-          if (!(Test-Path "C:\msys64\usr\bin\bash.exe")) {
-            throw "MSYS2 is required for the Windows RNNoise cgo build but was not found at C:\msys64"
-          }
-          & "C:\msys64\usr\bin\bash.exe" -lc "pacman -S --noconfirm --needed ${{ matrix.windows_msys_package }}"
-          "${{ matrix.windows_msys_bin }}" | Out-File -FilePath $env:GITHUB_PATH -Append
           "CC=${{ matrix.windows_cc }}" | Out-File -FilePath $env:GITHUB_ENV -Append
 
       - name: Install Wails v3 CLI
