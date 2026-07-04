@@ -7,6 +7,7 @@ import {
   CircleDot,
   Crosshair,
   FlipHorizontal,
+  FolderOpen,
   Gauge,
   Languages,
   Maximize2,
@@ -59,7 +60,7 @@ import {
   fallbackCapabilities,
   fallbackStorageStatus,
 } from './services/mockBackend'
-import {cancelRegionSelector, cancelSelectedRegion, completeAnnotationRegionSelection, completeRegionSelection, exportRecordingPackage, hidePipOverlay, hideRegionFrame, hideScreenIndicator, hideSettingsWindow, loadBootstrap, loadSettings, logClientEvent, openRecordingPackage, openVideoDirectory, patchAudioState, patchSettingsPreferences, patchWhiteboardSettings, pauseRecording, preflightAudioOnlyRecording, preflightRecording, previewExportRecordingPackage, quitApplication, readAnnotationPreviewImage, readPipPreviewImage, recoverRecordingPackage, restoreCapsuleWindow, resumeRecording, saveSettings, setCapsuleWindowExpanded, setCapsuleWindowHitRegions, setDataRoot, showAnnotationOverlay, showAnnotationRegionSelector, showPipOverlay, showRegionSelector, showScreenIndicator, showWhiteboardWindow, startAudioOnlyRecording, startMicrophoneLevelMonitor, startRecording, stopMicrophoneLevelMonitor, stopRecording, subscribeAudioLevel, subscribeAudioState, subscribeCapsuleWindowMoveEnded, subscribeRecordingStatus, subscribeRegionSelection, subscribeSettingsChanged, subscribeWhiteboardVisibility, updatePipOverlay, updateSelectedRegion, type AudioControlState, type AudioLevelUpdate, type AudioStatePatch, type CapsuleWindowExpandDirection, type CapsuleWindowHitRegion, type PIPOverlayCamera, type PIPOverlayState, type RecordingExportPlan, type RecordingRecovery, type RecordingStatusUpdate, type RegionSelectionSession, type SettingsPreferencesPatch, type WhiteboardSettingsPatch, type WhiteboardVisibilityUpdate} from './services/recorderBackend'
+import {cancelRegionSelector, cancelSelectedRegion, completeAnnotationRegionSelection, completeRegionSelection, exportRecordingPackage, hidePipOverlay, hideRegionFrame, hideScreenIndicator, hideSettingsWindow, loadBootstrap, loadSettings, logClientEvent, openRecordingPackage, openVideoDirectory, patchAudioState, patchSettingsPreferences, patchWhiteboardSettings, pauseRecording, preflightAudioOnlyRecording, preflightRecording, previewExportRecordingPackage, quitApplication, readAnnotationPreviewImage, readPipPreviewImage, recoverRecordingPackage, restoreCapsuleWindow, resumeRecording, saveSettings, setCapsuleWindowExpanded, setCapsuleWindowHitRegions, setDataRoot, showAnnotationOverlay, showAnnotationRegionSelector, showPipOverlay, showRegionSelector, showScreenIndicator, showWhiteboardWindow, snapCapsuleWindowToEdge, startAudioOnlyRecording, startMicrophoneLevelMonitor, startRecording, stopMicrophoneLevelMonitor, stopRecording, subscribeAudioLevel, subscribeAudioState, subscribeCapsuleWindowMoveEnded, subscribeRecordingStatus, subscribeRegionSelection, subscribeSettingsChanged, subscribeWhiteboardVisibility, updatePipOverlay, updateSelectedRegion, type AudioControlState, type AudioLevelUpdate, type AudioStatePatch, type CapsuleWindowDockSide, type CapsuleWindowExpandDirection, type CapsuleWindowHitRegion, type PIPOverlayCamera, type PIPOverlayState, type RecordingExportPlan, type RecordingRecovery, type RecordingStatusUpdate, type RegionSelectionSession, type SettingsPreferencesPatch, type WhiteboardSettingsPatch, type WhiteboardVisibilityUpdate} from './services/recorderBackend'
 
 const AnnotationOverlayWindow = lazy(() => import('./AnnotationOverlayWindow'))
 const AnnotationRenderWindow = lazy(() => import('./AnnotationRenderWindow'))
@@ -400,6 +401,7 @@ function App() {
   const [exportPlanError, setExportPlanError] = useState('')
   const [settingsLoaded, setSettingsLoaded] = useState(false)
   const [capsuleExpandDirection, setCapsuleExpandDirection] = useState<CapsuleWindowExpandDirection>('down')
+  const [capsuleDockSide, setCapsuleDockSide] = useState<CapsuleWindowDockSide>('none')
   const [capabilities, setCapabilities] = useState<CaptureCapabilities>(fallbackCapabilities)
   const [appData, setAppData] = useState<AppDataInfo>(fallbackAppData)
   const [storageStatus, setStorageStatus] = useState<AppStorageStatus>(fallbackStorageStatus)
@@ -417,6 +419,7 @@ function App() {
   const capsuleWindowLayoutChangingRef = useRef(false)
   const capsuleWindowLayoutTokenRef = useRef(0)
   const capsuleDragCandidateRef = useRef(false)
+  const capsuleDockSideRef = useRef<CapsuleWindowDockSide>('none')
   const floatingPointerInsideAtRef = useRef(0)
   const floatingPointerInsideRef = useRef(false)
   const countdownTimerRef = useRef<number | null>(null)
@@ -1147,6 +1150,10 @@ function App() {
     cameraRef.current = camera
   }, [camera])
 
+  useEffect(() => {
+    capsuleDockSideRef.current = capsuleDockSide
+  }, [capsuleDockSide])
+
   useEffect(() => subscribeAudioLevel((update: AudioLevelUpdate) => {
     const currentMic = selectedMicRef.current
     if (update.deviceId && currentMic && update.deviceId !== currentMic) return
@@ -1264,7 +1271,7 @@ function App() {
       childList: true,
       subtree: true,
       attributes: true,
-      attributeFilter: ['aria-expanded', 'class', 'style'],
+      attributeFilter: ['class', 'style'],
     })
     window.addEventListener('resize', scheduleNormal)
 
@@ -1276,7 +1283,7 @@ function App() {
       mutationObserver?.disconnect()
       window.removeEventListener('resize', scheduleNormal)
     }
-  }, [activePanel, capsuleExpanded, capsuleExpandedHeight, closePromptOpen, isSettingsWindow, settingsOpen, sourcePickerView])
+  }, [activePanel, capsuleDockSide, capsuleExpanded, capsuleExpandedHeight, closePromptOpen, isSettingsWindow, settingsOpen, sourcePickerView])
 
   useEffect(() => {
     if (isSettingsWindow) return
@@ -1295,7 +1302,15 @@ function App() {
       settleTimer = window.setTimeout(() => {
         if (disposed) return
         void logClientEvent('capsule-window', 'stabilize', {reason, expanded: capsuleExpanded, compact: capsuleWindowCompact})
-        void setCapsuleWindowExpanded(capsuleExpanded, capsuleExpandedHeight, 'auto', capsuleWindowCompact)
+        const snapBeforeLayout = !capsuleExpanded && (reason === 'pointer-end' || reason === 'window-end-move')
+        const snapTask = snapBeforeLayout
+          ? snapCapsuleWindowToEdge(capsuleWindowCompact)
+          : Promise.resolve(capsuleDockSideRef.current)
+        void snapTask
+          .then((dockSide) => {
+            if (!disposed) setCapsuleDockSide(dockSide)
+          })
+          .then(() => setCapsuleWindowExpanded(capsuleExpanded, capsuleExpandedHeight, 'auto', capsuleWindowCompact))
           .then((direction) => {
             if (!disposed) setCapsuleExpandDirection(direction)
           })
@@ -2208,7 +2223,7 @@ function App() {
   }
 
   return (
-    <main ref={shellRef} className={`rf-shell ${capsuleExpanded ? 'is-expanded' : 'is-collapsed'} ${recordingConfigLocked ? 'is-recording-compact' : ''} drop-${capsuleExpandDirection}`} aria-label={copy.aria.recorderShell}>
+    <main ref={shellRef} className={`rf-shell ${capsuleExpanded ? 'is-expanded' : 'is-collapsed'} ${recordingConfigLocked ? 'is-recording-compact' : ''} drop-${capsuleExpandDirection} dock-${capsuleDockSide}`} aria-label={copy.aria.recorderShell}>
       <section className="recorder-stage" aria-label={copy.aria.recorderControls}>
         <div ref={capsuleRef} className={`capsule ${isRecording ? 'capsule-active capsule-compact' : ''}`}>
           <button
@@ -2282,6 +2297,18 @@ function App() {
             <PenLine size={18} />
             <span className="whiteboard-label">{copy.whiteboard.open}</span>
           </button>
+
+          {canOpenLastPackage && !isRecording && (
+            <button
+              className="icon-button soft latest-recording-button"
+              type="button"
+              aria-label={copy.aria.openLastRecording}
+              title={`${copy.aria.openLastRecording}: ${lastPackageName}`}
+              onClick={() => void openLastRecordingPackage()}
+            >
+              <FolderOpen size={18} />
+            </button>
+          )}
 
           <div className="time-chip" aria-live="polite">
             <span className={`status-dot ${state}`} />
@@ -3818,6 +3845,7 @@ function SelectMenu({
   const [open, setOpen] = useState(false)
   const [dropDirection, setDropDirection] = useState<'down' | 'up'>('down')
   const rootRef = useRef<HTMLDivElement | null>(null)
+  const openedAtRef = useRef(0)
   const pointerInsideAtRef = useRef(0)
   const pointerInsideRef = useRef(false)
   const selected = options.find((option) => option.value === value) ?? options.find((option) => !option.disabled) ?? options[0]
@@ -3837,6 +3865,7 @@ function SelectMenu({
 
   useEffect(() => {
     if (!open) return
+    openedAtRef.current = Date.now()
     updateDropDirection()
     const close = () => setOpen(false)
     const markPointerInside = (inside: boolean) => {
@@ -3864,9 +3893,16 @@ function SelectMenu({
     }
     const onWindowBlur = () => {
       window.setTimeout(() => {
-        if (pointerInsideRef.current || Date.now() - pointerInsideAtRef.current < 650) return
+        const now = Date.now()
+        if (
+          pointerInsideRef.current ||
+          now - pointerInsideAtRef.current < 900 ||
+          now - openedAtRef.current < 360
+        ) {
+          return
+        }
         close()
-      }, 120)
+      }, 140)
     }
     document.addEventListener('pointerdown', onPointerDown, true)
     document.addEventListener('pointermove', onPointerMove, true)

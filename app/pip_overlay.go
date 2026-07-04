@@ -168,10 +168,7 @@ func (s *RecordingFreedomService) pipOverlayState(config pip.Config, mode string
 	config = pip.NormalizeConfig(config)
 	camera = normalizePIPCamera(camera, "")
 	previewImagePath = strings.TrimSpace(previewImagePath)
-	overlayBounds := application.Rect{Width: 1280, Height: 720}
-	if s.app != nil {
-		overlayBounds, _ = regionOverlayBounds(s.app.Screen.GetAll())
-	}
+	overlayBounds := s.pipOverlayCanvasBounds()
 	placement, err := pip.Place(config, pip.Size{Width: overlayBounds.Width, Height: overlayBounds.Height})
 	if err != nil {
 		return PIPOverlayState{}, err
@@ -202,6 +199,121 @@ func (s *RecordingFreedomService) pipOverlayState(config pip.Config, mode string
 		Camera:           camera,
 		PreviewImagePath: previewImagePath,
 	}, nil
+}
+
+func (s *RecordingFreedomService) pipOverlayCanvasBounds() application.Rect {
+	if s == nil || s.app == nil {
+		return application.Rect{Width: 1280, Height: 720}
+	}
+	screens := s.app.Screen.GetAll()
+	capsuleBounds, hasCapsuleBounds := s.currentCapsuleWindowBounds()
+	if bounds, ok := pipOverlayBoundsForCapsule(screens, capsuleBounds, hasCapsuleBounds); ok {
+		return bounds
+	}
+	bounds, _ := regionOverlayBounds(screens)
+	return bounds
+}
+
+func (s *RecordingFreedomService) currentCapsuleWindowBounds() (application.Rect, bool) {
+	if s == nil || s.capsuleWindow == nil {
+		return application.Rect{}, false
+	}
+	bounds := s.capsuleWindow.Bounds()
+	if validAppRect(bounds) {
+		return bounds, true
+	}
+	x, y := s.capsuleWindow.Position()
+	width, height := s.capsuleWindow.Size()
+	if width <= 0 {
+		width = capsuleWindowWidth
+	}
+	if height <= 0 {
+		height = capsuleWindowCollapsedHeight
+	}
+	return application.Rect{X: x, Y: y, Width: width, Height: height}, true
+}
+
+func pipOverlayBoundsForCapsule(screens []*application.Screen, capsuleBounds application.Rect, hasCapsuleBounds bool) (application.Rect, bool) {
+	if !hasCapsuleBounds || !validAppRect(capsuleBounds) {
+		return application.Rect{}, false
+	}
+	var best *application.Screen
+	bestArea := 0
+	for _, screen := range screens {
+		if screen == nil || !validAppRect(screen.Bounds) {
+			continue
+		}
+		area := rectIntersectionArea(screen.Bounds, capsuleBounds)
+		if area > bestArea {
+			bestArea = area
+			best = screen
+		}
+	}
+	if best != nil && bestArea > 0 {
+		return pipOverlayUsableScreenBounds(best), true
+	}
+
+	centerX := capsuleBounds.X + maxInt(1, capsuleBounds.Width)/2
+	centerY := capsuleBounds.Y + maxInt(1, capsuleBounds.Height)/2
+	for _, screen := range screens {
+		if screen == nil || !validAppRect(screen.Bounds) {
+			continue
+		}
+		if pointInsideAppRect(centerX, centerY, screen.Bounds) {
+			return pipOverlayUsableScreenBounds(screen), true
+		}
+	}
+
+	var nearest *application.Screen
+	var nearestDistance int64
+	for _, screen := range screens {
+		if screen == nil || !validAppRect(screen.Bounds) {
+			continue
+		}
+		distance := distanceToAppRectSquared(centerX, centerY, screen.Bounds)
+		if nearest == nil || distance < nearestDistance {
+			nearest = screen
+			nearestDistance = distance
+		}
+	}
+	if nearest == nil {
+		return application.Rect{}, false
+	}
+	return pipOverlayUsableScreenBounds(nearest), true
+}
+
+func pipOverlayUsableScreenBounds(screen *application.Screen) application.Rect {
+	if screen == nil {
+		return application.Rect{}
+	}
+	if validAppRect(screen.WorkArea) {
+		return screen.WorkArea
+	}
+	return screen.Bounds
+}
+
+func validAppRect(rect application.Rect) bool {
+	return rect.Width > 0 && rect.Height > 0
+}
+
+func pointInsideAppRect(x int, y int, rect application.Rect) bool {
+	return x >= rect.X && y >= rect.Y && x < rect.X+rect.Width && y < rect.Y+rect.Height
+}
+
+func distanceToAppRectSquared(x int, y int, rect application.Rect) int64 {
+	dx := 0
+	if x < rect.X {
+		dx = rect.X - x
+	} else if x >= rect.X+rect.Width {
+		dx = x - (rect.X + rect.Width - 1)
+	}
+	dy := 0
+	if y < rect.Y {
+		dy = rect.Y - y
+	} else if y >= rect.Y+rect.Height {
+		dy = y - (rect.Y + rect.Height - 1)
+	}
+	return int64(dx*dx + dy*dy)
 }
 
 func (s *RecordingFreedomService) applyPIPOverlayState(state PIPOverlayState) {

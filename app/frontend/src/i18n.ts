@@ -52,6 +52,7 @@ export type RecorderCopy = {
     selectLanguage: string
     openSettings: string
     openWhiteboard: string
+    openLastRecording: string
     closeApplication: string
     recordingMode: string
     menu: (panel: string) => string
@@ -317,6 +318,7 @@ const zhCN: RecorderCopy = {
     selectLanguage: '选择语言',
     openSettings: '打开设置',
     openWhiteboard: '打开画板',
+    openLastRecording: '打开最近录制内容',
     closeApplication: '关闭软件',
     recordingMode: '录制模式',
     menu: (panel) => `${panel} 菜单`,
@@ -744,6 +746,7 @@ const en: RecorderCopy = {
     selectLanguage: 'Select language',
     openSettings: 'Open settings',
     openWhiteboard: 'Open whiteboard',
+    openLastRecording: 'Open latest recording',
     closeApplication: 'Close app',
     recordingMode: 'Recording mode',
     menu: (panel) => `${panel} menu`,

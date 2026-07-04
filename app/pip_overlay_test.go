@@ -7,6 +7,7 @@ import (
 	"github.com/lemon-casino/RecordingFreedom/app/internal/devices"
 	"github.com/lemon-casino/RecordingFreedom/app/internal/pip"
 	"github.com/lemon-casino/RecordingFreedom/app/internal/recording"
+	"github.com/wailsapp/wails/v3/pkg/application"
 )
 
 func TestNormalizePIPCameraPrefersDisplayName(t *testing.T) {
@@ -55,6 +56,59 @@ func TestPIPOverlayStateCarriesRecordingPreviewImagePath(t *testing.T) {
 	}
 	if state.Mode != "recording" || state.PreviewImagePath != previewPath {
 		t.Fatalf("state mode/path = %q/%q, want recording preview path %q", state.Mode, state.PreviewImagePath, previewPath)
+	}
+}
+
+func TestPIPOverlayBoundsFollowCapsuleScreenWorkArea(t *testing.T) {
+	screens := []*application.Screen{
+		{
+			Bounds:   application.Rect{X: 0, Y: 0, Width: 1440, Height: 900},
+			WorkArea: application.Rect{X: 0, Y: 0, Width: 1440, Height: 860},
+		},
+		{
+			Bounds:   application.Rect{X: 1440, Y: 0, Width: 1920, Height: 1080},
+			WorkArea: application.Rect{X: 1440, Y: 0, Width: 1920, Height: 1040},
+		},
+	}
+	capsule := application.Rect{X: 1840, Y: 900, Width: 380, Height: 96}
+
+	got, ok := pipOverlayBoundsForCapsule(screens, capsule, true)
+	if !ok {
+		t.Fatal("pipOverlayBoundsForCapsule() did not find the capsule screen")
+	}
+	want := screens[1].WorkArea
+	if got != want {
+		t.Fatalf("pip overlay bounds = %#v, want capsule screen work area %#v", got, want)
+	}
+}
+
+func TestPIPOverlayPlacementUsesCapsuleScreenInsteadOfVirtualDesktop(t *testing.T) {
+	screens := []*application.Screen{
+		{Bounds: application.Rect{X: 0, Y: 0, Width: 1440, Height: 900}},
+		{
+			Bounds:   application.Rect{X: 1440, Y: 0, Width: 1920, Height: 1080},
+			WorkArea: application.Rect{X: 1440, Y: 0, Width: 1920, Height: 1040},
+		},
+	}
+	overlayBounds, ok := pipOverlayBoundsForCapsule(screens, application.Rect{X: 1840, Y: 900, Width: 380, Height: 96}, true)
+	if !ok {
+		t.Fatal("pipOverlayBoundsForCapsule() did not find the capsule screen")
+	}
+	placement, err := pip.Place(pip.ConfigFromPreset(pip.PresetBottomLeft), pip.Size{Width: overlayBounds.Width, Height: overlayBounds.Height})
+	if err != nil {
+		t.Fatalf("Place() error = %v", err)
+	}
+	windowBounds := application.Rect{
+		X:      overlayBounds.X + placement.Rect.X - pipOverlayPadding,
+		Y:      overlayBounds.Y + placement.Rect.Y - pipOverlayPadding,
+		Width:  placement.Rect.Width + pipOverlayPadding*2,
+		Height: placement.Rect.Height + pipOverlayPadding*2,
+	}
+	if windowBounds.X < overlayBounds.X {
+		t.Fatalf("bottom-left PIP window x = %d, want inside capsule screen starting at %d", windowBounds.X, overlayBounds.X)
+	}
+	if windowBounds.X >= overlayBounds.X+overlayBounds.Width/2 {
+		t.Fatalf("bottom-left PIP window x = %d, want left side of capsule screen %#v", windowBounds.X, overlayBounds)
 	}
 }
 

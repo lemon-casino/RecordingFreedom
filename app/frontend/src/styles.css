@@ -261,6 +261,16 @@ input:disabled,
   place-items: start center;
 }
 
+.rf-shell.dock-left {
+  place-items: center start;
+  padding: 8px 0 8px 8px;
+}
+
+.rf-shell.dock-right {
+  place-items: center end;
+  padding: 8px 8px 8px 0;
+}
+
 .recorder-stage {
   position: relative;
   display: grid;
@@ -269,6 +279,21 @@ input:disabled,
   width: min(var(--capsule-stage-width, 724px), 100%);
   --wails-draggable: drag;
   transition: width 220ms ease;
+}
+
+.rf-shell.dock-left .recorder-stage,
+.rf-shell.dock-right .recorder-stage {
+  align-items: center;
+  width: 100%;
+  height: 100%;
+}
+
+.rf-shell.dock-left .recorder-stage {
+  justify-items: start;
+}
+
+.rf-shell.dock-right .recorder-stage {
+  justify-items: end;
 }
 
 .rf-shell.is-recording-compact {
@@ -295,7 +320,9 @@ input:disabled,
   align-items: center;
   gap: 6px;
   width: min(var(--capsule-width, 724px), 100%);
+  height: 64px;
   min-height: 64px;
+  max-height: 64px;
   padding: 8px;
   border: 1px solid var(--line);
   border-radius: var(--radius-pill);
@@ -307,11 +334,58 @@ input:disabled,
   backdrop-filter: blur(22px) saturate(150%);
   transition: width 220ms ease, border-color 180ms ease, box-shadow 180ms ease, gap 180ms ease;
   cursor: grab;
+  overflow: hidden;
   --wails-draggable: drag;
 }
 
 .capsule:active {
   cursor: grabbing;
+}
+
+.rf-shell.dock-left .capsule,
+.rf-shell.dock-right .capsule {
+  flex-direction: column;
+  width: 64px;
+  max-width: 64px;
+  height: auto;
+  max-height: 100%;
+  min-height: 0;
+  padding: 7px;
+}
+
+.rf-shell.dock-left .capsule-config-segment,
+.rf-shell.dock-right .capsule-config-segment,
+.rf-shell.dock-left .capsule-utility-segment,
+.rf-shell.dock-right .capsule-utility-segment {
+  flex-direction: column;
+  max-width: 48px;
+  max-height: 190px;
+  transform-origin: center top;
+}
+
+.rf-shell.dock-left .capsule-utility-segment,
+.rf-shell.dock-right .capsule-utility-segment {
+  max-height: 88px;
+}
+
+.rf-shell.dock-left .capsule.capsule-compact .capsule-config-segment,
+.rf-shell.dock-right .capsule.capsule-compact .capsule-config-segment,
+.rf-shell.dock-left .capsule.capsule-compact .capsule-utility-segment,
+.rf-shell.dock-right .capsule.capsule-compact .capsule-utility-segment {
+  max-height: 0;
+  transform: translateY(-8px) scale(0.9);
+}
+
+.rf-shell.dock-left .grabber,
+.rf-shell.dock-right .grabber {
+  width: 42px;
+  height: 18px;
+}
+
+.rf-shell.dock-left .grabber span,
+.rf-shell.dock-right .grabber span {
+  width: 18px;
+  height: 3px;
 }
 
 .rf-shell.is-collapsed .storage-strip {
@@ -341,7 +415,7 @@ input:disabled,
   opacity: 1;
   transform: translateX(0) scale(1);
   transform-origin: left center;
-  transition: max-width 220ms ease, opacity 160ms ease, transform 220ms ease;
+  transition: max-width 220ms ease, max-height 220ms ease, opacity 160ms ease, transform 220ms ease;
 }
 
 .capsule-utility-segment {
@@ -428,6 +502,22 @@ select:disabled {
   background: rgba(255, 255, 255, 0.035);
 }
 
+.rf-shell.dock-left .source-pill,
+.rf-shell.dock-right .source-pill {
+  justify-content: center;
+  width: 48px;
+  min-width: 48px;
+  height: 48px;
+  padding: 0;
+}
+
+.rf-shell.dock-left .source-pill .source-text,
+.rf-shell.dock-right .source-pill .source-text,
+.rf-shell.dock-left .source-pill > svg:last-child,
+.rf-shell.dock-right .source-pill > svg:last-child {
+  display: none;
+}
+
 .source-text {
   display: grid;
   min-width: 0;
@@ -463,6 +553,13 @@ select:disabled {
   border-radius: var(--radius-pill);
   background: rgba(255, 255, 255, 0.04);
   flex: 0 0 auto;
+}
+
+.rf-shell.dock-left .control-group,
+.rf-shell.dock-right .control-group {
+  flex-direction: column;
+  width: 48px;
+  height: auto;
 }
 
 .icon-button,
@@ -565,6 +662,24 @@ select:disabled {
   display: none;
 }
 
+.rf-shell.dock-left .whiteboard-open-button,
+.rf-shell.dock-right .whiteboard-open-button {
+  width: 38px;
+  padding: 0;
+}
+
+.rf-shell.dock-left .whiteboard-label,
+.rf-shell.dock-right .whiteboard-label {
+  display: none;
+}
+
+.latest-recording-button {
+  width: 38px;
+  min-width: 38px;
+  padding: 0;
+  order: 5;
+}
+
 .record-button.idle,
 .record-button.ready,
 .record-button.failed {
@@ -600,6 +715,26 @@ select:disabled {
   tab-size: 4;
   flex: 0 0 auto;
   order: 3;
+}
+
+.rf-shell.dock-left .time-chip,
+.rf-shell.dock-right .time-chip {
+  justify-content: center;
+  width: 50px;
+  min-width: 50px;
+  height: 42px;
+  padding: 0 6px;
+  gap: 4px;
+}
+
+.rf-shell.dock-left .time-chip strong,
+.rf-shell.dock-right .time-chip strong {
+  display: none;
+}
+
+.rf-shell.dock-left .time-chip span:last-child,
+.rf-shell.dock-right .time-chip span:last-child {
+  font-size: 11px;
 }
 
 .pause-button {
@@ -712,6 +847,47 @@ body.rf-recorder-window .select-menu-list {
 
 .popover.panel-source {
   width: 360px;
+}
+
+.rf-shell.dock-left .popover,
+.rf-shell.dock-right .popover {
+  top: 8px;
+  bottom: auto;
+  max-width: calc(100vw - 108px);
+  max-height: calc(100vh - 16px);
+}
+
+.rf-shell.dock-left .popover {
+  right: auto;
+  left: 84px;
+}
+
+.rf-shell.dock-right .popover {
+  right: 84px;
+  left: auto;
+}
+
+.rf-shell.dock-left .settings-sheet,
+.rf-shell.dock-right .settings-sheet,
+.rf-shell.dock-left .close-confirm-panel,
+.rf-shell.dock-right .close-confirm-panel {
+  top: 8px;
+  bottom: auto;
+  width: min(390px, calc(100vw - 108px));
+  max-width: min(390px, calc(100vw - 108px));
+  max-height: calc(100vh - 16px);
+}
+
+.rf-shell.dock-left .settings-sheet,
+.rf-shell.dock-left .close-confirm-panel {
+  right: auto;
+  left: 84px;
+}
+
+.rf-shell.dock-right .settings-sheet,
+.rf-shell.dock-right .close-confirm-panel {
+  right: 84px;
+  left: auto;
 }
 
 .menu-grid,
@@ -1022,6 +1198,8 @@ select {
 
 .select-menu {
   position: relative;
+  isolation: isolate;
+  contain: layout style;
   width: 100%;
   min-width: 0;
   --wails-draggable: no-drag;
@@ -1041,6 +1219,7 @@ select {
   background: rgba(255, 255, 255, 0.065);
   color: var(--text);
   transition: background 160ms ease, border-color 160ms ease, color 160ms ease;
+  cursor: pointer;
 }
 
 .select-menu-button span {
@@ -1093,11 +1272,12 @@ select {
 
 .select-menu-list {
   position: absolute;
-  z-index: 20;
+  z-index: 60;
   top: calc(100% + 6px);
   left: 0;
   right: 0;
   display: grid;
+  contain: layout paint style;
   max-height: 220px;
   min-width: 0;
   overflow: auto;
@@ -1107,6 +1287,7 @@ select {
   background: rgba(17, 22, 28, 0.98);
   box-shadow: var(--shadow-panel);
   backdrop-filter: blur(24px) saturate(150%);
+  transform: translateZ(0);
 }
 
 .select-menu.drop-up .select-menu-list {
@@ -1127,6 +1308,7 @@ select {
   color: var(--text);
   text-align: left;
   line-height: 1.25;
+  cursor: pointer;
 }
 
 .select-menu-option span {

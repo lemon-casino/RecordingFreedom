@@ -378,19 +378,37 @@ func configureSystemTray(app *application.App, recorderWindow *application.Webvi
 	tray.SetIcon(appIcon)
 	tray.SetDarkModeIcon(appIcon)
 
+	showRecorder := func() {
+		recorderWindow.SetAlwaysOnTop(true)
+		recorderWindow.Show()
+		recorderWindow.UnMinimise()
+		recorderWindow.Focus()
+	}
+	hideRecorder := func() {
+		recorderWindow.Hide()
+	}
+	toggleRecorder := func() {
+		if recorderWindow.IsVisible() {
+			hideRecorder()
+			return
+		}
+		showRecorder()
+	}
+
 	var menuMu sync.Mutex
 	applyMenu := func(locale settings.Locale) {
 		copy := trayCopy(locale)
 		menu := app.NewMenu()
 		menu.Add(copy.ShowRecorder).OnClick(func(ctx *application.Context) {
-			tray.ShowWindow()
+			showRecorder()
 		})
 		menu.Add(copy.ShowSettings).OnClick(func(ctx *application.Context) {
 			settingsWindow.Show()
+			settingsWindow.UnMinimise()
 			settingsWindow.Focus()
 		})
 		menu.Add(copy.HideRecorder).OnClick(func(ctx *application.Context) {
-			tray.HideWindow()
+			hideRecorder()
 		})
 		menu.AddSeparator()
 		menu.Add(copy.Quit).OnClick(func(ctx *application.Context) {
@@ -402,9 +420,8 @@ func configureSystemTray(app *application.App, recorderWindow *application.Webvi
 	}
 	applyMenu(initialLocale)
 
-	tray.AttachWindow(recorderWindow).WindowOffset(10)
 	tray.OnClick(func() {
-		tray.ToggleWindow()
+		toggleRecorder()
 	})
 	tray.OnRightClick(func() {
 		tray.OpenMenu()
