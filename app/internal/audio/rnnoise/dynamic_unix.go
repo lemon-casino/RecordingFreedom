@@ -263,6 +263,42 @@ func dynamicLibraryCandidates() []string {
 		add(filepath.Join(cwd, "tools", name))
 		add(filepath.Join(cwd, "app", "tools", name))
 		add(filepath.Join(cwd, name))
+		for _, candidate := range ancestorToolCandidates(cwd, name) {
+			add(candidate)
+		}
+	}
+	return candidates
+}
+
+func ancestorToolCandidates(startDir string, name string) []string {
+	var candidates []string
+	seen := make(map[string]bool)
+	add := func(path string) {
+		if path == "" {
+			return
+		}
+		if abs, err := filepath.Abs(path); err == nil {
+			path = abs
+		}
+		if seen[path] {
+			return
+		}
+		seen[path] = true
+		candidates = append(candidates, path)
+	}
+
+	dir, err := filepath.Abs(startDir)
+	if err != nil {
+		dir = startDir
+	}
+	for {
+		add(filepath.Join(dir, "tools", name))
+		add(filepath.Join(dir, "app", "tools", name))
+		parent := filepath.Dir(dir)
+		if parent == dir {
+			break
+		}
+		dir = parent
 	}
 	return candidates
 }
