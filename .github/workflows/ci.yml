@@ -138,7 +138,8 @@ jobs:
             rnnoise_dynamic: "true"
             windows_msystem: MINGW64
             windows_msys_package: mingw-w64-x86_64-gcc
-            windows_cc: C:/msys64/mingw64/bin/gcc.exe
+            windows_cc_subdir: mingw64
+            windows_cc_exe: gcc.exe
           - name: windows-arm64
             os: windows-11-arm
             platform: windows
@@ -148,7 +149,8 @@ jobs:
             rnnoise_dynamic: "true"
             windows_msystem: CLANGARM64
             windows_msys_package: mingw-w64-clang-aarch64-clang
-            windows_cc: C:/msys64/clangarm64/bin/clang.exe
+            windows_cc_subdir: clangarm64
+            windows_cc_exe: clang.exe
           - name: macos-x64
             os: macos-15-intel
             platform: macos
@@ -196,6 +198,7 @@ jobs:
 
       - name: Enable Windows RNNoise C toolchain
         if: matrix.platform == 'windows' && matrix.rnnoise_dynamic == 'true'
+        id: msys2
         uses: msys2/setup-msys2@v2
         with:
           msystem: ${{ matrix.windows_msystem }}
@@ -208,7 +211,11 @@ jobs:
         if: matrix.platform == 'windows' && matrix.rnnoise_dynamic == 'true'
         shell: pwsh
         run: |
-          "CC=${{ matrix.windows_cc }}" | Out-File -FilePath $env:GITHUB_ENV -Append
+          $compiler = Join-Path "${{ steps.msys2.outputs.msys2-location }}" "${{ matrix.windows_cc_subdir }}\bin\${{ matrix.windows_cc_exe }}"
+          if (-not (Test-Path -LiteralPath $compiler)) {
+            throw "MSYS2 compiler not found: $compiler"
+          }
+          "CC=$compiler" | Out-File -FilePath $env:GITHUB_ENV -Append
 
       - name: Install Wails v3 CLI
         working-directory: ${{ env.APP_DIR }}
@@ -238,7 +245,7 @@ jobs:
       - name: Build Windows RNNoise dynamic module
         if: matrix.platform == 'windows'
         shell: pwsh
-        run: ./scripts/build-rnnoise-windows.ps1 -Architecture "${{ matrix.ffmpeg_arch }}" -Compiler "${{ matrix.windows_cc }}" -OutputPath "${{ env.APP_DIR }}\tools\rnnoise.dll"
+        run: ./scripts/build-rnnoise-windows.ps1 -Architecture "${{ matrix.ffmpeg_arch }}" -Compiler "$env:CC" -OutputPath "${{ env.APP_DIR }}\tools\rnnoise.dll"
 
       - name: Build Unix RNNoise dynamic module
         if: matrix.platform == 'macos' || matrix.platform == 'linux'
