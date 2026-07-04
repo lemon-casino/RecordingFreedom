@@ -8,7 +8,7 @@ test('capsule whiteboard opens board before recording and annotation during vide
 
   const toolsButton = page.getByRole('button', {name: 'Screenshot / board'})
   await expect(toolsButton).toBeVisible()
-  await expect(toolsButton.getByText('Tools')).toBeVisible()
+  await expect(toolsButton).not.toContainText('Tools')
 
   await toolsButton.click()
   await expect(page.getByRole('dialog', {name: 'board menu'})).toBeVisible()
@@ -62,12 +62,12 @@ test('capsule whiteboard remains available as a board during audio recording', a
   await expect(whiteboardButton).toHaveAttribute('aria-pressed', 'true')
 })
 
-test('capsule shows a labeled whiteboard entry before recording in Chinese', async ({page}) => {
+test('capsule shows an icon-only whiteboard entry before recording in Chinese', async ({page}) => {
   await openRecorderShell(page, {locale: 'zh-CN'})
 
   const toolsButton = page.getByRole('button', {name: '截图 / 画板'})
   await expect(toolsButton).toBeVisible()
-  await expect(toolsButton.getByText('工具')).toBeVisible()
+  await expect(toolsButton).not.toContainText('工具')
 })
 
 test('screenshot history exposes folder and delete actions', async ({page}) => {
@@ -92,7 +92,7 @@ test('screenshot history exposes folder and delete actions', async ({page}) => {
   await expect.poll(async () => page.evaluate((key) => JSON.parse(window.localStorage.getItem(key) || '[]').length, browserScreenshotHistoryKey)).toBe(0)
 })
 
-test('region screenshot enters editable selection before saving', async ({page}) => {
+test('region screenshot reuses the annotation overlay before saving', async ({page}) => {
   await page.addInitScript(({settingsKey, settings}) => {
     window.localStorage.setItem(settingsKey, JSON.stringify(settings))
     ;(window as Window & {__RF_REGION_SESSION__?: unknown}).__RF_REGION_SESSION__ = {
@@ -112,10 +112,25 @@ test('region screenshot enters editable selection before saving', async ({page})
   await page.mouse.move(420, 300)
   await page.mouse.up()
 
-  await expect(page.locator('.region-edit-rect')).toBeVisible()
-  await expect(page.getByRole('button', {name: 'Save screenshot'})).toBeVisible()
-  await page.getByRole('button', {name: 'Save screenshot'}).click()
-  await expect.poll(async () => page.evaluate((key) => JSON.parse(window.localStorage.getItem(key) || '[]').length, browserScreenshotHistoryKey)).toBe(1)
+  await expect.poll(async () => page.evaluate(() => {
+    const launch = (window as Window & {
+      __RF_LAST_WHITEBOARD_LAUNCH__?: {mode: string; url: string}
+      __RF_ANNOTATION_OVERLAY__?: {mode?: string; target?: {type?: string}}
+    }).__RF_LAST_WHITEBOARD_LAUNCH__
+    const overlay = (window as Window & {__RF_ANNOTATION_OVERLAY__?: {mode?: string; target?: {type?: string}}}).__RF_ANNOTATION_OVERLAY__
+    return {
+      mode: launch?.mode ?? '',
+      url: launch?.url ?? '',
+      overlayMode: overlay?.mode ?? '',
+      targetType: overlay?.target?.type ?? '',
+    }
+  })).toEqual({
+    mode: 'screenshot',
+    url: '/#/annotation-overlay',
+    overlayMode: 'screenshot',
+    targetType: 'screenshot-region',
+  })
+  await expect.poll(async () => page.evaluate((key) => JSON.parse(window.localStorage.getItem(key) || '[]').length, browserScreenshotHistoryKey)).toBe(0)
 })
 
 async function openRecorderShell(page: Page, options: {locale?: 'zh-CN' | 'en'; microphone?: boolean; systemAudio?: boolean; screenshotHistory?: unknown[]} = {}) {

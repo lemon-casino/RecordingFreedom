@@ -644,18 +644,9 @@ select:disabled {
 .whiteboard-open-button {
   display: inline-flex;
   justify-content: center;
-  gap: 7px;
-  width: 82px;
-  padding: 0 12px;
+  width: 38px;
+  padding: 0;
   order: 5;
-}
-
-.whiteboard-label {
-  font-size: 12px;
-  font-weight: 700;
-  line-height: 1;
-  color: currentColor;
-  white-space: nowrap;
 }
 
 .capsule.capsule-compact .whiteboard-open-button {
@@ -663,19 +654,10 @@ select:disabled {
   padding: 0;
 }
 
-.capsule.capsule-compact .whiteboard-label {
-  display: none;
-}
-
 .rf-shell.dock-left .whiteboard-open-button,
 .rf-shell.dock-right .whiteboard-open-button {
   width: 38px;
   padding: 0;
-}
-
-.rf-shell.dock-left .whiteboard-label,
-.rf-shell.dock-right .whiteboard-label {
-  display: none;
 }
 
 .latest-recording-button {

@@ -45,6 +45,7 @@ export interface AnnotationCaptureResult {
 }
 
 export interface AnnotationOverlayState {
+    "mode"?: string;
     "packageDir"?: string;
     "manifestPath"?: string;
     "windowBounds": RegionRect;

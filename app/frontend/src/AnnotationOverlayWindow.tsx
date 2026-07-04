@@ -18,7 +18,7 @@ import type {ExcalidrawImperativeAPI} from '@excalidraw/excalidraw/types'
 import '@excalidraw/excalidraw/index.css'
 import {copyByLocale} from './i18n'
 import {defaultSettings, normalizeLocale, normalizeTheme, type AppSettings, type LocaleCode, type ThemeCode, type WhiteboardTool} from './services/mockBackend'
-import {hideAnnotationOverlay, loadAnnotationCapture, loadSettings, patchWhiteboardSettings, reselectAnnotationRegion, saveAnnotationCapture, setAnnotationOverlayHitRegions, subscribeSettingsChanged, type AnnotationOverlayState, type CapsuleWindowHitRegion} from './services/recorderBackend'
+import {hideAnnotationOverlay, hideScreenshotAnnotationOverlay, loadAnnotationCapture, loadScreenshotAnnotationCapture, loadSettings, patchWhiteboardSettings, reselectAnnotationRegion, reselectScreenshotAnnotationRegion, saveAnnotationCapture, saveScreenshotAnnotationCapture, setAnnotationOverlayHitRegions, subscribeSettingsChanged, type AnnotationOverlayState, type CapsuleWindowHitRegion, type ScreenshotWhiteboardContext} from './services/recorderBackend'
 
 const annotationTools: Array<{tool: WhiteboardTool; icon: typeof PenLine; label: 'select' | 'pen' | 'arrow' | 'line' | 'rectangle' | 'ellipse' | 'text' | 'eraser'}> = [
   {tool: 'selection', icon: MousePointer2, label: 'select'},
@@ -66,6 +66,7 @@ function AnnotationOverlayWindow() {
   const canvasRef = useRef<HTMLElement | null>(null)
   const copy = copyByLocale[locale]
   const canvasReceivesInput = annotationCanvasReceivesInput(activeTool)
+  const isScreenshotMode = overlayState?.mode === 'screenshot'
   const overlayKey = annotationOverlayKey(overlayState)
   const canvasBounds = annotationCanvasBounds(overlayState)
 
@@ -152,15 +153,18 @@ function AnnotationOverlayWindow() {
   useEffect(() => {
     let cancelled = false
     setInitialData(null)
-    void Promise.all([loadSettings(), loadAnnotationCapture()])
+    const sceneTask = isScreenshotMode ? loadScreenshotAnnotationCapture() : loadAnnotationCapture()
+    void Promise.all([loadSettings(), sceneTask])
       .then(([settings, scene]) => {
         if (cancelled) return
         applySettings(settings)
-        const parsed = scene.available && scene.sceneJson ? safeParseScene(scene.sceneJson) : null
+        const parsed = isScreenshotMode
+          ? screenshotAnnotationScene(settings, scene as ScreenshotWhiteboardContext, overlayState)
+          : scene.available && 'sceneJson' in scene && scene.sceneJson ? safeParseScene(scene.sceneJson) : null
         const nextInitialData = parsed ?? defaultAnnotationScene(settings)
         resetAnnotationElementTracking(nextInitialData)
         setInitialData(nextInitialData)
-        lastSceneRef.current = scene.sceneJson ?? ''
+        lastSceneRef.current = 'sceneJson' in scene ? scene.sceneJson ?? '' : ''
       })
       .catch((error) => {
         console.info('Using annotation overlay load fallback:', error)
@@ -174,7 +178,7 @@ function AnnotationOverlayWindow() {
     return () => {
       cancelled = true
     }
-  }, [overlayKey])
+  }, [isScreenshotMode, overlayKey])
 
   useEffect(() => {
     document.documentElement.lang = locale
@@ -281,11 +285,12 @@ function AnnotationOverlayWindow() {
     if (!hasElements && !lastSceneRef.current) return
     lastSceneRef.current = sceneJson
     setDirty(true)
+    if (isScreenshotMode) return
     if (saveTimerRef.current !== null) window.clearTimeout(saveTimerRef.current)
     saveTimerRef.current = window.setTimeout(() => {
       void saveCurrentAnnotation()
     }, 700)
-  }, [])
+  }, [isScreenshotMode])
 
   const saveCurrentAnnotation = async () => {
     const api = apiRef.current
@@ -310,7 +315,11 @@ function AnnotationOverlayWindow() {
       } as any)
       const snapshotDataUrl = await blobToDataURL(blob)
       const eventsJsonl = pendingAnnotationEventsJSONL()
-      await saveAnnotationCapture({sceneJson, snapshotDataUrl, eventsJsonl})
+      if (isScreenshotMode) {
+        await saveScreenshotAnnotationCapture({sceneJson, snapshotDataUrl, eventsJsonl})
+      } else {
+        await saveAnnotationCapture({sceneJson, snapshotDataUrl, eventsJsonl})
+      }
       pendingElementEventsRef.current.clear()
       lastSceneRef.current = sceneJson
       setDirty(false)
@@ -346,7 +355,11 @@ function AnnotationOverlayWindow() {
   const reselectRegion = async () => {
     try {
       resetLocalAnnotationScene()
-      await reselectAnnotationRegion()
+      if (isScreenshotMode) {
+        await reselectScreenshotAnnotationRegion()
+      } else {
+        await reselectAnnotationRegion()
+      }
     } catch (error) {
       console.error('Failed to reselect annotation region:', error)
     }
@@ -380,7 +393,7 @@ function AnnotationOverlayWindow() {
   return (
     <main className={`annotation-overlay-shell ${canvasReceivesInput ? 'is-drawing' : 'is-pass-through'}`} data-theme={theme}>
       <section ref={capsuleRef} className="annotation-capsule" aria-label={copy.whiteboard.title}>
-        <span className="annotation-capsule-title">{copy.whiteboard.open}</span>
+        <span className="annotation-capsule-title">{isScreenshotMode ? copy.screenshot.region : copy.whiteboard.open}</span>
         <div className="annotation-tools" role="toolbar" aria-label={copy.whiteboard.title}>
           {annotationTools.map(({tool, icon: Icon, label}) => (
             <button
@@ -405,7 +418,7 @@ function AnnotationOverlayWindow() {
           <Save size={16} />
           <span>{saving ? copy.whiteboard.saved : dirty ? copy.whiteboard.unsaved : copy.whiteboard.ready}</span>
         </button>
-        <button type="button" aria-label={copy.whiteboard.close} title={copy.whiteboard.close} onClick={() => void hideAnnotationOverlay()}>
+        <button type="button" aria-label={copy.whiteboard.close} title={copy.whiteboard.close} onClick={() => void (isScreenshotMode ? hideScreenshotAnnotationOverlay() : hideAnnotationOverlay())}>
           <X size={17} />
         </button>
       </section>
@@ -513,6 +526,65 @@ function defaultAnnotationScene(settings: AppSettings) {
     elements: [],
     files: {},
   }
+}
+
+function screenshotAnnotationScene(settings: AppSettings, context: ScreenshotWhiteboardContext, overlayState: AnnotationOverlayState | null) {
+  if (!context.available || !context.dataUrl) return null
+  const canvas = annotationSnapshotCanvasSize(overlayState)
+  const fileId = `rf-screenshot-annotation-${context.item?.id ?? Date.now()}`
+  return {
+    appState: {
+      viewBackgroundColor: 'transparent',
+      currentItemStrokeColor: settings.whiteboard.lastStrokeColor || '#ef4444',
+      currentItemStrokeWidthKey: settings.whiteboard.lastStrokeWidth || 'medium',
+      currentItemOpacity: normalizeOpacity(settings.whiteboard.lastOpacity),
+    },
+    elements: [{
+      id: `${fileId}-image`,
+      type: 'image',
+      x: 0,
+      y: 0,
+      width: canvas.width,
+      height: canvas.height,
+      angle: 0,
+      strokeColor: 'transparent',
+      backgroundColor: 'transparent',
+      fillStyle: 'solid',
+      strokeWidth: 1,
+      strokeStyle: 'solid',
+      roughness: 0,
+      opacity: 100,
+      groupIds: [],
+      frameId: null,
+      roundness: null,
+      seed: 1,
+      version: 1,
+      versionNonce: 1,
+      isDeleted: false,
+      boundElements: null,
+      updated: Date.now(),
+      link: null,
+      locked: true,
+      status: 'saved',
+      fileId,
+      scale: [1, 1],
+    }],
+    files: {
+      [fileId]: {
+        id: fileId,
+        dataURL: context.dataUrl,
+        mimeType: screenshotAnnotationMimeType(context.dataUrl),
+        created: Date.now(),
+      },
+    },
+  }
+}
+
+function screenshotAnnotationMimeType(dataUrl: string) {
+  if (dataUrl.startsWith('data:image/svg+xml')) return 'image/svg+xml'
+  if (dataUrl.startsWith('data:image/jpeg')) return 'image/jpeg'
+  if (dataUrl.startsWith('data:image/webp')) return 'image/webp'
+  return 'image/png'
 }
 
 function safeParseScene(sceneJson: string) {

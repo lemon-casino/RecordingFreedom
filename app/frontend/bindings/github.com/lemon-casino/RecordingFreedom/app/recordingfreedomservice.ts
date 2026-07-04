@@ -31,6 +31,10 @@ import * as settings$0 from "./internal/settings/models.js";
 // @ts-ignore: Unused imports
 import * as $models from "./models.js";
 
+export function BeginScreenshotAnnotationOverlay(req: $models.RegionSelectionRequest): $CancellablePromise<$models.AnnotationOverlayState> {
+    return $Call.ByID(1272692414, req);
+}
+
 export function BeginScreenshotRegionEdit(req: $models.RegionSelectionRequest): $CancellablePromise<$models.RegionFrameState> {
     return $Call.ByID(1479485771, req);
 }
@@ -111,6 +115,10 @@ export function HideScreenIndicator(): $CancellablePromise<void> {
     return $Call.ByID(3727544311);
 }
 
+export function HideScreenshotAnnotationOverlay(): $CancellablePromise<void> {
+    return $Call.ByID(3471555377);
+}
+
 export function HideSettingsWindow(): $CancellablePromise<void> {
     return $Call.ByID(4158023747);
 }
@@ -137,6 +145,10 @@ export function LoadAnnotationCapture(): $CancellablePromise<$models.WhiteboardS
 
 export function LoadPinnedScreenshot(): $CancellablePromise<$models.ScreenshotPinState> {
     return $Call.ByID(1332827708);
+}
+
+export function LoadScreenshotAnnotationCapture(): $CancellablePromise<$models.ScreenshotWhiteboardContext> {
+    return $Call.ByID(2992029739);
 }
 
 export function LoadWhiteboardScene(): $CancellablePromise<$models.WhiteboardSceneResult> {
@@ -223,12 +235,20 @@ export function ReselectAnnotationRegion(): $CancellablePromise<$models.RegionSe
     return $Call.ByID(2985632494);
 }
 
+export function ReselectScreenshotAnnotationRegion(): $CancellablePromise<$models.RegionSelectionSession> {
+    return $Call.ByID(136431442);
+}
+
 export function ResumeRecording(): $CancellablePromise<recording$0.Session> {
     return $Call.ByID(2366067120);
 }
 
 export function SaveAnnotationCapture(req: $models.AnnotationCaptureRequest): $CancellablePromise<$models.AnnotationCaptureResult> {
     return $Call.ByID(938219912, req);
+}
+
+export function SaveScreenshotAnnotationCapture(req: $models.AnnotationCaptureRequest): $CancellablePromise<$models.ScreenshotCaptureResult> {
+    return $Call.ByID(2595159260, req);
 }
 
 export function SaveSettings(next: settings$0.Settings): $CancellablePromise<settings$0.Settings> {

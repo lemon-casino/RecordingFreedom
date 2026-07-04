@@ -1,6 +1,8 @@
 package main
 
 import (
+	"bytes"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -13,6 +15,7 @@ import (
 	"time"
 
 	desktopscreenshot "github.com/kbinani/screenshot"
+	"github.com/lemon-casino/RecordingFreedom/app/internal/recpackage"
 	"github.com/wailsapp/wails/v3/pkg/application"
 	"golang.org/x/image/draw"
 )
@@ -23,6 +26,9 @@ const (
 	screenshotMaxPreviewBytes        = 16 * 1024 * 1024
 	screenshotThumbnailMaxSide       = 320
 	regionSelectionPurposeScreenshot = "screenshot"
+	annotationOverlayModeScreenshot  = "screenshot"
+	screenshotAnnotationTargetType   = "screenshot-region"
+	screenshotAnnotationTargetID     = "screenshot:region"
 )
 
 type ScreenshotCaptureRequest struct {
@@ -186,10 +192,16 @@ func (s *RecordingFreedomService) CompleteScreenshotRegionSelection(req RegionSe
 	if s.regionOverlay != nil {
 		s.regionOverlay.Hide()
 	}
+	capsuleHidden := false
 	if s.capsuleWindow != nil {
 		s.capsuleWindow.Hide()
-		defer s.restoreCapsuleWindow()
+		capsuleHidden = true
 	}
+	defer func() {
+		if capsuleHidden {
+			s.restoreCapsuleWindow()
+		}
+	}()
 	time.Sleep(140 * time.Millisecond)
 	captureRect := mapRegionSelectionToCaptureRect(*session, regionRectFromAppRect(relative))
 	item, err := s.captureScreenshot(captureRect, "region", &RegionRect{
@@ -234,6 +246,146 @@ func (s *RecordingFreedomService) UpdateScreenshotRegionSelection(req RegionSele
 	return s.setScreenshotRegionEditor(absolute)
 }
 
+func (s *RecordingFreedomService) BeginScreenshotAnnotationOverlay(req RegionSelectionRequest) (AnnotationOverlayState, error) {
+	if recorderIsActive(s.recorder.State()) {
+		return AnnotationOverlayState{}, errors.New("cannot annotate a screenshot while recording is active")
+	}
+	session, err := s.activeScreenshotRegionSession()
+	if err != nil {
+		return AnnotationOverlayState{}, err
+	}
+	relative := normalizeRegionSelection(req)
+	if relative.Width < session.MinimumWidth || relative.Height < session.MinimumHeight {
+		return AnnotationOverlayState{}, fmt.Errorf("selected screenshot region must be at least %d x %d", session.MinimumWidth, session.MinimumHeight)
+	}
+	absoluteDIP := application.Rect{
+		X:      session.Bounds.X + relative.X,
+		Y:      session.Bounds.Y + relative.Y,
+		Width:  relative.Width,
+		Height: relative.Height,
+	}
+	captureRect := mapRegionSelectionToCaptureRect(session, regionRectFromAppRect(relative))
+
+	s.regionMu.Lock()
+	s.regionSession = nil
+	s.screenshotRegionDIP = application.Rect{}
+	s.regionMu.Unlock()
+	if s.regionOverlay != nil {
+		s.regionOverlay.Hide()
+	}
+	capsuleHidden := false
+	if s.capsuleWindow != nil {
+		s.capsuleWindow.Hide()
+		capsuleHidden = true
+	}
+	defer func() {
+		if capsuleHidden {
+			s.restoreCapsuleWindow()
+		}
+	}()
+	time.Sleep(140 * time.Millisecond)
+
+	img, err := desktopscreenshot.CaptureRect(captureRect)
+	if err != nil {
+		return AnnotationOverlayState{}, err
+	}
+	if img == nil || img.Bounds().Empty() {
+		return AnnotationOverlayState{}, errors.New("captured screenshot is empty")
+	}
+	dataURL, err := screenshotImageDataURL(img)
+	if err != nil {
+		return AnnotationOverlayState{}, err
+	}
+	now := time.Now().UTC()
+	region := RegionRect{
+		X:      captureRect.Min.X,
+		Y:      captureRect.Min.Y,
+		Width:  captureRect.Dx(),
+		Height: captureRect.Dy(),
+	}
+	context := ScreenshotWhiteboardContext{
+		Available: true,
+		Item: ScreenshotItem{
+			ID:        "screenshot-draft-" + now.Format("20060102-150405.000000000"),
+			CreatedAt: now.Format(time.RFC3339Nano),
+			Width:     img.Bounds().Dx(),
+			Height:    img.Bounds().Dy(),
+			Mode:      "region",
+			Region:    &region,
+		},
+		DataURL: dataURL,
+	}
+	s.screenshotMu.Lock()
+	s.screenshotAnnotation = context
+	s.screenshotMu.Unlock()
+	if capsuleHidden {
+		s.restoreCapsuleWindow()
+		capsuleHidden = false
+	}
+	return s.showScreenshotAnnotationOverlay(absoluteDIP, context.Item)
+}
+
+func (s *RecordingFreedomService) LoadScreenshotAnnotationCapture() (ScreenshotWhiteboardContext, error) {
+	s.screenshotMu.Lock()
+	defer s.screenshotMu.Unlock()
+	if !s.screenshotAnnotation.Available || strings.TrimSpace(s.screenshotAnnotation.DataURL) == "" {
+		return ScreenshotWhiteboardContext{}, errors.New("screenshot annotation requires an active screenshot draft")
+	}
+	return s.screenshotAnnotation, nil
+}
+
+func (s *RecordingFreedomService) SaveScreenshotAnnotationCapture(req AnnotationCaptureRequest) (ScreenshotCaptureResult, error) {
+	s.screenshotMu.Lock()
+	context := s.screenshotAnnotation
+	s.screenshotMu.Unlock()
+	if !context.Available {
+		return ScreenshotCaptureResult{}, errors.New("screenshot annotation requires an active screenshot draft")
+	}
+	data, err := decodeAnnotationSnapshot(req.SnapshotDataURL)
+	if err != nil {
+		return ScreenshotCaptureResult{}, err
+	}
+	img, err := png.Decode(bytes.NewReader(data))
+	if err != nil {
+		return ScreenshotCaptureResult{}, fmt.Errorf("screenshot annotation PNG is invalid: %w", err)
+	}
+	item, err := s.saveScreenshotImage(img, "region", context.Item.Region)
+	if err != nil {
+		return ScreenshotCaptureResult{}, err
+	}
+	s.screenshotMu.Lock()
+	s.screenshotAnnotation.Item = item
+	s.screenshotMu.Unlock()
+	s.emitScreenshotCaptured(item)
+	s.logEvent("screenshot", "annotation-save", map[string]string{
+		"id":     item.ID,
+		"path":   item.Path,
+		"width":  fmt.Sprint(item.Width),
+		"height": fmt.Sprint(item.Height),
+	})
+	return ScreenshotCaptureResult{Item: item}, nil
+}
+
+func (s *RecordingFreedomService) ReselectScreenshotAnnotationRegion() (RegionSelectionSession, error) {
+	if recorderIsActive(s.recorder.State()) {
+		return RegionSelectionSession{}, errors.New("cannot reselect screenshot region while recording is active")
+	}
+	s.screenshotMu.Lock()
+	s.screenshotAnnotation = ScreenshotWhiteboardContext{}
+	s.screenshotMu.Unlock()
+	if err := s.HideAnnotationOverlay(); err != nil {
+		return RegionSelectionSession{}, err
+	}
+	return s.ShowScreenshotRegionSelector()
+}
+
+func (s *RecordingFreedomService) HideScreenshotAnnotationOverlay() error {
+	s.screenshotMu.Lock()
+	s.screenshotAnnotation = ScreenshotWhiteboardContext{}
+	s.screenshotMu.Unlock()
+	return s.HideAnnotationOverlay()
+}
+
 func (s *RecordingFreedomService) activeScreenshotRegionSession() (RegionSelectionSession, error) {
 	s.regionMu.Lock()
 	defer s.regionMu.Unlock()
@@ -251,6 +403,42 @@ func (s *RecordingFreedomService) setScreenshotRegionEditor(bounds application.R
 	s.screenshotRegionDIP = bounds
 	s.regionMu.Unlock()
 	return s.showRegionEditorWithPurpose(bounds, regionSelectionPurposeScreenshot)
+}
+
+func (s *RecordingFreedomService) showScreenshotAnnotationOverlay(canvasBounds application.Rect, item ScreenshotItem) (AnnotationOverlayState, error) {
+	if s.app == nil || s.annotationOverlay == nil {
+		return AnnotationOverlayState{}, errors.New("annotation overlay window is not configured")
+	}
+	if canvasBounds.Width <= 0 || canvasBounds.Height <= 0 {
+		return AnnotationOverlayState{}, errors.New("screenshot annotation bounds are empty")
+	}
+	windowBounds := annotationOverlayWindowBounds(canvasBounds)
+	state := AnnotationOverlayState{
+		Mode:         annotationOverlayModeScreenshot,
+		WindowBounds: regionRectFromAppRect(windowBounds),
+		CanvasBounds: RegionRect{
+			X:      annotationOverlayFrameInset,
+			Y:      annotationOverlayFrameInset,
+			Width:  canvasBounds.Width,
+			Height: canvasBounds.Height,
+		},
+		Target:          screenshotAnnotationTargetFromRect(canvasBounds, item),
+		CaptureExcluded: false,
+	}
+	s.annotationOverlay.SetIgnoreMouseEvents(false)
+	s.annotationOverlay.SetAlwaysOnTop(true)
+	s.annotationOverlay.SetBounds(windowBounds)
+	s.annotationOverlay.Show()
+	s.annotationOverlay.SetBounds(windowBounds)
+	s.annotationOverlay.Focus()
+	s.broadcastAnnotationOverlayState(state)
+	go s.rebroadcastAnnotationOverlayState(state, s.nextAnnotationToken())
+	s.logEvent("screenshot", "annotation-overlay-show", map[string]string{
+		"id":     item.ID,
+		"bounds": fmt.Sprintf("%d,%d %dx%d", canvasBounds.X, canvasBounds.Y, canvasBounds.Width, canvasBounds.Height),
+	})
+	s.emitWhiteboardVisibility(true, "annotation")
+	return state, nil
 }
 
 func (s *RecordingFreedomService) PatchScreenshotItem(req ScreenshotItemPatchRequest) (ScreenshotHistoryResult, error) {
@@ -510,6 +698,13 @@ func (s *RecordingFreedomService) captureScreenshot(rect image.Rectangle, mode s
 	if img == nil || img.Bounds().Empty() {
 		return ScreenshotItem{}, errors.New("captured screenshot is empty")
 	}
+	return s.saveScreenshotImage(img, mode, region)
+}
+
+func (s *RecordingFreedomService) saveScreenshotImage(img image.Image, mode string, region *RegionRect) (ScreenshotItem, error) {
+	if img == nil || img.Bounds().Empty() {
+		return ScreenshotItem{}, errors.New("screenshot image is empty")
+	}
 	now := time.Now().UTC()
 	id := "screenshot-" + now.Format("20060102-150405.000000000")
 	dir, err := s.screenshotDir()
@@ -560,6 +755,35 @@ func (s *RecordingFreedomService) captureScreenshot(rect image.Rectangle, mode s
 		"mode":   item.Mode,
 	})
 	return item, nil
+}
+
+func screenshotImageDataURL(img image.Image) (string, error) {
+	if img == nil || img.Bounds().Empty() {
+		return "", errors.New("screenshot image is empty")
+	}
+	var buffer bytes.Buffer
+	if err := png.Encode(&buffer, img); err != nil {
+		return "", err
+	}
+	return whiteboardPNGContentPrefix + base64.StdEncoding.EncodeToString(buffer.Bytes()), nil
+}
+
+func screenshotAnnotationTargetFromRect(bounds application.Rect, item ScreenshotItem) recpackage.ManifestAnnotationTarget {
+	geometry := recpackage.ManifestSourceGeometry{
+		X:      bounds.X,
+		Y:      bounds.Y,
+		Width:  bounds.Width,
+		Height: bounds.Height,
+	}
+	id := strings.TrimSpace(item.ID)
+	if id == "" {
+		id = screenshotAnnotationTargetID
+	}
+	return recpackage.ManifestAnnotationTarget{
+		Type:     screenshotAnnotationTargetType,
+		ID:       id,
+		Geometry: &geometry,
+	}
 }
 
 func (s *RecordingFreedomService) screenshotImagePath(req ScreenshotImageRequest) (string, error) {

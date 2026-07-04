@@ -198,6 +198,7 @@ export type WhiteboardExport = {
 export type WhiteboardSettingsPatch = Partial<AppSettings['whiteboard']>
 
 export type AnnotationOverlayState = {
+  mode?: 'annotation' | 'screenshot'
   packageDir?: string
   manifestPath?: string
   windowBounds: {x: number; y: number; width: number; height: number}
@@ -266,6 +267,7 @@ const browserAnnotationSceneKey = 'recordingfreedom.annotation.scene.v1'
 const browserScreenshotHistoryKey = 'recordingfreedom.screenshots.history.v1'
 const browserScreenshotPinStateKey = 'recordingfreedom.screenshots.pin.v1'
 const browserScreenshotWhiteboardKey = 'recordingfreedom.screenshots.whiteboard.v1'
+const browserScreenshotAnnotationKey = 'recordingfreedom.screenshots.annotation.v1'
 const browserWhiteboardVisibilityEvent = 'rf-whiteboard-visibility'
 const browserScreenshotCapturedEvent = 'rf-screenshot-captured'
 const browserScreenshotPinEvent = 'rf-screenshot-pin'
@@ -1332,6 +1334,33 @@ export async function beginScreenshotRegionEdit(request: RegionSelectionSession[
   }
 }
 
+export async function beginScreenshotAnnotationOverlay(request: RegionSelectionSession['bounds']): Promise<AnnotationOverlayState> {
+  try {
+    return fromBoundAnnotationOverlayState(await RecordingFreedomService.BeginScreenshotAnnotationOverlay(toBoundRegionSelectionRequest(request)))
+  } catch (error) {
+    if (isWailsDesktopRuntime()) throw error
+    console.info('Using browser screenshot annotation overlay fallback:', error)
+    const item = createBrowserScreenshotItem('region', request)
+    const context: ScreenshotWhiteboardContext = {
+      available: true,
+      item,
+      dataUrl: browserScreenshotDataUrl(item),
+    }
+    window.localStorage?.setItem(browserScreenshotAnnotationKey, JSON.stringify(context))
+    const state = browserAnnotationOverlayState('screenshot', request)
+    ;(window as Window & {__RF_ANNOTATION_OVERLAY__?: AnnotationOverlayState}).__RF_ANNOTATION_OVERLAY__ = state
+    ;(window as Window & {__RF_LAST_WHITEBOARD_LAUNCH__?: {mode: string; url: string; at: string}}).__RF_LAST_WHITEBOARD_LAUNCH__ = {
+      mode: 'screenshot',
+      url: '/#/annotation-overlay',
+      at: new Date().toISOString(),
+    }
+    emitBrowserWhiteboardVisibility({visible: true, mode: 'annotation'})
+    const popup = window.open('/#/annotation-overlay', 'recordingfreedom-screenshot-annotation', 'width=1280,height=720')
+    popup?.focus()
+    return state
+  }
+}
+
 export async function updateScreenshotRegionSelection(request: RegionSelectionSession['bounds']): Promise<void> {
   try {
     await RecordingFreedomService.UpdateScreenshotRegionSelection(toBoundRegionSelectionRequest(request))
@@ -1369,11 +1398,35 @@ export async function reselectAnnotationRegion(): Promise<RegionSelectionSession
   }
 }
 
+export async function reselectScreenshotAnnotationRegion(): Promise<RegionSelectionSession> {
+  try {
+    return fromBoundRegionSelectionSession(await RecordingFreedomService.ReselectScreenshotAnnotationRegion())
+  } catch (error) {
+    if (isWailsDesktopRuntime()) throw error
+    console.info('Using browser screenshot annotation region reselect fallback:', error)
+    window.localStorage?.removeItem(browserScreenshotAnnotationKey)
+    const session = await showScreenshotRegionSelector()
+    ;(window as Window & {__RF_LAST_SCREENSHOT_REGION_RESELECT__?: RegionSelectionSession}).__RF_LAST_SCREENSHOT_REGION_RESELECT__ = session
+    return session
+  }
+}
+
 export async function hideAnnotationOverlay(): Promise<void> {
   try {
     await RecordingFreedomService.HideAnnotationOverlay()
   } catch (error) {
     console.info('Using browser annotation overlay hide fallback:', error)
+    emitBrowserWhiteboardVisibility({visible: false, mode: 'annotation'})
+    window.close()
+  }
+}
+
+export async function hideScreenshotAnnotationOverlay(): Promise<void> {
+  try {
+    await RecordingFreedomService.HideScreenshotAnnotationOverlay()
+  } catch (error) {
+    console.info('Using browser screenshot annotation hide fallback:', error)
+    window.localStorage?.removeItem(browserScreenshotAnnotationKey)
     emitBrowserWhiteboardVisibility({visible: false, mode: 'annotation'})
     window.close()
   }
@@ -1396,6 +1449,18 @@ export async function loadAnnotationCapture(): Promise<WhiteboardScene> {
   }
 }
 
+export async function loadScreenshotAnnotationCapture(): Promise<ScreenshotWhiteboardContext> {
+  try {
+    return fromBoundScreenshotWhiteboardContext(await RecordingFreedomService.LoadScreenshotAnnotationCapture())
+  } catch (error) {
+    if (isWailsDesktopRuntime()) throw error
+    console.info('Using browser screenshot annotation load fallback:', error)
+    const raw = window.localStorage?.getItem(browserScreenshotAnnotationKey)
+    const record = raw ? safeJSON(raw) : null
+    return fromBoundScreenshotWhiteboardContext(record as Partial<BoundScreenshotWhiteboardContext> | undefined)
+  }
+}
+
 export async function saveAnnotationCapture(request: {sceneJson: string; snapshotDataUrl: string; eventsJsonl?: string}): Promise<AnnotationCapture> {
   try {
     return fromBoundAnnotationCapture(await RecordingFreedomService.SaveAnnotationCapture(request as BoundAnnotationCaptureRequest))
@@ -1411,6 +1476,27 @@ export async function saveAnnotationCapture(request: {sceneJson: string; snapsho
       timelineSnapshotPath: 'browser-preview/data/video/recording-preview.rfrec/annotations/snapshots/annotation-000001.png',
       bytes: request.sceneJson.length + request.snapshotDataUrl.length,
     }
+  }
+}
+
+export async function saveScreenshotAnnotationCapture(request: {sceneJson: string; snapshotDataUrl: string; eventsJsonl?: string}): Promise<ScreenshotItem> {
+  try {
+    const result = await RecordingFreedomService.SaveScreenshotAnnotationCapture(request as BoundAnnotationCaptureRequest)
+    return fromBoundScreenshotCaptureResult(result as BoundScreenshotCaptureResult).item
+  } catch (error) {
+    if (isWailsDesktopRuntime()) throw error
+    console.info('Using browser screenshot annotation save fallback:', error)
+    const raw = window.localStorage?.getItem(browserScreenshotAnnotationKey)
+    const context = fromBoundScreenshotWhiteboardContext((raw ? safeJSON(raw) : null) as Partial<BoundScreenshotWhiteboardContext> | undefined)
+    const item = context.item ?? createBrowserScreenshotItem('region')
+    const saved = {
+      ...item,
+      id: `browser-screenshot-${Date.now()}`,
+      createdAt: new Date().toISOString(),
+    }
+    saveBrowserScreenshotHistory([saved, ...loadBrowserScreenshotHistory()])
+    window.dispatchEvent(new CustomEvent(browserScreenshotCapturedEvent, {detail: saved}))
+    return saved
   }
 }
 
@@ -2304,6 +2390,7 @@ function fromBoundScreenshotWhiteboardContext(context: Partial<BoundScreenshotWh
 
 function fromBoundAnnotationOverlayState(state: BoundAnnotationOverlayState): AnnotationOverlayState {
   return {
+    mode: state.mode === 'screenshot' ? 'screenshot' : 'annotation',
     packageDir: state.packageDir,
     manifestPath: state.manifestPath,
     windowBounds: fromBoundRegionRect(state.windowBounds),
@@ -2358,15 +2445,23 @@ function fromBoundAnnotationRenderJobClaim(result: BoundAnnotationRenderJobClaim
   }
 }
 
-function browserAnnotationOverlayState(): AnnotationOverlayState {
-  const width = Math.max(320, window.innerWidth || 1280)
-  const height = Math.max(240, window.innerHeight || 720)
+function browserAnnotationOverlayState(
+  mode: AnnotationOverlayState['mode'] = 'annotation',
+  bounds?: RegionSelectionSession['bounds'],
+): AnnotationOverlayState {
+  const width = Math.max(320, bounds?.width ?? window.innerWidth ?? 1280)
+  const height = Math.max(240, bounds?.height ?? window.innerHeight ?? 720)
   return {
-    packageDir: 'browser-preview/data/video/recording-preview.rfrec',
-    manifestPath: 'browser-preview/data/video/recording-preview.rfrec/manifest.json',
+    mode,
+    packageDir: mode === 'screenshot' ? undefined : 'browser-preview/data/video/recording-preview.rfrec',
+    manifestPath: mode === 'screenshot' ? undefined : 'browser-preview/data/video/recording-preview.rfrec/manifest.json',
     windowBounds: {x: 0, y: 0, width, height},
     canvasBounds: {x: 0, y: 0, width, height},
-    target: {type: 'screen', id: 'browser-preview'},
+    target: {
+      type: mode === 'screenshot' ? 'screenshot-region' : 'screen',
+      id: mode === 'screenshot' ? 'browser-screenshot-region' : 'browser-preview',
+      geometry: {x: bounds?.x ?? 0, y: bounds?.y ?? 0, width, height},
+    },
     captureExcluded: false,
   }
 }

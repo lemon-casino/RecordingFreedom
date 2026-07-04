@@ -1,6 +1,11 @@
 package main
 
 import (
+	"bytes"
+	"encoding/base64"
+	"image"
+	"image/color"
+	"image/png"
 	"os"
 	"path/filepath"
 	"testing"
@@ -73,6 +78,50 @@ func TestDeleteScreenshotItemRemovesHistoryAndFiles(t *testing.T) {
 	}
 }
 
+func TestSaveScreenshotAnnotationCaptureWritesHistoryAndFiles(t *testing.T) {
+	service := NewRecordingFreedomService()
+	service.appData = appdata.NewService(t.TempDir())
+	region := RegionRect{X: 10, Y: 20, Width: 80, Height: 60}
+	service.screenshotAnnotation = ScreenshotWhiteboardContext{
+		Available: true,
+		Item: ScreenshotItem{
+			ID:     "draft",
+			Width:  80,
+			Height: 60,
+			Mode:   "region",
+			Region: &region,
+		},
+		DataURL: testPNGDataURL(t, 80, 60),
+	}
+
+	result, err := service.SaveScreenshotAnnotationCapture(AnnotationCaptureRequest{
+		SceneJSON:       `{"type":"excalidraw","elements":[],"appState":{},"files":{}}`,
+		SnapshotDataURL: testPNGDataURL(t, 80, 60),
+	})
+	if err != nil {
+		t.Fatalf("SaveScreenshotAnnotationCapture() error = %v", err)
+	}
+	if result.Item.ID == "" || result.Item.Path == "" || result.Item.ThumbnailPath == "" {
+		t.Fatalf("saved screenshot item missing file paths: %#v", result.Item)
+	}
+	if result.Item.Mode != "region" || result.Item.Region == nil || *result.Item.Region != region {
+		t.Fatalf("saved screenshot region = %#v, want %#v", result.Item.Region, region)
+	}
+	if _, err := os.Stat(result.Item.Path); err != nil {
+		t.Fatalf("saved image stat error = %v", err)
+	}
+	if _, err := os.Stat(result.Item.ThumbnailPath); err != nil {
+		t.Fatalf("saved thumbnail stat error = %v", err)
+	}
+	history, err := service.loadScreenshotHistory()
+	if err != nil {
+		t.Fatalf("loadScreenshotHistory() error = %v", err)
+	}
+	if len(history) != 1 || history[0].ID != result.Item.ID {
+		t.Fatalf("history = %#v, want saved item only", history)
+	}
+}
+
 func TestMapRegionSelectionToCaptureRectScalesOverlayToNativeBounds(t *testing.T) {
 	session := RegionSelectionSession{
 		Bounds:        RegionRect{X: 10, Y: 20, Width: 1000, Height: 500},
@@ -82,6 +131,21 @@ func TestMapRegionSelectionToCaptureRectScalesOverlayToNativeBounds(t *testing.T
 	if rect.Min.X != 600 || rect.Min.Y != 400 || rect.Dx() != 600 || rect.Dy() != 400 {
 		t.Fatalf("mapped rect = %+v, want min=(600,400) size=600x400", rect)
 	}
+}
+
+func testPNGDataURL(t *testing.T, width int, height int) string {
+	t.Helper()
+	img := image.NewRGBA(image.Rect(0, 0, width, height))
+	for y := 0; y < height; y++ {
+		for x := 0; x < width; x++ {
+			img.Set(x, y, color.RGBA{R: uint8(x % 255), G: uint8(y % 255), B: 180, A: 255})
+		}
+	}
+	var buffer bytes.Buffer
+	if err := png.Encode(&buffer, img); err != nil {
+		t.Fatalf("png.Encode() error = %v", err)
+	}
+	return whiteboardPNGContentPrefix + base64.StdEncoding.EncodeToString(buffer.Bytes())
 }
 
 func mustScreenshotDir(t *testing.T, service *RecordingFreedomService) string {

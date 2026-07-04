@@ -136,6 +136,7 @@ type RecordingFreedomService struct {
 	screenshotMu          sync.Mutex
 	screenshotPinState    ScreenshotPinState
 	whiteboardScreenshot  ScreenshotWhiteboardContext
+	screenshotAnnotation  ScreenshotWhiteboardContext
 }
 
 func NewRecordingFreedomService() *RecordingFreedomService {

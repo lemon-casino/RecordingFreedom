@@ -71,7 +71,7 @@ import {
   fallbackCapabilities,
   fallbackStorageStatus,
 } from './services/mockBackend'
-import {beginScreenshotRegionEdit, cancelRegionSelector, cancelSelectedRegion, completeAnnotationRegionSelection, completeRegionSelection, completeScreenshotRegionSelection, deleteScreenshotItem, exportRecordingPackage, hidePinnedScreenshot, hidePipOverlay, hideRegionFrame, hideScreenIndicator, hideSettingsWindow, listScreenshots, loadBootstrap, loadPinnedScreenshot, loadSettings, logClientEvent, openRecordingPackage, openScreenshot, openScreenshotDirectory, openScreenshotInWhiteboard, openVideoDirectory, patchAudioState, patchScreenshotItem, patchSettingsPreferences, patchShortcutSettings, patchWhiteboardSettings, pauseRecording, preflightAudioOnlyRecording, preflightRecording, previewExportRecordingPackage, quitApplication, readAnnotationPreviewImage, readPipPreviewImage, recoverRecordingPackage, restoreCapsuleWindow, resumeRecording, saveSettings, setCapsuleWindowExpanded, setCapsuleWindowHitRegions, setDataRoot, showAnnotationOverlay, showAnnotationRegionSelector, showPinnedScreenshot, showPipOverlay, showRegionSelector, showScreenIndicator, showScreenshotRegionSelector, showWhiteboardWindow, snapCapsuleWindowToEdge, startAudioOnlyRecording, startMicrophoneLevelMonitor, startRecording, startScrollingScreenshot, stopMicrophoneLevelMonitor, stopRecording, subscribeAudioLevel, subscribeAudioState, subscribeCapsuleDockSide, subscribeCapsuleWindowMoveEnded, subscribeRecordingStatus, subscribeRegionSelection, subscribeScreenshotCaptured, subscribeScreenshotPin, subscribeSettingsChanged, subscribeShortcutTriggered, subscribeWhiteboardVisibility, updatePipOverlay, updateScreenshotRegionSelection, updateSelectedRegion, type AudioControlState, type AudioLevelUpdate, type AudioStatePatch, type CapsuleWindowDockSide, type CapsuleWindowExpandDirection, type CapsuleWindowHitRegion, type PIPOverlayCamera, type PIPOverlayState, type RecordingExportPlan, type RecordingRecovery, type RecordingStatusUpdate, type RegionSelectionSession, type ScreenshotPinState, type SettingsPreferencesPatch, type ShortcutSettingsPatch, type WhiteboardSettingsPatch, type WhiteboardVisibilityUpdate} from './services/recorderBackend'
+import {beginScreenshotAnnotationOverlay, cancelRegionSelector, cancelSelectedRegion, completeAnnotationRegionSelection, completeRegionSelection, completeScreenshotRegionSelection, deleteScreenshotItem, exportRecordingPackage, hidePinnedScreenshot, hidePipOverlay, hideRegionFrame, hideScreenIndicator, hideSettingsWindow, listScreenshots, loadBootstrap, loadPinnedScreenshot, loadSettings, logClientEvent, openRecordingPackage, openScreenshot, openScreenshotDirectory, openScreenshotInWhiteboard, openVideoDirectory, patchAudioState, patchScreenshotItem, patchSettingsPreferences, patchShortcutSettings, patchWhiteboardSettings, pauseRecording, preflightAudioOnlyRecording, preflightRecording, previewExportRecordingPackage, quitApplication, readAnnotationPreviewImage, readPipPreviewImage, recoverRecordingPackage, restoreCapsuleWindow, resumeRecording, saveSettings, setCapsuleWindowExpanded, setCapsuleWindowHitRegions, setDataRoot, showAnnotationOverlay, showAnnotationRegionSelector, showPinnedScreenshot, showPipOverlay, showRegionSelector, showScreenIndicator, showScreenshotRegionSelector, showWhiteboardWindow, snapCapsuleWindowToEdge, startAudioOnlyRecording, startMicrophoneLevelMonitor, startRecording, startScrollingScreenshot, stopMicrophoneLevelMonitor, stopRecording, subscribeAudioLevel, subscribeAudioState, subscribeCapsuleDockSide, subscribeCapsuleWindowMoveEnded, subscribeRecordingStatus, subscribeRegionSelection, subscribeScreenshotCaptured, subscribeScreenshotPin, subscribeSettingsChanged, subscribeShortcutTriggered, subscribeWhiteboardVisibility, updatePipOverlay, updateScreenshotRegionSelection, updateSelectedRegion, type AudioControlState, type AudioLevelUpdate, type AudioStatePatch, type CapsuleWindowDockSide, type CapsuleWindowExpandDirection, type CapsuleWindowHitRegion, type PIPOverlayCamera, type PIPOverlayState, type RecordingExportPlan, type RecordingRecovery, type RecordingStatusUpdate, type RegionSelectionSession, type ScreenshotPinState, type SettingsPreferencesPatch, type ShortcutSettingsPatch, type WhiteboardSettingsPatch, type WhiteboardVisibilityUpdate} from './services/recorderBackend'
 
 const AnnotationOverlayWindow = lazy(() => import('./AnnotationOverlayWindow'))
 const AnnotationRenderWindow = lazy(() => import('./AnnotationRenderWindow'))
@@ -2573,7 +2573,6 @@ function App() {
             onClick={openBoardTools}
           >
             <PenLine size={18} />
-            <span className="whiteboard-label">{isRecording ? copy.whiteboard.open : copy.screenshot.toolsShort}</span>
           </button>
 
           {canOpenLastPackage && !isRecording && (
@@ -4100,7 +4099,7 @@ function RegionOverlayWindow() {
       return
     }
     if (isScreenshotRegionSelection) {
-      await beginScreenshotRegionEdit(rect)
+      await beginScreenshotAnnotationOverlay(rect)
       return
     }
     await completeRegionSelection(rect)

@@ -2,6 +2,8 @@ import {expect, test, type Page} from '@playwright/test'
 
 const browserSettingsKey = 'recordingfreedom.settings.v1'
 const browserAnnotationSceneKey = 'recordingfreedom.annotation.scene.v1'
+const browserScreenshotAnnotationKey = 'recordingfreedom.screenshots.annotation.v1'
+const browserScreenshotHistoryKey = 'recordingfreedom.screenshots.history.v1'
 const annotationFrameInset = 10
 
 test('annotation overlay narrows hit regions in pass-through mode', async ({page}) => {
@@ -49,6 +51,18 @@ test('annotation overlay exposes undo and region reselect controls', async ({pag
     scene: null,
     purpose: 'annotation',
   })
+})
+
+test('screenshot annotation overlay saves into screenshot history on explicit save', async ({page}) => {
+  await openScreenshotAnnotationOverlay(page)
+
+  await expect(page.locator('.annotation-overlay-shell')).toBeVisible()
+  await expect(page.locator('.annotation-capsule-title')).toHaveText('Region screenshot')
+  await expect.poll(async () => page.evaluate((key) => JSON.parse(window.localStorage.getItem(key) || '[]').length, browserScreenshotHistoryKey)).toBe(0)
+
+  await page.getByRole('button', {name: 'Save'}).click()
+
+  await expect.poll(async () => page.evaluate((key) => JSON.parse(window.localStorage.getItem(key) || '[]').length, browserScreenshotHistoryKey)).toBe(1)
 })
 
 async function openAnnotationOverlay(page: Page) {
@@ -113,6 +127,87 @@ async function openAnnotationOverlay(page: Page) {
       captureExcluded: false,
     }
   }, {settingsKey: browserSettingsKey, frameInset: annotationFrameInset})
+  await page.goto('/#/annotation-overlay')
+}
+
+async function openScreenshotAnnotationOverlay(page: Page) {
+  await page.setViewportSize({width: 900 + annotationFrameInset * 2, height: 520 + annotationFrameInset * 2})
+  await page.addInitScript(({settingsKey, screenshotAnnotationKey, frameInset}) => {
+    window.localStorage.setItem(settingsKey, JSON.stringify({
+      schemaVersion: 1,
+      locale: 'en',
+      source: {lastSourceType: 'screen'},
+      storage: {dataRootDir: 'browser-preview'},
+      recording: {
+        quality: 'balanced',
+        fps: 30,
+        captureCursor: true,
+        countdownSeconds: 0,
+      },
+      audio: {
+        system: false,
+        systemDeviceId: 'system-audio:default',
+        microphone: false,
+        microphoneDeviceId: 'microphone:browser-preview',
+        noiseSuppression: false,
+        microphoneGain: 1,
+      },
+      camera: {
+        enabled: false,
+        deviceId: 'camera:default',
+        pipPreset: 'bottom-right',
+        pip: {
+          preset: 'bottom-right',
+          shape: 'circle',
+          mirror: true,
+          position: {x: 1, y: 1},
+          scale: 0.08,
+          edgeFeather: 0.16,
+        },
+      },
+      whiteboard: {
+        enabled: true,
+        lastMode: 'annotation',
+        lastTool: 'freedraw',
+        lastStrokeColor: '#ef4444',
+        lastStrokeWidth: 'medium',
+        lastOpacity: 100,
+        capturePolicy: 'export-compose',
+      },
+      window: {
+        minimizeToTray: true,
+        theme: 'night-teal',
+      },
+    }))
+    const svg = '<svg xmlns="http://www.w3.org/2000/svg" width="900" height="520"><rect width="900" height="520" fill="#1f2937"/><text x="24" y="52" fill="#fff" font-family="Arial" font-size="24">Screenshot draft</text></svg>'
+    window.localStorage.setItem(screenshotAnnotationKey, JSON.stringify({
+      available: true,
+      item: {
+        id: 'screenshot-draft-test',
+        path: 'browser-preview/data/screenshots/screenshot-draft-test.png',
+        thumbnailPath: 'browser-preview/data/screenshots/thumbnails/screenshot-draft-test.png',
+        createdAt: '2026-07-04T12:00:00Z',
+        width: 900,
+        height: 520,
+        mode: 'region',
+        region: {x: 0, y: 0, width: 900, height: 520},
+        pinned: false,
+        fixed: false,
+      },
+      dataUrl: `data:image/svg+xml;base64,${window.btoa(svg)}`,
+    }))
+    ;(window as Window & {__RF_ANNOTATION_OVERLAY__?: unknown}).__RF_ANNOTATION_OVERLAY__ = {
+      mode: 'screenshot',
+      windowBounds: {x: -frameInset, y: -frameInset, width: 900 + frameInset * 2, height: 520 + frameInset * 2},
+      canvasBounds: {x: frameInset, y: frameInset, width: 900, height: 520},
+      target: {
+        type: 'screenshot-region',
+        id: 'screenshot-draft-test',
+        geometry: {x: 0, y: 0, width: 900, height: 520},
+      },
+      captureExcluded: false,
+    }
+  }, {settingsKey: browserSettingsKey, screenshotAnnotationKey: browserScreenshotAnnotationKey, frameInset: annotationFrameInset})
   await page.goto('/#/annotation-overlay')
 }
 

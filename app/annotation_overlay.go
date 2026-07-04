@@ -24,6 +24,7 @@ const (
 )
 
 type AnnotationOverlayState struct {
+	Mode            string                              `json:"mode,omitempty"`
 	PackageDir      string                              `json:"packageDir,omitempty"`
 	ManifestPath    string                              `json:"manifestPath,omitempty"`
 	WindowBounds    RegionRect                          `json:"windowBounds"`
@@ -514,6 +515,7 @@ func (s *RecordingFreedomService) annotationOverlayState() (AnnotationOverlaySta
 	}
 	windowBounds := annotationOverlayWindowBounds(canvasBounds)
 	return AnnotationOverlayState{
+		Mode:         "annotation",
 		PackageDir:   session.PackageDir,
 		ManifestPath: session.Manifest,
 		WindowBounds: regionRectFromAppRect(windowBounds),
