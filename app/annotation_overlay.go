@@ -20,6 +20,7 @@ const (
 	maxAnnotationEventBatchLines = 512
 	annotationRegionTargetType   = "annotation-region"
 	annotationRegionTargetID     = "annotation:region"
+	annotationOverlayFrameInset  = 10
 )
 
 type AnnotationOverlayState struct {
@@ -507,20 +508,35 @@ func (s *RecordingFreedomService) annotationOverlayState() (AnnotationOverlaySta
 	if err != nil {
 		return AnnotationOverlayState{}, err
 	}
-	windowBounds, target, ok := s.annotationTargetWindowBounds(session.ID, manifest)
+	canvasBounds, target, ok := s.annotationTargetWindowBounds(session.ID, manifest)
 	if !ok {
 		return AnnotationOverlayState{}, errors.New("annotation overlay requires a selected annotation region")
 	}
+	windowBounds := annotationOverlayWindowBounds(canvasBounds)
 	return AnnotationOverlayState{
 		PackageDir:   session.PackageDir,
 		ManifestPath: session.Manifest,
 		WindowBounds: regionRectFromAppRect(windowBounds),
 		CanvasBounds: RegionRect{
-			Width:  windowBounds.Width,
-			Height: windowBounds.Height,
+			X:      annotationOverlayFrameInset,
+			Y:      annotationOverlayFrameInset,
+			Width:  canvasBounds.Width,
+			Height: canvasBounds.Height,
 		},
 		Target: target,
 	}, nil
+}
+
+func annotationOverlayWindowBounds(canvasBounds application.Rect) application.Rect {
+	if canvasBounds.Width <= 0 || canvasBounds.Height <= 0 {
+		return canvasBounds
+	}
+	return application.Rect{
+		X:      canvasBounds.X - annotationOverlayFrameInset,
+		Y:      canvasBounds.Y - annotationOverlayFrameInset,
+		Width:  canvasBounds.Width + annotationOverlayFrameInset*2,
+		Height: canvasBounds.Height + annotationOverlayFrameInset*2,
+	}
 }
 
 func (s *RecordingFreedomService) annotationWindowBounds(manifest recpackage.Manifest) application.Rect {

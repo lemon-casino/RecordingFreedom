@@ -67,6 +67,7 @@ function AnnotationOverlayWindow() {
   const copy = copyByLocale[locale]
   const canvasReceivesInput = annotationCanvasReceivesInput(activeTool)
   const overlayKey = annotationOverlayKey(overlayState)
+  const canvasBounds = annotationCanvasBounds(overlayState)
 
   function resetAnnotationElementTracking(scene: any) {
     elementSignatureRef.current = elementSignatureMap(scene?.elements ?? [])
@@ -413,8 +414,10 @@ function AnnotationOverlayWindow() {
         className="annotation-overlay-canvas"
         aria-label={copy.whiteboard.title}
         style={{
-          width: overlayState?.canvasBounds.width || window.innerWidth,
-          height: overlayState?.canvasBounds.height || window.innerHeight,
+          left: canvasBounds.x,
+          top: canvasBounds.y,
+          width: canvasBounds.width,
+          height: canvasBounds.height,
         }}
       >
         <Excalidraw
@@ -455,6 +458,21 @@ function AnnotationOverlayWindow() {
           renderTopRightUI={() => null}
         />
       </section>
+      <div
+        className="annotation-overlay-frame"
+        aria-hidden="true"
+        style={{
+          left: canvasBounds.x,
+          top: canvasBounds.y,
+          width: canvasBounds.width,
+          height: canvasBounds.height,
+        }}
+      >
+        <span className="corner top-left" />
+        <span className="corner top-right" />
+        <span className="corner bottom-left" />
+        <span className="corner bottom-right" />
+      </div>
     </main>
   )
 }
@@ -517,6 +535,15 @@ function annotationOverlayKey(state: AnnotationOverlayState | null) {
     geometry.width,
     geometry.height,
   ].join(':')
+}
+
+function annotationCanvasBounds(state: AnnotationOverlayState | null) {
+  return {
+    x: Math.round(state?.canvasBounds.x ?? 0),
+    y: Math.round(state?.canvasBounds.y ?? 0),
+    width: Math.max(1, Math.round(state?.canvasBounds.width ?? window.innerWidth ?? 1)),
+    height: Math.max(1, Math.round(state?.canvasBounds.height ?? window.innerHeight ?? 1)),
+  }
 }
 
 function elementSignatureMap(elements: readonly unknown[]) {

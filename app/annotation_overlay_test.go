@@ -56,10 +56,11 @@ func TestAnnotationOverlayStateUsesActiveVideoRecordingGeometry(t *testing.T) {
 			if state.PackageDir != session.PackageDir || state.ManifestPath != session.Manifest {
 				t.Fatalf("state package = %q/%q, want %q/%q", state.PackageDir, state.ManifestPath, session.PackageDir, session.Manifest)
 			}
-			if state.WindowBounds.X != annotationBounds.X || state.WindowBounds.Y != annotationBounds.Y || state.WindowBounds.Width != annotationBounds.Width || state.WindowBounds.Height != annotationBounds.Height {
-				t.Fatalf("window bounds = %#v, want annotation geometry %#v", state.WindowBounds, annotationBounds)
+			wantWindow := annotationOverlayWindowBounds(annotationBounds)
+			if state.WindowBounds.X != wantWindow.X || state.WindowBounds.Y != wantWindow.Y || state.WindowBounds.Width != wantWindow.Width || state.WindowBounds.Height != wantWindow.Height {
+				t.Fatalf("window bounds = %#v, want framed annotation geometry %#v", state.WindowBounds, wantWindow)
 			}
-			if state.CanvasBounds.X != 0 || state.CanvasBounds.Y != 0 || state.CanvasBounds.Width != annotationBounds.Width || state.CanvasBounds.Height != annotationBounds.Height {
+			if state.CanvasBounds.X != annotationOverlayFrameInset || state.CanvasBounds.Y != annotationOverlayFrameInset || state.CanvasBounds.Width != annotationBounds.Width || state.CanvasBounds.Height != annotationBounds.Height {
 				t.Fatalf("canvas bounds = %#v, want local canvas %dx%d", state.CanvasBounds, annotationBounds.Width, annotationBounds.Height)
 			}
 			if state.Target.Type != annotationRegionTargetType || state.Target.ID != annotationRegionTargetID || state.Target.Geometry == nil {
@@ -117,8 +118,12 @@ func TestAnnotationOverlayStateAllowsPausedVideoRecording(t *testing.T) {
 	if err != nil {
 		t.Fatalf("annotationOverlayState() error = %v", err)
 	}
-	if state.WindowBounds.X != 10 || state.WindowBounds.Y != 20 || state.WindowBounds.Width != 640 || state.WindowBounds.Height != 360 {
-		t.Fatalf("window bounds = %#v, want paused annotation geometry", state.WindowBounds)
+	wantWindow := annotationOverlayWindowBounds(applicationRect(10, 20, 640, 360))
+	if state.WindowBounds.X != wantWindow.X || state.WindowBounds.Y != wantWindow.Y || state.WindowBounds.Width != wantWindow.Width || state.WindowBounds.Height != wantWindow.Height {
+		t.Fatalf("window bounds = %#v, want paused framed annotation geometry %#v", state.WindowBounds, wantWindow)
+	}
+	if state.CanvasBounds.X != annotationOverlayFrameInset || state.CanvasBounds.Y != annotationOverlayFrameInset || state.CanvasBounds.Width != 640 || state.CanvasBounds.Height != 360 {
+		t.Fatalf("canvas bounds = %#v, want inset paused annotation geometry", state.CanvasBounds)
 	}
 }
 

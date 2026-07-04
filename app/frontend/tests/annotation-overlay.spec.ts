@@ -2,6 +2,7 @@ import {expect, test, type Page} from '@playwright/test'
 
 const browserSettingsKey = 'recordingfreedom.settings.v1'
 const browserAnnotationSceneKey = 'recordingfreedom.annotation.scene.v1'
+const annotationFrameInset = 10
 
 test('annotation overlay narrows hit regions in pass-through mode', async ({page}) => {
   await openAnnotationOverlay(page)
@@ -11,6 +12,7 @@ test('annotation overlay narrows hit regions in pass-through mode', async ({page
   await expect(shell).toBeVisible()
   await expect(shell).toHaveClass(/is-drawing/)
   await expect(canvas).toHaveCSS('pointer-events', 'auto')
+  await expectAnnotationFrame(page)
   await expectAnnotationHitRegions(page, 'drawing')
 
   await page.locator('.annotation-tools').getByRole('button', {name: 'Select'}).click()
@@ -50,7 +52,8 @@ test('annotation overlay exposes undo and region reselect controls', async ({pag
 })
 
 async function openAnnotationOverlay(page: Page) {
-  await page.addInitScript(({settingsKey}) => {
+  await page.setViewportSize({width: 1280 + annotationFrameInset * 2, height: 720 + annotationFrameInset * 2})
+  await page.addInitScript(({settingsKey, frameInset}) => {
     window.localStorage.setItem(settingsKey, JSON.stringify({
       schemaVersion: 1,
       locale: 'en',
@@ -100,8 +103,8 @@ async function openAnnotationOverlay(page: Page) {
     ;(window as Window & {__RF_ANNOTATION_OVERLAY__?: unknown}).__RF_ANNOTATION_OVERLAY__ = {
       packageDir: 'browser-preview/data/video/recording-preview.rfrec',
       manifestPath: 'browser-preview/data/video/recording-preview.rfrec/manifest.json',
-      windowBounds: {x: 0, y: 0, width: 1280, height: 720},
-      canvasBounds: {x: 0, y: 0, width: 1280, height: 720},
+      windowBounds: {x: -frameInset, y: -frameInset, width: 1280 + frameInset * 2, height: 720 + frameInset * 2},
+      canvasBounds: {x: frameInset, y: frameInset, width: 1280, height: 720},
       target: {
         type: 'screen',
         id: 'screen:primary',
@@ -109,7 +112,7 @@ async function openAnnotationOverlay(page: Page) {
       },
       captureExcluded: false,
     }
-  }, {settingsKey: browserSettingsKey})
+  }, {settingsKey: browserSettingsKey, frameInset: annotationFrameInset})
   await page.goto('/#/annotation-overlay')
 }
 
@@ -147,17 +150,17 @@ async function expectAnnotationHitRegions(page: Page, mode: 'drawing' | 'pass-th
   })).toEqual(mode === 'drawing'
     ? {
       enabled: true,
-      viewportWidth: 1280,
-      viewportHeight: 720,
+      viewportWidth: 1280 + annotationFrameInset * 2,
+      viewportHeight: 720 + annotationFrameInset * 2,
       regions: [
         expect.objectContaining({kind: 'pill'}),
-        expect.objectContaining({kind: 'rect', x: 0, y: 0, width: 1280, height: 720}),
+        expect.objectContaining({kind: 'rect', x: annotationFrameInset, y: annotationFrameInset, width: 1280, height: 720}),
       ],
     }
     : {
       enabled: true,
-      viewportWidth: 1280,
-      viewportHeight: 720,
+      viewportWidth: 1280 + annotationFrameInset * 2,
+      viewportHeight: 720 + annotationFrameInset * 2,
       regions: [
         expect.objectContaining({kind: 'pill'}),
       ],
@@ -172,4 +175,32 @@ async function expectAnnotationHitRegions(page: Page, mode: 'drawing' | 'pass-th
   if (mode === 'pass-through') {
     expect(regions.some((region) => region.kind === 'rect')).toBe(false)
   }
+}
+
+async function expectAnnotationFrame(page: Page) {
+  const frame = page.locator('.annotation-overlay-frame')
+  const canvas = page.locator('.annotation-overlay-canvas')
+  await expect(frame).toBeVisible()
+  await expect(frame).toHaveCSS('pointer-events', 'none')
+  await expect(frame).toHaveCSS('border-top-color', 'rgba(255, 59, 59, 0.98)')
+  await expect.poll(async () => {
+    const [frameBox, canvasBox] = await Promise.all([frame.boundingBox(), canvas.boundingBox()])
+    return {
+      frame: frameBox && {
+        x: Math.round(frameBox.x),
+        y: Math.round(frameBox.y),
+        width: Math.round(frameBox.width),
+        height: Math.round(frameBox.height),
+      },
+      canvas: canvasBox && {
+        x: Math.round(canvasBox.x),
+        y: Math.round(canvasBox.y),
+        width: Math.round(canvasBox.width),
+        height: Math.round(canvasBox.height),
+      },
+    }
+  }).toEqual({
+    frame: {x: annotationFrameInset, y: annotationFrameInset, width: 1280, height: 720},
+    canvas: {x: annotationFrameInset, y: annotationFrameInset, width: 1280, height: 720},
+  })
 }

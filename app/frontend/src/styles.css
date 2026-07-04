@@ -2013,9 +2013,63 @@ body.rf-annotation-overlay-window {
 
 .annotation-overlay-canvas {
   position: absolute;
-  inset: 0;
+  top: 0;
+  left: 0;
   z-index: 1;
   background: transparent;
+}
+
+.annotation-overlay-frame {
+  position: absolute;
+  z-index: 3;
+  pointer-events: none;
+  border: 2px solid rgba(255, 59, 59, 0.98);
+  border-radius: 7px;
+  box-shadow:
+    0 0 0 1px rgba(255, 255, 255, 0.86),
+    0 0 0 5px rgba(255, 59, 59, 0.22),
+    0 0 22px rgba(255, 59, 59, 0.62),
+    inset 0 0 0 1px rgba(255, 255, 255, 0.5);
+}
+
+.annotation-overlay-frame .corner {
+  position: absolute;
+  width: 22px;
+  height: 22px;
+  border-color: #ffffff;
+  filter: drop-shadow(0 0 5px rgba(255, 59, 59, 0.95));
+}
+
+.annotation-overlay-frame .top-left {
+  top: -4px;
+  left: -4px;
+  border-top: 4px solid;
+  border-left: 4px solid;
+  border-top-left-radius: 8px;
+}
+
+.annotation-overlay-frame .top-right {
+  top: -4px;
+  right: -4px;
+  border-top: 4px solid;
+  border-right: 4px solid;
+  border-top-right-radius: 8px;
+}
+
+.annotation-overlay-frame .bottom-left {
+  bottom: -4px;
+  left: -4px;
+  border-bottom: 4px solid;
+  border-left: 4px solid;
+  border-bottom-left-radius: 8px;
+}
+
+.annotation-overlay-frame .bottom-right {
+  right: -4px;
+  bottom: -4px;
+  border-right: 4px solid;
+  border-bottom: 4px solid;
+  border-bottom-right-radius: 8px;
 }
 
 .annotation-overlay-shell.is-pass-through .annotation-overlay-canvas,
