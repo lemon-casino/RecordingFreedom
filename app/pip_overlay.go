@@ -16,24 +16,26 @@ const pipOverlayPadding = 24
 const stopPIPOverlayMediaScript = `window.__RF_PIP_STOP_TOKEN__=(window.__RF_PIP_STOP_TOKEN__||0)+1;if(window.__RF_STOP_PIP_CAMERA__){window.__RF_STOP_PIP_CAMERA__();}document.querySelectorAll("video").forEach((video)=>{try{video.pause();}catch(e){}const stream=video.srcObject;if(stream&&typeof stream.getTracks==="function"){stream.getTracks().forEach((track)=>track.stop());}video.srcObject=null;video.removeAttribute("src");try{video.load();}catch(e){}});window.__RF_PIP_OVERLAY__=undefined;`
 
 type PIPOverlayRequest struct {
-	Config           pip.Config `json:"config"`
-	Mode             string     `json:"mode,omitempty"`
-	CameraName       string     `json:"cameraName,omitempty"`
-	Camera           PIPCamera  `json:"camera,omitempty"`
-	PreviewImagePath string     `json:"previewImagePath,omitempty"`
+	Config            pip.Config `json:"config"`
+	Mode              string     `json:"mode,omitempty"`
+	CameraName        string     `json:"cameraName,omitempty"`
+	Camera            PIPCamera  `json:"camera,omitempty"`
+	PreviewImagePath  string     `json:"previewImagePath,omitempty"`
+	ClientOperationID uint64     `json:"clientOperationId,omitempty"`
 }
 
 type PIPOverlayState struct {
-	Config           pip.Config    `json:"config"`
-	Placement        pip.Placement `json:"placement"`
-	OverlayBounds    RegionRect    `json:"overlayBounds"`
-	WindowBounds     RegionRect    `json:"windowBounds"`
-	ContentBounds    RegionRect    `json:"contentBounds"`
-	Mode             string        `json:"mode"`
-	CameraName       string        `json:"cameraName,omitempty"`
-	Camera           PIPCamera     `json:"camera,omitempty"`
-	PreviewImagePath string        `json:"previewImagePath,omitempty"`
-	CaptureExcluded  bool          `json:"captureExcluded"`
+	Config            pip.Config    `json:"config"`
+	Placement         pip.Placement `json:"placement"`
+	OverlayBounds     RegionRect    `json:"overlayBounds"`
+	WindowBounds      RegionRect    `json:"windowBounds"`
+	ContentBounds     RegionRect    `json:"contentBounds"`
+	Mode              string        `json:"mode"`
+	CameraName        string        `json:"cameraName,omitempty"`
+	Camera            PIPCamera     `json:"camera,omitempty"`
+	PreviewImagePath  string        `json:"previewImagePath,omitempty"`
+	CaptureExcluded   bool          `json:"captureExcluded"`
+	ClientOperationID uint64        `json:"clientOperationId,omitempty"`
 }
 
 type PIPCamera struct {
@@ -57,12 +59,15 @@ func (s *RecordingFreedomService) ShowPIPOverlay(req PIPOverlayRequest) (PIPOver
 	})
 	if config.Preset == pip.PresetOff {
 		_ = s.HidePIPOverlay()
-		return s.pipOverlayState(config, req.Mode, camera, req.PreviewImagePath)
+		state, err := s.pipOverlayState(config, req.Mode, camera, req.PreviewImagePath)
+		state.ClientOperationID = req.ClientOperationID
+		return state, err
 	}
 	state, err := s.pipOverlayState(config, req.Mode, camera, req.PreviewImagePath)
 	if err != nil {
 		return PIPOverlayState{}, err
 	}
+	state.ClientOperationID = req.ClientOperationID
 	s.applyPIPOverlayState(state)
 	return state, nil
 }
@@ -85,12 +90,15 @@ func (s *RecordingFreedomService) UpdatePIPOverlay(req PIPOverlayRequest) (PIPOv
 	}
 	if config.Preset == pip.PresetOff {
 		_ = s.HidePIPOverlay()
-		return s.pipOverlayState(config, req.Mode, camera, req.PreviewImagePath)
+		state, err := s.pipOverlayState(config, req.Mode, camera, req.PreviewImagePath)
+		state.ClientOperationID = req.ClientOperationID
+		return state, err
 	}
 	state, err := s.pipOverlayState(config, req.Mode, camera, req.PreviewImagePath)
 	if err != nil {
 		return PIPOverlayState{}, err
 	}
+	state.ClientOperationID = req.ClientOperationID
 	s.applyPIPOverlayState(state)
 	return state, nil
 }

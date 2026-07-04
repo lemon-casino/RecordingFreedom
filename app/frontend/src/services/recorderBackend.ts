@@ -360,6 +360,7 @@ export type PIPOverlayState = {
   camera?: PIPOverlayCamera
   previewImagePath?: string
   captureExcluded: boolean
+  clientOperationId?: number
 }
 
 export type PIPPreviewImage = {
@@ -1028,21 +1029,21 @@ export async function hideRegionFrame(): Promise<void> {
   }
 }
 
-export async function showPipOverlay(config: PIPConfig, mode: PIPOverlayMode = 'edit', camera: string | PIPOverlayCamera = '', previewImagePath = ''): Promise<PIPOverlayState> {
+export async function showPipOverlay(config: PIPConfig, mode: PIPOverlayMode = 'edit', camera: string | PIPOverlayCamera = '', previewImagePath = '', clientOperationId = 0): Promise<PIPOverlayState> {
   try {
-    return fromBoundPipOverlayState(await RecordingFreedomService.ShowPIPOverlay(toBoundPipOverlayRequest(config, mode, camera, previewImagePath)))
+    return fromBoundPipOverlayState(await RecordingFreedomService.ShowPIPOverlay(toBoundPipOverlayRequest(config, mode, camera, previewImagePath, clientOperationId)))
   } catch (error) {
     console.info('Using browser PIP overlay fallback:', error)
-    return browserPipOverlayState(config, mode, camera, previewImagePath)
+    return browserPipOverlayState(config, mode, camera, previewImagePath, clientOperationId)
   }
 }
 
-export async function updatePipOverlay(config: PIPConfig, mode: PIPOverlayMode = 'edit', camera: string | PIPOverlayCamera = '', previewImagePath = ''): Promise<PIPOverlayState> {
+export async function updatePipOverlay(config: PIPConfig, mode: PIPOverlayMode = 'edit', camera: string | PIPOverlayCamera = '', previewImagePath = '', clientOperationId = 0): Promise<PIPOverlayState> {
   try {
-    return fromBoundPipOverlayState(await RecordingFreedomService.UpdatePIPOverlay(toBoundPipOverlayRequest(config, mode, camera, previewImagePath)))
+    return fromBoundPipOverlayState(await RecordingFreedomService.UpdatePIPOverlay(toBoundPipOverlayRequest(config, mode, camera, previewImagePath, clientOperationId)))
   } catch (error) {
     console.info('Using browser PIP overlay update fallback:', error)
-    return browserPipOverlayState(config, mode, camera, previewImagePath)
+    return browserPipOverlayState(config, mode, camera, previewImagePath, clientOperationId)
   }
 }
 
@@ -1472,6 +1473,7 @@ function fromBoundPipOverlayState(state: BoundPIPOverlayState): PIPOverlayState 
     camera: fromBoundPipCamera(state.camera),
     previewImagePath: state.previewImagePath,
     captureExcluded: state.captureExcluded,
+    clientOperationId: state.clientOperationId,
   }
 }
 
@@ -1981,7 +1983,7 @@ function toBoundScreenIndicatorRequest(sourceId: string): BoundScreenIndicatorRe
   }
 }
 
-function toBoundPipOverlayRequest(config: PIPConfig, mode: PIPOverlayMode, camera: string | PIPOverlayCamera, previewImagePath = ''): BoundPIPOverlayRequest {
+function toBoundPipOverlayRequest(config: PIPConfig, mode: PIPOverlayMode, camera: string | PIPOverlayCamera, previewImagePath = '', clientOperationId = 0): BoundPIPOverlayRequest {
   const target = normalizePipOverlayCamera(camera)
   return {
     config: config as unknown as BoundPIPOverlayRequest['config'],
@@ -1989,10 +1991,11 @@ function toBoundPipOverlayRequest(config: PIPConfig, mode: PIPOverlayMode, camer
     cameraName: target.name,
     camera: target as BoundPIPOverlayRequest['camera'],
     previewImagePath,
+    clientOperationId,
   }
 }
 
-function browserPipOverlayState(config: PIPConfig, mode: PIPOverlayMode, camera: string | PIPOverlayCamera, previewImagePath = ''): PIPOverlayState {
+function browserPipOverlayState(config: PIPConfig, mode: PIPOverlayMode, camera: string | PIPOverlayCamera, previewImagePath = '', clientOperationId = 0): PIPOverlayState {
   const target = normalizePipOverlayCamera(camera)
   const overlayBounds = {x: 0, y: 0, width: Math.max(320, window.innerWidth || 1280), height: Math.max(240, window.innerHeight || 720)}
   const normalized = fromBoundPipConfig(config, config.preset)
@@ -2015,6 +2018,7 @@ function browserPipOverlayState(config: PIPConfig, mode: PIPOverlayMode, camera:
     camera: target,
     previewImagePath,
     captureExcluded: false,
+    clientOperationId,
   }
 }
 

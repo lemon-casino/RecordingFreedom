@@ -2700,6 +2700,8 @@ function PIPOverlayWindow() {
   const activeCameraStreamRef = useRef<MediaStream | null>(null)
   const cameraStreamsRef = useRef<Set<MediaStream>>(new Set())
   const cameraRequestTokenRef = useRef(0)
+  const overlayOperationIdRef = useRef(overlayState?.clientOperationId ?? 0)
+  const overlayClosedRef = useRef(!overlayState || overlayState.config.preset === 'off')
   const previewImageModifiedRef = useRef(0)
   const previewImageDataUrlRef = useRef<string | null>(null)
   const [cameraReady, setCameraReady] = useState(false)
@@ -2713,6 +2715,25 @@ function PIPOverlayWindow() {
   }
 
   const pipStopTokenChanged = (stopToken: number) => (pipWindow.__RF_PIP_STOP_TOKEN__ ?? 0) !== stopToken
+
+  const nextPipOverlayOperationId = () => {
+    overlayOperationIdRef.current += 1
+    return overlayOperationIdRef.current
+  }
+
+  const cancelPendingPipOverlayEdits = () => {
+    if (previewFrameRef.current !== null) {
+      window.cancelAnimationFrame(previewFrameRef.current)
+      previewFrameRef.current = null
+    }
+    pendingPreviewRef.current = null
+    editRef.current = null
+  }
+
+  const pipOverlayStateIsStale = (state: PIPOverlayState | undefined) => {
+    const operationId = state?.clientOperationId ?? 0
+    return operationId > 0 && operationId < overlayOperationIdRef.current
+  }
 
   const setPipPreviewImage = (dataUrl: string | null) => {
     previewImageDataUrlRef.current = dataUrl
@@ -2818,8 +2839,24 @@ function PIPOverlayWindow() {
     const onState = (event: Event) => {
       const next = (event as CustomEvent<PIPOverlayState>).detail
       if (next) {
+        if (pipOverlayStateIsStale(next)) {
+          logPipCameraEvent('overlay-state-stale', {
+            incomingOperationId: next.clientOperationId ?? 0,
+            currentOperationId: overlayOperationIdRef.current,
+            preset: next.config.preset,
+          })
+          if (overlayClosedRef.current && next.config.preset !== 'off') {
+            cancelPipCameraStream()
+            void hidePipOverlay()
+          }
+          return
+        }
+        if (next.clientOperationId && next.clientOperationId > overlayOperationIdRef.current) {
+          overlayOperationIdRef.current = next.clientOperationId
+        }
         if (next.config.preset === 'off') {
           logPipCameraEvent('overlay-state-off')
+          overlayClosedRef.current = true
           cancelPipCameraStream()
           overlayStateRef.current = undefined
           setOverlayState(undefined)
@@ -2831,7 +2868,9 @@ function PIPOverlayWindow() {
           preset: next.config.preset,
           cameraId: next.camera?.deviceId ?? '',
           cameraName: next.camera?.name ?? next.cameraName ?? '',
+          clientOperationId: next.clientOperationId ?? 0,
         })
+        overlayClosedRef.current = false
         overlayStateRef.current = next
         setOverlayState(next)
       }
@@ -2982,39 +3021,55 @@ function PIPOverlayWindow() {
     }
   }, [])
 
-  const overlayConfig = async (config: PIPConfig, commit: boolean) => {
+  const overlayConfig = async (config: PIPConfig, commit: boolean, operationId = nextPipOverlayOperationId()) => {
     const state = overlayStateRef.current
     const mode = state?.mode ?? 'edit'
     const cameraTarget = state?.camera ?? (state?.cameraName ? {name: state.cameraName} : '')
     const previewImagePath = state?.previewImagePath ?? ''
     const nextConfig = normalizePipConfig(config, config.preset)
+    if (nextConfig.preset !== 'off') {
+      overlayClosedRef.current = false
+    }
     const nextState = commit
-      ? await updatePipOverlay(nextConfig, mode, cameraTarget, previewImagePath)
-      : await showPipOverlay(nextConfig, mode, cameraTarget, previewImagePath)
+      ? await updatePipOverlay(nextConfig, mode, cameraTarget, previewImagePath, operationId)
+      : await showPipOverlay(nextConfig, mode, cameraTarget, previewImagePath, operationId)
+    if (operationId !== overlayOperationIdRef.current || overlayClosedRef.current || pipOverlayStateIsStale(nextState)) {
+      logPipCameraEvent('overlay-config-stale', {
+        operationId,
+        currentOperationId: overlayOperationIdRef.current,
+        closed: overlayClosedRef.current,
+        preset: nextState.config.preset,
+      })
+      if (overlayClosedRef.current && nextState.config.preset !== 'off') {
+        cancelPipCameraStream()
+        void hidePipOverlay()
+      }
+      return
+    }
+    overlayClosedRef.current = nextState.config.preset === 'off'
     overlayStateRef.current = nextState
     setOverlayState(nextState)
   }
 
   const previewConfig = (config: PIPConfig) => {
+    if (overlayClosedRef.current) return
     pendingPreviewRef.current = config
     if (previewFrameRef.current !== null) return
     previewFrameRef.current = window.requestAnimationFrame(() => {
       previewFrameRef.current = null
       const pending = pendingPreviewRef.current
       pendingPreviewRef.current = null
-      if (pending) {
-        void overlayConfig(pending, false).catch((error) => console.info('PIP preview update failed:', error))
+      if (pending && !overlayClosedRef.current) {
+        const operationId = nextPipOverlayOperationId()
+        void overlayConfig(pending, false, operationId).catch((error) => console.info('PIP preview update failed:', error))
       }
     })
   }
 
   const commitConfig = async (config: PIPConfig) => {
-    if (previewFrameRef.current !== null) {
-      window.cancelAnimationFrame(previewFrameRef.current)
-      previewFrameRef.current = null
-      pendingPreviewRef.current = null
-    }
-    await overlayConfig(config, true)
+    cancelPendingPipOverlayEdits()
+    const operationId = nextPipOverlayOperationId()
+    await overlayConfig(config, true, operationId)
   }
 
   const beginEdit = (event: ReactPointerEvent<HTMLElement>, action: PIPEditAction) => {
@@ -3066,14 +3121,35 @@ function PIPOverlayWindow() {
   }
 
   const closePip = () => {
+    const state = overlayStateRef.current ?? overlayState
+    const operationId = nextPipOverlayOperationId()
+    overlayClosedRef.current = true
+    cancelPendingPipOverlayEdits()
     cancelPipCameraStream()
-    if (!overlayState) {
+    overlayStateRef.current = undefined
+    setOverlayState(undefined)
+    setCameraError(null)
+    if (!state) {
       void hidePipOverlay()
       return
     }
-    void commitConfig({...overlayState.config, preset: 'off'})
-      .then(() => hidePipOverlay())
+    const cameraTarget = state.camera ?? (state.cameraName ? {name: state.cameraName} : '')
+    void updatePipOverlay({...state.config, preset: 'off'}, state.mode, cameraTarget, state.previewImagePath ?? '', operationId)
       .catch((error) => console.info('PIP close failed:', error))
+      .finally(() => {
+        if (operationId !== overlayOperationIdRef.current && !overlayClosedRef.current) return
+        cancelPipCameraStream()
+        void hidePipOverlay()
+        for (const delay of [120, 500]) {
+          window.setTimeout(() => {
+            if (operationId !== overlayOperationIdRef.current || !overlayClosedRef.current) return
+            cancelPipCameraStream()
+            overlayStateRef.current = undefined
+            setOverlayState(undefined)
+            void hidePipOverlay()
+          }, delay)
+        }
+      })
   }
 
   const content = overlayState?.config.preset !== 'off' ? overlayState?.contentBounds : undefined

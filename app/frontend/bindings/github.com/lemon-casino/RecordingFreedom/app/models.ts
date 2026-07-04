@@ -186,6 +186,7 @@ export interface PIPOverlayRequest {
     "cameraName"?: string;
     "camera"?: PIPCamera;
     "previewImagePath"?: string;
+    "clientOperationId"?: number;
 }
 
 export interface PIPOverlayState {
@@ -199,6 +200,7 @@ export interface PIPOverlayState {
     "camera"?: PIPCamera;
     "previewImagePath"?: string;
     "captureExcluded": boolean;
+    "clientOperationId"?: number;
 }
 
 export interface PIPPreviewImageRequest {
