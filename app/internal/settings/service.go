@@ -18,6 +18,12 @@ import (
 
 const fileName = "settings.json"
 
+const (
+	pipScaleSchemaVersion = 2
+	legacyPIPMinimumScale = 0.016
+	legacyPIPMaximumScale = 0.08
+)
+
 type Service struct {
 	appData *appdata.Service
 	now     func() time.Time
@@ -55,6 +61,7 @@ func (s *Service) Load() (Settings, error) {
 	if err := json.Unmarshal(data, &result); err != nil {
 		return Settings{}, err
 	}
+	result = migrateLoadedSettings(result)
 	return normalize(result), nil
 }
 
@@ -124,7 +131,7 @@ func Default() Settings {
 
 func normalize(value Settings) Settings {
 	defaults := Default()
-	if value.SchemaVersion == 0 {
+	if value.SchemaVersion < SchemaVersion {
 		value.SchemaVersion = SchemaVersion
 	}
 	if value.Locale == "" || !validLocale(value.Locale) {
@@ -153,6 +160,33 @@ func normalize(value Settings) Settings {
 	value.Shortcuts = normalizeShortcuts(value.Shortcuts, defaults.Shortcuts)
 	if value.Window.Theme == "" || !validTheme(value.Window.Theme) {
 		value.Window.Theme = defaults.Window.Theme
+	}
+	return value
+}
+
+func migrateLoadedSettings(value Settings) Settings {
+	if value.SchemaVersion >= pipScaleSchemaVersion {
+		return value
+	}
+	value.Camera.PIP.Scale = migrateLegacyPIPScale(value.Camera.PIP.Scale)
+	return value
+}
+
+func migrateLegacyPIPScale(value float64) float64 {
+	if value <= 0 {
+		return value
+	}
+	value = clampSettingsFloat(value, legacyPIPMinimumScale, legacyPIPMaximumScale)
+	progress := (value - legacyPIPMinimumScale) / (legacyPIPMaximumScale - legacyPIPMinimumScale)
+	return pip.MinimumScale + progress*(pip.MaximumScale-pip.MinimumScale)
+}
+
+func clampSettingsFloat(value float64, minimum float64, maximum float64) float64 {
+	if value < minimum {
+		return minimum
+	}
+	if value > maximum {
+		return maximum
 	}
 	return value
 }

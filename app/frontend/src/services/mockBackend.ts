@@ -496,7 +496,7 @@ export const systemAudioDevices = mediaInventory.systemAudio
 export const cameraDevices = mediaInventory.cameras
 
 export const defaultSettings: AppSettings = {
-  schemaVersion: 1,
+  schemaVersion: 2,
   locale: 'zh-CN',
   source: {
     lastSourceType: 'screen',
@@ -527,7 +527,7 @@ export const defaultSettings: AppSettings = {
       shape: 'circle',
       mirror: true,
       position: {x: 1, y: 1},
-      scale: 0.08,
+      scale: 0.15,
       edgeFeather: 0.16,
     },
   },
@@ -558,7 +558,7 @@ export function createMockRecordingPackage(request: MockRecordingRequest) {
     id: `recording-${stamp}`,
     packagePath: `data/video/recording-${stamp}.rfrec`,
     manifest: {
-      schemaVersion: 1,
+      schemaVersion: 2,
       app: 'RecordingFreedom',
       status: 'recording',
       media: {screenVideoPath: 'screen.mock.txt'},
@@ -612,7 +612,7 @@ export function createMockAudioOnlyRecordingPackage(request: AudioOnlyRecordingR
     id: `recording-${stamp}`,
     packagePath: `data/video/recording-${stamp}.rfrec`,
     manifest: {
-      schemaVersion: 1,
+      schemaVersion: 2,
       app: 'RecordingFreedom',
       status: 'recording',
       recordingMode: 'audio-only',

@@ -17,8 +17,8 @@ const (
 	DefaultShape       Shape = ShapeCircle
 	DefaultScale             = MaximumScale
 	DefaultEdgeFeather       = 0.16
-	MaximumScale             = 0.08
-	MinimumScale             = MaximumScale * 0.2
+	MaximumScale             = 0.15
+	MinimumScale             = 0.08
 	MinimumPixelSize         = 24
 	MaximumEdgeFeather       = 0.42
 )

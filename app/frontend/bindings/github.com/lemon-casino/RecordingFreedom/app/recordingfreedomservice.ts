@@ -75,6 +75,10 @@ export function CompleteScreenshotRegionSelection(req: $models.RegionSelectionRe
     return $Call.ByID(167393633, req);
 }
 
+export function CompleteScrollingScreenshotSelection(req: $models.RegionSelectionRequest): $CancellablePromise<$models.ScreenshotCaptureResult> {
+    return $Call.ByID(595150326, req);
+}
+
 export function ConsumeScreenshotWhiteboardContext(): $CancellablePromise<$models.ScreenshotWhiteboardContext> {
     return $Call.ByID(3553890718);
 }
@@ -335,7 +339,7 @@ export function StartRecording(req: recording$0.StartRequest): $CancellablePromi
     return $Call.ByID(171835981, req);
 }
 
-export function StartScrollingScreenshot(): $CancellablePromise<void> {
+export function StartScrollingScreenshot(): $CancellablePromise<$models.RegionSelectionSession> {
     return $Call.ByID(3090857805);
 }
 

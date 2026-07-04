@@ -157,6 +157,81 @@ func TestSaveAndLoadSettings(t *testing.T) {
 	}
 }
 
+func TestLoadMigratesLegacyPIPScaleRange(t *testing.T) {
+	root := t.TempDir()
+	service := NewService(appdata.NewService(root))
+	path, err := service.Path()
+	if err != nil {
+		t.Fatalf("Path() error = %v", err)
+	}
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		t.Fatalf("MkdirAll() error = %v", err)
+	}
+	legacy := `{
+  "schemaVersion": 1,
+  "locale": "zh-CN",
+  "camera": {
+    "enabled": true,
+    "deviceId": "camera:default",
+    "pipPreset": "bottom-right",
+    "pip": {
+      "preset": "bottom-right",
+      "shape": "circle",
+      "mirror": true,
+      "position": {"x": 1, "y": 1},
+      "scale": 0.08,
+      "edgeFeather": 0.16
+    }
+  }
+}`
+	if err := os.WriteFile(path, []byte(legacy), 0o644); err != nil {
+		t.Fatalf("WriteFile() error = %v", err)
+	}
+
+	loaded, err := service.Load()
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+	if loaded.SchemaVersion != SchemaVersion {
+		t.Fatalf("schema version = %d, want %d", loaded.SchemaVersion, SchemaVersion)
+	}
+	if loaded.Camera.PIP.Scale != pip.MaximumScale {
+		t.Fatalf("legacy max scale = %v, want migrated max %v", loaded.Camera.PIP.Scale, pip.MaximumScale)
+	}
+}
+
+func TestSavePreservesNewPIPMinimumScale(t *testing.T) {
+	service := NewService(appdata.NewService(t.TempDir()))
+
+	saved, err := service.Save(Settings{
+		Camera: CameraSettings{
+			PIPPreset: string(pip.PresetBottomRight),
+			PIP: pip.Config{
+				Preset:      pip.PresetBottomRight,
+				Shape:       pip.ShapeCircle,
+				Mirror:      true,
+				Position:    pip.Position{X: 1, Y: 1},
+				Scale:       pip.MinimumScale,
+				EdgeFeather: pip.DefaultEdgeFeather,
+			},
+		},
+	})
+	if err != nil {
+		t.Fatalf("Save() error = %v", err)
+	}
+	if saved.Camera.PIP.Scale != pip.MinimumScale {
+		t.Fatalf("minimum scale = %v, want preserved %v", saved.Camera.PIP.Scale, pip.MinimumScale)
+	}
+
+	loaded, err := service.Load()
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+	if loaded.Camera.PIP.Scale != pip.MinimumScale {
+		t.Fatalf("loaded minimum scale = %v, want preserved %v", loaded.Camera.PIP.Scale, pip.MinimumScale)
+	}
+}
+
 func TestSaveNormalizesInvalidSettings(t *testing.T) {
 	service := NewService(appdata.NewService(t.TempDir()))
 

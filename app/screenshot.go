@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"image"
+	"image/color"
 	"image/png"
 	"os"
 	"path/filepath"
@@ -26,10 +27,20 @@ const (
 	screenshotMaxPreviewBytes        = 16 * 1024 * 1024
 	screenshotThumbnailMaxSide       = 320
 	regionSelectionPurposeScreenshot = "screenshot"
+	regionSelectionPurposeScrolling  = "scrolling-screenshot"
 	annotationOverlayModeScreenshot  = "screenshot"
 	screenshotAnnotationTargetType   = "screenshot-region"
 	screenshotAnnotationTargetID     = "screenshot:region"
+	scrollingScreenshotMode          = "scrolling"
+	scrollingScreenshotMaxFrames     = 24
+	scrollingScreenshotMaxHeight     = 32000
+	scrollingScreenshotMinAppend     = 8
+	scrollingScreenshotScrollDelay   = 180 * time.Millisecond
 )
+
+type screenshotCaptureFunc func(image.Rectangle) (*image.RGBA, error)
+type screenshotScrollFunc func(image.Rectangle) error
+type screenshotSleepFunc func(time.Duration)
 
 type ScreenshotCaptureRequest struct {
 	Mode   string      `json:"mode,omitempty"`
@@ -663,8 +674,89 @@ func (s *RecordingFreedomService) ConsumeScreenshotWhiteboardContext() Screensho
 	return context
 }
 
-func (s *RecordingFreedomService) StartScrollingScreenshot() error {
-	return errors.New("scrolling screenshot requires platform scroll automation and is not enabled in this build")
+func (s *RecordingFreedomService) StartScrollingScreenshot() (RegionSelectionSession, error) {
+	if recorderIsActive(s.recorder.State()) {
+		return RegionSelectionSession{}, errors.New("cannot take a scrolling screenshot while recording is active")
+	}
+	if s.app == nil || s.regionOverlay == nil {
+		return RegionSelectionSession{}, errors.New("region overlay window is not configured")
+	}
+	bounds, displayCount := regionOverlayBounds(s.app.Screen.GetAll())
+	captureBounds := screenshotCaptureUnionBounds()
+	session := RegionSelectionSession{
+		ID:            fmt.Sprintf("scrolling-screenshot-%d", time.Now().UnixNano()),
+		Bounds:        regionRectFromAppRect(bounds),
+		CaptureBounds: &captureBounds,
+		MinimumWidth:  minRegionWidth,
+		MinimumHeight: minRegionHeight,
+		DisplayCount:  displayCount,
+		Purpose:       regionSelectionPurposeScrolling,
+	}
+	s.regionMu.Lock()
+	s.regionSession = &session
+	s.regionMu.Unlock()
+	s.regionOverlay.SetBounds(bounds)
+	s.regionOverlay.SetAlwaysOnTop(true)
+	s.regionOverlay.Show()
+	s.regionOverlay.SetBounds(bounds)
+	s.regionOverlay.Focus()
+	if payload, err := json.Marshal(session); err == nil {
+		s.regionOverlay.ExecJS(fmt.Sprintf(
+			"window.__RF_REGION_SESSION__=%s;window.dispatchEvent(new CustomEvent('rf-region-session',{detail:window.__RF_REGION_SESSION__}));",
+			string(payload),
+		))
+	}
+	s.logEvent("screenshot", "scrolling-selector-show", map[string]string{
+		"sessionId": session.ID,
+		"bounds":    fmt.Sprintf("%d,%d %dx%d", bounds.X, bounds.Y, bounds.Width, bounds.Height),
+	})
+	return session, nil
+}
+
+func (s *RecordingFreedomService) CompleteScrollingScreenshotSelection(req RegionSelectionRequest) (ScreenshotCaptureResult, error) {
+	s.regionMu.Lock()
+	session := s.regionSession
+	s.regionSession = nil
+	s.screenshotRegionDIP = application.Rect{}
+	s.regionMu.Unlock()
+	if session == nil {
+		return ScreenshotCaptureResult{}, errors.New("no active scrolling screenshot selection session")
+	}
+	if session.Purpose != regionSelectionPurposeScrolling {
+		return ScreenshotCaptureResult{}, errors.New("active region selection session is not for scrolling screenshots")
+	}
+	relative := normalizeRegionSelection(req)
+	if relative.Width < session.MinimumWidth || relative.Height < session.MinimumHeight {
+		return ScreenshotCaptureResult{}, fmt.Errorf("selected scrolling screenshot region must be at least %d x %d", session.MinimumWidth, session.MinimumHeight)
+	}
+	if s.regionOverlay != nil {
+		s.regionOverlay.Hide()
+	}
+	capsuleHidden := false
+	if s.capsuleWindow != nil {
+		s.capsuleWindow.Hide()
+		capsuleHidden = true
+	}
+	defer func() {
+		if capsuleHidden {
+			s.restoreCapsuleWindow()
+		}
+	}()
+	time.Sleep(160 * time.Millisecond)
+
+	captureRect := mapRegionSelectionToCaptureRect(*session, regionRectFromAppRect(relative))
+	region := RegionRect{
+		X:      captureRect.Min.X,
+		Y:      captureRect.Min.Y,
+		Width:  captureRect.Dx(),
+		Height: captureRect.Dy(),
+	}
+	item, err := s.captureScrollingScreenshot(captureRect, &region)
+	if err != nil {
+		return ScreenshotCaptureResult{}, err
+	}
+	s.emitScreenshotCaptured(item)
+	return ScreenshotCaptureResult{Item: item}, nil
 }
 
 func (s *RecordingFreedomService) captureScreenshotRect(req ScreenshotCaptureRequest) (image.Rectangle, *RegionRect, error) {
@@ -699,6 +791,217 @@ func (s *RecordingFreedomService) captureScreenshot(rect image.Rectangle, mode s
 		return ScreenshotItem{}, errors.New("captured screenshot is empty")
 	}
 	return s.saveScreenshotImage(img, mode, region)
+}
+
+func (s *RecordingFreedomService) captureScrollingScreenshot(rect image.Rectangle, region *RegionRect) (ScreenshotItem, error) {
+	img, frames, scrolled, err := captureScrollingScreenshotImage(rect, desktopscreenshot.CaptureRect, scrollDownAtRect, time.Sleep)
+	if err != nil {
+		return ScreenshotItem{}, err
+	}
+	mode := scrollingScreenshotMode
+	event := "scrolling-capture"
+	if !scrolled {
+		mode = "region"
+		event = "scrolling-fallback-region"
+	}
+	item, err := s.saveScreenshotImage(img, mode, region)
+	if err != nil {
+		return ScreenshotItem{}, err
+	}
+	s.logEvent("screenshot", event, map[string]string{
+		"id":     item.ID,
+		"path":   item.Path,
+		"width":  fmt.Sprint(item.Width),
+		"height": fmt.Sprint(item.Height),
+		"frames": fmt.Sprint(frames),
+		"mode":   item.Mode,
+	})
+	return item, nil
+}
+
+func captureScrollingScreenshotImage(rect image.Rectangle, capture screenshotCaptureFunc, scroll screenshotScrollFunc, sleep screenshotSleepFunc) (*image.RGBA, int, bool, error) {
+	if rect.Empty() {
+		return nil, 0, false, errors.New("scrolling screenshot rectangle is empty")
+	}
+	first, err := capture(rect)
+	if err != nil {
+		return nil, 0, false, err
+	}
+	if first == nil || first.Bounds().Empty() {
+		return nil, 0, false, errors.New("captured scrolling screenshot frame is empty")
+	}
+	stitched := cloneToRGBA(first)
+	previous := cloneToRGBA(first)
+	frames := 1
+	appendedTotal := 0
+	stableFrames := 0
+	for frames < scrollingScreenshotMaxFrames && stitched.Bounds().Dy() < scrollingScreenshotMaxHeight {
+		if err := scroll(rect); err != nil {
+			return nil, frames, false, err
+		}
+		if sleep != nil {
+			sleep(scrollingScreenshotScrollDelay)
+		}
+		next, err := capture(rect)
+		if err != nil {
+			return nil, frames, false, err
+		}
+		if next == nil || next.Bounds().Empty() {
+			return nil, frames, false, errors.New("captured scrolling screenshot frame is empty")
+		}
+		frames++
+		if previous.Bounds().Dx() != next.Bounds().Dx() || previous.Bounds().Dy() != next.Bounds().Dy() {
+			return nil, frames, false, fmt.Errorf("scrolling screenshot frame size changed from %dx%d to %dx%d", previous.Bounds().Dx(), previous.Bounds().Dy(), next.Bounds().Dx(), next.Bounds().Dy())
+		}
+		nextFrame := cloneToRGBA(next)
+		if framesNearlyEqual(previous, nextFrame) {
+			break
+		}
+		var appended int
+		stitched, appended = appendScrollingFrame(stitched, previous, nextFrame, scrollingScreenshotMaxHeight)
+		if appended > 0 {
+			appendedTotal += appended
+		}
+		if appended <= scrollingScreenshotMinAppend {
+			stableFrames++
+			if stableFrames >= 2 {
+				break
+			}
+		} else {
+			stableFrames = 0
+		}
+		previous = nextFrame
+	}
+	if appendedTotal == 0 {
+		return stitched, frames, false, nil
+	}
+	return stitched, frames, true, nil
+}
+
+func appendScrollingFrame(stitched *image.RGBA, previous *image.RGBA, next *image.RGBA, maxHeight int) (*image.RGBA, int) {
+	if stitched == nil || previous == nil || next == nil {
+		return stitched, 0
+	}
+	width := stitched.Bounds().Dx()
+	if width <= 0 || next.Bounds().Dx() != width {
+		return stitched, 0
+	}
+	overlap := detectScrollingOverlap(previous, next)
+	startY := overlap
+	if startY < 0 {
+		startY = 0
+	}
+	if startY >= next.Bounds().Dy() {
+		return stitched, 0
+	}
+	appendHeight := next.Bounds().Dy() - startY
+	currentHeight := stitched.Bounds().Dy()
+	if maxHeight > 0 && currentHeight+appendHeight > maxHeight {
+		appendHeight = maxHeight - currentHeight
+	}
+	if appendHeight <= 0 {
+		return stitched, 0
+	}
+	dst := image.NewRGBA(image.Rect(0, 0, width, currentHeight+appendHeight))
+	draw.Draw(dst, image.Rect(0, 0, width, currentHeight), stitched, stitched.Bounds().Min, draw.Src)
+	draw.Draw(dst, image.Rect(0, currentHeight, width, currentHeight+appendHeight), next, image.Point{X: next.Bounds().Min.X, Y: next.Bounds().Min.Y + startY}, draw.Src)
+	return dst, appendHeight
+}
+
+func detectScrollingOverlap(previous *image.RGBA, next *image.RGBA) int {
+	if previous == nil || next == nil {
+		return 0
+	}
+	width := minInt(previous.Bounds().Dx(), next.Bounds().Dx())
+	height := minInt(previous.Bounds().Dy(), next.Bounds().Dy())
+	if width <= 0 || height < 24 {
+		return 0
+	}
+	minShift := maxInt(6, height/12)
+	maxShift := maxInt(minShift, height*9/10)
+	bestShift := 0
+	bestScore := int64(1<<62 - 1)
+	for shift := minShift; shift <= maxShift; shift += 4 {
+		score := overlapAverageDiff(previous, next, shift, width, height)
+		if score < bestScore {
+			bestScore = score
+			bestShift = shift
+		}
+	}
+	if bestShift == 0 {
+		return 0
+	}
+	for shift := maxInt(minShift, bestShift-3); shift <= minInt(maxShift, bestShift+3); shift++ {
+		score := overlapAverageDiff(previous, next, shift, width, height)
+		if score < bestScore {
+			bestScore = score
+			bestShift = shift
+		}
+	}
+	if bestScore > 18 {
+		return 0
+	}
+	return height - bestShift
+}
+
+func overlapAverageDiff(previous *image.RGBA, next *image.RGBA, shift int, width int, height int) int64 {
+	overlap := height - shift
+	if overlap <= 0 {
+		return 1<<62 - 1
+	}
+	stepX := maxInt(1, width/80)
+	stepY := maxInt(1, overlap/80)
+	var total int64
+	var samples int64
+	prevBounds := previous.Bounds()
+	nextBounds := next.Bounds()
+	for y := 0; y < overlap; y += stepY {
+		for x := 0; x < width; x += stepX {
+			total += int64(colorDistance(previous.At(prevBounds.Min.X+x, prevBounds.Min.Y+shift+y), next.At(nextBounds.Min.X+x, nextBounds.Min.Y+y)))
+			samples++
+		}
+	}
+	if samples == 0 {
+		return 1<<62 - 1
+	}
+	return total / samples
+}
+
+func framesNearlyEqual(previous *image.RGBA, next *image.RGBA) bool {
+	if previous == nil || next == nil {
+		return false
+	}
+	if previous.Bounds().Dx() != next.Bounds().Dx() || previous.Bounds().Dy() != next.Bounds().Dy() {
+		return false
+	}
+	score := overlapAverageDiff(previous, next, 0, previous.Bounds().Dx(), previous.Bounds().Dy())
+	return score <= 2
+}
+
+func colorDistance(a color.Color, b color.Color) int {
+	ar, ag, ab, aa := a.RGBA()
+	br, bg, bb, ba := b.RGBA()
+	return absInt(int(ar>>8)-int(br>>8)) +
+		absInt(int(ag>>8)-int(bg>>8)) +
+		absInt(int(ab>>8)-int(bb>>8)) +
+		absInt(int(aa>>8)-int(ba>>8))
+}
+
+func cloneToRGBA(src image.Image) *image.RGBA {
+	if src == nil || src.Bounds().Empty() {
+		return image.NewRGBA(image.Rect(0, 0, 0, 0))
+	}
+	bounds := src.Bounds()
+	dst := image.NewRGBA(image.Rect(0, 0, bounds.Dx(), bounds.Dy()))
+	draw.Draw(dst, dst.Bounds(), src, bounds.Min, draw.Src)
+	return dst
+}
+
+func absInt(value int) int {
+	if value < 0 {
+		return -value
+	}
+	return value
 }
 
 func (s *RecordingFreedomService) saveScreenshotImage(img image.Image, mode string, region *RegionRect) (ScreenshotItem, error) {

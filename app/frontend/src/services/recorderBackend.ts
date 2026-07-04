@@ -280,6 +280,11 @@ const browserWhiteboardVisibilityEvent = 'rf-whiteboard-visibility'
 const browserScreenshotCapturedEvent = 'rf-screenshot-captured'
 const browserScreenshotPinEvent = 'rf-screenshot-pin'
 const browserCapsuleDockSideEvent = 'rf-capsule-dock-side'
+const settingsSchemaVersion = 2
+const legacyPipMinimumScale = 0.016
+const legacyPipMaximumScale = 0.08
+const pipMinimumScale = 0.08
+const pipMaximumScale = 0.15
 const capsuleWindowWidth = 760
 const capsuleWindowCompactWidth = 380
 const capsuleWindowCollapsedHeight = 96
@@ -395,6 +400,8 @@ export async function logClientEvent(component: string, event: string, fields: R
   }
 }
 
+export type RegionSelectionPurpose = 'capture' | 'annotation' | 'screenshot' | 'scrolling-screenshot'
+
 export type RegionSelectionSession = {
   id: string
   bounds: {x: number; y: number; width: number; height: number}
@@ -402,7 +409,7 @@ export type RegionSelectionSession = {
   minimumWidth: number
   minimumHeight: number
   displayCount: number
-  purpose?: 'capture' | 'annotation' | 'screenshot'
+  purpose?: RegionSelectionPurpose
 }
 
 export type RegionSelectionResult = {
@@ -1356,6 +1363,20 @@ export async function completeScreenshotRegionSelection(request: RegionSelection
   }
 }
 
+export async function completeScrollingScreenshotSelection(request: RegionSelectionSession['bounds']): Promise<ScreenshotItem> {
+  try {
+    const result = await RecordingFreedomService.CompleteScrollingScreenshotSelection(toBoundRegionSelectionRequest(request))
+    return fromBoundScreenshotCaptureResult(result as BoundScreenshotCaptureResult).item
+  } catch (error) {
+    if (isWailsDesktopRuntime()) throw error
+    console.info('Using browser scrolling screenshot completion fallback:', error)
+    const item = createBrowserScreenshotItem('region', request)
+    saveBrowserScreenshotHistory([item, ...loadBrowserScreenshotHistory()])
+    window.dispatchEvent(new CustomEvent(browserScreenshotCapturedEvent, {detail: item}))
+    return item
+  }
+}
+
 export async function beginScreenshotRegionEdit(request: RegionSelectionSession['bounds']): Promise<void> {
   try {
     await RecordingFreedomService.BeginScreenshotRegionEdit(toBoundRegionSelectionRequest(request))
@@ -1776,7 +1797,19 @@ export async function startScrollingScreenshot(): Promise<void> {
   } catch (error) {
     if (isWailsDesktopRuntime()) throw error
     console.info('Using browser scrolling screenshot fallback:', error)
-    throw error
+    const session: RegionSelectionSession = {
+      id: `browser-scrolling-screenshot-${Date.now()}`,
+      bounds: {x: 0, y: 0, width: window.innerWidth, height: window.innerHeight},
+      captureBounds: {x: 0, y: 0, width: window.innerWidth, height: window.innerHeight},
+      minimumWidth: 64,
+      minimumHeight: 64,
+      displayCount: 1,
+      purpose: 'scrolling-screenshot',
+    }
+    ;(window as Window & {__RF_REGION_SESSION__?: RegionSelectionSession}).__RF_REGION_SESSION__ = session
+    window.dispatchEvent(new CustomEvent('rf-region-session', {detail: session}))
+    const popup = window.open('/#/region-overlay', 'recordingfreedom-scrolling-screenshot', 'width=1280,height=720')
+    popup?.focus()
   }
 }
 
@@ -2287,7 +2320,7 @@ function fromBoundRegionSelectionSession(session: BoundRegionSelectionSession): 
     minimumWidth: session.minimumWidth,
     minimumHeight: session.minimumHeight,
     displayCount: session.displayCount,
-    purpose: session.purpose === 'annotation' || session.purpose === 'screenshot' ? session.purpose : 'capture',
+    purpose: session.purpose === 'annotation' || session.purpose === 'screenshot' || session.purpose === 'scrolling-screenshot' ? session.purpose : 'capture',
   }
 }
 
@@ -2883,7 +2916,7 @@ function loadBrowserSettings(): AppSettings {
   const raw = window.localStorage?.getItem(browserSettingsKey)
   if (!raw) return defaultSettings
   try {
-    const parsed = JSON.parse(raw)
+    const parsed = migrateBrowserSettings(JSON.parse(raw))
     const next = {
       ...defaultSettings,
       ...parsed,
@@ -2905,6 +2938,32 @@ function loadBrowserSettings(): AppSettings {
   } catch {
     return defaultSettings
   }
+}
+
+function migrateBrowserSettings(value: unknown): Partial<AppSettings> {
+  const record = value && typeof value === 'object' ? value as Partial<AppSettings> : {}
+  const schemaVersion = typeof record.schemaVersion === 'number' && Number.isFinite(record.schemaVersion) ? record.schemaVersion : 0
+  if (schemaVersion >= settingsSchemaVersion) return record
+  const next: Partial<AppSettings> = {...record, schemaVersion: settingsSchemaVersion}
+  const camera = record.camera
+  const pip = camera?.pip
+  if (!camera || !pip) return next
+  const scale = pip.scale
+  next.camera = {
+    ...camera,
+    pip: {
+      ...pip,
+      scale: typeof scale === 'number' && Number.isFinite(scale) ? migrateLegacyPipScale(scale) : scale,
+    },
+  }
+  return next
+}
+
+function migrateLegacyPipScale(scale: number): number {
+  if (scale <= 0) return scale
+  const clamped = normalizedRange(scale, legacyPipMaximumScale, legacyPipMinimumScale, legacyPipMaximumScale)
+  const progress = (clamped - legacyPipMinimumScale) / (legacyPipMaximumScale - legacyPipMinimumScale)
+  return pipMinimumScale + progress * (pipMaximumScale - pipMinimumScale)
 }
 
 function fromBoundWhiteboardSettings(value: Partial<AppSettings['whiteboard']> | undefined): AppSettings['whiteboard'] {
@@ -2970,7 +3029,7 @@ function fromBoundPipConfig(config: Partial<PIPConfig> | undefined, fallbackPres
       x: normalizedUnit(config?.position?.x ?? (preset === 'bottom-left' ? 0 : 1)),
       y: normalizedUnit(config?.position?.y ?? 1),
     },
-    scale: normalizedRange(config?.scale, 0.08, 0.016, 0.08),
+    scale: normalizedRange(config?.scale, pipMaximumScale, pipMinimumScale, pipMaximumScale),
     edgeFeather: normalizedRange(config?.edgeFeather, 0.16, 0.02, 0.42),
   }
 }

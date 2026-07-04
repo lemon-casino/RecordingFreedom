@@ -7,7 +7,7 @@ import (
 	"github.com/lemon-casino/RecordingFreedom/app/internal/recordingprofile"
 )
 
-const SchemaVersion = 1
+const SchemaVersion = 2
 
 type Locale string
 

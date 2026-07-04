@@ -92,6 +92,26 @@ func TestNormalizeConfigForPresetUsesLegacyPresetForEmptyConfig(t *testing.T) {
 	}
 }
 
+func TestDefaultScaleUsesConfiguredMaximum(t *testing.T) {
+	if MinimumScale != 0.08 {
+		t.Fatalf("minimum scale = %v, want 0.08", MinimumScale)
+	}
+	if MaximumScale != 0.15 {
+		t.Fatalf("maximum scale = %v, want 0.15", MaximumScale)
+	}
+	if DefaultScale != MaximumScale {
+		t.Fatalf("default scale = %v, want maximum %v", DefaultScale, MaximumScale)
+	}
+	placement, err := Place(DefaultConfig(), Size{Width: 1920, Height: 1080})
+	if err != nil {
+		t.Fatalf("Place() error = %v", err)
+	}
+	wantSize := int(1920 * MaximumScale)
+	if placement.Rect.Width != wantSize || placement.Rect.Height != wantSize {
+		t.Fatalf("default rect size = %#v, want %d square", placement.Rect, wantSize)
+	}
+}
+
 func TestPlaceFreeConfig(t *testing.T) {
 	placement, err := Place(Config{
 		Preset:      PresetFree,

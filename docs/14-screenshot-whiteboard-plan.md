@@ -40,13 +40,13 @@ The first native backend uses `github.com/kbinani/screenshot` and captures a sel
 
 ## Scrolling Screenshot
 
-Scrolling screenshot is intentionally not faked. The UI and API entry exist, but the desktop build reports it as unavailable until platform scroll automation is implemented.
+Scrolling screenshot is implemented through the same native region-selection overlay used by screenshots. The user selects a target region, the app hides the capsule/overlay, captures repeated native frames, sends controlled platform scroll input, detects the overlap between adjacent frames, stitches only the new content into a single PNG, and saves it to screenshot history with `mode: scrolling`. If the selected area does not move after scroll input, the app saves the first captured frame as a normal `mode: region` screenshot instead of failing or creating a fake long image.
 
-Required native path:
+Native scroll path:
 
-- Windows: UI Automation scroll pattern + repeated region capture + image stitching.
-- macOS: Accessibility API scroll actions + ScreenCaptureKit or native screenshot region capture + image stitching.
-- Linux: AT-SPI scroll actions where available, with X11/Wayland capability detection.
+- Windows: `SendInput` mouse-wheel events at the center of the selected region.
+- macOS: `CGEventCreateScrollWheelEvent` posted at the selected region center. The user may need to grant Accessibility permission for controlled scrolling.
+- Linux: `xdotool` on X11. Wayland or missing `xdotool` returns a clear unsupported reason and does not save a fake history item.
 
 Acceptance:
 
@@ -55,3 +55,4 @@ Acceptance:
 - Duplicate overlapping content is removed during stitching.
 - The final image is saved as one PNG and appears in screenshot history.
 - If a platform cannot control the target window, the app returns a clear unsupported reason without creating a fake history item.
+- If the selected content does not move after scroll input, the app saves the selected area as a normal region screenshot.

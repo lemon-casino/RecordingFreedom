@@ -5,10 +5,12 @@ import (
 	"encoding/base64"
 	"image"
 	"image/color"
+	imagedraw "image/draw"
 	"image/png"
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/lemon-casino/RecordingFreedom/app/internal/appdata"
 )
@@ -133,19 +135,91 @@ func TestMapRegionSelectionToCaptureRectScalesOverlayToNativeBounds(t *testing.T
 	}
 }
 
-func testPNGDataURL(t *testing.T, width int, height int) string {
-	t.Helper()
-	img := image.NewRGBA(image.Rect(0, 0, width, height))
-	for y := 0; y < height; y++ {
-		for x := 0; x < width; x++ {
-			img.Set(x, y, color.RGBA{R: uint8(x % 255), G: uint8(y % 255), B: 180, A: 255})
+func TestCaptureScrollingScreenshotImageStitchesOverlappingFrames(t *testing.T) {
+	source := testPatternImage(64, 220)
+	offsets := []int{0, 60, 120}
+	index := 0
+	capture := func(rect image.Rectangle) (*image.RGBA, error) {
+		frame := image.NewRGBA(image.Rect(0, 0, rect.Dx(), rect.Dy()))
+		imagedraw.Draw(frame, frame.Bounds(), source, image.Point{X: 0, Y: offsets[index]}, imagedraw.Src)
+		return frame, nil
+	}
+	scroll := func(rect image.Rectangle) error {
+		if index < len(offsets)-1 {
+			index++
+		}
+		return nil
+	}
+
+	got, frames, scrolled, err := captureScrollingScreenshotImage(image.Rect(0, 0, 64, 100), capture, scroll, func(time.Duration) {})
+	if err != nil {
+		t.Fatalf("captureScrollingScreenshotImage() error = %v", err)
+	}
+	if !scrolled {
+		t.Fatal("scrolled = false, want true for overlapping frames")
+	}
+	if frames < 3 {
+		t.Fatalf("frames = %d, want at least 3", frames)
+	}
+	if got.Bounds().Dx() != 64 || got.Bounds().Dy() != 220 {
+		t.Fatalf("stitched bounds = %v, want 64x220", got.Bounds())
+	}
+	for _, point := range []image.Point{{X: 12, Y: 20}, {X: 33, Y: 118}, {X: 41, Y: 207}} {
+		if got.At(point.X, point.Y) != source.At(point.X, point.Y) {
+			t.Fatalf("stitched pixel at %v = %v, want %v", point, got.At(point.X, point.Y), source.At(point.X, point.Y))
 		}
 	}
+}
+
+func TestCaptureScrollingScreenshotImageFallsBackToDirectShotForStaticTarget(t *testing.T) {
+	frame := testPatternImage(80, 120)
+	scrolls := 0
+	capture := func(rect image.Rectangle) (*image.RGBA, error) {
+		next := image.NewRGBA(image.Rect(0, 0, rect.Dx(), rect.Dy()))
+		imagedraw.Draw(next, next.Bounds(), frame, image.Point{}, imagedraw.Src)
+		return next, nil
+	}
+	scroll := func(rect image.Rectangle) error {
+		scrolls++
+		return nil
+	}
+
+	got, frames, scrolled, err := captureScrollingScreenshotImage(image.Rect(0, 0, 80, 120), capture, scroll, func(time.Duration) {})
+	if err != nil {
+		t.Fatalf("captureScrollingScreenshotImage() error = %v", err)
+	}
+	if scrolled {
+		t.Fatal("scrolled = true, want false for static target")
+	}
+	if frames < 2 {
+		t.Fatalf("frames = %d, want at least 2", frames)
+	}
+	if got.Bounds().Dx() != 80 || got.Bounds().Dy() != 120 {
+		t.Fatalf("fallback bounds = %v, want direct 80x120 screenshot", got.Bounds())
+	}
+	if scrolls == 0 {
+		t.Fatal("scroll automation was not attempted")
+	}
+}
+
+func testPNGDataURL(t *testing.T, width int, height int) string {
+	t.Helper()
+	img := testPatternImage(width, height)
 	var buffer bytes.Buffer
 	if err := png.Encode(&buffer, img); err != nil {
 		t.Fatalf("png.Encode() error = %v", err)
 	}
 	return whiteboardPNGContentPrefix + base64.StdEncoding.EncodeToString(buffer.Bytes())
+}
+
+func testPatternImage(width int, height int) *image.RGBA {
+	img := image.NewRGBA(image.Rect(0, 0, width, height))
+	for y := 0; y < height; y++ {
+		for x := 0; x < width; x++ {
+			img.Set(x, y, color.RGBA{R: uint8((x*3 + y) % 255), G: uint8((y*5 + x) % 255), B: uint8((x + y*2) % 255), A: 255})
+		}
+	}
+	return img
 }
 
 func mustScreenshotDir(t *testing.T, service *RecordingFreedomService) string {
