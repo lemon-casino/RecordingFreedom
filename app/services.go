@@ -85,6 +85,13 @@ type ClientLogEvent struct {
 	Fields    map[string]string `json:"fields,omitempty"`
 }
 
+type CameraStatePatchRequest struct {
+	Enabled   *bool       `json:"enabled,omitempty"`
+	DeviceID  *string     `json:"deviceId,omitempty"`
+	PIPPreset *string     `json:"pipPreset,omitempty"`
+	PIP       *pip.Config `json:"pip,omitempty"`
+}
+
 const (
 	maxPIPPreviewImageBytes        = 2 * 1024 * 1024
 	maxAnnotationPreviewImageBytes = 8 * 1024 * 1024
@@ -744,6 +751,9 @@ func (s *RecordingFreedomService) SaveSettings(next settings.Settings) (settings
 	}
 	if currentSettings, err := s.settings.Load(); err == nil {
 		next.Recording = currentSettings.Recording
+		next.Audio = currentSettings.Audio
+		next.Camera = currentSettings.Camera
+		next.Whiteboard = currentSettings.Whiteboard
 		next.Window.Theme = currentSettings.Window.Theme
 		next.Shortcuts = currentSettings.Shortcuts
 	}
@@ -756,6 +766,66 @@ func (s *RecordingFreedomService) SaveSettings(next settings.Settings) (settings
 	s.emitSettingsChanged(saved)
 	s.emitAudioState(saved.Audio)
 	return saved, nil
+}
+
+func (s *RecordingFreedomService) PatchCameraState(patch CameraStatePatchRequest) (settings.Settings, error) {
+	s.settingsMu.Lock()
+	defer s.settingsMu.Unlock()
+	saved, err := s.patchCameraStateLocked(patch)
+	if err != nil {
+		return settings.Settings{}, err
+	}
+	s.emitSettingsChanged(saved)
+	s.logEvent("camera", "patch", map[string]string{
+		"enabled":   fmt.Sprint(saved.Camera.Enabled),
+		"deviceId":  strings.TrimSpace(saved.Camera.DeviceID),
+		"pipPreset": strings.TrimSpace(saved.Camera.PIPPreset),
+	})
+	return saved, nil
+}
+
+func (s *RecordingFreedomService) patchCameraStateLocked(patch CameraStatePatchRequest) (settings.Settings, error) {
+	if s.settings == nil {
+		return settings.Settings{}, errors.New("settings service is not initialized")
+	}
+	currentSettings, err := s.settings.Load()
+	if err != nil {
+		return settings.Settings{}, err
+	}
+	currentSettings.Camera = applyCameraStatePatch(currentSettings.Camera, patch)
+	return s.settings.Save(currentSettings)
+}
+
+func applyCameraStatePatch(current settings.CameraSettings, patch CameraStatePatchRequest) settings.CameraSettings {
+	next := current
+	if patch.DeviceID != nil {
+		if deviceID := strings.TrimSpace(*patch.DeviceID); deviceID != "" {
+			next.DeviceID = deviceID
+		}
+	}
+	if patch.PIP != nil {
+		next.PIP = *patch.PIP
+	}
+	if patch.PIPPreset != nil {
+		next.PIPPreset = strings.TrimSpace(*patch.PIPPreset)
+	}
+	if next.PIPPreset == "" {
+		next.PIPPreset = string(next.PIP.Preset)
+	}
+	next.PIP = pip.NormalizeConfigForPreset(next.PIPPreset, next.PIP)
+	next.PIPPreset = string(next.PIP.Preset)
+	if patch.Enabled != nil {
+		next.Enabled = *patch.Enabled
+	}
+	if next.Enabled && next.PIP.Preset == pip.PresetOff {
+		next.PIP = pip.DefaultConfig()
+		next.PIPPreset = string(next.PIP.Preset)
+	}
+	if !next.Enabled {
+		next.PIP = pip.OffConfig()
+		next.PIPPreset = string(pip.PresetOff)
+	}
+	return next
 }
 
 func (s *RecordingFreedomService) PatchAudioState(patch AudioStatePatchRequest) (AudioState, error) {
@@ -858,6 +928,9 @@ func (s *RecordingFreedomService) StartRecording(req recording.StartRequest) (re
 	})
 	if summary, blocked := s.blockingRecordingPreflight(req, media); blocked {
 		err := fmt.Errorf("preflight blocked: %s", firstBlockedPreflightReason(summary))
+		s.logEvent("recording", "start-blocked", map[string]string{
+			"reason": err.Error(),
+		})
 		s.emitRecordingStatus(recording.StatusEvent{
 			Status:  recording.StateFailed,
 			Backend: s.recorder.BackendID(),
@@ -871,8 +944,18 @@ func (s *RecordingFreedomService) StartRecording(req recording.StartRequest) (re
 		Backend: s.recorder.BackendID(),
 		Message: "Preparing recording package",
 	})
+	if req.Camera.Enabled {
+		s.logEvent("camera", "native-start-request", map[string]string{
+			"deviceId":  strings.TrimSpace(req.Camera.DeviceID),
+			"nativeId":  strings.TrimSpace(req.Camera.DeviceNativeID),
+			"pipPreset": strings.TrimSpace(req.Camera.PIPPreset),
+		})
+	}
 	session, err := s.recorder.StartRecording(req)
 	if err != nil {
+		s.logEvent("recording", "start-error", map[string]string{
+			"error": err.Error(),
+		})
 		s.emitRecordingStatus(recording.StatusEvent{
 			Status:  recording.StateFailed,
 			Backend: s.recorder.BackendID(),
@@ -881,6 +964,14 @@ func (s *RecordingFreedomService) StartRecording(req recording.StartRequest) (re
 		return recording.Session{}, err
 	}
 	s.lockRegionFrameForRecording(req)
+	if req.Camera.Enabled {
+		s.logEvent("camera", "native-started", map[string]string{
+			"deviceId":         strings.TrimSpace(req.Camera.DeviceID),
+			"nativeId":         strings.TrimSpace(req.Camera.DeviceNativeID),
+			"packageDir":       strings.TrimSpace(session.PackageDir),
+			"previewImagePath": recording.CameraPreviewImagePath(session.PackageDir),
+		})
+	}
 	s.showRecordingPIPOverlay(req, session)
 	s.emitSessionStatus(session, "Recording started")
 	return session, nil

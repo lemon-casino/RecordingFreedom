@@ -71,7 +71,7 @@ import {
   fallbackCapabilities,
   fallbackStorageStatus,
 } from './services/mockBackend'
-import {beginScreenshotAnnotationOverlay, cancelRegionSelector, cancelSelectedRegion, completeAnnotationRegionSelection, completeRegionSelection, completeScreenshotRegionSelection, deleteScreenshotItem, exportRecordingPackage, hidePinnedScreenshot, hidePipOverlay, hideRegionFrame, hideScreenIndicator, hideSettingsWindow, listScreenshots, loadBootstrap, loadPinnedScreenshot, loadSettings, logClientEvent, openRecordingPackage, openScreenshot, openScreenshotDirectory, openScreenshotInWhiteboard, openVideoDirectory, patchAudioState, patchScreenshotItem, patchSettingsPreferences, patchShortcutSettings, patchWhiteboardSettings, pauseRecording, preflightAudioOnlyRecording, preflightRecording, previewExportRecordingPackage, quitApplication, readAnnotationPreviewImage, readPipPreviewImage, recoverRecordingPackage, restoreCapsuleWindow, resumeRecording, saveSettings, setCapsuleWindowExpanded, setCapsuleWindowHitRegions, setDataRoot, showAnnotationOverlay, showAnnotationRegionSelector, showPinnedScreenshot, showPipOverlay, showRegionSelector, showScreenIndicator, showScreenshotRegionSelector, showWhiteboardWindow, snapCapsuleWindowToEdge, startAudioOnlyRecording, startMicrophoneLevelMonitor, startRecording, startScrollingScreenshot, stopMicrophoneLevelMonitor, stopRecording, subscribeAudioLevel, subscribeAudioState, subscribeCapsuleDockSide, subscribeCapsuleWindowMoveEnded, subscribeRecordingStatus, subscribeRegionSelection, subscribeScreenshotCaptured, subscribeScreenshotPin, subscribeSettingsChanged, subscribeShortcutTriggered, subscribeWhiteboardVisibility, updatePipOverlay, updateScreenshotRegionSelection, updateSelectedRegion, type AudioControlState, type AudioLevelUpdate, type AudioStatePatch, type CapsuleWindowDockSide, type CapsuleWindowExpandDirection, type CapsuleWindowHitRegion, type PIPOverlayCamera, type PIPOverlayState, type RecordingExportPlan, type RecordingRecovery, type RecordingStatusUpdate, type RegionSelectionSession, type ScreenshotPinState, type SettingsPreferencesPatch, type ShortcutSettingsPatch, type WhiteboardSettingsPatch, type WhiteboardVisibilityUpdate} from './services/recorderBackend'
+import {beginScreenshotAnnotationOverlay, cancelRegionSelector, cancelSelectedRegion, completeAnnotationRegionSelection, completeRegionSelection, completeScreenshotRegionSelection, deleteScreenshotItem, exportRecordingPackage, hidePinnedScreenshot, hidePipOverlay, hideRegionFrame, hideScreenIndicator, hideSettingsWindow, listScreenshots, loadBootstrap, loadPinnedScreenshot, loadSettings, logClientEvent, openRecordingPackage, openScreenshot, openScreenshotDirectory, openScreenshotInWhiteboard, openVideoDirectory, patchAudioState, patchCameraState, patchScreenshotItem, patchSettingsPreferences, patchShortcutSettings, patchWhiteboardSettings, pauseRecording, preflightAudioOnlyRecording, preflightRecording, previewExportRecordingPackage, quitApplication, readAnnotationPreviewImage, readPipPreviewImage, recoverRecordingPackage, restoreCapsuleWindow, resumeRecording, saveSettings, setCapsuleWindowExpanded, setCapsuleWindowHitRegions, setDataRoot, showAnnotationOverlay, showAnnotationRegionSelector, showPinnedScreenshot, showPipOverlay, showRegionSelector, showScreenIndicator, showScreenshotRegionSelector, showWhiteboardWindow, snapCapsuleWindowToEdge, startAudioOnlyRecording, startMicrophoneLevelMonitor, startRecording, startScrollingScreenshot, stopMicrophoneLevelMonitor, stopRecording, subscribeAudioLevel, subscribeAudioState, subscribeCapsuleDockSide, subscribeCapsuleWindowMoveEnded, subscribeRecordingStatus, subscribeRegionSelection, subscribeScreenshotCaptured, subscribeScreenshotPin, subscribeSettingsChanged, subscribeShortcutTriggered, subscribeWhiteboardVisibility, updatePipOverlay, updateScreenshotRegionSelection, updateSelectedRegion, type AudioControlState, type AudioLevelUpdate, type AudioStatePatch, type CapsuleWindowDockSide, type CapsuleWindowExpandDirection, type CapsuleWindowHitRegion, type PIPOverlayCamera, type PIPOverlayState, type RecordingExportPlan, type RecordingRecovery, type RecordingStatusUpdate, type RegionSelectionSession, type ScreenshotPinState, type SettingsPreferencesPatch, type ShortcutSettingsPatch, type WhiteboardSettingsPatch, type WhiteboardVisibilityUpdate} from './services/recorderBackend'
 
 const AnnotationOverlayWindow = lazy(() => import('./AnnotationOverlayWindow'))
 const AnnotationRenderWindow = lazy(() => import('./AnnotationRenderWindow'))
@@ -458,6 +458,7 @@ function App() {
   const localPipIntentUntilRef = useRef(0)
   const selectedSystemAudioRef = useRef(selectedSystemAudio)
   const selectedMicRef = useRef(selectedMic)
+  const selectedCameraRef = useRef(selectedCamera)
   const systemAudioRef = useRef(systemAudio)
   const microphoneRef = useRef(microphone)
   const noiseSuppressionRef = useRef(noiseSuppression)
@@ -580,15 +581,7 @@ function App() {
     sourceId: selectedSource.id,
     sourceType: selectedSource.type,
     dataRootDir: appData.rootDir,
-    camera,
-    selectedCamera,
-    pipPreset,
-    pipShape,
-    pipMirror,
-    pipPosition,
-    pipScale,
-    pipEdgeFeather,
-  }), [appData.rootDir, camera, locale, pipEdgeFeather, pipMirror, pipPosition, pipPreset, pipScale, pipShape, selectedCamera, selectedSource.id, selectedSource.type])
+  }), [appData.rootDir, locale, selectedSource.id, selectedSource.type])
   const capabilityRows = useMemo(() => [
     capabilities.sourceEnumeration,
     capabilities.screenRecording,
@@ -737,7 +730,7 @@ function App() {
     setPipScale(nextConfig.scale)
     setPipEdgeFeather(nextConfig.edgeFeather)
   }
-  const persistCameraSettings = (enabled: boolean, pipConfig: PIPConfig, deviceId = selectedCamera) => {
+  const persistCameraSettings = (enabled: boolean, pipConfig: PIPConfig, deviceId = selectedCameraRef.current || selectedCamera) => {
     const normalizedPip = enabled
       ? ensureVisiblePipConfig(pipConfig)
       : normalizePipConfig({...pipConfig, preset: 'off'}, 'off')
@@ -753,9 +746,21 @@ function App() {
       },
     }
     currentSettingsRef.current = nextSettings
-    void saveSettings(nextSettings)
+    persistedSettingsRef.current = nextSettings
+    void patchCameraState({
+      enabled,
+      deviceId,
+      pipPreset: normalizedPip.preset,
+      pip: normalizedPip,
+    })
       .then((saved) => {
+        currentSettingsRef.current = saved
         persistedSettingsRef.current = saved
+        applySettingsState(saved, undefined, undefined, {
+          preserveCameraEnabled: hasLocalCameraIntent(),
+          preserveCameraSelection: hasLocalCameraIntent(),
+          preservePipConfig: hasLocalPipIntent(),
+        })
       })
       .catch((error) => console.error('Failed to persist camera settings:', error))
   }
@@ -791,7 +796,7 @@ function App() {
   const setCameraEnabled = (enabled: boolean, deviceId = selectedCamera) => {
     const nextEnabled = enabled && hasUsableCamera
     markLocalCameraIntent()
-    if (!nextEnabled) markLocalPipIntent()
+    markLocalPipIntent()
     const nextPipConfig = nextEnabled
       ? ensureVisiblePipConfig(currentPipConfig.preset === 'off'
           ? normalizePipConfig({...currentPipConfig, preset: 'bottom-right', position: defaultPipPosition('bottom-right')}, 'bottom-right')
@@ -812,6 +817,16 @@ function App() {
     if (!nextEnabled) {
       void hidePipOverlay()
     }
+  }
+  const chooseCameraDevice = (deviceId: string) => {
+    if (recordingConfigLocked) return
+    selectedCameraRef.current = deviceId
+    setSelectedCamera(deviceId)
+    markLocalCameraIntent()
+    const nextPipConfig = cameraRef.current
+      ? ensureVisiblePipConfig(currentPipConfig)
+      : normalizePipConfig(currentPipConfig, currentPipConfig.preset)
+    persistCameraSettings(cameraRef.current, nextPipConfig, deviceId)
   }
   const applyRecordingStatus = (update: RecordingStatusUpdate) => {
     const nextStatus = update.status as RecordingState
@@ -1218,6 +1233,10 @@ function App() {
   useEffect(() => {
     selectedMicRef.current = selectedMic
   }, [selectedMic])
+
+  useEffect(() => {
+    selectedCameraRef.current = selectedCamera
+  }, [selectedCamera])
 
   useEffect(() => {
     systemAudioRef.current = systemAudio
@@ -1668,7 +1687,7 @@ function App() {
       preserveCameraEnabled,
       preservePipConfig,
     })
-    if (incomingCameraOff && cameraRef.current && !preserveCameraEnabled) {
+    if (!isSettingsWindow && incomingCameraOff && cameraRef.current && !preserveCameraEnabled) {
       stopCameraPreview('settings-camera-off')
     }
     applySettingsState(settings, undefined, undefined, {
@@ -1788,20 +1807,30 @@ function App() {
     noiseSuppression,
   })
 
-  const buildVideoRequest = (): MockRecordingRequest => ({
-    source: selectedSource,
-    recording: currentRecordingProfile(),
-    systemAudio,
-    systemAudioDeviceId: selectedSystemAudio || undefined,
-    microphone,
-    microphoneDeviceId: selectedMic || undefined,
-    noiseSuppression,
-    camera,
-    cameraDeviceId: selectedCamera,
-    cameraDeviceNativeId: selectedCameraDevice?.nativeId,
-    pipPreset: camera ? ensureVisiblePipConfig(currentPipConfig).preset : 'off',
-    pip: camera ? ensureVisiblePipConfig(currentPipConfig) : currentPipConfig,
-  })
+  const buildVideoRequest = (): MockRecordingRequest => {
+    const requestedCameraId = selectedCameraRef.current || selectedCamera
+    const requestCameraDevice = availableCameras.find((device) => device.id === requestedCameraId && isUsableCameraDevice(device)) ??
+      fallbackUsableCameraDevice ??
+      selectedCameraDevice
+    const requestCameraEnabled = cameraRef.current && recordingMode === 'video' && (requestCameraDevice ? isUsableCameraDevice(requestCameraDevice) : false)
+    const requestPip = requestCameraEnabled
+      ? ensureVisiblePipConfig(currentPipConfig)
+      : normalizePipConfig({...currentPipConfig, preset: 'off'}, 'off')
+    return {
+      source: selectedSource,
+      recording: currentRecordingProfile(),
+      systemAudio,
+      systemAudioDeviceId: selectedSystemAudio || undefined,
+      microphone,
+      microphoneDeviceId: selectedMic || undefined,
+      noiseSuppression,
+      camera: requestCameraEnabled,
+      cameraDeviceId: requestCameraDevice?.id ?? requestedCameraId,
+      cameraDeviceNativeId: requestCameraDevice?.nativeId,
+      pipPreset: requestCameraEnabled ? requestPip.preset : 'off',
+      pip: requestPip,
+    }
+  }
 
   const runCurrentPreflight = async () => {
     if (isRecording || preflightBusy) return null
@@ -1885,6 +1914,15 @@ function App() {
       }
 
       const request = buildVideoRequest()
+      void logClientEvent('recording', 'start-request-built', {
+        sourceType: request.source.type,
+        cameraEnabled: request.camera,
+        cameraDeviceId: request.cameraDeviceId ?? '',
+        cameraNativeId: request.cameraDeviceNativeId ?? '',
+        cameraPipPreset: request.pipPreset,
+        microphoneEnabled: request.microphone,
+        systemAudio: request.systemAudio,
+      })
       const preflight = await preflightRecording(request)
       setLastPreflight(preflight)
       setLastBackend(preflight.backend || lastBackend)
@@ -2842,7 +2880,7 @@ function App() {
                   value={selectedCamera}
                   disabled={recordingConfigLocked || availableCameras.length === 0}
                   options={availableCameras.map((device) => ({value: device.id, label: mediaDeviceName(device, copy), disabled: !isUsableCameraDevice(device)}))}
-                  onChange={setSelectedCamera}
+                  onChange={chooseCameraDevice}
                 />
                 <div className={`meter-status ${!hasUsableCamera || !selectedCameraUsable ? 'error' : ''}`}>
                   <span>{cameraStatusText}</span>
@@ -3178,6 +3216,8 @@ function PIPOverlayWindow() {
   const overlayClosedRef = useRef(!overlayState || overlayState.config.preset === 'off')
   const previewImageModifiedRef = useRef(0)
   const previewImageDataUrlRef = useRef<string | null>(null)
+  const previewImageReadyLoggedRef = useRef(false)
+  const previewImageWaitingLoggedRef = useRef(false)
   const [cameraReady, setCameraReady] = useState(false)
   const [cameraError, setCameraError] = useState<string | null>(null)
   const [previewImageDataUrl, setPreviewImageDataUrl] = useState<string | null>(null)
@@ -3216,6 +3256,8 @@ function PIPOverlayWindow() {
 
   const clearPipPreviewImage = () => {
     previewImageModifiedRef.current = 0
+    previewImageReadyLoggedRef.current = false
+    previewImageWaitingLoggedRef.current = false
     setPipPreviewImage(null)
   }
 
@@ -3366,6 +3408,7 @@ function PIPOverlayWindow() {
       const stopToken = pipWindow.__RF_PIP_STOP_TOKEN__ ?? 0
       let cancelled = false
       let timer: number | null = null
+      const startedAt = Date.now()
       stopActivePipCameraStream()
       clearPipPreviewImage()
       setCameraReady(false)
@@ -3393,6 +3436,19 @@ function PIPOverlayWindow() {
             setPipPreviewImage(result.dataUrl)
             setCameraReady(true)
             setCameraError(null)
+            if (!previewImageReadyLoggedRef.current) {
+              previewImageReadyLoggedRef.current = true
+              logPipCameraEvent('preview-image-ready', {
+                requestToken,
+                modifiedUnixNano: result.modifiedUnixNano ?? 0,
+              })
+            }
+          } else if (!previewImageWaitingLoggedRef.current && Date.now() - startedAt > 1800) {
+            previewImageWaitingLoggedRef.current = true
+            logPipCameraEvent('preview-image-waiting', {
+              requestToken,
+              path: recordingPreviewImagePath,
+            })
           }
         } catch (error) {
           if (!isCancelled()) {
@@ -3415,6 +3471,12 @@ function PIPOverlayWindow() {
           cameraRequestTokenRef.current += 1
         }
       }
+    }
+    if (overlayState.mode === 'recording') {
+      cancelPipCameraStream()
+      setCameraError(null)
+      logPipCameraEvent('preview-image-path-missing', {mode: overlayState.mode})
+      return
     }
     clearPipPreviewImage()
     if (!navigator.mediaDevices?.getUserMedia) {
@@ -3627,16 +3689,14 @@ function PIPOverlayWindow() {
   }
 
   const content = overlayState?.config.preset !== 'off' ? overlayState?.contentBounds : undefined
-  const usesBackendPreviewImage = overlayState?.mode === 'recording' && Boolean(overlayState.previewImagePath?.trim())
+  const isRecordingPipOverlay = overlayState?.mode === 'recording'
+  const usesBackendPreviewImage = isRecordingPipOverlay && Boolean(overlayState.previewImagePath?.trim())
   const cameraName = overlayState?.camera?.name || overlayState?.cameraName || copy.panels.cameraSidecar
-  const cameraPlaceholderTitle = overlayState?.mode === 'recording'
-    ? copy.pipOverlay.cameraRecording
-    : cameraError
+  const showCameraPlaceholder = !isRecordingPipOverlay && !cameraReady
+  const cameraPlaceholderTitle = cameraError
       ? copy.pipOverlay.cameraUnavailable
       : copy.pipOverlay.cameraPreparing
-  const cameraPlaceholderDetail = overlayState?.mode === 'recording'
-    ? cameraName
-    : cameraError || cameraName
+  const cameraPlaceholderDetail = cameraError || cameraName
   const featherPx = content && overlayState ? Math.max(2, Math.round(content.width * overlayState.config.edgeFeather)) : 12
   const frameStyle = content ? {
     left: content.x,
@@ -3669,7 +3729,7 @@ function PIPOverlayWindow() {
             ) : (
               <video ref={videoRef} autoPlay muted playsInline className={cameraReady ? 'ready' : ''} />
             )}
-            {!cameraReady && (
+            {showCameraPlaceholder && (
               <div className={`pip-camera-placeholder ${overlayState.mode} ${cameraError ? 'error' : 'pending'}`}>
                 <Camera size={24} />
                 <strong>{cameraPlaceholderTitle}</strong>

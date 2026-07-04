@@ -183,6 +183,10 @@ export function PatchAudioState(patch: $models.AudioStatePatchRequest): $Cancell
     return $Call.ByID(680645443, patch);
 }
 
+export function PatchCameraState(patch: $models.CameraStatePatchRequest): $CancellablePromise<settings$0.Settings> {
+    return $Call.ByID(1363806772, patch);
+}
+
 export function PatchScreenshotItem(req: $models.ScreenshotItemPatchRequest): $CancellablePromise<$models.ScreenshotHistoryResult> {
     return $Call.ByID(4203171135, req);
 }

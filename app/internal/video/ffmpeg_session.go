@@ -355,6 +355,10 @@ func (s *ffmpegDesktopSession) encodingArgs(outputPattern string, input ffmpegIn
 	if videoFilter == "" {
 		videoFilter = defaultFFmpegVideoFilter()
 	}
+	previewPath := strings.TrimSpace(input.PreviewImagePath)
+	if previewPath != "" && !input.VideoPreFiltered {
+		return s.encodingArgsWithPreviewSplit(outputPattern, input, videoFilter, previewPath)
+	}
 	segmentSeconds := ffmpegSegmentSeconds()
 	args := []string{
 		"-an",
@@ -378,7 +382,7 @@ func (s *ffmpegDesktopSession) encodingArgs(outputPattern string, input ffmpegIn
 		"-segment_format_options", "movflags=+faststart",
 		outputPattern,
 	)
-	if previewPath := strings.TrimSpace(input.PreviewImagePath); previewPath != "" {
+	if previewPath != "" {
 		args = append(args,
 			"-map", "0:v:0",
 			"-an",
@@ -390,6 +394,44 @@ func (s *ffmpegDesktopSession) encodingArgs(outputPattern string, input ffmpegIn
 		)
 	}
 	return args
+}
+
+func (s *ffmpegDesktopSession) encodingArgsWithPreviewSplit(outputPattern string, input ffmpegInputSpec, videoFilter string, previewPath string) []string {
+	segmentSeconds := ffmpegSegmentSeconds()
+	recordLabel := "rf_record"
+	previewLabel := "rf_preview"
+	filter := fmt.Sprintf(
+		"[0:v]split=2[rf_record_src][rf_preview_src];[rf_record_src]%s[%s];[rf_preview_src]%s[%s]",
+		videoFilter,
+		recordLabel,
+		ffmpegPreviewImageFilter(input),
+		previewLabel,
+	)
+	return []string{
+		"-filter_complex", filter,
+		"-map", "[" + recordLabel + "]",
+		"-an",
+		"-c:v", "libx264",
+		"-preset", "veryfast",
+		"-g", fmt.Sprintf("%d", ffmpegKeyframeInterval(s.config.Profile.FPS)),
+		"-keyint_min", fmt.Sprintf("%d", ffmpegKeyframeInterval(s.config.Profile.FPS)),
+		"-sc_threshold", "0",
+		"-crf", ffmpegCRF(s.config.Profile.Quality),
+		"-force_key_frames", fmt.Sprintf("expr:gte(t,n_forced*%d)", segmentSeconds),
+		"-pix_fmt", "yuv420p",
+		"-f", "segment",
+		"-segment_time", fmt.Sprintf("%d", segmentSeconds),
+		"-reset_timestamps", "1",
+		"-segment_format", "mp4",
+		"-segment_format_options", "movflags=+faststart",
+		outputPattern,
+		"-map", "[" + previewLabel + "]",
+		"-an",
+		"-q:v", "5",
+		"-f", "image2",
+		"-update", "1",
+		previewPath,
+	}
 }
 
 func prepareFFmpegPreviewImage(input ffmpegInputSpec) error {

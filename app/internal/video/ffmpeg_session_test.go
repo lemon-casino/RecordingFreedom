@@ -59,14 +59,33 @@ func TestFFmpegEncodingArgsWritesPreviewImageAsSecondOutput(t *testing.T) {
 	if segmentIndex < 0 || previewIndex < 0 || previewIndex <= segmentIndex {
 		t.Fatalf("encoding args = %#v, want segment output followed by preview image output", args)
 	}
-	if ffmpegTestFlagValueAfter(args, segmentIndex, "-map") != "0:v:0" {
-		t.Fatalf("preview -map = %q, want camera video stream in args %v", ffmpegTestFlagValueAfter(args, segmentIndex, "-map"), args)
+	if filter := ffmpegTestFlagValue(args, "-filter_complex"); filter != "[0:v]split=2[rf_record_src][rf_preview_src];[rf_record_src]pad=ceil(iw/2)*2:ceil(ih/2)*2[rf_record];[rf_preview_src]fps=15,scale=720:-2[rf_preview]" {
+		t.Fatalf("filter_complex = %q, want split recording and preview graph in args %v", filter, args)
 	}
-	if ffmpegTestFlagValueAfter(args, segmentIndex, "-vf") != "fps=15,scale=720:-2" {
-		t.Fatalf("preview filter = %q, want capped fps/width in args %v", ffmpegTestFlagValueAfter(args, segmentIndex, "-vf"), args)
+	if ffmpegTestFlagValue(args, "-map") != "[rf_record]" {
+		t.Fatalf("recording -map = %q, want split recording stream in args %v", ffmpegTestFlagValue(args, "-map"), args)
+	}
+	if ffmpegTestFlagValueAfter(args, segmentIndex, "-map") != "[rf_preview]" {
+		t.Fatalf("preview -map = %q, want split preview stream in args %v", ffmpegTestFlagValueAfter(args, segmentIndex, "-map"), args)
 	}
 	if ffmpegTestFlagValueAfter(args, segmentIndex, "-f") != "image2" || ffmpegTestFlagValueAfter(args, segmentIndex, "-update") != "1" {
 		t.Fatalf("preview output args = %#v, want image2 -update 1", args[segmentIndex+1:])
+	}
+}
+
+func TestFFmpegEncodingArgsKeepsLegacyPreviewOutputForPreFilteredInput(t *testing.T) {
+	previewPath := filepath.Join("cache", "pip-camera-preview.jpg")
+	session := &ffmpegDesktopSession{}
+	args := session.encodingArgs("segment-%03d.mp4", ffmpegInputSpec{
+		VideoPreFiltered: true,
+		PreviewImagePath: previewPath,
+	})
+	segmentIndex := slices.Index(args, "segment-%03d.mp4")
+	if segmentIndex < 0 {
+		t.Fatalf("encoding args = %#v, want segment output", args)
+	}
+	if ffmpegTestFlagValueAfter(args, segmentIndex, "-map") != "0:v:0" {
+		t.Fatalf("preview -map = %q, want original mapped input for pre-filtered capture", ffmpegTestFlagValueAfter(args, segmentIndex, "-map"))
 	}
 }
 

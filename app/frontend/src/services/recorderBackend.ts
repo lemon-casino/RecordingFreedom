@@ -12,6 +12,7 @@ import {
   type AudioStatePatchRequest as BoundAudioStatePatchRequest,
   type BootstrapState as BoundBootstrapState,
   type CapsuleWindowHitRegionsRequest as BoundCapsuleWindowHitRegionsRequest,
+  type CameraStatePatchRequest as BoundCameraStatePatchRequest,
   type ExportRecordingPlanResult as BoundExportRecordingPlanResult,
   type ExportRecordingResult as BoundExportRecordingResult,
   type PIPPreviewImageRequest as BoundPIPPreviewImageRequest,
@@ -143,6 +144,13 @@ export type AudioStatePatch = {
   microphoneGain?: number
   clearSystemDevice?: boolean
   clearMicrophoneDevice?: boolean
+}
+
+export type CameraStatePatch = {
+  enabled?: boolean
+  deviceId?: string
+  pipPreset?: AppSettings['camera']['pipPreset']
+  pip?: PIPConfig
 }
 
 export type SettingsPreferencesPatch = {
@@ -1179,6 +1187,30 @@ export async function patchAudioState(patch: AudioStatePatch): Promise<AudioCont
   }
 }
 
+export async function patchCameraState(patch: CameraStatePatch): Promise<AppSettings> {
+  try {
+    return fromBoundSettings(await RecordingFreedomService.PatchCameraState(patch as BoundCameraStatePatchRequest))
+  } catch (error) {
+    console.info('Using browser camera state patch fallback:', error)
+    const current = loadBrowserSettings()
+    const enabled = patch.enabled ?? current.camera.enabled
+    const pipConfig = fromBoundPipConfig(patch.pip ?? current.camera.pip, patch.pipPreset ?? current.camera.pipPreset)
+    const nextPip = enabled ? pipConfig : fromBoundPipConfig({...pipConfig, preset: 'off'}, 'off')
+    const next: AppSettings = {
+      ...current,
+      camera: {
+        enabled,
+        deviceId: patch.deviceId ?? current.camera.deviceId,
+        pipPreset: nextPip.preset,
+        pip: nextPip,
+      },
+      updatedAt: new Date().toISOString(),
+    }
+    window.localStorage?.setItem(browserSettingsKey, JSON.stringify(next))
+    return next
+  }
+}
+
 export async function patchSettingsPreferences(patch: SettingsPreferencesPatch): Promise<AppSettings> {
   try {
     return fromBoundSettings(await RecordingFreedomService.PatchSettingsPreferences(toBoundSettingsPreferencesPatch(patch)))
@@ -1961,6 +1993,9 @@ export async function saveSettings(settings: AppSettings): Promise<AppSettings> 
     const next = {
       ...settings,
       recording: current.recording,
+      audio: current.audio,
+      camera: current.camera,
+      whiteboard: current.whiteboard,
       shortcuts: current.shortcuts,
       window: {
         ...settings.window,

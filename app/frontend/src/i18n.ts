@@ -216,7 +216,6 @@ export type RecorderCopy = {
     close: string
     cameraUnavailable: string
     cameraPreparing: string
-    cameraRecording: string
   }
   whiteboard: {
     title: string
@@ -557,7 +556,6 @@ const zhCN: RecorderCopy = {
     close: '关闭画中画',
     cameraUnavailable: '摄像头预览不可用',
     cameraPreparing: '正在打开摄像头预览',
-    cameraRecording: '摄像头录制中',
   },
   whiteboard: {
     title: '画板',
@@ -1029,7 +1027,6 @@ const en: RecorderCopy = {
     close: 'Close PIP',
     cameraUnavailable: 'Camera preview unavailable',
     cameraPreparing: 'Opening camera preview',
-    cameraRecording: 'Camera recording',
   },
   whiteboard: {
     title: 'Whiteboard',

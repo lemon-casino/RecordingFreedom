@@ -19,6 +19,7 @@ export type {
     AudioState,
     AudioStatePatchRequest,
     BootstrapState,
+    CameraStatePatchRequest,
     CapsuleWindowHitRegion,
     CapsuleWindowHitRegionsRequest,
     ClientLogEvent,

@@ -416,6 +416,82 @@ func TestSaveSettingsDoesNotOverwritePatchedPreferences(t *testing.T) {
 	}
 }
 
+func TestPatchCameraStatePersistsCameraIntent(t *testing.T) {
+	data := appdata.NewService(t.TempDir())
+	service := &RecordingFreedomService{
+		appData:  data,
+		settings: settings.NewService(data),
+	}
+	enabled := true
+	deviceID := "camera:dshow:hd-webcam"
+	preset := string(pip.PresetFree)
+	pipConfig := pip.Config{
+		Preset:      pip.PresetFree,
+		Shape:       pip.ShapeSquare,
+		Mirror:      false,
+		Position:    pip.Position{X: 0.25, Y: 0.75},
+		Scale:       pip.MaximumScale,
+		EdgeFeather: 0.2,
+	}
+	saved, err := service.PatchCameraState(CameraStatePatchRequest{
+		Enabled:   &enabled,
+		DeviceID:  &deviceID,
+		PIPPreset: &preset,
+		PIP:       &pipConfig,
+	})
+	if err != nil {
+		t.Fatalf("PatchCameraState() error = %v", err)
+	}
+	if !saved.Camera.Enabled || saved.Camera.DeviceID != deviceID {
+		t.Fatalf("saved camera = %#v, want enabled %q", saved.Camera, deviceID)
+	}
+	if saved.Camera.PIPPreset != string(pip.PresetFree) || saved.Camera.PIP.Shape != pip.ShapeSquare || saved.Camera.PIP.Mirror {
+		t.Fatalf("saved camera pip = %#v, want free square non-mirrored", saved.Camera)
+	}
+	loaded, err := service.settings.Load()
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+	if !loaded.Camera.Enabled || loaded.Camera.DeviceID != deviceID || loaded.Camera.PIPPreset != string(pip.PresetFree) {
+		t.Fatalf("loaded camera = %#v, want patched camera intent", loaded.Camera)
+	}
+}
+
+func TestSaveSettingsDoesNotOverwritePatchedCameraState(t *testing.T) {
+	data := appdata.NewService(t.TempDir())
+	service := &RecordingFreedomService{
+		appData:  data,
+		settings: settings.NewService(data),
+	}
+	enabled := true
+	deviceID := "camera:dshow:hd-webcam"
+	if _, err := service.PatchCameraState(CameraStatePatchRequest{
+		Enabled:  &enabled,
+		DeviceID: &deviceID,
+	}); err != nil {
+		t.Fatalf("PatchCameraState() error = %v", err)
+	}
+	stale := settings.Default()
+	stale.Locale = settings.LocaleEN
+	stale.Camera.Enabled = false
+	stale.Camera.DeviceID = "camera:default"
+	stale.Camera.PIPPreset = string(pip.PresetOff)
+	stale.Camera.PIP = pip.OffConfig()
+	saved, err := service.SaveSettings(stale)
+	if err != nil {
+		t.Fatalf("SaveSettings(stale) error = %v", err)
+	}
+	if saved.Locale != settings.LocaleEN {
+		t.Fatalf("locale = %q, want SaveSettings to still persist unrelated settings", saved.Locale)
+	}
+	if !saved.Camera.Enabled || saved.Camera.DeviceID != deviceID {
+		t.Fatalf("SaveSettings overwrote patched camera: %#v", saved.Camera)
+	}
+	if saved.Camera.PIPPreset == string(pip.PresetOff) || saved.Camera.PIP.Preset == pip.PresetOff {
+		t.Fatalf("SaveSettings disabled patched camera pip: %#v", saved.Camera)
+	}
+}
+
 func TestSaveWhiteboardExportWritesExcalidrawScene(t *testing.T) {
 	data := appdata.NewService(t.TempDir())
 	service := &RecordingFreedomService{appData: data}

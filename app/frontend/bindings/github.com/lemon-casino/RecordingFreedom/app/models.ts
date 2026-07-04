@@ -133,6 +133,13 @@ export interface BootstrapState {
     "capabilities": capture$0.Capabilities;
 }
 
+export interface CameraStatePatchRequest {
+    "enabled"?: boolean | null;
+    "deviceId"?: string | null;
+    "pipPreset"?: string | null;
+    "pip"?: pip$0.Config | null;
+}
+
 export interface CapsuleWindowHitRegion {
     "x": number;
     "y": number;

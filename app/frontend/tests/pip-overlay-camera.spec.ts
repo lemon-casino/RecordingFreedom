@@ -23,12 +23,21 @@ test('pip overlay close stops camera stream and ignores stale drag updates', asy
   await expect.poll(() => pipCameraCounters(page)).toMatchObject({opened: 1, stopped: 1})
 })
 
-test('recording pip overlay waits for backend preview image without reopening browser camera', async ({page}) => {
+test('recording pip overlay waits for real backend preview frames without reopening browser camera', async ({page}) => {
   await openRecordingPipOverlayWithBackendPreviewPath(page)
 
   await expect(page.locator('.pip-live-frame')).toBeVisible()
-  await expect(page.getByText('Camera recording')).toBeVisible()
-  await expect(page.getByText('HD Webcam')).toBeVisible()
+  await expect(page.getByText('Camera recording')).toHaveCount(0)
+  await expect(page.locator('.pip-camera-placeholder')).toHaveCount(0)
+  await expect.poll(() => pipCameraCounters(page)).toMatchObject({opened: 0})
+})
+
+test('recording pip overlay never falls back to fake camera placeholder', async ({page}) => {
+  await openRecordingPipOverlayWithBackendPreviewPath(page, '')
+
+  await expect(page.locator('.pip-live-frame')).toBeVisible()
+  await expect(page.getByText('Camera recording')).toHaveCount(0)
+  await expect(page.locator('.pip-camera-placeholder')).toHaveCount(0)
   await expect.poll(() => pipCameraCounters(page)).toMatchObject({opened: 0})
 })
 
@@ -152,8 +161,8 @@ async function openPipOverlayWithMockCamera(page: Page) {
   await page.goto('/#/pip-overlay')
 }
 
-async function openRecordingPipOverlayWithBackendPreviewPath(page: Page) {
-  await page.addInitScript(({settingsKey}) => {
+async function openRecordingPipOverlayWithBackendPreviewPath(page: Page, previewImagePath = 'browser-preview/data/video/recording.rfrec/cache/pip-camera-preview.jpg') {
+  await page.addInitScript(({settingsKey, previewPath}) => {
     const recordingPipState = {
       config: {
         preset: 'bottom-right',
@@ -176,7 +185,7 @@ async function openRecordingPipOverlayWithBackendPreviewPath(page: Page) {
       mode: 'recording',
       cameraName: 'HD Webcam',
       camera: {deviceId: 'camera:dshow:hd-webcam', nativeId: 'HD Webcam', name: 'HD Webcam'},
-      previewImagePath: 'browser-preview/data/video/recording.rfrec/cache/pip-camera-preview.jpg',
+      previewImagePath: previewPath,
       captureExcluded: false,
       clientOperationId: 1,
     }
@@ -239,7 +248,7 @@ async function openRecordingPipOverlayWithBackendPreviewPath(page: Page) {
         },
       },
     })
-  }, {settingsKey: browserSettingsKey})
+  }, {settingsKey: browserSettingsKey, previewPath: previewImagePath})
 
   await page.goto('/#/pip-overlay')
 }
