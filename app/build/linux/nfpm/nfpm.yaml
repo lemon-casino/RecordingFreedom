@@ -3,7 +3,7 @@
 #
 # The lines below are called `modelines`. See `:help modeline`
 
-name: "recordingfreedom.exe"
+name: "recordingfreedom"
 arch: ${GOARCH}
 platform: "linux"
 version: "0.1.0"
@@ -17,31 +17,38 @@ license: "MIT"
 release: "1"
 
 contents:
-  - src: "./bin/recordingfreedom.exe"
-    dst: "/usr/local/bin/recordingfreedom.exe"
+  - src: "./bin/recordingfreedom"
+    dst: "/usr/local/bin/recordingfreedom"
   - src: "./build/appicon.png"
-    dst: "/usr/share/icons/hicolor/128x128/apps/recordingfreedom.exe.png"
-  - src: "./build/linux/recordingfreedom.exe.desktop"
-    dst: "/usr/share/applications/recordingfreedom.exe.desktop"
+    dst: "/usr/share/icons/hicolor/128x128/apps/recordingfreedom.png"
+  - src: "./build/linux/recordingfreedom.desktop"
+    dst: "/usr/share/applications/recordingfreedom.desktop"
+  - src: "./tools/ffmpeg"
+    dst: "/usr/local/lib/recordingfreedom/tools/ffmpeg"
+  - src: "./tools/ffprobe"
+    dst: "/usr/local/lib/recordingfreedom/tools/ffprobe"
+  - src: "./tools/THIRD_PARTY_FFMPEG.txt"
+    dst: "/usr/local/lib/recordingfreedom/tools/THIRD_PARTY_FFMPEG.txt"
+  - src: "./tools/THIRD_PARTY_NOTICES.txt"
+    dst: "/usr/local/lib/recordingfreedom/tools/THIRD_PARTY_NOTICES.txt"
 
-# Default dependencies for the GTK4 + WebKitGTK 6.0 stack (Ubuntu 24.04+ / Debian 13+)
 depends:
-  - libgtk-4-1
-  - libwebkitgtk-6.0-4
+  - libgtk-3-0
+  - libwebkit2gtk-4.1-0
 
 # Distribution-specific overrides for different package formats
 overrides:
   # RPM packages for Fedora / RHEL / AlmaLinux / Rocky Linux
   rpm:
     depends:
-      - gtk4
-      - webkitgtk6.0
+      - gtk3
+      - webkit2gtk4.1
 
   # Arch Linux packages
   archlinux:
     depends:
-      - gtk4
-      - webkitgtk-6.0
+      - gtk3
+      - webkit2gtk-4.1
 
 # scripts section to ensure desktop database is updated after install
 scripts:

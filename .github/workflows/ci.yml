@@ -118,9 +118,28 @@ jobs:
           CGO_ENABLED: "1"
         run: go run -tags "gtk3 ${RNNOISE_TAG}" ./cmd/desktop-doctor -require-rnnoise
 
-  windows-build:
-    name: Windows Wails Build
-    runs-on: windows-latest
+  desktop-build:
+    name: Desktop Build ${{ matrix.name }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: windows-x64
+            os: windows-latest
+            platform: windows
+            arch: amd64
+            ffmpeg_arch: x64
+          - name: macos-arm64
+            os: macos-15
+            platform: macos
+            arch: arm64
+            ffmpeg_arch: arm64
+          - name: linux-x64
+            os: ubuntu-latest
+            platform: linux
+            arch: amd64
+            ffmpeg_arch: x64
     steps:
       - uses: actions/checkout@v5
 
@@ -135,7 +154,19 @@ jobs:
           cache: npm
           cache-dependency-path: ${{ env.APP_DIR }}/frontend/package-lock.json
 
+      - name: Install Linux Wails build dependencies
+        if: matrix.platform == 'linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            build-essential \
+            pkg-config \
+            libgtk-3-dev \
+            libwebkit2gtk-4.1-dev \
+            file
+
       - name: Enable Windows cgo toolchain
+        if: matrix.platform == 'windows'
         shell: pwsh
         run: |
           if (!(Test-Path "C:\msys64\usr\bin\bash.exe")) {
@@ -148,7 +179,11 @@ jobs:
         working-directory: ${{ env.APP_DIR }}
         shell: bash
         run: |
-          go install github.com/wailsapp/wails/v3/cmd/wails3@${WAILS_VERSION}
+          if [ "${{ matrix.platform }}" = "linux" ]; then
+            go install -tags gtk3 github.com/wailsapp/wails/v3/cmd/wails3@${WAILS_VERSION}
+          else
+            go install github.com/wailsapp/wails/v3/cmd/wails3@${WAILS_VERSION}
+          fi
           echo "$(go env GOPATH)/bin" >> "$GITHUB_PATH"
 
       - name: Install frontend dependencies
@@ -156,35 +191,62 @@ jobs:
         run: npm ci
 
       - name: Prepare Windows FFmpeg tool
+        if: matrix.platform == 'windows'
         shell: pwsh
         run: ./scripts/ensure-windows-ffmpeg.ps1
+
+      - name: Prepare Unix FFmpeg tools
+        if: matrix.platform == 'macos' || matrix.platform == 'linux'
+        shell: bash
+        run: ./scripts/ensure-unix-ffmpeg.sh --platform "${{ matrix.platform }}" --arch "${{ matrix.ffmpeg_arch }}"
 
       - name: Build app
         working-directory: ${{ env.APP_DIR }}
         shell: bash
-        run: CGO_ENABLED=1 wails3 task windows:build EXTRA_TAGS="${RNNOISE_TAG}" CGO_ENABLED=1
+        run: |
+          if [ "${{ matrix.platform }}" = "windows" ]; then
+            CGO_ENABLED=1 wails3 task windows:build ARCH="${{ matrix.arch }}" EXTRA_TAGS="${RNNOISE_TAG}" CGO_ENABLED=1
+          elif [ "${{ matrix.platform }}" = "macos" ]; then
+            CGO_ENABLED=1 wails3 task darwin:package ARCH="${{ matrix.arch }}" EXTRA_TAGS="${RNNOISE_TAG}"
+          else
+            CGO_ENABLED=1 wails3 task linux:build ARCH="${{ matrix.arch }}" EXTRA_TAGS="gtk3,${RNNOISE_TAG}" CGO_ENABLED=1
+          fi
 
-      - name: Build Windows portable smoke tools
+      - name: Build desktop smoke tools
         working-directory: ${{ env.APP_DIR }}
-        shell: pwsh
+        shell: bash
         env:
           CGO_ENABLED: "1"
         run: |
-          New-Item -ItemType Directory -Force -Path "bin" | Out-Null
-          go build -tags "$env:RNNOISE_TAG" -trimpath -ldflags "-w -s" -o "bin\desktop-doctor.exe" ".\cmd\desktop-doctor"
-          go build -tags "$env:RNNOISE_TAG" -trimpath -ldflags "-w -s" -o "bin\video-smoke.exe" ".\cmd\video-smoke"
-          go build -tags "$env:RNNOISE_TAG" -trimpath -ldflags "-w -s" -o "bin\audio-smoke.exe" ".\cmd\audio-smoke"
-          go build -tags "$env:RNNOISE_TAG" -trimpath -ldflags "-w -s" -o "bin\annotation-export-smoke.exe" ".\cmd\annotation-export-smoke"
-          go build -tags "$env:RNNOISE_TAG" -trimpath -ldflags "-w -s" -o "bin\annotation-overlay-evidence-check.exe" ".\cmd\annotation-overlay-evidence-check"
+          mkdir -p bin
+          tags="${RNNOISE_TAG}"
+          ext=""
+          if [ "${{ matrix.platform }}" = "linux" ]; then
+            tags="gtk3 ${RNNOISE_TAG}"
+          elif [ "${{ matrix.platform }}" = "windows" ]; then
+            ext=".exe"
+          fi
+          go build -tags "${tags}" -trimpath -ldflags "-w -s" -o "bin/desktop-doctor${ext}" "./cmd/desktop-doctor"
+          go build -tags "${tags}" -trimpath -ldflags "-w -s" -o "bin/video-smoke${ext}" "./cmd/video-smoke"
+          go build -tags "${tags}" -trimpath -ldflags "-w -s" -o "bin/audio-smoke${ext}" "./cmd/audio-smoke"
+          go build -tags "${tags}" -trimpath -ldflags "-w -s" -o "bin/annotation-export-smoke${ext}" "./cmd/annotation-export-smoke"
+          go build -tags "${tags}" -trimpath -ldflags "-w -s" -o "bin/annotation-overlay-evidence-check${ext}" "./cmd/annotation-overlay-evidence-check"
 
       - name: Run desktop dependency doctor
         working-directory: ${{ env.APP_DIR }}
         shell: bash
-        run: CGO_ENABLED=1 go run -tags "${RNNOISE_TAG}" ./cmd/desktop-doctor -require-video -require-rnnoise
+        run: |
+          if [ "${{ matrix.platform }}" = "windows" ]; then
+            CGO_ENABLED=1 go run -tags "${RNNOISE_TAG}" ./cmd/desktop-doctor -require-video -require-rnnoise
+          elif [ "${{ matrix.platform }}" = "linux" ]; then
+            CGO_ENABLED=1 go run -tags "gtk3 ${RNNOISE_TAG}" ./cmd/desktop-doctor -require-rnnoise
+          else
+            CGO_ENABLED=1 go run -tags "${RNNOISE_TAG}" ./cmd/desktop-doctor -require-rnnoise
+          fi
 
       - name: Upload build artifact
         uses: actions/upload-artifact@v5
         with:
-          name: recordingfreedom-windows-x64
+          name: recordingfreedom-${{ matrix.name }}
           path: ${{ env.APP_DIR }}/bin/**
           if-no-files-found: error

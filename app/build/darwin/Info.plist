@@ -6,7 +6,7 @@
         <key>CFBundleName</key>
             <string>RecordingFreedom</string>
         <key>CFBundleExecutable</key>
-            <string>recordingfreedom.exe</string>
+            <string>recordingfreedom</string>
         <key>CFBundleIdentifier</key>
             <string>casino.lemon.recordingfreedom</string>
         <key>CFBundleVersion</key>
@@ -26,6 +26,6 @@
         <key>NSMicrophoneUsageDescription</key>
             <string>RecordingFreedom uses the microphone only when microphone recording is enabled.</string>
         <key>NSHumanReadableCopyright</key>
-            <string>© 2026, My Company</string>
+            <string>© 2026, lemon-casino</string>
     </dict>
 </plist>

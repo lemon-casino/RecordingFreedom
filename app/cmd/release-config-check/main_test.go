@@ -18,6 +18,9 @@ func TestRunAcceptsRequiredReleaseGates(t *testing.T) {
 	writeWorkflow(t, root, "scripts/verify-windows-installer.ps1", workflowFixture("scripts/verify-windows-installer.ps1"))
 	writeWorkflow(t, root, "scripts/verify-windows-portable.ps1", workflowFixture("scripts/verify-windows-portable.ps1"))
 	writeWorkflow(t, root, "scripts/verify-windows-preview-release.ps1", workflowFixture("scripts/verify-windows-preview-release.ps1"))
+	writeWorkflow(t, root, "scripts/ensure-unix-ffmpeg.sh", workflowFixture("scripts/ensure-unix-ffmpeg.sh"))
+	writeWorkflow(t, root, "scripts/verify-macos-app-zip.sh", workflowFixture("scripts/verify-macos-app-zip.sh"))
+	writeWorkflow(t, root, "scripts/verify-linux-portable.sh", workflowFixture("scripts/verify-linux-portable.sh"))
 	writeWorkflow(t, root, "scripts/run-windows-portable-smoke.ps1", workflowFixture("scripts/run-windows-portable-smoke.ps1"))
 	writeWorkflow(t, root, "app/frontend/tests/capsule-whiteboard-entry.spec.ts", workflowFixture("app/frontend/tests/capsule-whiteboard-entry.spec.ts"))
 	writeWorkflow(t, root, "docs/12-annotation-overlay-platform-smoke.md", workflowFixture("docs/12-annotation-overlay-platform-smoke.md"))
@@ -48,6 +51,9 @@ func TestRunRejectsMissingRNNoiseGate(t *testing.T) {
 	writeWorkflow(t, root, "scripts/verify-windows-installer.ps1", workflowFixture("scripts/verify-windows-installer.ps1"))
 	writeWorkflow(t, root, "scripts/verify-windows-portable.ps1", workflowFixture("scripts/verify-windows-portable.ps1"))
 	writeWorkflow(t, root, "scripts/verify-windows-preview-release.ps1", workflowFixture("scripts/verify-windows-preview-release.ps1"))
+	writeWorkflow(t, root, "scripts/ensure-unix-ffmpeg.sh", workflowFixture("scripts/ensure-unix-ffmpeg.sh"))
+	writeWorkflow(t, root, "scripts/verify-macos-app-zip.sh", workflowFixture("scripts/verify-macos-app-zip.sh"))
+	writeWorkflow(t, root, "scripts/verify-linux-portable.sh", workflowFixture("scripts/verify-linux-portable.sh"))
 	writeWorkflow(t, root, "scripts/run-windows-portable-smoke.ps1", workflowFixture("scripts/run-windows-portable-smoke.ps1"))
 	writeWorkflow(t, root, "app/frontend/tests/capsule-whiteboard-entry.spec.ts", workflowFixture("app/frontend/tests/capsule-whiteboard-entry.spec.ts"))
 	writeWorkflow(t, root, "docs/12-annotation-overlay-platform-smoke.md", workflowFixture("docs/12-annotation-overlay-platform-smoke.md"))
@@ -74,7 +80,7 @@ func TestRunRejectsMissingRNNoiseGate(t *testing.T) {
 
 func TestRunRejectsMissingWhiteboardReleaseNotes(t *testing.T) {
 	root := t.TempDir()
-	release := strings.ReplaceAll(workflowFixture(".github/workflows/release.yml"), "Whiteboard / Excalidraw preview", "")
+	release := strings.ReplaceAll(workflowFixture(".github/workflows/release.yml"), "Whiteboard / Excalidraw board and recording annotation", "")
 	writeWorkflow(t, root, ".github/workflows/ci.yml", workflowFixture(".github/workflows/ci.yml"))
 	writeWorkflow(t, root, ".github/workflows/release.yml", release)
 	writeWorkflow(t, root, "app/build/darwin/Taskfile.yml", workflowFixture("app/build/darwin/Taskfile.yml"))
@@ -84,6 +90,9 @@ func TestRunRejectsMissingWhiteboardReleaseNotes(t *testing.T) {
 	writeWorkflow(t, root, "scripts/verify-windows-installer.ps1", workflowFixture("scripts/verify-windows-installer.ps1"))
 	writeWorkflow(t, root, "scripts/verify-windows-portable.ps1", workflowFixture("scripts/verify-windows-portable.ps1"))
 	writeWorkflow(t, root, "scripts/verify-windows-preview-release.ps1", workflowFixture("scripts/verify-windows-preview-release.ps1"))
+	writeWorkflow(t, root, "scripts/ensure-unix-ffmpeg.sh", workflowFixture("scripts/ensure-unix-ffmpeg.sh"))
+	writeWorkflow(t, root, "scripts/verify-macos-app-zip.sh", workflowFixture("scripts/verify-macos-app-zip.sh"))
+	writeWorkflow(t, root, "scripts/verify-linux-portable.sh", workflowFixture("scripts/verify-linux-portable.sh"))
 	writeWorkflow(t, root, "scripts/run-windows-portable-smoke.ps1", workflowFixture("scripts/run-windows-portable-smoke.ps1"))
 	writeWorkflow(t, root, "app/frontend/tests/capsule-whiteboard-entry.spec.ts", workflowFixture("app/frontend/tests/capsule-whiteboard-entry.spec.ts"))
 	writeWorkflow(t, root, "docs/12-annotation-overlay-platform-smoke.md", workflowFixture("docs/12-annotation-overlay-platform-smoke.md"))
@@ -99,7 +108,7 @@ func TestRunRejectsMissingWhiteboardReleaseNotes(t *testing.T) {
 	}
 	var found bool
 	for _, check := range report.Checks {
-		if check.Status == "blocked" && strings.Contains(check.Message, "Whiteboard / Excalidraw preview") {
+		if check.Status == "blocked" && strings.Contains(check.Message, "Whiteboard / Excalidraw board and recording annotation") {
 			found = true
 		}
 	}
@@ -123,7 +132,7 @@ func workflowFixture(name string) string {
 	var builder strings.Builder
 	builder.WriteString("RNNOISE_TAG: rnnoise_native\n")
 	builder.WriteString("CGO_ENABLED=1 wails3 build -tags\n")
-	builder.WriteString("CGO_ENABLED=1 wails3 task windows:build EXTRA_TAGS=\"${RNNOISE_TAG}\" CGO_ENABLED=1\n")
+	builder.WriteString("wails3 task windows:build ARCH=\"${{ matrix.arch }}\" EXTRA_TAGS=\"${RNNOISE_TAG}\"\n")
 	builder.WriteString("gtk3,${RNNOISE_TAG}\n")
 	builder.WriteString("-require-rnnoise\n")
 	builder.WriteString("pacman -S --noconfirm --needed mingw-w64-x86_64-gcc\n")
@@ -139,15 +148,22 @@ func workflowFixture(name string) string {
 	builder.WriteString("set -e\n")
 	builder.WriteString("GITHUB_STEP_SUMMARY\n")
 	builder.WriteString("Go test failed\n")
-	builder.WriteString("Build Windows portable smoke tools\n")
-	builder.WriteString("bin\\desktop-doctor.exe\n")
-	builder.WriteString("bin\\video-smoke.exe\n")
-	builder.WriteString("bin\\audio-smoke.exe\n")
-	builder.WriteString("bin\\annotation-export-smoke.exe\n")
-	builder.WriteString("bin\\annotation-overlay-evidence-check.exe\n")
+	builder.WriteString("Build desktop smoke tools\n")
+	builder.WriteString("desktop-doctor${ext}\n")
+	builder.WriteString("video-smoke${ext}\n")
+	builder.WriteString("audio-smoke${ext}\n")
+	builder.WriteString("annotation-export-smoke${ext}\n")
+	builder.WriteString("annotation-overlay-evidence-check${ext}\n")
+	builder.WriteString("macos-arm64\n")
+	builder.WriteString("linux-x64\n")
+	builder.WriteString("windows-x64\n")
+	builder.WriteString("./scripts/ensure-unix-ffmpeg.sh\n")
+	builder.WriteString("wails3 task darwin:package\n")
+	builder.WriteString("wails3 task linux:build\n")
+	builder.WriteString("recordingfreedom-${{ matrix.name }}\n")
 	if strings.Contains(name, "release.yml") {
 		builder.WriteString("RNNoise native DSP is compiled into release artifacts\n")
-		builder.WriteString("Whiteboard / Excalidraw preview\n")
+		builder.WriteString("Whiteboard / Excalidraw board and recording annotation\n")
 		builder.WriteString("opens the normal whiteboard\n")
 		builder.WriteString("opens the annotation overlay\n")
 		builder.WriteString("Whiteboard scene persistence and export\n")
@@ -173,6 +189,13 @@ func workflowFixture(name string) string {
 		builder.WriteString("run-windows-portable-smoke.ps1\n")
 		builder.WriteString("./scripts/verify-windows-portable.ps1\n")
 		builder.WriteString("./scripts/verify-windows-installer.ps1\n")
+		builder.WriteString("RecordingFreedom-${{ matrix.name }}-${{ github.ref_name }}-app.zip\n")
+		builder.WriteString("RecordingFreedom-${{ matrix.name }}-${{ github.ref_name }}-portable.tar.gz\n")
+		builder.WriteString("./scripts/verify-macos-app-zip.sh\n")
+		builder.WriteString("./scripts/verify-linux-portable.sh\n")
+		builder.WriteString("Full desktop build matrix is enabled for Windows x64, macOS arm64, and Linux x64\n")
+		builder.WriteString("macOS app bundles include Contents/MacOS/recordingfreedom\n")
+		builder.WriteString("Linux portable archives include recordingfreedom\n")
 	}
 	if strings.Contains(name, "Taskfile.yml") {
 		builder.WriteString("-ldflags=\"-w -s -H windowsgui\"\n")
@@ -224,6 +247,33 @@ func workflowFixture(name string) string {
 		builder.WriteString("SHA256SUMS-windows-x64\n")
 		builder.WriteString("Get-FileHash -Algorithm SHA256\n")
 		builder.WriteString("verify-windows-portable.ps1\n")
+	}
+	if strings.Contains(name, "ensure-unix-ffmpeg.sh") {
+		builder.WriteString("n8.1.2-1\n")
+		builder.WriteString("ffmpeg-osx-arm64\n")
+		builder.WriteString("ffprobe-osx-arm64\n")
+		builder.WriteString("ffmpeg-linux-x64\n")
+		builder.WriteString("ffprobe-linux-x64\n")
+		builder.WriteString("SHA256 mismatch\n")
+		builder.WriteString("THIRD_PARTY_FFMPEG.txt\n")
+	}
+	if strings.Contains(name, "verify-macos-app-zip.sh") {
+		builder.WriteString("RecordingFreedom.app\n")
+		builder.WriteString("Contents/MacOS/recordingfreedom\n")
+		builder.WriteString("Contents/MacOS/tools\n")
+		builder.WriteString("CFBundleExecutable\n")
+		builder.WriteString("ffmpeg\n")
+		builder.WriteString("ffprobe\n")
+		builder.WriteString("THIRD_PARTY_NOTICES.txt\n")
+	}
+	if strings.Contains(name, "verify-linux-portable.sh") {
+		builder.WriteString("RecordingFreedom-linux-*\n")
+		builder.WriteString("recordingfreedom\n")
+		builder.WriteString("tools/ffmpeg\n")
+		builder.WriteString("tools/ffprobe\n")
+		builder.WriteString("recordingfreedom.desktop\n")
+		builder.WriteString("THIRD_PARTY_NOTICES.txt\n")
+		builder.WriteString("ELF 64-bit\n")
 	}
 	if strings.Contains(name, "run-windows-portable-smoke.ps1") {
 		builder.WriteString("desktop-doctor.exe\n")

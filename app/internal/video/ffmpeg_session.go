@@ -111,6 +111,14 @@ func ResolveFFmpegPath() (string, error) {
 			)
 		}
 	}
+	if runtime.GOOS != "windows" {
+		for _, name := range names {
+			candidates = append(candidates,
+				filepath.Join("/usr/local/lib/recordingfreedom/tools", name),
+				filepath.Join("/opt/RecordingFreedom/tools", name),
+			)
+		}
+	}
 	for _, candidate := range candidates {
 		if path, err := validateExecutablePath(candidate, "bundled ffmpeg"); err == nil {
 			return path, nil

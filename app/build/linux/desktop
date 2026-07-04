@@ -3,9 +3,9 @@ Version=1.0
 Name=RecordingFreedom
 Comment=A modern capsule screen recorder built with Go, React, and Wails v3
 # The Exec line includes %u to pass the URL to the application
-Exec=/usr/local/bin/recordingfreedom.exe %u
+Exec=/usr/local/bin/recordingfreedom %u
 Terminal=false
 Type=Application
-Icon=recordingfreedom.exe
+Icon=recordingfreedom
 Categories=Utility;
-StartupWMClass=recordingfreedom.exe
+StartupWMClass=recordingfreedom
