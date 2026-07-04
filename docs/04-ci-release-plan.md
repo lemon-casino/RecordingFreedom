@@ -27,11 +27,11 @@ https://github.com/lemon-casino/RecordingFreedom.git
 当前已落地 jobs：
 
 - `validate`：安装 Go、Node、Linux Wails 依赖、Wails v3 CLI 和 Playwright Chromium，生成 bindings，校验 `frontend/bindings` 无未提交差异，运行前端 build、前端 `test:e2e`、`go test ./...`、RNNoise native DSP + recording runtime 定向测试、`go run ./cmd/preview-smoke`、`go run ./cmd/release-config-check`，并用 `CGO_ENABLED=1 go run -tags "gtk3 rnnoise_native" ./cmd/desktop-doctor -require-rnnoise` 阻断不能创建 RNNoise native suppressor 的构建。前端 e2e 覆盖普通画板、主胶囊画板入口双态规则和录制标注 overlay 命中区域，防止画板入口在录制紧凑态被隐藏或误切模式；`release-config-check` 同时检查 `12-annotation-overlay-platform-smoke.md` 的实机 overlay 验收标准，避免把导出合成 smoke 误写成透明 overlay 已完成。
-- `desktop-build`：使用矩阵构建 Windows x64、macOS arm64 和 Linux x64。Windows runner 会显式准备 MinGW GCC 供 cgo 编译 RNNoise，并继续运行 `desktop-doctor -require-video -require-rnnoise`；macOS/Linux runner 会下载经 SHA256 固定的 FFmpeg/FFprobe 工具，macOS 打出完整 `.app` bundle，Linux 打出可校验 portable 目录。三端都会构建 desktop-doctor/video-smoke/audio-smoke/annotation-export-smoke/annotation-overlay-evidence-check 诊断工具。
+- `desktop-build`：使用矩阵构建 Windows x64/arm64、macOS x64/arm64 和 Linux x64/arm64。Windows runner 会按架构准备 MinGW/Clang cgo 工具链供 RNNoise 编译，并继续运行 `desktop-doctor -require-video -require-rnnoise`；macOS/Linux runner 会下载经 SHA256 固定的对应架构 FFmpeg/FFprobe 工具，macOS 打出完整 `.app` bundle，Linux 打出可校验 portable 目录。所有桌面架构都会构建 desktop-doctor/video-smoke/audio-smoke/annotation-export-smoke/annotation-overlay-evidence-check 诊断工具。
 
 ## 当前 Release 工作流
 
-`release.yml` 由 `v*` tag 触发。`v0.1.0` 开始作为第一版桌面 release 发布，开启 Windows x64、macOS arm64 和 Linux x64 三端构建。当前仍不是签名/公证后的商业发行包：Windows 提供 portable zip 和 NSIS setup.exe，macOS 提供完整 `.app.zip`，Linux 提供 portable `.tar.gz`。
+`release.yml` 由 `v*` tag 触发。`v0.1.0` 开始作为第一版桌面 release 发布，开启 Windows x64/arm64、macOS x64/arm64 和 Linux x64/arm64 全桌面架构构建。当前仍不是签名/公证后的商业发行包：Windows 每个架构提供 portable zip 和 NSIS setup.exe，macOS 每个架构提供完整 `.app.zip`，Linux 每个架构提供 portable `.tar.gz`。
 
 发布前门禁：
 
@@ -40,20 +40,30 @@ https://github.com/lemon-casino/RecordingFreedom.git
 
 平台 runner：
 
-- macOS: `macos-15`，先构建 arm64 `.app.zip`，后续增加 universal、Developer ID 签名、公证和 staple。
-- Windows: `windows-latest`，先构建 x64。
-- Linux: `ubuntu-latest`，先构建 x64 portable `.tar.gz`，Linux 录制能力仍标注 experimental。
+- macOS x64: `macos-15-intel`，构建 x64 `.app.zip`。
+- macOS arm64: `macos-15`，构建 arm64 `.app.zip`。
+- Windows x64: `windows-latest`，构建 x64 portable zip 和 NSIS setup.exe。
+- Windows arm64: `windows-11-arm`，构建 arm64 portable zip 和 NSIS setup.exe。
+- Linux x64: `ubuntu-latest`，构建 x64 portable `.tar.gz`。
+- Linux arm64: `ubuntu-24.04-arm`，构建 arm64 portable `.tar.gz`；Linux 录制能力仍标注 experimental。
 
 当前 release artifact 命名：
 
 ```text
 RecordingFreedom-windows-x64-vX.Y.Z-portable.zip
 RecordingFreedom-windows-x64-vX.Y.Z-setup.exe
+RecordingFreedom-windows-arm64-vX.Y.Z-portable.zip
+RecordingFreedom-windows-arm64-vX.Y.Z-setup.exe
+RecordingFreedom-macos-x64-vX.Y.Z-app.zip
 RecordingFreedom-macos-arm64-vX.Y.Z-app.zip
 RecordingFreedom-linux-x64-vX.Y.Z-portable.tar.gz
+RecordingFreedom-linux-arm64-vX.Y.Z-portable.tar.gz
 SHA256SUMS-windows-x64.txt
+SHA256SUMS-windows-arm64.txt
+SHA256SUMS-macos-x64.txt
 SHA256SUMS-macos-arm64.txt
 SHA256SUMS-linux-x64.txt
+SHA256SUMS-linux-arm64.txt
 ```
 
 后续安装包目标仍为 `.dmg`、已签名 Windows installer/MSIX、Linux AppImage/deb/rpm。
@@ -175,9 +185,9 @@ Linux 初期为 experimental：
 - RNNoise native DSP 已进入目标 preview/release toolchain 的 cgo 构建和 doctor 门禁；正式发布前仍需补目标桌面的 `audio-smoke -rnnoise` 实录听感与诊断验证。
 - FFmpeg 或系统编码依赖策略检查；PIP 导出和当前三平台摄像头 sidecar 均依赖 FFmpeg，可用性必须进入 capability、doctor 和 release notes。
 - Windows portable zip 解压后 `recordingfreedom.exe` 能从同级 `tools/ffmpeg.exe` 解析依赖。
-- Release workflow 在上传 artifact 前运行 `scripts/verify-windows-portable.ps1`，缺少 exe、FFmpeg、FFprobe、FFmpeg 第三方说明或 Excalidraw MIT notices 会直接失败；该脚本还会解压 portable zip，检查 `recordingfreedom.exe` 是 x64 GUI PE，并确认 FFmpeg/FFprobe 是 x64 PE，在 Windows host 上继续执行 `-version`。
+- Release workflow 在上传 artifact 前运行 `scripts/verify-windows-portable.ps1`，缺少 exe、FFmpeg、FFprobe、FFmpeg 第三方说明或 Excalidraw MIT notices 会直接失败；该脚本还会解压 portable zip，按矩阵架构检查 `recordingfreedom.exe` 是 x64 或 ARM64 GUI PE，并确认 FFmpeg/FFprobe 与诊断工具架构一致，在 Windows host 上继续执行 `-version`。
 - Release workflow 在上传 macOS artifact 前运行 `scripts/verify-macos-app-zip.sh`，缺少 `.app`、`Contents/MacOS/recordingfreedom`、`Contents/MacOS/tools/ffmpeg`、`Contents/MacOS/tools/ffprobe`、Info.plist 或 notices 会直接失败。
-- Release workflow 在上传 Linux artifact 前运行 `scripts/verify-linux-portable.sh`，缺少主程序、FFmpeg/FFprobe、诊断工具、desktop 文件或 notices 会直接失败，并检查主程序是 x64 ELF。
+- Release workflow 在上传 Linux artifact 前运行 `scripts/verify-linux-portable.sh`，缺少主程序、FFmpeg/FFprobe、诊断工具、desktop 文件或 notices 会直接失败，并检查主程序、FFmpeg 和 FFprobe 是矩阵指定的 x64 或 ARM64 ELF。
 - Release 发布后可运行 `scripts/verify-windows-preview-release.ps1` 对 GitHub Release asset 做下载级复验，覆盖 SHA256SUMS 和 portable zip 结构。
 - 正式安装包环境中的 GUI/进程级 smoke test。
 - signed/notarized/package 后的 mock `.rfrec/manifest.json` 创建 smoke test。

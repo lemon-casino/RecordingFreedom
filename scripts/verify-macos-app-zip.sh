@@ -1,12 +1,13 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-if [ "$#" -ne 1 ]; then
-  echo "Usage: $0 <RecordingFreedom-macos-*.zip>" >&2
+if [ "$#" -lt 1 ] || [ "$#" -gt 2 ]; then
+  echo "Usage: $0 <RecordingFreedom-macos-*.zip> [x64|arm64]" >&2
   exit 2
 fi
 
 zip_path="$1"
+expected_arch="${2:-}"
 if [ ! -s "${zip_path}" ]; then
   echo "macOS app zip is missing or empty: ${zip_path}" >&2
   exit 1
@@ -43,5 +44,33 @@ fi
 
 "${tools_dir}/ffmpeg" -version >/dev/null
 "${tools_dir}/ffprobe" -version >/dev/null
+
+if [ -n "${expected_arch}" ]; then
+  assert_file_arch() {
+    local path="$1"
+    local pattern="$2"
+    if ! file "${path}" | grep -Eq "${pattern}"; then
+      echo "${path} does not match expected macOS architecture ${expected_arch}." >&2
+      file "${path}" >&2
+      exit 1
+    fi
+  }
+  case "${expected_arch}" in
+    x64|amd64)
+      assert_file_arch "${main_binary}" "x86_64"
+      assert_file_arch "${tools_dir}/ffmpeg" "x86_64"
+      assert_file_arch "${tools_dir}/ffprobe" "x86_64"
+      ;;
+    arm64)
+      assert_file_arch "${main_binary}" "arm64"
+      assert_file_arch "${tools_dir}/ffmpeg" "arm64"
+      assert_file_arch "${tools_dir}/ffprobe" "arm64"
+      ;;
+    *)
+      echo "Unsupported macOS architecture check: ${expected_arch}" >&2
+      exit 2
+      ;;
+  esac
+fi
 
 echo "macOS app zip verified: ${zip_path}"

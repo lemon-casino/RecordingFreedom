@@ -1,7 +1,9 @@
 [CmdletBinding()]
 param(
     [string]$DestinationDir = "",
-    [string]$Uri = "https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/ffmpeg-master-latest-win64-gpl.zip",
+    [ValidateSet("x64", "arm64")]
+    [string]$Architecture = "x64",
+    [string]$Uri = "",
     [string]$Sha256Uri = "https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/checksums.sha256",
     [switch]$Force
 )
@@ -67,17 +69,33 @@ if ([string]::IsNullOrWhiteSpace($DestinationDir)) {
     $DestinationDir = Resolve-FullPath $DestinationDir
 }
 
+if ([string]::IsNullOrWhiteSpace($Uri)) {
+    $assetName = if ($Architecture -eq "arm64") {
+        "ffmpeg-master-latest-winarm64-gpl.zip"
+    } else {
+        "ffmpeg-master-latest-win64-gpl.zip"
+    }
+    $Uri = "https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/$assetName"
+}
+
 New-Item -ItemType Directory -Force -Path $DestinationDir | Out-Null
 $ffmpegPath = Join-Path $DestinationDir "ffmpeg.exe"
+$ffprobePath = Join-Path $DestinationDir "ffprobe.exe"
+$noticePath = Join-Path $DestinationDir "THIRD_PARTY_FFMPEG.txt"
 
-if ((Test-Path -LiteralPath $ffmpegPath) -and -not $Force) {
-    $version = (& $ffmpegPath -version 2>$null | Select-Object -First 1)
-    if ($LASTEXITCODE -eq 0) {
-        Write-Host "Using existing FFmpeg: $ffmpegPath"
-        Write-Host $version
-        exit 0
+if ((Test-Path -LiteralPath $ffmpegPath) -and (Test-Path -LiteralPath $ffprobePath) -and (Test-Path -LiteralPath $noticePath) -and -not $Force) {
+    $noticeText = Get-Content -Raw -LiteralPath $noticePath
+    if ($noticeText -notmatch "Architecture:\s*$([regex]::Escape($Architecture))") {
+        Write-Host "Existing FFmpeg bundle does not match requested architecture $Architecture, refreshing: $ffmpegPath"
+    } else {
+        $version = (& $ffmpegPath -version 2>$null | Select-Object -First 1)
+        if ($LASTEXITCODE -eq 0) {
+            Write-Host "Using existing FFmpeg: $ffmpegPath"
+            Write-Host $version
+            exit 0
+        }
+        Write-Host "Existing FFmpeg is not executable, refreshing: $ffmpegPath"
     }
-    Write-Host "Existing FFmpeg is not executable, refreshing: $ffmpegPath"
 }
 
 $workDir = Join-Path ([System.IO.Path]::GetTempPath()) ("recordingfreedom-ffmpeg-" + [System.Guid]::NewGuid().ToString("N"))
@@ -118,16 +136,17 @@ try {
     $ffprobe = Get-ChildItem -Path $extractDir -Recurse -Filter "ffprobe.exe" |
         Where-Object { $_.FullName -match "[\\/]bin[\\/]ffprobe\.exe$" } |
         Select-Object -First 1
-    if ($null -ne $ffprobe) {
-        Copy-Item -LiteralPath $ffprobe.FullName -Destination (Join-Path $DestinationDir "ffprobe.exe") -Force
+    if ($null -eq $ffprobe) {
+        throw "Downloaded FFmpeg archive did not contain ffprobe.exe"
     }
+    Copy-Item -LiteralPath $ffprobe.FullName -Destination $ffprobePath -Force
 
-    $noticePath = Join-Path $DestinationDir "THIRD_PARTY_FFMPEG.txt"
     $notice = @"
 RecordingFreedom bundled FFmpeg dependency
 
 Source: $Uri
 Checksum source: $Sha256Uri
+Architecture: $Architecture
 SHA256: $actualHash
 RetrievedAtUtc: $((Get-Date).ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ssZ"))
 

@@ -55,6 +55,12 @@ if [ -z "${arch}" ]; then
 fi
 
 case "${platform}-${arch}" in
+  macos-x64|macos-amd64)
+    ffmpeg_asset="ffmpeg-osx-x64"
+    ffprobe_asset="ffprobe-osx-x64"
+    ffmpeg_sha256="62c87854d851f202fc4a29bdda0fe7b6ebcddd37b863482ce1bdc81151b03fe4"
+    ffprobe_sha256="d530823f480a3c7eb6334f18a00197d1e9f1070e86172b9aa89c4bf4022bd879"
+    ;;
   macos-arm64)
     ffmpeg_asset="ffmpeg-osx-arm64"
     ffprobe_asset="ffprobe-osx-arm64"
@@ -66,6 +72,12 @@ case "${platform}-${arch}" in
     ffprobe_asset="ffprobe-linux-x64"
     ffmpeg_sha256="9eac5b2b5076db5ff853a6fa0dcd6b8de7d0cac8481eadda6c47cd935825f1ee"
     ffprobe_sha256="065d3c56926052a76e884c4e4b51b7d95248da9391ab7effdcca6b94ceab98cf"
+    ;;
+  linux-arm64)
+    ffmpeg_asset="ffmpeg-linux-arm64"
+    ffprobe_asset="ffprobe-linux-arm64"
+    ffmpeg_sha256="6e7b1d7d1aa8c35e3fedd78a140aa0968717aeb7386ecfb0ee00773d9f0a4503"
+    ffprobe_sha256="fd2aca1456f0261cabef4514b6d97a70fa342003347f51b39c473dd364328089"
     ;;
   *)
     echo "Unsupported FFmpeg bundle target: platform=${platform} arch=${arch}" >&2

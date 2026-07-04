@@ -130,6 +130,24 @@ jobs:
             platform: windows
             arch: amd64
             ffmpeg_arch: x64
+            windows_msys_package: mingw-w64-x86_64-gcc
+            windows_msys_bin: C:\msys64\mingw64\bin
+            windows_cc: gcc
+            nsis_arch: AMD64
+          - name: windows-arm64
+            os: windows-11-arm
+            platform: windows
+            arch: arm64
+            ffmpeg_arch: arm64
+            windows_msys_package: mingw-w64-clang-aarch64-clang
+            windows_msys_bin: C:\msys64\clangarm64\bin
+            windows_cc: clang
+            nsis_arch: ARM64
+          - name: macos-x64
+            os: macos-15-intel
+            platform: macos
+            arch: amd64
+            ffmpeg_arch: x64
           - name: macos-arm64
             os: macos-15
             platform: macos
@@ -140,6 +158,11 @@ jobs:
             platform: linux
             arch: amd64
             ffmpeg_arch: x64
+          - name: linux-arm64
+            os: ubuntu-24.04-arm
+            platform: linux
+            arch: arm64
+            ffmpeg_arch: arm64
     steps:
       - uses: actions/checkout@v5
 
@@ -172,8 +195,9 @@ jobs:
           if (!(Test-Path "C:\msys64\usr\bin\bash.exe")) {
             throw "MSYS2 is required for the Windows RNNoise cgo build but was not found at C:\msys64"
           }
-          & "C:\msys64\usr\bin\bash.exe" -lc "pacman -S --noconfirm --needed mingw-w64-x86_64-gcc"
-          "C:\msys64\mingw64\bin" | Out-File -FilePath $env:GITHUB_PATH -Append
+          & "C:\msys64\usr\bin\bash.exe" -lc "pacman -S --noconfirm --needed ${{ matrix.windows_msys_package }}"
+          "${{ matrix.windows_msys_bin }}" | Out-File -FilePath $env:GITHUB_PATH -Append
+          "CC=${{ matrix.windows_cc }}" | Out-File -FilePath $env:GITHUB_ENV -Append
 
       - name: Install Wails v3 CLI
         working-directory: ${{ env.APP_DIR }}
@@ -193,7 +217,7 @@ jobs:
       - name: Prepare Windows FFmpeg tool
         if: matrix.platform == 'windows'
         shell: pwsh
-        run: ./scripts/ensure-windows-ffmpeg.ps1
+        run: ./scripts/ensure-windows-ffmpeg.ps1 -Architecture "${{ matrix.ffmpeg_arch }}" -Force
 
       - name: Install Windows installer tooling
         if: matrix.platform == 'windows'
@@ -205,7 +229,7 @@ jobs:
       - name: Prepare Unix FFmpeg tools
         if: matrix.platform == 'macos' || matrix.platform == 'linux'
         shell: bash
-        run: ./scripts/ensure-unix-ffmpeg.sh --platform "${{ matrix.platform }}" --arch "${{ matrix.ffmpeg_arch }}"
+        run: ./scripts/ensure-unix-ffmpeg.sh --platform "${{ matrix.platform }}" --arch "${{ matrix.ffmpeg_arch }}" --force
 
       - name: Build app
         working-directory: ${{ env.APP_DIR }}
@@ -230,7 +254,7 @@ jobs:
             -DWAILS_INSTALL_SCOPE=user `
             -DREQUEST_EXECUTION_LEVEL=user `
             "-DARG_RECORDINGFREEDOM_TOOLS_DIR=$root\${{ env.APP_DIR }}\tools" `
-            "-DARG_WAILS_AMD64_BINARY=$root\${{ env.APP_DIR }}\bin\recordingfreedom.exe" `
+            "-DARG_WAILS_${{ matrix.nsis_arch }}_BINARY=$root\${{ env.APP_DIR }}\bin\recordingfreedom.exe" `
             project.nsi
           Pop-Location
 
@@ -346,7 +370,7 @@ jobs:
       - name: Verify Windows portable artifact
         if: matrix.platform == 'windows'
         shell: pwsh
-        run: ./scripts/verify-windows-portable.ps1 -ZipPath "release-out/RecordingFreedom-${{ matrix.name }}-${{ github.ref_name }}-portable.zip"
+        run: ./scripts/verify-windows-portable.ps1 -ZipPath "release-out/RecordingFreedom-${{ matrix.name }}-${{ github.ref_name }}-portable.zip" -Architecture "${{ matrix.ffmpeg_arch }}"
 
       - name: Verify Windows installer artifact
         if: matrix.platform == 'windows'
@@ -356,12 +380,12 @@ jobs:
       - name: Verify macOS app artifact
         if: matrix.platform == 'macos'
         shell: bash
-        run: ./scripts/verify-macos-app-zip.sh "release-out/RecordingFreedom-${{ matrix.name }}-${{ github.ref_name }}-app.zip"
+        run: ./scripts/verify-macos-app-zip.sh "release-out/RecordingFreedom-${{ matrix.name }}-${{ github.ref_name }}-app.zip" "${{ matrix.ffmpeg_arch }}"
 
       - name: Verify Linux portable artifact
         if: matrix.platform == 'linux'
         shell: bash
-        run: ./scripts/verify-linux-portable.sh "release-out/RecordingFreedom-${{ matrix.name }}-${{ github.ref_name }}-portable.tar.gz"
+        run: ./scripts/verify-linux-portable.sh "release-out/RecordingFreedom-${{ matrix.name }}-${{ github.ref_name }}-portable.tar.gz" "${{ matrix.ffmpeg_arch }}"
 
       - name: Upload release artifact
         uses: actions/upload-artifact@v5
@@ -410,7 +434,7 @@ jobs:
           - Windows FFmpeg desktop video writer contract for screen/all-screen/region/locked-window capture; enabled WASAPI system audio and microphone tracks are muxed into the final screen.mp4 at stop, and the Windows release artifacts are staged as a portable zip plus an NSIS setup installer. Both include tools/ffmpeg.exe and tools/ffprobe.exe; the portable zip also includes desktop-doctor/video-smoke/audio-smoke/annotation-export-smoke/annotation-overlay-evidence-check diagnostics.
           - Windows clean-machine portable smoke entrypoint at tools/run-windows-portable-smoke.ps1.
           - RNNoise native DSP is compiled into release artifacts with the rnnoise_native cgo build tag; desktop-doctor -require-rnnoise is a release build gate.
-          - Full desktop build matrix is enabled for Windows x64, macOS arm64, and Linux x64. Release artifacts are Windows portable zip + Windows setup.exe, macOS RecordingFreedom.app zip, and Linux portable tar.gz.
+          - Full desktop build matrix is enabled for Windows x64/arm64, macOS x64/arm64, and Linux x64/arm64. Release artifacts are Windows portable zip + Windows setup.exe, macOS RecordingFreedom.app zip, and Linux portable tar.gz for each architecture.
           - macOS app bundles include Contents/MacOS/recordingfreedom, Contents/MacOS/tools/ffmpeg, Contents/MacOS/tools/ffprobe, icons, Info.plist permissions, and third-party notices.
           - Linux portable archives include recordingfreedom, tools/ffmpeg, tools/ffprobe, diagnostic smoke tools, a desktop file, and third-party notices.
           - Whiteboard / Excalidraw board and recording annotation: the main capsule keeps a Whiteboard entry before recording, during compact video recording, while paused, and during audio-only recording. Before recording and during audio-only recording it opens the normal whiteboard; during video recording or pause it opens the annotation overlay.

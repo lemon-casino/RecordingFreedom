@@ -3,6 +3,9 @@ param(
     [Parameter(Mandatory = $true)]
     [string]$ZipPath,
 
+    [ValidateSet("x64", "arm64")]
+    [string]$Architecture = "x64",
+
     [switch]$AllowMissingFFprobe,
     [switch]$SkipExecutableCheck
 )
@@ -191,6 +194,7 @@ try {
 }
 
 if (-not $SkipExecutableCheck) {
+    $expectedMachine = if ($Architecture -eq "arm64") { [UInt16]0xAA64 } else { [UInt16]0x8664 }
     $extractDir = Join-Path ([System.IO.Path]::GetTempPath()) ("recordingfreedom-portable-" + [System.Guid]::NewGuid().ToString("N"))
     try {
         New-Item -ItemType Directory -Force -Path $extractDir | Out-Null
@@ -199,13 +203,13 @@ if (-not $SkipExecutableCheck) {
         if (-not (Test-Path -LiteralPath $appPath)) {
             throw "Extracted portable zip is missing recordingfreedom.exe"
         }
-        Assert-PEMetadata -Path $appPath -ExpectedMachine 0x8664 -ExpectedSubsystem 2
+        Assert-PEMetadata -Path $appPath -ExpectedMachine $expectedMachine -ExpectedSubsystem 2
 
         $ffmpegPath = Join-Path $extractDir "tools/ffmpeg.exe"
         if (-not (Test-Path -LiteralPath $ffmpegPath)) {
             throw "Extracted portable zip is missing tools/ffmpeg.exe"
         }
-        Assert-PEMetadata -Path $ffmpegPath -ExpectedMachine 0x8664
+        Assert-PEMetadata -Path $ffmpegPath -ExpectedMachine $expectedMachine
 
         $thirdPartyNoticesPath = Join-Path $extractDir "tools/THIRD_PARTY_NOTICES.txt"
         if (-not (Test-Path -LiteralPath $thirdPartyNoticesPath)) {
@@ -223,38 +227,38 @@ if (-not $SkipExecutableCheck) {
             if (-not (Test-Path -LiteralPath $ffprobePath)) {
                 throw "Extracted portable zip is missing tools/ffprobe.exe"
             }
-            Assert-PEMetadata -Path $ffprobePath -ExpectedMachine 0x8664
+            Assert-PEMetadata -Path $ffprobePath -ExpectedMachine $expectedMachine
         }
 
         $doctorPath = Join-Path $extractDir "tools/desktop-doctor.exe"
         if (-not (Test-Path -LiteralPath $doctorPath)) {
             throw "Extracted portable zip is missing tools/desktop-doctor.exe"
         }
-        Assert-PEMetadata -Path $doctorPath -ExpectedMachine 0x8664 -ExpectedSubsystem 3
+        Assert-PEMetadata -Path $doctorPath -ExpectedMachine $expectedMachine -ExpectedSubsystem 3
 
         $videoSmokePath = Join-Path $extractDir "tools/video-smoke.exe"
         if (-not (Test-Path -LiteralPath $videoSmokePath)) {
             throw "Extracted portable zip is missing tools/video-smoke.exe"
         }
-        Assert-PEMetadata -Path $videoSmokePath -ExpectedMachine 0x8664 -ExpectedSubsystem 3
+        Assert-PEMetadata -Path $videoSmokePath -ExpectedMachine $expectedMachine -ExpectedSubsystem 3
 
         $audioSmokePath = Join-Path $extractDir "tools/audio-smoke.exe"
         if (-not (Test-Path -LiteralPath $audioSmokePath)) {
             throw "Extracted portable zip is missing tools/audio-smoke.exe"
         }
-        Assert-PEMetadata -Path $audioSmokePath -ExpectedMachine 0x8664 -ExpectedSubsystem 3
+        Assert-PEMetadata -Path $audioSmokePath -ExpectedMachine $expectedMachine -ExpectedSubsystem 3
 
         $annotationSmokePath = Join-Path $extractDir "tools/annotation-export-smoke.exe"
         if (-not (Test-Path -LiteralPath $annotationSmokePath)) {
             throw "Extracted portable zip is missing tools/annotation-export-smoke.exe"
         }
-        Assert-PEMetadata -Path $annotationSmokePath -ExpectedMachine 0x8664 -ExpectedSubsystem 3
+        Assert-PEMetadata -Path $annotationSmokePath -ExpectedMachine $expectedMachine -ExpectedSubsystem 3
 
         $annotationEvidenceCheckPath = Join-Path $extractDir "tools/annotation-overlay-evidence-check.exe"
         if (-not (Test-Path -LiteralPath $annotationEvidenceCheckPath)) {
             throw "Extracted portable zip is missing tools/annotation-overlay-evidence-check.exe"
         }
-        Assert-PEMetadata -Path $annotationEvidenceCheckPath -ExpectedMachine 0x8664 -ExpectedSubsystem 3
+        Assert-PEMetadata -Path $annotationEvidenceCheckPath -ExpectedMachine $expectedMachine -ExpectedSubsystem 3
 
         $portableSmokePath = Join-Path $extractDir "tools/run-windows-portable-smoke.ps1"
         if (-not (Test-Path -LiteralPath $portableSmokePath)) {
