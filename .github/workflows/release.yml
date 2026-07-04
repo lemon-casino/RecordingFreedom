@@ -138,7 +138,7 @@ jobs:
             rnnoise_dynamic: "true"
             windows_msystem: MINGW64
             windows_msys_package: mingw-w64-x86_64-gcc
-            windows_cc: gcc
+            windows_cc: C:/msys64/mingw64/bin/gcc.exe
             nsis_arch: AMD64
           - name: windows-arm64
             os: windows-11-arm
@@ -149,7 +149,7 @@ jobs:
             rnnoise_dynamic: "true"
             windows_msystem: CLANGARM64
             windows_msys_package: mingw-w64-clang-aarch64-clang
-            windows_cc: clang
+            windows_cc: C:/msys64/clangarm64/bin/clang.exe
             nsis_arch: ARM64
           - name: macos-x64
             os: macos-15-intel

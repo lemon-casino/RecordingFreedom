@@ -35,6 +35,55 @@ function Resolve-CommandPath {
     return ""
 }
 
+function Resolve-CompilerPath {
+    param(
+        [Parameter(Mandatory = $true)][string]$Architecture,
+        [string]$RequestedCompiler
+    )
+
+    $candidates = [System.Collections.Generic.List[string]]::new()
+    if (-not [string]::IsNullOrWhiteSpace($RequestedCompiler)) {
+        if ([System.IO.Path]::IsPathRooted($RequestedCompiler)) {
+            $candidates.Add($RequestedCompiler)
+        } else {
+            if ($Architecture -eq "arm64" -and $RequestedCompiler -ieq "clang") {
+                $candidates.Add("C:\msys64\clangarm64\bin\clang.exe")
+            } elseif ($Architecture -eq "x64" -and $RequestedCompiler -ieq "gcc") {
+                $candidates.Add("C:\msys64\mingw64\bin\gcc.exe")
+            }
+            $candidates.Add($RequestedCompiler)
+        }
+    } elseif (-not [string]::IsNullOrWhiteSpace($env:CC)) {
+        $candidates.Add($env:CC)
+    } elseif ($Architecture -eq "arm64") {
+        $candidates.Add("C:\msys64\clangarm64\bin\clang.exe")
+        $candidates.Add("aarch64-w64-mingw32-clang")
+        $candidates.Add("clang")
+    } else {
+        $candidates.Add("C:\msys64\mingw64\bin\gcc.exe")
+        $candidates.Add("x86_64-w64-mingw32-gcc")
+        $candidates.Add("gcc")
+        $candidates.Add("clang")
+    }
+
+    foreach ($candidate in $candidates) {
+        if ([string]::IsNullOrWhiteSpace($candidate)) {
+            continue
+        }
+        if ([System.IO.Path]::IsPathRooted($candidate) -or $candidate.Contains("/") -or $candidate.Contains("\")) {
+            if (Test-Path -LiteralPath $candidate) {
+                return ([System.IO.Path]::GetFullPath($candidate))
+            }
+            continue
+        }
+        $resolved = Resolve-CommandPath @($candidate)
+        if (-not [string]::IsNullOrWhiteSpace($resolved)) {
+            return $resolved
+        }
+    }
+    return ""
+}
+
 function Assert-PEMachine {
     param(
         [Parameter(Mandatory = $true)][string]$Path,
@@ -74,18 +123,12 @@ if ([string]::IsNullOrWhiteSpace($OutputPath)) {
 $OutputPath = [System.IO.Path]::GetFullPath($OutputPath)
 New-Item -ItemType Directory -Force -Path (Split-Path -Parent $OutputPath) | Out-Null
 
-if ([string]::IsNullOrWhiteSpace($Compiler)) {
-    if (-not [string]::IsNullOrWhiteSpace($env:CC)) {
-        $Compiler = $env:CC
-    } elseif ($Architecture -eq "arm64") {
-        $Compiler = Resolve-CommandPath @("clang", "aarch64-w64-mingw32-clang", "gcc")
-    } else {
-        $Compiler = Resolve-CommandPath @("gcc", "clang", "x86_64-w64-mingw32-gcc")
-    }
-}
+$Compiler = Resolve-CompilerPath -Architecture $Architecture -RequestedCompiler $Compiler
 if ([string]::IsNullOrWhiteSpace($Compiler)) {
     throw "No C compiler found. Install MSYS2 MINGW64/CLANGARM64 gcc or clang before building rnnoise.dll."
 }
+Write-Host "Resolved RNNoise compiler: $Compiler"
+& $Compiler --version | Select-Object -First 3 | ForEach-Object { Write-Host $_ }
 
 $sources = @(
     "likely_voice_enhancer.c",
