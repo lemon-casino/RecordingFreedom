@@ -6,7 +6,7 @@ Current state:
 
 - Wails v3 React + TypeScript + Vite project scaffold is in place.
 - The capsule recorder UI, tray entry, independent settings window, global Simplified Chinese / English language switching, screen indicator, and region selector are implemented.
-- Go backend services provide app data discovery, `.rfrec` package creation, preflight checks, recovery scanning, storage health, Windows WASAPI audio capture, RNNoise native DSP build coverage, and desktop dependency diagnostics under app-managed `data/video`.
+- Go backend services provide app data discovery, `.rfrec` package creation, preflight checks, recovery scanning, storage health, Windows WASAPI audio capture, RNNoise dynamic native module coverage, and desktop dependency diagnostics under app-managed `data/video`.
 - Native video code paths are now wired for macOS ScreenCaptureKit and Windows FFmpeg desktop capture. Windows short smoke covers screen/all-screens/region/window plus system-audio/microphone mux into `screen.mp4`; Windows camera sidecar now uses FFmpeg DirectShow and writes `webcam.mp4`, but still needs real-camera smoke and long-recording validation.
 - Linux PipeWire capture, macOS/Linux camera sidecar, PIP export, signed Windows installers, macOS notarization, and Linux packages remain queued. Windows preview releases include an unsigned NSIS setup installer and a portable zip.
 
@@ -61,10 +61,11 @@ Run Go tests:
 go test ./...
 ```
 
-Run RNNoise native tests on a machine with cgo and a C compiler:
+Build and test the RNNoise dynamic native module:
 
 ```bash
-CGO_ENABLED=1 go test -tags rnnoise_native ./internal/audio/rnnoise/native ./internal/recording
+bash ../scripts/build-rnnoise-unix.sh --platform linux --arch x64
+go test -tags rnnoise_dynamic ./internal/audio/rnnoise ./internal/recording
 ```
 
 Run the no-GUI preview smoke:
@@ -81,10 +82,10 @@ Run the no-GUI audio smoke:
 go run ./cmd/audio-smoke -duration=3s -keep
 ```
 
-Enable RNNoise in the audio smoke only on machines with cgo and a C compiler:
+Enable RNNoise in the audio smoke after `app/tools/` contains the platform module:
 
 ```bash
-CGO_ENABLED=1 go run -tags rnnoise_native ./cmd/audio-smoke -duration=3s -rnnoise -keep
+go run -tags rnnoise_dynamic ./cmd/audio-smoke -duration=3s -rnnoise -keep
 ```
 
 Run the desktop dependency doctor:
@@ -93,7 +94,7 @@ Run the desktop dependency doctor:
 go run ./cmd/desktop-doctor
 ```
 
-Use `-require-video` when a machine must be able to start real screen/window capture. On Windows this requires a readable `ffmpeg.exe` in `PATH`, beside the app under `tools/`, or configured with `RECORDINGFREEDOM_FFMPEG_PATH`. Release artifacts are built with `rnnoise_native`; validate the same capability with `CGO_ENABLED=1 go run -tags rnnoise_native ./cmd/desktop-doctor -require-rnnoise` on machines with a C toolchain.
+Use `-require-video` when a machine must be able to start real screen/window capture. On Windows this requires a readable `ffmpeg.exe` in `PATH`, beside the app under `tools/`, or configured with `RECORDINGFREEDOM_FFMPEG_PATH`. Release artifacts are built with `rnnoise_dynamic`; validate the same capability with `go run -tags rnnoise_dynamic ./cmd/desktop-doctor -require-rnnoise` after building the RNNoise module.
 
 Prepare the same Windows FFmpeg tool layout used by release builds:
 
@@ -115,7 +116,7 @@ Verify a locally produced Windows setup installer:
 ..\scripts\verify-windows-installer.ps1 -InstallerPath .\bin\RecordingFreedom-amd64-installer.exe
 ```
 
-The setup verifier silently installs to a temporary directory, checks that the installed app includes the executable plus `tools\ffmpeg.exe`, `tools\ffprobe.exe`, `tools\THIRD_PARTY_FFMPEG.txt`, and an uninstaller, then removes the test install.
+The setup verifier silently installs to a temporary directory, checks that the installed app includes the executable plus `tools\ffmpeg.exe`, `tools\ffprobe.exe`, `tools\rnnoise.dll`, `tools\THIRD_PARTY_FFMPEG.txt`, and an uninstaller, then removes the test install.
 
 The current Windows portable preview includes target-machine smoke tools. After unzipping the portable zip on a Windows desktop, run:
 

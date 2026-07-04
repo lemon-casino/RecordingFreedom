@@ -106,7 +106,7 @@ func microphoneEnhancementCapability() Capability {
 	if rnnoise.Available() {
 		return available("microphone-enhancement", "Microphone RNNoise", "RNNoise native DSP", PermissionNotRequired, "RNNoise native DSP is available and wired into microphone capture; system audio is never denoised.")
 	}
-	return queued("microphone-enhancement", "Microphone RNNoise", "RNNoise native DSP", PermissionNotRequired, "RNNoise requires a cgo build with the rnnoise_native tag; the current build cannot create the native suppressor.")
+	return queued("microphone-enhancement", "Microphone RNNoise", "RNNoise dynamic module", PermissionNotRequired, "RNNoise requires a packaged native module under tools/ and a build with the rnnoise_dynamic tag; the current build cannot create the suppressor.")
 }
 
 func cameraSidecarCapability(platform string) Capability {

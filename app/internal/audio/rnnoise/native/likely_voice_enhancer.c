@@ -209,6 +209,14 @@ LikelyVoiceEnhancer* likely_voice_enhancer_create(int sample_rate, int channels,
     return enhancer;
 }
 
+LikelyVoiceEnhancer* likely_voice_enhancer_create_milli_gain(int sample_rate, int channels, int output_gain_milli) {
+    float output_gain = 1.0f;
+    if (output_gain_milli > 0) {
+        output_gain = (float)output_gain_milli / 1000.0f;
+    }
+    return likely_voice_enhancer_create(sample_rate, channels, output_gain);
+}
+
 void likely_voice_enhancer_destroy(LikelyVoiceEnhancer* enhancer) {
     if (!enhancer) return;
     if (enhancer->rnnoise) rnnoise_destroy(enhancer->rnnoise);

@@ -69,8 +69,8 @@
   - `internal/recpackage` 已新增 audio-only 包合同：manifest 使用 `recordingMode: "audio-only"` 和 `audioPath`，`CreateAudioOnly()` 不创建 `screen.mp4`，ready 门禁会校验主音频媒体的 `soun` 音轨，或校验明确声明的 WAV fallback sidecar。
   - 新增 `recording.AudioOnlyRuntime`、`AudioOnlyRuntimeBackend` 和 `RecordingService.StartAudioOnlyRecording()`：audio-only 录制不启动 video session，复用 `audio.CaptureSession`、RNNoise suppressor 生命周期、pause/resume/reset、sync diagnostics、`ValidateReady()` 和统一状态机；停止阶段会通过 FFmpeg 把 `audio.wav` 或 `system-audio.wav` + `microphone.wav` sidecar 封装为包内主音频 `audio.m4a`，并把 manifest 中已启用音轨标记为 `muxed`；Wails 服务已暴露 `PreflightAudioOnlyRecording()` 和 `StartAudioOnlyRecording()`，前端胶囊来源面板已接入视频/音频模式切换。
   - Windows 已新增纯 Go WASAPI capture source：麦克风采集会 downmix/resample 为 `48kHz / mono`，系统声音使用 loopback source，二者都走同一 audio pipeline 和 WAV sink。
-  - 新增 `internal/audio/rnnoise`：迁移 RNNoise C 源码和旧项目 `LikelyVoiceEnhancement` 为 cgo native wrapper；RNNoise C/H 源码已隔离到 `internal/audio/rnnoise/native` 子包，默认构建返回明确 unavailable，不做假降噪，带 `rnnoise_native` 标签的 cgo 构建才启用原生 DSP。
-  - RNNoise capability 和 media enhancement 状态已改为读取 `rnnoise.Available()`：带 `rnnoise_native` 标签的 cgo 构建会显示 available 并允许预检进入真实 suppressor，未带标签的本地开发构建显示 queued/blocked reason，不会假装降噪已生效。当前 CI/release preview artifact 已要求带 `rnnoise_native` 构建并通过 `desktop-doctor -require-rnnoise`；`rnnoise_native && !cgo` 已新增编译期硬门禁，避免标签存在但 CGO 关闭时静默打出无降噪二进制。
+  - 新增 `internal/audio/rnnoise`：迁移 RNNoise C 源码和旧项目 `LikelyVoiceEnhancement` 为可复用 C ABI；RNNoise C/H 源码已隔离到 `internal/audio/rnnoise/native` 子包，默认构建返回明确 unavailable，不做假降噪。
+  - RNNoise capability 和 media enhancement 状态已改为读取 `rnnoise.Available()`：当前 release 标准为 `rnnoise_dynamic`，CI 按平台/架构编译 `tools/rnnoise.dll`、`tools/librnnoise.dylib` 或 `tools/librnnoise.so`，主程序运行时加载模块。模块缺失、架构不匹配或符号绑定失败时会显示 queued/blocked reason，不会假装降噪已生效。当前 CI/release artifact 要求动态 DSP smoke 与 `desktop-doctor -require-rnnoise` 全平台通过；Windows ARM64 不再是无 RNNoise 的例外架构。
   - 新增 `cmd/audio-smoke`：可在不启动 Wails UI 的情况下真实启动平台音频 source，当前通过 `RecordingService.StartAudioOnlyRecording()` 写入 `<DataRoot>/data/video/recording-*.rfrec/`；采集期间单流写 `audio.wav` sidecar，双流写 `system-audio.wav` / `microphone.wav` 分轨 sidecar，停止后用 FFmpeg 生成 `audio.m4a` 主音频、写入 `audio-diagnostics.json` 和 manifest sync diagnostics，并通过 `ValidateReady()` 后标记 `ready`。
   - 新增 `internal/pip` 画中画 preset 合同：`off`、`bottom-right`、`bottom-left`、`free`，并提供基础 overlay layout 计算。
   - 新增 `internal/recordingprofile` 录制参数合同：`standard/balanced/high`、`24/30/60 FPS`、`captureCursor`、`countdownSeconds`，供 settings、recording request 和 manifest 共用。
@@ -170,7 +170,7 @@
   - `RecordingFreedom/.github/workflows/release.yml`
   - workflow 假定 `RecordingFreedom/` 是新仓库根目录，因此 `APP_DIR=app`。
   - CI 包含 bindings 检查、frontend build、Go test、preview smoke、macOS native contract、Windows/macOS/Linux Wails build。
-  - Release 在 tag `v*` 时先执行 release gate（bindings 检查、frontend build、Go test、preview smoke、release config check、`rnnoise_native` doctor），通过后用 `rnnoise_native` 构建三平台 preview artifacts、生成 SHA256SUMS 并发布 GitHub Release。
+  - Release 在 tag `v*` 时先执行 release gate（bindings 检查、frontend build、Go test、RNNoise dynamic module build/test、preview smoke、release config check、`rnnoise_dynamic` doctor），通过后用 `rnnoise_dynamic` 构建全平台 artifacts、生成 SHA256SUMS 并发布 GitHub Release。
   - 新增 `cmd/release-config-check`：轻量检查 `.github/workflows/ci.yml` 和 `.github/workflows/release.yml` 是否仍保留 RNNoise native artifact gate、Windows FFmpeg bootstrap、Windows portable zip verifier 和 release notes 能力边界，避免后续 workflow 改动把验收门禁悄悄删掉。
   - 新增无 GUI `cmd/preview-smoke` 验证入口：
   - 默认使用临时 data root，不污染开发目录；可通过 `-keep` 保留生成包。
@@ -290,10 +290,10 @@ go run ./cmd/video-smoke -duration=1s
 有 C 工具链的环境可用以下命令验证 RNNoise 原生 DSP：
 
 ```bash
-CGO_ENABLED=1 go test -tags rnnoise_native ./internal/audio/rnnoise/native ./internal/recording
+go test -tags rnnoise_dynamic ./internal/audio/rnnoise ./internal/recording
 ```
 
-本机 Windows 如果缺少 `gcc`，该命令只作为有 C 工具链环境的本机验证入口；CI/release gate 会在 Linux runner 上执行 RNNoise native DSP 和 recording runtime 定向测试，并在三平台 artifact 构建时启用 `rnnoise_native` 后运行 `desktop-doctor -require-rnnoise`。
+本机需先通过 `scripts/build-rnnoise-windows.ps1` 或 `scripts/build-rnnoise-unix.sh` 在 `app/tools/` 生成对应平台动态模块；CI/release gate 会执行 RNNoise dynamic DSP 和 recording runtime 定向测试，并在 artifact 构建时启用 `rnnoise_dynamic` 后运行 `desktop-doctor -require-rnnoise`。
 
 视觉检查：
 
@@ -344,7 +344,7 @@ CGO_ENABLED=1 go test -tags rnnoise_native ./internal/audio/rnnoise/native ./int
 - `internal/audio` 覆盖 WAV sidecar header/data 写入、格式变化拒绝、mono resampler、`CaptureSession` source -> pipeline -> sink -> diagnostics 运行时、有界队列满时丢弃输入帧并记录 diagnostics、queue capacity / maxDepth / flushCount / droppedFrames / droppedSamples 诊断，以及暂停前 flush 队列再 reset RNNoise。
 - `internal/video` 覆盖 Windows FFmpeg audio mux 参数：单音频输入直接映射，系统声音 + 麦克风使用 `amix` 混成主媒体 AAC 音轨。
 - `internal/video` 覆盖视频 capture config 归一化、source geometry 写入 diagnostics、`video-diagnostics.json` 写盘和默认平台 session 明确 unsupported。
-- `internal/audio/rnnoise` 覆盖非 cgo/未带标签 fallback；`rnnoise_native` cgo 构建下会编译 RNNoise C 源并跑 native frame 处理测试。Linux cgo link 的 `-lm` 约束已修正为独立 `linux` / `darwin` LDFLAGS，CI/release gate 执行 native 定向测试；三平台 preview artifact 构建已改为带 `rnnoise_native`，Windows runner 会显式准备 MinGW GCC。
+- `internal/audio/rnnoise` 覆盖非动态模块 fallback；`rnnoise_dynamic` 构建下会运行时加载平台动态库并跑 native frame 处理测试。CI/release gate 会先从 RNNoise C 源编译平台模块，再执行动态 DSP 定向测试；Windows x64/ARM64 主程序保持 `CGO_ENABLED=0`，macOS/Linux 通过 `dlopen` 加载 dylib/so。
 - `internal/recording` 覆盖 `CreateAudioCaptureConfig()`：打开/关闭系统声音、麦克风和 RNNoise 时，音频设备、sidecar 输出路径、diagnostics 路径和系统声音不降噪策略保持稳定。
 - `internal/recording` 覆盖 `CreateVideoCaptureConfig()`：source、source geometry、profile、`screen.mp4` 输出路径和 `video-diagnostics.json` 路径保持稳定；区域 source 会携带用户框选的虚拟桌面矩形进入 video config。
 - `internal/recording` 覆盖 `NativeBackendRuntime`：会创建并控制 video session；有音频时创建并控制 audio session；无音频时不启动 audio session；RNNoise suppressor 会传入并在停止时关闭；视频 session 或 RNNoise 不可用时初始化失败并把已创建 native 包标记为 `failed`。
@@ -430,7 +430,7 @@ RecordingFreedom/app/bin/recordingfreedom.exe
 - 真实 CoreAudio/PipeWire 音频采集；当前 Windows WASAPI 麦克风采集已通过 smoke，Windows system loopback 已通过有播放源真实样本 smoke，Windows FFmpeg 视频后端已通过 `NativeBackendRuntime` 调用 WASAPI 音频运行时，并在停止阶段把系统声音/麦克风 mux 到主 `screen.mp4`。macOS CoreAudio 麦克风枚举和 PCM 采集代码路径已完成，仍需 macOS 真机 smoke、视频麦克风 mux/sync 验收；Linux 音频源和长录同步仍未完成。
 - 真实 audio-only 录制模式；当前已完成 `.rfrec` audio-only 包格式、`audio.m4a` 主媒体路径、WAV sidecar 写盘、停止阶段 FFmpeg M4A 封装、ready 前 `soun` 音轨门禁、`audio-smoke` 包级验收入口、RecordingService/Wails 后端入口、胶囊 UI 模式入口和 audio-only preflight。macOS/Linux 真实音频源、RNNoise 目标桌面实录听感和长录同步仍未完成。
 - 摄像头/画中画已完成第一条可验证代码闭环：结构化 `camera.pip` 合同贯通 settings、start request、manifest、export plan、前端摄像头设置面板、透明 PIP 编辑 overlay、三平台 FFmpeg sidecar writer、Wails 导出入口和 FFmpeg PIP 导出器。仍不能把没有真机摄像头录制 smoke 的平台说成已完成真实摄像头验收。
-- RNNoise native DSP 的 C 源码和 Go wrapper 已迁移并隔离；CI/release gate 已恢复 native 定向测试。当前能力矩阵会按 `rnnoise.Available()` 动态显示：带 `rnnoise_native` 的 release artifact 显示可用并允许预检，未带标签的本地开发构建仍显示 queued/blocked。三平台 preview artifact 构建已要求 `desktop-doctor -require-rnnoise` 通过；目标桌面的 `audio-smoke -rnnoise` 实录听感和长录诊断仍需补。
+- RNNoise native DSP 的 C 源码和 Go wrapper 已迁移并隔离；CI/release gate 已切到动态模块定向测试。当前能力矩阵会按 `rnnoise.Available()` 动态显示：带 `rnnoise_dynamic` 且能加载随包模块的 release artifact 显示可用并允许预检，未带模块或模块不可加载的本地构建仍显示 queued/blocked。全平台 artifact 构建已要求 `desktop-doctor -require-rnnoise` 通过；目标桌面的 `audio-smoke -rnnoise` 实录听感和长录诊断仍需补。
 - macOS AVFoundation、Windows DirectShow、Linux v4l2 摄像头 sidecar 写入已接入 FFmpeg 实现；WebView 预览与 sidecar 设备的最佳匹配逻辑已接入。真实设备预览匹配效果、macOS/Linux 真机 sidecar smoke、PipeWire 摄像头替换和长时长同步仍保持后续项。
 - 真实 FFmpeg PIP 导出执行已接入并通过本机临时包 smoke；导出后首帧解码门禁已接入。暂停片段精确同步、真实录制包矩阵导出、ffprobe 音轨/时长门禁和长录同步仍保持后续项。
 - 真实音画同步时间戳采集和容器级媒体 probe；当前只完成 manifest 诊断合同、mock 标记、ready 前非 0 字节媒体门禁。

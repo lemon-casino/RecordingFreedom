@@ -97,6 +97,7 @@ Section
         SetOutPath "$INSTDIR\tools"
         File "${ARG_RECORDINGFREEDOM_TOOLS_DIR}\ffmpeg.exe"
         File "${ARG_RECORDINGFREEDOM_TOOLS_DIR}\ffprobe.exe"
+        File "${ARG_RECORDINGFREEDOM_TOOLS_DIR}\rnnoise.dll"
         File "${ARG_RECORDINGFREEDOM_TOOLS_DIR}\THIRD_PARTY_FFMPEG.txt"
         File "${ARG_RECORDINGFREEDOM_TOOLS_DIR}\THIRD_PARTY_NOTICES.txt"
         SetOutPath $INSTDIR

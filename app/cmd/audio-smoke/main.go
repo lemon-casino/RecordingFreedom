@@ -33,7 +33,7 @@ func main() {
 	flag.BoolVar(&systemAudio, "system", false, "capture system audio loopback")
 	flag.StringVar(&microphoneDevice, "microphone-device", "microphone:default", "microphone device id")
 	flag.StringVar(&systemDevice, "system-device", "system-audio:default", "system audio device id")
-	flag.BoolVar(&noiseSuppression, "rnnoise", false, "enable RNNoise microphone suppression; requires cgo build")
+	flag.BoolVar(&noiseSuppression, "rnnoise", false, "enable RNNoise microphone suppression; requires the packaged RNNoise native module")
 	flag.Float64Var(&gain, "gain", 1, "microphone gain")
 	flag.BoolVar(&keep, "keep", false, "keep temporary root when -root is not provided")
 	flag.Parse()

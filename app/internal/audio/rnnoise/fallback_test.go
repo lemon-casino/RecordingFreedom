@@ -1,4 +1,4 @@
-//go:build !cgo || !rnnoise_native
+//go:build !rnnoise_dynamic && (!cgo || !rnnoise_native)
 
 package rnnoise
 

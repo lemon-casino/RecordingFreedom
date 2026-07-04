@@ -1,4 +1,4 @@
-//go:build !cgo || !rnnoise_native
+//go:build !rnnoise_dynamic && (!cgo || !rnnoise_native)
 
 package rnnoise
 
@@ -19,7 +19,7 @@ func FrameSize() int {
 }
 
 func New(float64) (*Suppressor, error) {
-	return nil, errors.New("rnnoise native DSP requires a cgo-enabled build")
+	return nil, errors.New("rnnoise native DSP requires a build with rnnoise_dynamic and a packaged native module")
 }
 
 func (s *Suppressor) Name() string {
@@ -27,7 +27,7 @@ func (s *Suppressor) Name() string {
 }
 
 func (s *Suppressor) ProcessFrame([]float32) error {
-	return errors.New("rnnoise native DSP requires a cgo-enabled build")
+	return errors.New("rnnoise native DSP requires a build with rnnoise_dynamic and a packaged native module")
 }
 
 func (s *Suppressor) Reset() error {

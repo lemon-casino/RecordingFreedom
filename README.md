@@ -101,7 +101,7 @@ wails3 build
 
 `go run ./cmd/preview-smoke -keep` keeps the generated temporary data root so the `.rfrec` package can be inspected manually.
 
-`go run ./cmd/audio-smoke -duration=3s -keep` records real platform audio into a temporary `data/video/audio-smoke-*.rfrec/` folder. On Windows today, microphone capture writes `microphone.wav` and `audio-diagnostics.json`; RNNoise requires a cgo-enabled build and a C compiler.
+`go run ./cmd/audio-smoke -duration=3s -keep` records real platform audio into a temporary `data/video/audio-smoke-*.rfrec/` folder. RNNoise uses a packaged native dynamic module; build it first with the platform scripts below when testing `-rnnoise`.
 
 On Windows, `go run ./cmd/video-smoke -duration=3s -keep` requires FFmpeg. Put `ffmpeg.exe` on `PATH`, place it beside the app under `tools/`, or set:
 
@@ -116,6 +116,20 @@ The same Windows FFmpeg layout used by CI/release can be prepared locally:
 ```
 
 That script downloads the BtbN FFmpeg-Builds static Windows archive from GitHub, verifies it against `checksums.sha256`, and writes `app/tools/ffmpeg.exe`. The app resolves the same `tools/ffmpeg.exe` path when shipped beside `recordingfreedom.exe`.
+
+Build the RNNoise dynamic module used by release artifacts:
+
+```powershell
+.\scripts\build-rnnoise-windows.ps1 -Architecture x64
+.\scripts\build-rnnoise-windows.ps1 -Architecture arm64
+```
+
+```bash
+bash ./scripts/build-rnnoise-unix.sh --platform macos --arch arm64
+bash ./scripts/build-rnnoise-unix.sh --platform linux --arch x64
+```
+
+The module is written under `app/tools/` as `rnnoise.dll`, `librnnoise.dylib`, or `librnnoise.so`. The app can also load a diagnostic override from `RECORDINGFREEDOM_RNNOISE_PATH`.
 
 Verify a staged Windows portable zip before uploading it:
 
@@ -136,16 +150,16 @@ Use the desktop doctor to inspect the same dependency gate before trying a real 
 ```bash
 go run ./cmd/desktop-doctor
 go run ./cmd/desktop-doctor -require-video
-CGO_ENABLED=1 go run -tags rnnoise_native ./cmd/desktop-doctor -require-rnnoise
+go run -tags rnnoise_dynamic ./cmd/desktop-doctor -require-rnnoise
 ```
 
-The first command reports app data, `data/video`, backend, capabilities, RNNoise, and FFmpeg status as JSON without failing preview builds. `-require-video` exits non-zero when the current platform cannot start real screen/window video recording. `-require-rnnoise` exits non-zero unless the current binary was built with native RNNoise support.
+The first command reports app data, `data/video`, backend, capabilities, RNNoise, and FFmpeg status as JSON without failing preview builds. `-require-video` exits non-zero when the current platform cannot start real screen/window video recording. `-require-rnnoise` exits non-zero unless the current binary can load and bind the native RNNoise module.
 
-To test and smoke the RNNoise path on a machine with a C toolchain:
+To test and smoke the RNNoise path:
 
 ```bash
-CGO_ENABLED=1 go test -tags rnnoise_native ./internal/audio/rnnoise/native
-CGO_ENABLED=1 go run -tags rnnoise_native ./cmd/audio-smoke -duration=3s -rnnoise -keep
+go test -tags rnnoise_dynamic ./internal/audio/rnnoise
+go run -tags rnnoise_dynamic ./cmd/audio-smoke -duration=3s -rnnoise -keep
 ```
 
 ## Preview Release
@@ -157,7 +171,7 @@ git tag v0.1.0-preview.9
 git push origin v0.1.0-preview.9
 ```
 
-Preview tags are published as GitHub prereleases. The Windows preview artifact is a portable zip containing `recordingfreedom.exe`, FFmpeg/FFprobe, and portable diagnostics for desktop doctor, video smoke, audio smoke, and the Windows smoke runner; macOS/Linux remain raw preview binaries. Release artifacts are built with the `rnnoise_native` cgo tag and gated by `desktop-doctor -require-rnnoise`, so a preview that cannot create the native RNNoise suppressor must fail before publishing. This preview release is for UI shell, settings, mock package, developer audio smoke, Windows FFmpeg video + WASAPI audio mux verification, RNNoise native artifact gating, FFmpeg dependency gating, and full-platform build verification. It is not a signed installer release, and it does not claim full native screen/audio/camera recording yet. See [docs/04-ci-release-plan.md](docs/04-ci-release-plan.md).
+Preview tags are published as GitHub prereleases. Release artifacts are built with `rnnoise_dynamic`; Windows packages include `tools/rnnoise.dll`, macOS app bundles include `Contents/MacOS/tools/librnnoise.dylib`, and Linux archives include `tools/librnnoise.so`. `desktop-doctor -require-rnnoise` and a dynamic RNNoise DSP smoke gate every desktop architecture, including Windows ARM64. See [docs/04-ci-release-plan.md](docs/04-ci-release-plan.md) and [docs/13-rnnoise-dynamic-module.md](docs/13-rnnoise-dynamic-module.md).
 
 ## Data Directory
 
@@ -195,5 +209,5 @@ User settings are persisted in:
 2. Replace queued media-device placeholders with native macOS/Linux audio and camera enumeration; Windows WASAPI/DirectShow enumeration is already wired.
 3. Real-device smoke macOS ScreenCaptureKit recording.
 4. Download the Windows portable preview artifact and run `.\tools\run-windows-portable-smoke.ps1` on a real desktop to verify screen/all-screens/region/locked-window, pause/resume, system audio, microphone, RNNoise, and audio-only smoke.
-5. Smoke `audio-smoke -rnnoise` on target desktops built with the same `rnnoise_native` release toolchain, then keep the release `desktop-doctor -require-rnnoise` gate green on every desktop runner.
+5. Smoke `audio-smoke -rnnoise` on target desktops built with the same `rnnoise_dynamic` release toolchain, then keep the release `desktop-doctor -require-rnnoise` gate green on every desktop runner.
 6. After video recording and voice/audio recording are accepted, resume camera sidecar and PIP preview/export work.

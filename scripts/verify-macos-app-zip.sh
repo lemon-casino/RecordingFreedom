@@ -34,6 +34,7 @@ test -x "${main_binary}"
 test -f "${info_plist}"
 test -x "${tools_dir}/ffmpeg"
 test -x "${tools_dir}/ffprobe"
+test -s "${tools_dir}/librnnoise.dylib"
 test -s "${tools_dir}/THIRD_PARTY_FFMPEG.txt"
 test -s "${tools_dir}/THIRD_PARTY_NOTICES.txt"
 
@@ -60,11 +61,13 @@ if [ -n "${expected_arch}" ]; then
       assert_file_arch "${main_binary}" "x86_64"
       assert_file_arch "${tools_dir}/ffmpeg" "x86_64"
       assert_file_arch "${tools_dir}/ffprobe" "x86_64"
+      assert_file_arch "${tools_dir}/librnnoise.dylib" "x86_64"
       ;;
     arm64)
       assert_file_arch "${main_binary}" "arm64"
       assert_file_arch "${tools_dir}/ffmpeg" "arm64"
       assert_file_arch "${tools_dir}/ffprobe" "arm64"
+      assert_file_arch "${tools_dir}/librnnoise.dylib" "arm64"
       ;;
     *)
       echo "Unsupported macOS architecture check: ${expected_arch}" >&2

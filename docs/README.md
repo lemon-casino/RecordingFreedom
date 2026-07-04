@@ -30,6 +30,8 @@ RecordingFreedom 是一个全新的录制软件重构项目，目标技术栈为
    记录 Excalidraw 画板调研、画板胶囊、录制标注 overlay、录制包写入和导出合成计划。
 13. [12-annotation-overlay-platform-smoke.md](12-annotation-overlay-platform-smoke.md)
    固定录制标注 overlay 的真实桌面验收矩阵、证据目录和通过标准，区分导出合成 smoke 与透明窗口实机验收。
+14. [13-rnnoise-dynamic-module.md](13-rnnoise-dynamic-module.md)
+   固定 RNNoise 源码按平台/架构编译动态原生模块、随包发布、运行时加载和 release 门禁标准。
 
 ## 当前硬性决策
 
@@ -38,7 +40,7 @@ RecordingFreedom 是一个全新的录制软件重构项目，目标技术栈为
 - 新录制视频和录制包默认存入软件托管数据目录的 `data/video/` 下。
 - 生产环境不能把数据写进只读安装包本体；各平台使用应用数据根目录，再在其下保持统一的 `data/video/` 结构。
 - 默认录制包目录为 `data/video/recording-YYYY-MM-DD-HH-mm-ss-SSS.rfrec/`。
-- 麦克风降噪继承旧项目 RNNoise 原生处理思路，但要抽成新项目的跨平台音频 DSP 模块。
+- 麦克风降噪继承旧项目 RNNoise 原生处理思路，但发布标准改为跨平台动态原生模块：Windows `rnnoise.dll`、macOS `librnnoise.dylib`、Linux `librnnoise.so` 随包进入 `tools/` 并由 `rnnoise_dynamic` 运行时加载。
 - 后续画中画摄像头从 v1 数据模型开始预留，先录 webcam sidecar，不把摄像头硬烘焙进屏幕视频。
 - 当前已生成 Wails v3 React 工程骨架，并实现第一版胶囊 UI Shell 与 mock `.rfrec` 包创建服务。
 - 初版 preview 后的未完成任务以 `08-unfinished-task-plan-audio-first.md` 为执行清单，优先推进真实系统声音、麦克风采集和 RNNoise 降噪。

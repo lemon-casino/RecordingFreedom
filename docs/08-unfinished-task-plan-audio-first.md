@@ -99,7 +99,7 @@
 
 ### A4 RNNoise native DSP 接入
 
-状态：RNNoise C 源码和旧项目 `LikelyVoiceEnhancement` 已迁移为 `internal/audio/rnnoise` cgo 包，C/H 源码已隔离到 `internal/audio/rnnoise/native` 子包；非 cgo 或未带 `rnnoise_native` 标签的构建会明确返回 unavailable。Linux cgo link 的 `-lm` 约束已修正为独立 `linux` / `darwin` LDFLAGS，CI/release gate 已恢复 RNNoise native frame 处理硬门禁。`CaptureService` / `DeviceService` 已按 `rnnoise.Available()` 暴露真实能力：带 `rnnoise_native` 的 release artifact 显示 available 并允许预检，未带标签的本地开发构建仍显示 queued/blocked。当前 release/CI build job 已要求 `rnnoise_native`，并用 `desktop-doctor -require-rnnoise` 阻断缺真降噪的 preview artifact；目标桌面的 `audio-smoke -rnnoise` 实录听感和长录诊断仍需补。
+状态：RNNoise C 源码和旧项目 `LikelyVoiceEnhancement` 已迁移为 `internal/audio/rnnoise` 动态模块边界，C/H 源码已隔离到 `internal/audio/rnnoise/native` 子包；未带 `rnnoise_dynamic` 或无法加载随包模块的构建会明确返回 unavailable。CI/release gate 会从源码编译 `rnnoise.dll`、`librnnoise.dylib` 或 `librnnoise.so`，并执行 RNNoise dynamic frame 处理硬门禁。`CaptureService` / `DeviceService` 已按 `rnnoise.Available()` 暴露真实能力：带 `rnnoise_dynamic` 且模块可加载的 release artifact 显示 available 并允许预检，未带模块的本地开发构建仍显示 queued/blocked。当前 release/CI build job 已要求 `desktop-doctor -require-rnnoise` 阻断缺真降噪的 artifact；目标桌面的 `audio-smoke -rnnoise` 实录听感和长录诊断仍需补。
 
 交付：
 
@@ -318,7 +318,7 @@
 1. A0 音频后端边界。已完成基础代码合同和 `NativeBackendRuntime`。
 2. A1 真实音频设备枚举。Windows 已完成；macOS CoreAudio 输入设备枚举代码路径已完成，下一步补 macOS 真机验证和 Linux。
 3. A3 麦克风采集。Windows 已完成并 smoke 验证；macOS CoreAudio 麦克风采集代码路径已完成，下一步补 macOS 真机 smoke、长录同步和 Linux。
-4. A4 RNNoise native DSP。wrapper 已迁移并恢复 CI/release gate 定向验证；能力矩阵已按 `rnnoise.Available()` 动态展示；preview/release artifact 已改为默认启用 `rnnoise_native` 并通过 `desktop-doctor -require-rnnoise`。下一步是在目标桌面补真实 `audio-smoke -rnnoise`、听感检查和长录诊断。
+4. A4 RNNoise native DSP。wrapper 已迁移为动态原生模块并纳入 CI/release gate 定向验证；能力矩阵已按 `rnnoise.Available()` 动态展示；preview/release artifact 已改为默认启用 `rnnoise_dynamic`、随包携带对应平台模块并通过 `desktop-doctor -require-rnnoise`。下一步是在目标桌面补真实 `audio-smoke -rnnoise`、听感检查和长录诊断。
 5. A2 系统声音采集。Windows source 已实现并通过有播放源真实样本 smoke，录屏 runtime 已能启动 WASAPI sidecar 并在停止阶段 mux 到主 `screen.mp4`，Windows 20 分钟音视频长录已通过，Windows portable zip 已能准备 FFmpeg 依赖并在 release workflow 中通过内容校验；`v0.1.0-preview.15` artifact-run 3 秒矩阵已通过 system audio、microphone 和二者组合。下一步做外部 clean-machine 长时长真实录制验收。
 6. A5 音频混音、mux 与写盘。Windows 屏幕录制停止阶段 mux 与 audio-only 停止阶段 `audio.m4a` 封装已完成；音频采集会话已接入有界队列、队列水位 diagnostics 和丢帧诊断，避免磁盘/处理变慢时无限占用内存；macOS CoreAudio 麦克风采集源已接入 native audio runtime，下一步补 macOS 真机 mux/sync 验收、Linux 音频源、live PCM pipe/内存水位记录，并做三平台长录同步。
 7. A6 预检、UI 和设置联动。

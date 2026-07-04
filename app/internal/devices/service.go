@@ -317,7 +317,7 @@ func defaultAudioEnhancement(reason string) AudioEnhancement {
 		}
 	}
 	if strings.TrimSpace(reason) == "" {
-		reason = "RNNoise requires a cgo build with the rnnoise_native tag; the current build cannot create the native suppressor."
+		reason = "RNNoise requires a packaged native module under tools/ and a build with the rnnoise_dynamic tag; the current build cannot create the suppressor."
 	}
 	return AudioEnhancement{
 		Engine:            "rnnoise",

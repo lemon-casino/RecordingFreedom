@@ -179,6 +179,7 @@ try {
     Require-Entry -Entries $entries -Name "recordingfreedom.exe" | Out-Null
     Require-Entry -Entries $entries -Name "tools/ffmpeg.exe" | Out-Null
     Require-Entry -Entries $entries -Name "tools/THIRD_PARTY_FFMPEG.txt" | Out-Null
+    Require-Entry -Entries $entries -Name "tools/rnnoise.dll" | Out-Null
     Require-Entry -Entries $entries -Name "tools/THIRD_PARTY_NOTICES.txt" | Out-Null
     Require-Entry -Entries $entries -Name "tools/desktop-doctor.exe" | Out-Null
     Require-Entry -Entries $entries -Name "tools/video-smoke.exe" | Out-Null
@@ -210,6 +211,12 @@ if (-not $SkipExecutableCheck) {
             throw "Extracted portable zip is missing tools/ffmpeg.exe"
         }
         Assert-PEMetadata -Path $ffmpegPath -ExpectedMachine $expectedMachine
+
+        $rnnoisePath = Join-Path $extractDir "tools/rnnoise.dll"
+        if (-not (Test-Path -LiteralPath $rnnoisePath)) {
+            throw "Extracted portable zip is missing tools/rnnoise.dll"
+        }
+        Assert-PEMetadata -Path $rnnoisePath -ExpectedMachine $expectedMachine
 
         $thirdPartyNoticesPath = Join-Path $extractDir "tools/THIRD_PARTY_NOTICES.txt"
         if (-not (Test-Path -LiteralPath $thirdPartyNoticesPath)) {

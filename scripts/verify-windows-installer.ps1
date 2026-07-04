@@ -66,10 +66,12 @@ try {
     $toolsDir = Join-Path $InstallDir "tools"
     $ffmpegPath = Join-Path $toolsDir "ffmpeg.exe"
     $ffprobePath = Join-Path $toolsDir "ffprobe.exe"
+    $rnnoisePath = Join-Path $toolsDir "rnnoise.dll"
     $noticePath = Join-Path $toolsDir "THIRD_PARTY_FFMPEG.txt"
     $thirdPartyNoticesPath = Join-Path $toolsDir "THIRD_PARTY_NOTICES.txt"
     Require-File $ffmpegPath | Out-Null
     Require-File $ffprobePath | Out-Null
+    Require-File $rnnoisePath | Out-Null
     Require-File $noticePath | Out-Null
     Require-File $thirdPartyNoticesPath | Out-Null
     Assert-FileContains -Path $thirdPartyNoticesPath -Needles @(

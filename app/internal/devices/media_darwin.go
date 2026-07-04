@@ -229,7 +229,7 @@ func listPlatformMediaDevices() (MediaInventory, error) {
 		},
 		Microphones: microphones,
 		Cameras:     listDarwinCameraDevices(),
-		Enhancement: defaultAudioEnhancement("RNNoise requires the rnnoise_native tag; CoreAudio microphone PCM is available without denoising."),
+		Enhancement: defaultAudioEnhancement("RNNoise requires the packaged librnnoise.dylib dynamic module; CoreAudio microphone PCM is available without denoising."),
 	}, nil
 }
 

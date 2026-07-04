@@ -14,7 +14,7 @@ env:
   NODE_VERSION: "24"
   WAILS_VERSION: "v3.0.0-alpha2.109"
   APP_DIR: app
-  RNNOISE_TAG: rnnoise_native
+  RNNOISE_TAG: rnnoise_dynamic
 
 jobs:
   validate:
@@ -98,11 +98,15 @@ jobs:
             exit "${status}"
           fi
 
-      - name: Test RNNoise native DSP
+      - name: Build RNNoise dynamic module
+        shell: bash
+        run: bash ./scripts/build-rnnoise-unix.sh --platform linux --arch x64 --force
+
+      - name: Test RNNoise dynamic DSP
         working-directory: ${{ env.APP_DIR }}
         env:
           CGO_ENABLED: "1"
-        run: go test -tags rnnoise_native ./internal/audio/rnnoise/native ./internal/recording
+        run: go test -tags "${RNNOISE_TAG}" ./internal/audio/rnnoise ./internal/recording
 
       - name: Run preview smoke
         working-directory: ${{ env.APP_DIR }}
@@ -130,20 +134,21 @@ jobs:
             platform: windows
             arch: amd64
             ffmpeg_arch: x64
-            cgo_enabled: "1"
-            rnnoise_native: "true"
+            cgo_enabled: "0"
+            rnnoise_dynamic: "true"
             windows_msystem: MINGW64
             windows_msys_package: mingw-w64-x86_64-gcc
             windows_cc: gcc
-            windows_cgo_cflags: ""
-            windows_cgo_ldflags: ""
           - name: windows-arm64
             os: windows-11-arm
             platform: windows
             arch: arm64
             ffmpeg_arch: arm64
             cgo_enabled: "0"
-            rnnoise_native: "false"
+            rnnoise_dynamic: "true"
+            windows_msystem: CLANGARM64
+            windows_msys_package: mingw-w64-clang-aarch64-clang
+            windows_cc: clang
           - name: macos-x64
             os: macos-15-intel
             platform: macos
@@ -189,8 +194,8 @@ jobs:
             libwebkit2gtk-4.1-dev \
             file
 
-      - name: Enable Windows cgo toolchain
-        if: matrix.platform == 'windows' && matrix.cgo_enabled == '1'
+      - name: Enable Windows RNNoise C toolchain
+        if: matrix.platform == 'windows' && matrix.rnnoise_dynamic == 'true'
         uses: msys2/setup-msys2@v2
         with:
           msystem: ${{ matrix.windows_msystem }}
@@ -199,17 +204,11 @@ jobs:
           install: ${{ matrix.windows_msys_package }}
           path-type: inherit
 
-      - name: Export Windows cgo compiler
-        if: matrix.platform == 'windows' && matrix.cgo_enabled == '1'
+      - name: Export Windows RNNoise compiler
+        if: matrix.platform == 'windows' && matrix.rnnoise_dynamic == 'true'
         shell: pwsh
         run: |
           "CC=${{ matrix.windows_cc }}" | Out-File -FilePath $env:GITHUB_ENV -Append
-          if ("${{ matrix.windows_cgo_cflags }}" -ne "") {
-            "CGO_CFLAGS=${{ matrix.windows_cgo_cflags }}" | Out-File -FilePath $env:GITHUB_ENV -Append
-          }
-          if ("${{ matrix.windows_cgo_ldflags }}" -ne "") {
-            "CGO_LDFLAGS=${{ matrix.windows_cgo_ldflags }}" | Out-File -FilePath $env:GITHUB_ENV -Append
-          }
 
       - name: Install Wails v3 CLI
         working-directory: ${{ env.APP_DIR }}
@@ -236,15 +235,32 @@ jobs:
         shell: bash
         run: ./scripts/ensure-unix-ffmpeg.sh --platform "${{ matrix.platform }}" --arch "${{ matrix.ffmpeg_arch }}" --force
 
+      - name: Build Windows RNNoise dynamic module
+        if: matrix.platform == 'windows'
+        shell: pwsh
+        run: ./scripts/build-rnnoise-windows.ps1 -Architecture "${{ matrix.ffmpeg_arch }}" -Compiler "${{ matrix.windows_cc }}" -OutputPath "${{ env.APP_DIR }}\tools\rnnoise.dll"
+
+      - name: Build Unix RNNoise dynamic module
+        if: matrix.platform == 'macos' || matrix.platform == 'linux'
+        shell: bash
+        run: bash ./scripts/build-rnnoise-unix.sh --platform "${{ matrix.platform }}" --arch "${{ matrix.ffmpeg_arch }}" --force
+
+      - name: Test RNNoise dynamic DSP
+        working-directory: ${{ env.APP_DIR }}
+        shell: bash
+        run: |
+          cgo_enabled="1"
+          if [ "${{ matrix.platform }}" = "windows" ]; then
+            cgo_enabled="${{ matrix.cgo_enabled }}"
+          fi
+          CGO_ENABLED="${cgo_enabled}" go test -tags "${RNNOISE_TAG}" ./internal/audio/rnnoise
+
       - name: Build app
         working-directory: ${{ env.APP_DIR }}
         shell: bash
         run: |
           if [ "${{ matrix.platform }}" = "windows" ]; then
-            tags=""
-            if [ "${{ matrix.rnnoise_native }}" = "true" ]; then
-              tags="${RNNOISE_TAG}"
-            fi
+            tags="${RNNOISE_TAG}"
             CGO_ENABLED="${{ matrix.cgo_enabled }}" wails3 task windows:build ARCH="${{ matrix.arch }}" EXTRA_TAGS="${tags}" CGO_ENABLED="${{ matrix.cgo_enabled }}"
           elif [ "${{ matrix.platform }}" = "macos" ]; then
             CGO_ENABLED=1 wails3 task darwin:package ARCH="${{ matrix.arch }}" EXTRA_TAGS="${RNNOISE_TAG}"
@@ -267,9 +283,6 @@ jobs:
           elif [ "${{ matrix.platform }}" = "windows" ]; then
             ext=".exe"
             cgo_enabled="${{ matrix.cgo_enabled }}"
-            if [ "${{ matrix.rnnoise_native }}" != "true" ]; then
-              tags=""
-            fi
           fi
           tag_args=()
           if [ -n "${tags}" ]; then
@@ -286,11 +299,7 @@ jobs:
         shell: bash
         run: |
           if [ "${{ matrix.platform }}" = "windows" ]; then
-            if [ "${{ matrix.rnnoise_native }}" = "true" ]; then
-              CGO_ENABLED="${{ matrix.cgo_enabled }}" go run -tags "${RNNOISE_TAG}" ./cmd/desktop-doctor -require-video -require-rnnoise
-            else
-              CGO_ENABLED="${{ matrix.cgo_enabled }}" go run ./cmd/desktop-doctor -require-video
-            fi
+            CGO_ENABLED="${{ matrix.cgo_enabled }}" go run -tags "${RNNOISE_TAG}" ./cmd/desktop-doctor -require-video -require-rnnoise
           elif [ "${{ matrix.platform }}" = "linux" ]; then
             CGO_ENABLED=1 go run -tags "gtk3 ${RNNOISE_TAG}" ./cmd/desktop-doctor -require-rnnoise
           else

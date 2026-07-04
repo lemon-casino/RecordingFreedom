@@ -29,6 +29,7 @@ fi
 test -x "${portable_root}/recordingfreedom"
 test -x "${portable_root}/tools/ffmpeg"
 test -x "${portable_root}/tools/ffprobe"
+test -s "${portable_root}/tools/librnnoise.so"
 test -s "${portable_root}/tools/THIRD_PARTY_FFMPEG.txt"
 test -s "${portable_root}/tools/THIRD_PARTY_NOTICES.txt"
 test -s "${portable_root}/recordingfreedom.desktop"
@@ -70,6 +71,7 @@ if command -v file >/dev/null 2>&1; then
   assert_file_arch "${portable_root}/recordingfreedom" "${arch_pattern}"
   assert_file_arch "${portable_root}/tools/ffmpeg" "${arch_pattern}"
   assert_file_arch "${portable_root}/tools/ffprobe" "${arch_pattern}"
+  assert_file_arch "${portable_root}/tools/librnnoise.so" "${arch_pattern}"
 fi
 
 echo "Linux portable archive verified: ${archive_path}"

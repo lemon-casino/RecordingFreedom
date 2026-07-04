@@ -155,6 +155,13 @@ tasks:
           exit 1
         fi
       - cp tools/THIRD_PARTY_FFMPEG.txt "{{.BIN_DIR}}/{{.APP_NAME}}.app/Contents/MacOS/tools/THIRD_PARTY_FFMPEG.txt"
+      - |
+        if [ -f tools/librnnoise.dylib ]; then
+          cp tools/librnnoise.dylib "{{.BIN_DIR}}/{{.APP_NAME}}.app/Contents/MacOS/tools/librnnoise.dylib"
+        else
+          echo "Missing tools/librnnoise.dylib; macOS release bundles must include the RNNoise dynamic module beside FFmpeg under Contents/MacOS/tools." >&2
+          exit 1
+        fi
       - cp tools/THIRD_PARTY_NOTICES.txt "{{.BIN_DIR}}/{{.APP_NAME}}.app/Contents/MacOS/tools/THIRD_PARTY_NOTICES.txt"
       - cp build/darwin/Info.plist "{{.BIN_DIR}}/{{.APP_NAME}}.app/Contents"
       - task: '{{if eq OS "darwin"}}codesign:adhoc{{else}}codesign:skip{{end}}'

@@ -128,7 +128,7 @@ manifest 里所有媒体路径必须是包内相对路径。
 
 当前 `recording.NormalizeStartRequest()` 和 `recpackage` 的归一化会保证：关闭的系统声音、麦克风、摄像头不会把旧 device id 写入 manifest；RNNoise 只在麦克风开启时可能写为 `rnnoise`；摄像头关闭时 PIP preset 固定为 `off`。
 
-默认设置保持系统声音、麦克风和 RNNoise 关闭，只保留默认设备 ID 作为用户后续开启时的选择记忆。这样 preview 首次启动不会把用户尚未开启的音频/降噪链路显示成正在生效；从当前发布门禁开始，artifact 本身必须带 `rnnoise_native` 构建并通过 `desktop-doctor -require-rnnoise`。
+默认设置保持系统声音、麦克风和 RNNoise 关闭，只保留默认设备 ID 作为用户后续开启时的选择记忆。这样 preview 首次启动不会把用户尚未开启的音频/降噪链路显示成正在生效；从当前发布门禁开始，artifact 本身必须带 `rnnoise_dynamic` 构建、随包携带对应平台 RNNoise 动态模块，并通过 `desktop-doctor -require-rnnoise`。
 
 `recpackage.WriteManifest()` 会在摄像头关闭时同时清空 `webcamVideoPath`、`webcamStartOffsetMs` 和 webcam sync track，防止关闭摄像头后保留旧 sidecar 或旧 offset。
 
@@ -285,7 +285,7 @@ Linux：
 - `NativeBackendRuntime.SyncDiagnostics()` 已把 video/audio runtime diagnostics 转成 manifest `diagnostics.sync` 合同，真实平台后端停止时应直接返回它，让 `RecordingService.Stop()` 统一 patch 和校验。
 - `recording.NativeRuntimeBackend` 已把 `NativeBackendRuntime` 包装成真正的 `recording.Backend`：Start 创建包并启动 video/audio runtime，Pause/Resume 转发到 runtime，Stop flush runtime 并返回 `SyncDiagnostics()`。后续 macOS/Windows/Linux 平台文件只需要注册该 backend factory。
 
-RNNoise native DSP 已迁移为 `internal/audio/rnnoise` cgo 包，并把 C 源码隔离到 `internal/audio/rnnoise/native` 子包：带 `rnnoise_native` 标签的 cgo 构建会链接旧项目 RNNoise + `LikelyVoiceEnhancement`，非 cgo 或未带标签构建返回明确 unavailable，不会假装降噪已生效。`CaptureService` 和 `DeviceService` 会读取 `rnnoise.Available()`：带标签构建显示 available 并允许预检通过，未带标签的本地开发构建显示 queued/blocked reason。当前 CI/release 的 validate 和三平台 build job 都要求 `rnnoise_native`，并运行 `desktop-doctor -require-rnnoise`；如果目标 runner 不能完成 cgo 编译或 suppressor 创建，preview artifact 不能发布。
+RNNoise native DSP 已迁移为 `internal/audio/rnnoise` 模块，并把 C 源码隔离到 `internal/audio/rnnoise/native` 子包。当前 release 标准使用 `rnnoise_dynamic`：CI 从仓库内 RNNoise C 源按平台/架构编译 `rnnoise.dll`、`librnnoise.dylib` 或 `librnnoise.so`，再随包放入 `tools/`。Go/Wails 主程序运行时通过 `rnnoise.Available()` 加载动态模块；如果模块缺失、架构不匹配或符号绑定失败，`CaptureService` 和 `DeviceService` 会显示 queued/blocked reason，预检不会假装降噪已生效。当前 CI/release 的 validate 和全平台 build job 都要求动态 DSP smoke 与 `desktop-doctor -require-rnnoise` 通过；Windows ARM64 不再是无 RNNoise 的例外架构。
 
 ## 单独音频录制
 
