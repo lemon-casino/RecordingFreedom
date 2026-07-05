@@ -71,7 +71,8 @@ import {
   fallbackCapabilities,
   fallbackStorageStatus,
 } from './services/mockBackend'
-import {assistRegionSelection, beginScreenshotAnnotationOverlay, cancelRegionSelector, cancelSelectedRegion, captureScreenshot, completeAnnotationRegionSelection, completeRegionSelection, completeScreenshotRegionSelection, completeScrollingScreenshotSelection, deleteScreenshotItem, exportRecordingPackage, hidePinnedScreenshot, hidePipOverlay, hideRegionFrame, hideScreenIndicator, hideSettingsWindow, listScreenshots, loadBootstrap, loadPinnedScreenshot, loadSettings, logClientEvent, openRecordingPackage, openScreenshot, openScreenshotDirectory, openScreenshotInWhiteboard, openVideoDirectory, patchAudioState, patchCameraState, patchScreenshotItem, patchSettingsPreferences, patchShortcutSettings, patchWhiteboardSettings, pauseRecording, preflightAudioOnlyRecording, preflightRecording, previewExportRecordingPackage, quitApplication, readAnnotationPreviewImage, readPipPreviewImage, recoverRecordingPackage, restoreCapsuleWindow, resumeRecording, saveSettings, setCapsuleWindowExpanded, setCapsuleWindowHitRegions, setDataRoot, showAnnotationOverlay, showAnnotationRegionSelector, showPinnedScreenshot, showPipOverlay, showRegionSelector, showScreenIndicator, showScreenshotRegionSelector, showWhiteboardWindow, snapCapsuleWindowToEdge, startAudioOnlyRecording, startMicrophoneLevelMonitor, startRecording, startScrollingScreenshot, stopMicrophoneLevelMonitor, stopRecording, subscribeAudioLevel, subscribeAudioState, subscribeCapsuleDockSide, subscribeCapsuleWindowMoveEnded, subscribeRecordingStatus, subscribeRegionSelection, subscribeScreenshotCaptured, subscribeScreenshotPin, subscribeSettingsChanged, subscribeShortcutTriggered, subscribeWhiteboardVisibility, updatePipOverlay, updateScreenshotRegionSelection, updateSelectedRegion, type AudioControlState, type AudioLevelUpdate, type AudioStatePatch, type CapsuleWindowDockSide, type CapsuleWindowExpandDirection, type CapsuleWindowHitRegion, type PIPOverlayCamera, type PIPOverlayState, type RecordingExportPlan, type RecordingRecovery, type RecordingStatusUpdate, type RegionSelectionSession, type RegionSmartCandidate, type ScreenshotPinState, type SettingsPreferencesPatch, type ShortcutSettingsPatch, type WhiteboardSettingsPatch, type WhiteboardVisibilityUpdate} from './services/recorderBackend'
+import {assistRegionSelection, beginScreenshotAnnotationOverlay, cancelRegionSelector, cancelSelectedRegion, captureScreenshot, completeAnnotationRegionSelection, completeRegionSelection, completeScreenshotRegionSelection, completeScrollingScreenshotSelection, completeFloatingSelect, deleteScreenshotItem, exportRecordingPackage, getFloatingPanelState, getFloatingSelectState, getSourceState, hideFloatingPanel, hideFloatingSelect, hidePinnedScreenshot, hidePipOverlay, hideRegionFrame, hideScreenIndicator, hideSettingsWindow, isWailsDesktopRuntime, listScreenshots, loadBootstrap, loadPinnedScreenshot, loadSettings, logClientEvent, openRecordingPackage, openScreenshot, openScreenshotDirectory, openScreenshotInWhiteboard, openVideoDirectory, patchAudioState, patchCameraState, patchScreenshotItem, patchSettingsPreferences, patchShortcutSettings, patchSourceState, patchWhiteboardSettings, pauseRecording, preflightAudioOnlyRecording, preflightRecording, previewExportRecordingPackage, quitApplication, readAnnotationPreviewImage, readPipPreviewImage, recoverRecordingPackage, restoreCapsuleWindow, resumeRecording, saveSettings, setCapsuleWindowExpanded, setCapsuleWindowHitRegions, setDataRoot, setFloatingPanelHitRegions, setFloatingSelectHitRegions, showAnnotationOverlay, showAnnotationRegionSelector, showFloatingPanel, showFloatingSelect, showPinnedScreenshot, showPipOverlay, showRegionSelector, showScreenIndicator, showScreenshotRegionSelector, showWhiteboardWindow, snapCapsuleWindowToEdge, startAudioOnlyRecording, startMicrophoneLevelMonitor, startRecording, startScrollingScreenshot, stopMicrophoneLevelMonitor, stopRecording, subscribeAudioLevel, subscribeAudioState, subscribeCapsuleDockSide, subscribeCapsuleWindowMoveEnded, subscribeFloatingPanelChanged, subscribeFloatingSelectChanged, subscribeFloatingSelectChosen, subscribeRecordingStatus, subscribeRegionSelection, subscribeScreenshotCaptured, subscribeScreenshotPin, subscribeSettingsChanged, subscribeShortcutTriggered, subscribeSourceStateChanged, subscribeWhiteboardVisibility, updatePipOverlay, updateScreenshotRegionSelection, updateSelectedRegion, type AudioControlState, type AudioLevelUpdate, type AudioStatePatch, type CapsuleWindowDockSide, type CapsuleWindowExpandDirection, type CapsuleWindowHitRegion, type FloatingPanelKind, type FloatingPanelState, type FloatingSelectOption, type FloatingSelectState, type PIPOverlayCamera, type PIPOverlayState, type RecordingExportPlan, type RecordingRecovery, type RecordingStatusUpdate, type RegionSelectionSession, type RegionSmartCandidate, type ScreenshotPinState, type SettingsPreferencesPatch, type ShortcutSettingsPatch, type SourceControlState, type WhiteboardSettingsPatch, type WhiteboardVisibilityUpdate} from './services/recorderBackend'
+import {resolveFloatingPanelPlacement, resolveFloatingSelectPlacement} from './components/floating/floatingPosition'
 
 const AnnotationOverlayWindow = lazy(() => import('./AnnotationOverlayWindow'))
 const AnnotationRenderWindow = lazy(() => import('./AnnotationRenderWindow'))
@@ -99,6 +100,23 @@ const fpsOptions = [24, 30, 60]
 const countdownOptions = [0, 3, 5, 10]
 const previewPackagePath = 'data/video/recording-preview.rfrec'
 type ActivePanel = 'source' | 'audio' | 'camera' | 'language' | 'board'
+
+const floatingPanelStandardSize = {width: 320, height: 340, maxHeight: 340, minWidth: 300}
+const floatingPanelCompactSize = {width: 260, height: 120, maxHeight: 120, minWidth: 240}
+const floatingPanelSettingsSize = {width: 340, height: 340, maxHeight: 340, minWidth: 320}
+const floatingSelectMinWidth = 180
+const floatingSelectMaxWidth = 280
+const floatingSelectMaxHeight = 220
+
+const floatingPanelSizes: Record<FloatingPanelKind, {width: number; height: number; maxHeight: number; minWidth?: number}> = {
+  source: floatingPanelStandardSize,
+  audio: floatingPanelStandardSize,
+  camera: floatingPanelStandardSize,
+  board: floatingPanelStandardSize,
+  language: floatingPanelCompactSize,
+  settings: floatingPanelSettingsSize,
+  close: {width: 340, height: 170, maxHeight: 170, minWidth: 320},
+}
 
 function normalizePipPreset(value: PIPPreset): PIPPreset {
   return allPipPresetOptions.includes(value) ? value : 'bottom-right'
@@ -321,6 +339,8 @@ type ApplySettingsOptions = {
 function App() {
   const route = currentWindowRoute()
   const isSettingsWindow = route === '/settings'
+  const isFloatingPanelWindow = route === '/floating-panel'
+  const isFloatingSelectWindow = route === '/floating-select'
   const isRegionOverlayWindow = route === '/region-overlay'
   const isScreenIndicatorWindow = route === '/screen-indicator'
   const isPipOverlayWindow = route === '/pip-overlay'
@@ -328,6 +348,9 @@ function App() {
   const isWhiteboardWindow = route === '/whiteboard'
   const isAnnotationOverlayWindow = route === '/annotation-overlay'
   const isAnnotationRendererWindow = route === '/annotation-renderer'
+  if (isFloatingSelectWindow) {
+    return <FloatingSelectWindow />
+  }
   if (isScreenIndicatorWindow) {
     return <ScreenIndicatorWindow />
   }
@@ -360,6 +383,9 @@ function App() {
         <WhiteboardWindow />
       </Suspense>
     )
+  }
+  if (isFloatingPanelWindow) {
+    return <FloatingPanelWindow />
   }
 
   const [selectedSource, setSelectedSource] = useState<CaptureSource>(sources[0])
@@ -457,6 +483,7 @@ function App() {
   const whiteboardPatchTokenRef = useRef(0)
   const shortcutPatchTokenRef = useRef(0)
   const exportPlanTokenRef = useRef(0)
+  const floatingPanelTokenRef = useRef(0)
   const localAudioIntentUntilRef = useRef(0)
   const localPreferenceIntentUntilRef = useRef(0)
   const localWhiteboardIntentUntilRef = useRef(0)
@@ -490,7 +517,7 @@ function App() {
   const isRecording = state === 'recording' || state === 'paused' || state === 'preparing' || state === 'stopping'
   const recordingConfigLocked = isRecording
   const whiteboardButtonActive = whiteboardVisibility?.visible === true
-  const capsuleExpanded = activePanel !== null || settingsOpen || closePromptOpen
+  const capsuleExpanded = closePromptOpen
   const capsuleWindowCompact = recordingConfigLocked && !capsuleExpanded
   const capsuleExpandedHeight = settingsOpen
     ? 560
@@ -843,7 +870,7 @@ function App() {
     if (nextStatus === 'idle' || nextStatus === 'ready' || nextStatus === 'failed') {
       setElapsed(0)
     }
-    if (!isSettingsWindow && (nextStatus === 'ready' || nextStatus === 'failed')) {
+    if (!isSettingsWindow && !isFloatingPanelWindow && (nextStatus === 'ready' || nextStatus === 'failed')) {
       void restoreCapsuleWindow(false)
     }
     if (update.session?.packagePath) setLastPackage(update.session.packagePath)
@@ -1226,11 +1253,12 @@ function App() {
 
   useEffect(() => {
     document.body.classList.toggle('rf-settings-window', isSettingsWindow)
-    document.body.classList.toggle('rf-recorder-window', !isSettingsWindow)
+    document.body.classList.toggle('rf-floating-panel-window', isFloatingPanelWindow)
+    document.body.classList.toggle('rf-recorder-window', !isSettingsWindow && !isFloatingPanelWindow)
     return () => {
-      document.body.classList.remove('rf-settings-window', 'rf-recorder-window')
+      document.body.classList.remove('rf-settings-window', 'rf-recorder-window', 'rf-floating-panel-window')
     }
-  }, [isSettingsWindow])
+  }, [isFloatingPanelWindow, isSettingsWindow])
 
   useEffect(() => {
     document.documentElement.lang = locale
@@ -1281,6 +1309,82 @@ function App() {
     setCapsuleDockSide(side)
   }), [])
 
+  useEffect(() => {
+    let cancelled = false
+    void getFloatingPanelState()
+      .then((state) => {
+        if (cancelled) return
+        applyFloatingPanelState(state)
+      })
+      .catch((error) => console.info('Floating panel state unavailable:', error))
+    const unsubscribe = subscribeFloatingPanelChanged(applyFloatingPanelState)
+    return () => {
+      cancelled = true
+      unsubscribe()
+    }
+  }, [])
+
+  const applyFloatingPanelState = (state: FloatingPanelState) => {
+    if (!state.visible) {
+      setActivePanel(null)
+      setSettingsOpen(false)
+      return
+    }
+    if (state.kind === 'settings') {
+      setActivePanel(null)
+      setSettingsOpen(true)
+      return
+    }
+    if (state.kind === 'close') {
+      setActivePanel(null)
+      setSettingsOpen(false)
+      return
+    }
+    if (state.kind === 'source' || state.kind === 'audio' || state.kind === 'camera' || state.kind === 'language' || state.kind === 'board') {
+      setSettingsOpen(false)
+      setActivePanel(state.kind)
+    }
+  }
+
+  useEffect(() => {
+    let cancelled = false
+    void getSourceState()
+      .then((sourceState) => {
+        if (!cancelled) applySourceControlState(sourceState)
+      })
+      .catch((error) => console.info('Source state unavailable:', error))
+    const unsubscribe = subscribeSourceStateChanged(applySourceControlState)
+    return () => {
+      cancelled = true
+      unsubscribe()
+    }
+  }, [availableSources])
+
+  const applySourceControlState = (sourceState: SourceControlState) => {
+    if (sourceState.recordingMode) setRecordingMode(sourceState.recordingMode)
+    if (!sourceState.sourceId && !sourceState.sourceType) return
+    setSelectedSource((current) => {
+      const direct = sourceState.sourceId
+        ? availableSources.find((source) => source.id === sourceState.sourceId)
+        : undefined
+      const byType = sourceState.sourceType
+        ? availableSources.find((source) => source.type === sourceState.sourceType)
+        : undefined
+      const picked = direct ?? byType
+      if (!picked) return current
+      if (picked.type !== 'region' || !sourceState.sourceGeometry) return picked
+      return {
+        ...picked,
+        x: sourceState.sourceGeometry.x,
+        y: sourceState.sourceGeometry.y,
+        width: sourceState.sourceGeometry.width,
+        height: sourceState.sourceGeometry.height,
+        displayIndex: sourceState.sourceGeometry.displayIndex,
+        nativeId: sourceState.sourceGeometry.nativeId,
+      }
+    })
+  }
+
   useEffect(() => subscribeAudioLevel((update: AudioLevelUpdate) => {
     const currentMic = selectedMicRef.current
     if (update.deviceId && currentMic && update.deviceId !== currentMic) return
@@ -1298,7 +1402,7 @@ function App() {
   }), [])
 
   useLayoutEffect(() => {
-    if (isSettingsWindow) return
+    if (isSettingsWindow || isFloatingPanelWindow) return
     const token = capsuleWindowLayoutTokenRef.current + 1
     capsuleWindowLayoutTokenRef.current = token
     capsuleWindowLayoutChangingRef.current = true
@@ -1345,10 +1449,10 @@ function App() {
       if (secondForceTimer) window.clearTimeout(secondForceTimer)
       if (programmaticMoveTimer) window.clearTimeout(programmaticMoveTimer)
     }
-  }, [capsuleExpanded, capsuleExpandedHeight, capsuleWindowCompact, isSettingsWindow])
+  }, [capsuleExpanded, capsuleExpandedHeight, capsuleWindowCompact, isFloatingPanelWindow, isSettingsWindow])
 
   useLayoutEffect(() => {
-    if (isSettingsWindow) return
+    if (isSettingsWindow || isFloatingPanelWindow) return
     let disposed = false
     let frame = 0
     let pendingForce = false
@@ -1360,11 +1464,7 @@ function App() {
       const viewportHeight = window.innerHeight || document.documentElement.clientHeight || 0
       const regions = [
         elementHitRegion(capsuleRef.current, viewportWidth, viewportHeight, 'pill', 999),
-        elementHitRegion(popoverRef.current, viewportWidth, viewportHeight, 'round-rect', 22),
-        settingsOpen ? elementHitRegion(settingsPanelRef.current, viewportWidth, viewportHeight, 'round-rect', 24) : null,
         closePromptOpen ? elementHitRegion(closePromptRef.current, viewportWidth, viewportHeight, 'round-rect', 22) : null,
-        ...Array.from(shellRef.current?.querySelectorAll('.select-menu-list') ?? [])
-          .map((element) => elementHitRegion(element, viewportWidth, viewportHeight, 'round-rect', 16)),
       ].filter((region): region is CapsuleWindowHitRegion => region !== null)
       const request = {
         enabled: regions.length > 0,
@@ -1397,8 +1497,6 @@ function App() {
     ;[
       shellRef.current,
       capsuleRef.current,
-      popoverRef.current,
-      settingsPanelRef.current,
       closePromptRef.current,
     ].forEach((element) => {
       if (element) resizeObserver?.observe(element)
@@ -1423,10 +1521,10 @@ function App() {
       mutationObserver?.disconnect()
       window.removeEventListener('resize', scheduleNormal)
     }
-  }, [activePanel, capsuleDockSide, capsuleExpanded, capsuleExpandedHeight, closePromptOpen, isSettingsWindow, settingsOpen, sourcePickerView])
+  }, [capsuleDockSide, capsuleExpanded, capsuleExpandedHeight, closePromptOpen, isFloatingPanelWindow, isSettingsWindow])
 
   useEffect(() => {
-    if (isSettingsWindow) return
+    if (isSettingsWindow || isFloatingPanelWindow) return
     let disposed = false
     let settleTimer = 0
     let forceTimer = 0
@@ -1540,7 +1638,7 @@ function App() {
       capsuleDragStartPointRef.current = null
       capsuleDragPendingUntilRef.current = 0
     }
-  }, [capsuleExpanded, capsuleExpandedHeight, capsuleWindowCompact, isSettingsWindow])
+  }, [capsuleExpanded, capsuleExpandedHeight, capsuleWindowCompact, isFloatingPanelWindow, isSettingsWindow])
 
   useEffect(() => {
     if (recordingMode === 'audio' && activePanel === 'camera') {
@@ -1777,6 +1875,19 @@ function App() {
       return [pickedSource, ...next]
     })
     setSelectedSource(pickedSource)
+    void patchSourceState({
+      recordingMode: 'video',
+      sourceId: pickedSource.id,
+      sourceType: pickedSource.type,
+      sourceGeometry: {
+        x: result.geometry?.x ?? pickedSource.x ?? 0,
+        y: result.geometry?.y ?? pickedSource.y ?? 0,
+        width: result.geometry?.width ?? pickedSource.width ?? 0,
+        height: result.geometry?.height ?? pickedSource.height ?? 0,
+        displayIndex: pickedSource.displayIndex,
+        nativeId: pickedSource.nativeId,
+      },
+    })
     setSourceSelectionMessage({
       key: 'regionSelected',
       width: result.geometry?.width ?? pickedSource.width,
@@ -1792,7 +1903,8 @@ function App() {
   }, [activePanel])
 
   useEffect(() => {
-    if (isSettingsWindow || (!activePanel && !settingsOpen && !closePromptOpen)) return
+    const inlinePanelOpen = !isWailsDesktopRuntime() && (activePanel || settingsOpen)
+    if (isSettingsWindow || isFloatingPanelWindow || (!inlinePanelOpen && !closePromptOpen)) return
     const pointerInsideFloatingPanels = (event: Event) => (
       eventPathContains(event, capsuleRef.current) ||
       eventPathContains(event, popoverRef.current) ||
@@ -1840,7 +1952,7 @@ function App() {
       window.removeEventListener('blur', onWindowBlur)
       floatingPointerInsideRef.current = false
     }
-  }, [activePanel, closePromptOpen, isSettingsWindow, settingsOpen])
+  }, [activePanel, closePromptOpen, isFloatingPanelWindow, isSettingsWindow, settingsOpen])
 
   const statusLabel = useMemo(() => {
     return copy.statusChips[state] ?? copy.statusChips.idle
@@ -1945,6 +2057,8 @@ function App() {
 
   const beginRecording = async () => {
     setActivePanel(null)
+    setSettingsOpen(false)
+    void hideFloatingPanel()
     setElapsed(0)
     setState('preparing')
     try {
@@ -2186,21 +2300,69 @@ function App() {
     }
   }
 
-  const togglePanel = (panel: ActivePanel) => {
+  const openFloatingPanelFromAnchor = async (panel: FloatingPanelKind, anchorElement: Element) => {
+    const size = floatingPanelSizes[panel]
+    const token = floatingPanelTokenRef.current + 1
+    floatingPanelTokenRef.current = token
+    const placement = await resolveFloatingPanelPlacement(anchorElement, {
+      dockSide: capsuleDockSideRef.current,
+      width: size.width,
+      height: size.height,
+      maxHeight: size.maxHeight,
+      minWidth: size.minWidth,
+    })
+    await showFloatingPanel({
+      kind: panel,
+      anchor: placement.anchor,
+      bounds: placement.bounds,
+      dockSide: capsuleDockSideRef.current,
+      width: placement.bounds.width,
+      height: placement.bounds.height,
+      minWidth: size.minWidth,
+      maxHeight: size.maxHeight,
+      token,
+      screenId: placement.screenId,
+      direction: placement.direction,
+    })
+  }
+
+  const togglePanel = (panel: ActivePanel, anchorElement?: Element) => {
     setSettingsOpen(false)
     setClosePromptOpen(false)
+    if (isWailsDesktopRuntime() && anchorElement) {
+      if (activePanel === panel) {
+        void hideFloatingPanel()
+        return
+      }
+      void openFloatingPanelFromAnchor(panel, anchorElement)
+      return
+    }
     setActivePanel(activePanel === panel ? null : panel)
   }
 
-  const openSettings = () => {
+  const openSettings = (anchorElement?: Element) => {
     setActivePanel(null)
     setClosePromptOpen(false)
+    if (isWailsDesktopRuntime() && anchorElement) {
+      if (settingsOpen) {
+        void hideFloatingPanel()
+        return
+      }
+      void openFloatingPanelFromAnchor('settings', anchorElement)
+      return
+    }
     setSettingsOpen((open) => !open)
   }
 
-  const requestCloseApplication = () => {
+  const requestCloseApplication = (anchorElement?: Element) => {
     setActivePanel(null)
     setSettingsOpen(false)
+    if (isWailsDesktopRuntime() && anchorElement) {
+      setClosePromptOpen(false)
+      void openFloatingPanelFromAnchor('close', anchorElement)
+      return
+    }
+    void hideFloatingPanel()
     setClosePromptOpen(true)
   }
 
@@ -2225,6 +2387,7 @@ function App() {
     setActivePanel(null)
     setSettingsOpen(false)
     setClosePromptOpen(false)
+    void hideFloatingPanel()
     const launchMode = whiteboardLaunchMode(state, recordingMode)
     void (async () => {
       if (launchMode === 'whiteboard') {
@@ -2245,12 +2408,12 @@ function App() {
     })()
   }
 
-  const openBoardTools = () => {
+  const openBoardTools = (anchorElement?: Element) => {
     if (isRecording) {
       openWhiteboard()
       return
     }
-    togglePanel('board')
+    togglePanel('board', anchorElement)
   }
 
   const beginScreenshotCapture = () => {
@@ -2258,6 +2421,7 @@ function App() {
     setActivePanel(null)
     setSettingsOpen(false)
     setClosePromptOpen(false)
+    void hideFloatingPanel()
     setScreenshotMessage(copy.screenshot.selecting)
     void showScreenshotRegionSelector()
       .catch((error) => {
@@ -2269,6 +2433,7 @@ function App() {
 
   const beginScrollingScreenshot = () => {
     if (isRecording) return
+    void hideFloatingPanel()
     setScreenshotMessage(copy.screenshot.scrollingPreparing)
     void startScrollingScreenshot()
       .then(() => setScreenshotMessage(copy.screenshot.scrollingStarted))
@@ -2284,6 +2449,7 @@ function App() {
     setActivePanel(null)
     setSettingsOpen(false)
     setClosePromptOpen(false)
+    void hideFloatingPanel()
     void captureScreenshot({mode})
       .then((item) => {
         setScreenshots((current) => [item, ...current.filter((entry) => entry.id !== item.id)].slice(0, 200))
@@ -2379,9 +2545,9 @@ function App() {
   }
 
   useEffect(() => subscribeShortcutTriggered((event) => {
-    if (isSettingsWindow || shortcutCaptureRef.current) return
+    if (isSettingsWindow || isFloatingPanelWindow || shortcutCaptureRef.current) return
     shortcutActionsRef.current[event.action]?.()
-  }), [isSettingsWindow])
+  }), [isFloatingPanelWindow, isSettingsWindow])
 
   const confirmCloseApplication = async () => {
     if (closeBusy) return
@@ -2409,6 +2575,23 @@ function App() {
     setSelectedSource(source)
     setSourceSelectionMessage(source.available === false ? {key: 'sourceQueued'} : null)
     setActivePanel(null)
+    void patchSourceState({
+      recordingMode,
+      sourceId: source.id,
+      sourceType: source.type,
+      sourceGeometry: source.type === 'region' && source.width && source.height
+        ? {
+            x: source.x ?? 0,
+            y: source.y ?? 0,
+            width: source.width,
+            height: source.height,
+            displayIndex: source.displayIndex,
+            nativeId: source.nativeId,
+          }
+        : undefined,
+      clearGeometry: source.type !== 'region',
+    })
+    void hideFloatingPanel()
     setSourcePickerView('overview')
   }
 
@@ -2416,6 +2599,7 @@ function App() {
     if (recordingConfigLocked) return
     await hideScreenIndicator()
     setActivePanel(null)
+    void hideFloatingPanel()
     setSourcePickerView('overview')
     setSourceSelectionMessage({key: 'regionSelecting'})
     try {
@@ -2636,7 +2820,7 @@ function App() {
               type="button"
               aria-expanded={activePanel === 'source'}
               disabled={recordingConfigLocked}
-              onClick={() => togglePanel('source')}
+              onClick={(event) => togglePanel('source', event.currentTarget)}
             >
               <SourceIcon size={18} />
               <span className="source-text">
@@ -2654,7 +2838,7 @@ function App() {
                 title={copy.panels.audio}
                 aria-expanded={activePanel === 'audio'}
                 disabled={recordingConfigLocked}
-                onClick={() => togglePanel('audio')}
+                onClick={(event) => togglePanel('audio', event.currentTarget)}
               >
                 <Volume2 size={18} />
               </button>
@@ -2664,7 +2848,7 @@ function App() {
                 aria-label={copy.aria.openCameraSettings}
                 title={titleWithShortcut(copy.panels.cameraSidecar, 'toggleCamera')}
                 disabled={recordingConfigLocked || recordingMode === 'audio'}
-                onClick={() => togglePanel('camera')}
+                onClick={(event) => togglePanel('camera', event.currentTarget)}
               >
                 <Camera size={18} />
               </button>
@@ -2688,7 +2872,7 @@ function App() {
             aria-pressed={whiteboardButtonActive}
             title={isRecording ? titleWithShortcut(copy.aria.openWhiteboard, 'openWhiteboard') : `${copy.screenshot.tools} · ${formatShortcutForDisplay(shortcuts.openScreenshot)} / ${formatShortcutForDisplay(shortcuts.openWhiteboard)}`}
             aria-expanded={!isRecording && activePanel === 'board'}
-            onClick={openBoardTools}
+            onClick={(event) => openBoardTools(event.currentTarget)}
           >
             <PenLine size={18} />
           </button>
@@ -2730,7 +2914,7 @@ function App() {
               title={copy.localeNames[locale]}
               aria-expanded={activePanel === 'language'}
               disabled={recordingConfigLocked}
-              onClick={() => togglePanel('language')}
+              onClick={(event) => togglePanel('language', event.currentTarget)}
             >
               <Languages size={18} />
             </button>
@@ -2740,7 +2924,7 @@ function App() {
               aria-label={copy.aria.openSettings}
               title={copy.settings.title}
               disabled={recordingConfigLocked}
-              onClick={openSettings}
+              onClick={(event) => openSettings(event.currentTarget)}
             >
               <Settings size={18} />
             </button>
@@ -2751,13 +2935,13 @@ function App() {
             type="button"
             aria-label={copy.aria.closeApplication}
             title={copy.aria.closeApplication}
-            onClick={requestCloseApplication}
+            onClick={(event) => requestCloseApplication(event.currentTarget)}
           >
             <X size={18} />
           </button>
         </div>
 
-        {activePanel && (
+        {!isWailsDesktopRuntime() && activePanel && (
           <div ref={popoverRef} className={`popover panel-${activePanel} drop-${capsuleExpandDirection}`} role="dialog" aria-label={copy.aria.menu(activePanel)}>
             {activePanel === 'source' && (
               <div className="menu-grid source-menu">
@@ -3156,7 +3340,7 @@ function App() {
         </div>
       </section>
 
-      {settingsOpen && settingsPanel}
+      {!isWailsDesktopRuntime() && settingsOpen && settingsPanel}
       {closePromptOpen && (
         <section ref={closePromptRef} className="close-confirm-panel" role="dialog" aria-modal="true" aria-label={isRecording ? copy.closeDialog.recordingTitle : copy.closeDialog.idleTitle}>
           <div className="close-confirm-copy">
@@ -3173,6 +3357,934 @@ function App() {
           </div>
         </section>
       )}
+    </main>
+  )
+}
+
+function FloatingPanelWindow() {
+  const panelRef = useRef<HTMLElement | null>(null)
+  const [panelState, setPanelState] = useState<FloatingPanelState>(() => ({
+    visible: false,
+    anchor: {x: 0, y: 0, width: 0, height: 0},
+    bounds: {x: 0, y: 0, width: 0, height: 0},
+    token: 0,
+  }))
+  const [locale, setLocale] = useState<LocaleCode>('zh-CN')
+  const [theme, setTheme] = useState<ThemeCode>('night-teal')
+  const [settings, setSettings] = useState<AppSettings>(defaultSettings)
+  const [appData, setAppData] = useState<AppDataInfo>(fallbackAppData)
+  const [storageStatus, setStorageStatus] = useState<AppStorageStatus>(fallbackStorageStatus)
+  const [storageRootDraft, setStorageRootDraft] = useState(fallbackAppData.rootDir)
+  const [storageBusy, setStorageBusy] = useState(false)
+  const [storageMessage, setStorageMessage] = useState<StorageMessageState | null>(null)
+  const [availableSources, setAvailableSources] = useState<CaptureSource[]>(sources)
+  const [selectedSource, setSelectedSource] = useState<CaptureSource>(sources[0])
+  const [sourcePickerView, setSourcePickerView] = useState<'overview' | 'windows'>('overview')
+  const [sourceSelectionMessage, setSourceSelectionMessage] = useState<SourceSelectionMessageState | null>(null)
+  const [recordingMode, setRecordingMode] = useState<RecordingMode>('video')
+  const [state, setState] = useState<RecordingState>('idle')
+  const [availableSystemAudio, setAvailableSystemAudio] = useState<MediaDevice[]>(systemAudioDevices)
+  const [availableMicrophones, setAvailableMicrophones] = useState<MediaDevice[]>([])
+  const [availableCameras, setAvailableCameras] = useState<MediaDevice[]>(cameraDevices)
+  const [audioState, setAudioState] = useState<AudioControlState>({
+    system: defaultSettings.audio.system,
+    systemDeviceId: defaultSettings.audio.systemDeviceId,
+    microphone: defaultSettings.audio.microphone,
+    microphoneDeviceId: defaultSettings.audio.microphoneDeviceId,
+    noiseSuppression: defaultSettings.audio.noiseSuppression,
+    microphoneGain: defaultSettings.audio.microphoneGain,
+  })
+  const [micLevel, setMicLevel] = useState(0)
+  const [micPeak, setMicPeak] = useState(0)
+  const [micMonitorActive, setMicMonitorActive] = useState(false)
+  const [micMonitorError, setMicMonitorError] = useState<string | null>(null)
+  const [screenshots, setScreenshots] = useState<ScreenshotItem[]>([])
+  const [screenshotMessage, setScreenshotMessage] = useState('')
+  const [shortcutCapture, setShortcutCapture] = useState<ShortcutAction | null>(null)
+  const [shortcutError, setShortcutError] = useState('')
+  const [lastBackend, setLastBackend] = useState('ffmpeg-desktop-capture')
+  const [closeBusy, setCloseBusy] = useState(false)
+  const copy = copyByLocale[locale]
+  const isRecording = state === 'recording' || state === 'paused' || state === 'preparing' || state === 'stopping'
+  const shortcuts = settings.shortcuts ?? defaultSettings.shortcuts
+  const systemAudio = audioState.system
+  const microphone = audioState.microphone
+  const selectedSystemAudio = audioState.systemDeviceId || availableSystemAudio[0]?.id || ''
+  const selectedMic = audioState.microphoneDeviceId || availableMicrophones[0]?.id || ''
+  const noiseSuppression = microphone && audioState.noiseSuppression
+  const selectedMicrophoneDevice = availableMicrophones.find((device) => device.id === selectedMic)
+  const hasAvailableMicrophone = availableMicrophones.some((device) => device.available !== false)
+  const hasUsableCamera = availableCameras.some(isUsableCameraDevice)
+  const selectedCamera = settings.camera.deviceId || availableCameras[0]?.id || ''
+  const selectedCameraDevice = availableCameras.find((device) => device.id === selectedCamera)
+  const selectedCameraUsable = selectedCameraDevice ? isUsableCameraDevice(selectedCameraDevice) : hasUsableCamera
+  const fallbackUsableCameraDevice = availableCameras.find(isUsableCameraDevice)
+  const camera = settings.camera.enabled && hasUsableCamera
+  const currentPipConfig = normalizePipConfig(settings.camera.pip, normalizePipPreset(settings.camera.pipPreset))
+  const cameraStatusText = !hasUsableCamera || !selectedCameraUsable
+    ? selectedCameraDevice?.unavailableReason || selectedCameraDevice?.meta || copy.pipOverlay.cameraUnavailable
+    : camera
+      ? copy.panels.cameraEnabled
+      : copy.panels.cameraOff
+  const micMonitorStatusText = micMonitorError
+    ? copy.panels.microphoneLevelError
+    : !microphone
+      ? copy.panels.microphoneLevelOff
+      : selectedMicrophoneDevice?.available === false || !hasAvailableMicrophone
+        ? copy.panels.microphoneLevelUnavailable
+        : micMonitorActive
+          ? copy.panels.microphoneLevelLive
+          : copy.panels.microphoneLevelWaiting
+  const micMeterLevel = microphone && micMonitorActive ? micLevel : 0
+  const micMeterBars = useMemo(() => Array.from({length: 18}, (_, index) => {
+    const threshold = (index + 1) / 18
+    const active = micMeterLevel >= threshold
+    const height = active ? Math.max(14, Math.min(100, micMeterLevel * 100 + index * 0.9)) : 8
+    return {active, height: `${height}%`}
+  }), [micMeterLevel])
+  const allScreensSource = availableSources.find((source) => source.type === 'all-screens')
+  const screenSources = availableSources.filter((source) => source.type === 'screen')
+  const regionSource = availableSources.find((source) => source.type === 'region')
+  const windowSources = availableSources.filter((source) => source.type === 'window')
+  const selectedWindowSource = selectedSource.type === 'window' ? selectedSource : windowSources.find((source) => source.id === selectedSource.id)
+  const sourceSelectionText = sourceSelectionMessage ? formatSourceSelectionMessage(sourceSelectionMessage, copy) : ''
+
+  useEffect(() => {
+    document.body.classList.add('rf-floating-panel-window')
+    return () => document.body.classList.remove('rf-floating-panel-window')
+  }, [])
+
+  useEffect(() => {
+    document.documentElement.lang = locale
+    document.documentElement.dataset.theme = theme
+  }, [locale, theme])
+
+  useEffect(() => {
+    let cancelled = false
+    void Promise.all([loadBootstrap(), getFloatingPanelState(), getSourceState(), listScreenshots()])
+      .then(([bootstrap, panel, sourceState, screenshotItems]) => {
+        if (cancelled) return
+        applyFloatingBootstrap(bootstrap)
+        applyFloatingSourceState(sourceState, bootstrap.sources.length > 0 ? bootstrap.sources : sources)
+        setPanelState(panel)
+        setScreenshots(screenshotItems)
+      })
+      .catch((error) => console.info('Floating panel bootstrap fallback:', error))
+    const unsubscribePanel = subscribeFloatingPanelChanged(setPanelState)
+    const unsubscribeSettings = subscribeSettingsChanged((next) => applyFloatingSettings(next))
+    const unsubscribeAudio = subscribeAudioState(setAudioState)
+    const unsubscribeStatus = subscribeRecordingStatus((update) => {
+      setState(update.status as RecordingState)
+      if (update.status === 'recording' || update.status === 'paused' || update.status === 'preparing' || update.status === 'stopping') {
+        void hideFloatingPanel()
+      }
+    })
+    const unsubscribeSource = subscribeSourceStateChanged((sourceState) => applyFloatingSourceState(sourceState, availableSources))
+    const unsubscribeRegion = subscribeRegionSelection((result) => {
+      if (result.cancelled) {
+        setSourceSelectionMessage(result.error ? {key: 'regionTooSmall', fallback: result.error} : {key: 'regionCancelled'})
+        return
+      }
+      if (!result.source) return
+      setAvailableSources((current) => [result.source!, ...current.filter((source) => source.id !== result.source!.id)])
+      setSelectedSource(result.source)
+      setRecordingMode('video')
+      setSourceSelectionMessage({
+        key: 'regionSelected',
+        width: result.geometry?.width ?? result.source.width,
+        height: result.geometry?.height ?? result.source.height,
+      })
+      void patchSourceState({
+        recordingMode: 'video',
+        sourceId: result.source.id,
+        sourceType: result.source.type,
+        sourceGeometry: {
+          x: result.geometry?.x ?? result.source.x ?? 0,
+          y: result.geometry?.y ?? result.source.y ?? 0,
+          width: result.geometry?.width ?? result.source.width ?? 0,
+          height: result.geometry?.height ?? result.source.height ?? 0,
+          displayIndex: result.source.displayIndex,
+          nativeId: result.source.nativeId,
+        },
+      })
+    })
+    const unsubscribeScreenshot = subscribeScreenshotCaptured((item) => {
+      setScreenshots((current) => [item, ...current.filter((entry) => entry.id !== item.id)].slice(0, 200))
+      setScreenshotMessage(copy.screenshot.captured(item.width, item.height))
+    })
+    return () => {
+      cancelled = true
+      unsubscribePanel()
+      unsubscribeSettings()
+      unsubscribeAudio()
+      unsubscribeStatus()
+      unsubscribeSource()
+      unsubscribeRegion()
+      unsubscribeScreenshot()
+    }
+  }, [])
+
+  useEffect(() => subscribeAudioLevel((update: AudioLevelUpdate) => {
+    if (update.deviceId && selectedMic && update.deviceId !== selectedMic) return
+    if (update.error) {
+      setMicMonitorError(update.error)
+      setMicMonitorActive(false)
+      setMicLevel(0)
+      setMicPeak(0)
+      return
+    }
+    setMicMonitorError(null)
+    setMicMonitorActive(update.active)
+    setMicLevel(update.active ? update.level : 0)
+    setMicPeak(update.active ? update.peak : 0)
+  }), [selectedMic])
+
+  useEffect(() => {
+    const shouldMonitor = panelState.visible &&
+      panelState.kind === 'audio' &&
+      microphone &&
+      !isRecording &&
+      selectedMic !== '' &&
+      selectedMicrophoneDevice?.available !== false &&
+      hasAvailableMicrophone
+    if (!shouldMonitor) {
+      setMicMonitorActive(false)
+      setMicLevel(0)
+      setMicPeak(0)
+      void stopMicrophoneLevelMonitor()
+      return
+    }
+    let cancelled = false
+    setMicMonitorError(null)
+    void startMicrophoneLevelMonitor(selectedMic)
+      .then(() => {
+        if (!cancelled) setMicMonitorActive(true)
+      })
+      .catch((error) => {
+        if (cancelled) return
+        setMicMonitorError(readableError(error))
+        setMicMonitorActive(false)
+      })
+    return () => {
+      cancelled = true
+      void stopMicrophoneLevelMonitor()
+    }
+  }, [hasAvailableMicrophone, isRecording, microphone, panelState.kind, panelState.visible, selectedMic, selectedMicrophoneDevice?.available])
+
+  useLayoutEffect(() => {
+    let frame = 0
+    const publish = () => {
+      const viewportWidth = window.innerWidth || document.documentElement.clientWidth || 0
+      const viewportHeight = window.innerHeight || document.documentElement.clientHeight || 0
+      const region = elementHitRegion(panelRef.current, viewportWidth, viewportHeight, 'round-rect', 22)
+      void setFloatingPanelHitRegions({
+        enabled: Boolean(region),
+        force: true,
+        viewportWidth,
+        viewportHeight,
+        devicePixelRatio: window.devicePixelRatio || 1,
+        regions: region ? [region] : [],
+      })
+    }
+    frame = window.requestAnimationFrame(publish)
+    const observer = typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(() => {
+      if (frame) window.cancelAnimationFrame(frame)
+      frame = window.requestAnimationFrame(publish)
+    })
+    if (panelRef.current) observer?.observe(panelRef.current)
+    window.addEventListener('resize', publish)
+    return () => {
+      if (frame) window.cancelAnimationFrame(frame)
+      observer?.disconnect()
+      window.removeEventListener('resize', publish)
+    }
+  }, [panelState.kind, panelState.visible])
+
+  useEffect(() => {
+    if (!panelState.visible) return
+    const token = panelState.token
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        event.preventDefault()
+        void hideFloatingPanel(token)
+      }
+    }
+    document.addEventListener('keydown', onKeyDown)
+    return () => {
+      document.removeEventListener('keydown', onKeyDown)
+    }
+  }, [panelState.token, panelState.visible])
+
+  const applyFloatingBootstrap = (bootstrap: {
+    appData: AppDataInfo
+    storage: AppStorageStatus
+    state: string
+    backend?: string
+    sources: CaptureSource[]
+    media: MediaInventory
+    settings: AppSettings
+  }) => {
+    const nextSources = bootstrap.sources.length > 0 ? bootstrap.sources : sources
+    setAppData(bootstrap.appData)
+    setStorageStatus(bootstrap.storage)
+    setStorageRootDraft(bootstrap.appData.rootDir)
+    setLastBackend(bootstrap.backend || lastBackend)
+    setAvailableSources(nextSources)
+    setState(bootstrap.state as RecordingState)
+    applyFloatingSettings(bootstrap.settings, bootstrap.media, nextSources)
+  }
+
+  const applyFloatingSettings = (next: AppSettings, media?: MediaInventory, nextSources = availableSources) => {
+    setSettings(next)
+    setLocale(next.locale)
+    setTheme(next.window.theme)
+    setAudioState({
+      system: next.audio.system,
+      systemDeviceId: next.audio.systemDeviceId,
+      microphone: next.audio.microphone,
+      microphoneDeviceId: next.audio.microphoneDeviceId,
+      noiseSuppression: next.audio.microphone && next.audio.noiseSuppression,
+      microphoneGain: next.audio.microphoneGain,
+    })
+    if (media) {
+      setAvailableSystemAudio(media.systemAudio)
+      setAvailableMicrophones(media.microphones)
+      setAvailableCameras(media.cameras)
+    }
+    setSelectedSource(selectVisibleInitialSource(nextSources, next.source.lastSourceId, next.source.lastSourceType))
+  }
+
+  const applyFloatingSourceState = (sourceState: SourceControlState, sourceList = availableSources) => {
+    setRecordingMode(sourceState.recordingMode)
+    const picked = sourceState.sourceId
+      ? sourceList.find((source) => source.id === sourceState.sourceId)
+      : sourceState.sourceType
+        ? sourceList.find((source) => source.type === sourceState.sourceType)
+        : undefined
+    if (!picked) return
+    setSelectedSource(picked.type === 'region' && sourceState.sourceGeometry
+      ? {
+          ...picked,
+          x: sourceState.sourceGeometry.x,
+          y: sourceState.sourceGeometry.y,
+          width: sourceState.sourceGeometry.width,
+          height: sourceState.sourceGeometry.height,
+          displayIndex: sourceState.sourceGeometry.displayIndex,
+          nativeId: sourceState.sourceGeometry.nativeId,
+        }
+      : picked)
+  }
+
+  const commitSettingsPreferencePatch = (patch: SettingsPreferencesPatch) => {
+    setSettings((current) => ({
+      ...current,
+      recording: {
+        ...current.recording,
+        quality: patch.recordingQuality ?? current.recording.quality,
+        fps: patch.recordingFps ?? current.recording.fps,
+        captureCursor: patch.captureCursor ?? current.recording.captureCursor,
+        countdownSeconds: patch.countdownSeconds ?? current.recording.countdownSeconds,
+      },
+      window: {
+        ...current.window,
+        theme: patch.theme ?? current.window.theme,
+        startAtLogin: patch.startAtLogin ?? current.window.startAtLogin,
+      },
+    }))
+    if (patch.theme !== undefined) setTheme(normalizeTheme(patch.theme))
+    void patchSettingsPreferences(patch)
+      .then((saved) => applyFloatingSettings(saved))
+      .catch((error) => console.error('Failed to patch floating settings:', error))
+  }
+
+  const commitFloatingShortcutSettingsPatch = (action: ShortcutAction, accelerator: string) => {
+    const conflict = shortcutActions.find((candidate) => (
+      candidate !== action &&
+      shortcutIdentity(shortcuts[candidate]) === shortcutIdentity(accelerator)
+    ))
+    if (conflict) {
+      setShortcutError(copy.settings.shortcutConflict(copy.settings.shortcutActionLabels[conflict]))
+      return
+    }
+    setShortcutCapture(null)
+    setShortcutError('')
+    setSettings((current) => ({
+      ...current,
+      shortcuts: {
+        ...current.shortcuts,
+        [action]: accelerator,
+      },
+    }))
+    void patchShortcutSettings({[action]: accelerator} as ShortcutSettingsPatch)
+      .then((saved) => {
+        setSettings(saved)
+        setLocale(saved.locale)
+        setTheme(saved.window.theme)
+      })
+      .catch((error) => {
+        setSettings((current) => ({...current, shortcuts}))
+        setShortcutError(readableError(error) || copy.settings.shortcutInvalid)
+        console.error('Failed to patch floating shortcut settings:', error)
+      })
+  }
+
+  const commitAudioStatePatch = (patch: AudioStatePatch) => {
+    setAudioState((current) => ({...current, ...patch, noiseSuppression: patch.noiseSuppression ?? current.noiseSuppression}))
+    void patchAudioState(patch)
+      .then(setAudioState)
+      .catch((error) => console.error('Failed to patch floating audio state:', error))
+  }
+
+  const commitCameraStatePatch = (patch: Partial<AppSettings['camera']>) => {
+    const nextCamera = {
+      ...settings.camera,
+      ...patch,
+      pip: patch.pip ?? settings.camera.pip,
+      pipPreset: patch.pipPreset ?? patch.pip?.preset ?? settings.camera.pipPreset,
+    }
+    setSettings((current) => ({...current, camera: nextCamera}))
+    void patchCameraState({
+      enabled: nextCamera.enabled,
+      deviceId: nextCamera.deviceId,
+      pipPreset: nextCamera.pipPreset,
+      pip: nextCamera.pip,
+    })
+      .then((saved) => applyFloatingSettings(saved))
+      .catch((error) => console.error('Failed to patch floating camera state:', error))
+  }
+
+  const setCameraEnabled = (enabled: boolean) => {
+    const nextEnabled = enabled && hasUsableCamera
+    const deviceId = selectedCamera || fallbackUsableCameraDevice?.id || ''
+    const nextPip = nextEnabled
+      ? ensureVisiblePipConfig(currentPipConfig.preset === 'off'
+          ? normalizePipConfig({...currentPipConfig, preset: 'bottom-right', position: defaultPipPosition('bottom-right')}, 'bottom-right')
+          : currentPipConfig)
+      : normalizePipConfig({...currentPipConfig, preset: 'off'}, 'off')
+    commitCameraStatePatch({
+      enabled: nextEnabled,
+      deviceId,
+      pipPreset: nextPip.preset,
+      pip: nextPip,
+    })
+    if (!nextEnabled) void hidePipOverlay()
+  }
+
+  const commitPipConfigFromPanel = (patch: Partial<PIPConfig>) => {
+    if (!camera || !hasUsableCamera || recordingMode === 'audio') return
+    const nextConfig = ensureVisiblePipConfig(normalizePipConfig({
+      ...currentPipConfig,
+      ...patch,
+      position: patch.position ?? currentPipConfig.position,
+    }, (patch.preset as PIPPreset | undefined) ?? currentPipConfig.preset))
+    commitCameraStatePatch({enabled: true, pipPreset: nextConfig.preset, pip: nextConfig})
+    const target = {
+      deviceId: selectedCameraDevice?.id || selectedCamera,
+      nativeId: selectedCameraDevice?.nativeId,
+      name: selectedCameraDevice?.name || selectedCamera,
+    }
+    void updatePipOverlay(nextConfig, 'edit', target).catch(() => undefined)
+  }
+
+  const chooseCameraDevice = (deviceId: string) => {
+    if (isRecording) return
+    commitCameraStatePatch({deviceId})
+  }
+
+  const chooseSource = (source: CaptureSource) => {
+    if (isRecording) return
+    if (source.type !== 'region') void hideRegionFrame()
+    setSelectedSource(source)
+    setSourcePickerView('overview')
+    setSourceSelectionMessage(source.available === false ? {key: 'sourceQueued'} : null)
+    void patchSourceState({
+      recordingMode,
+      sourceId: source.id,
+      sourceType: source.type,
+      sourceGeometry: source.type === 'region' && source.width && source.height
+        ? {
+            x: source.x ?? 0,
+            y: source.y ?? 0,
+            width: source.width,
+            height: source.height,
+            displayIndex: source.displayIndex,
+            nativeId: source.nativeId,
+          }
+        : undefined,
+      clearGeometry: source.type !== 'region',
+    })
+    void hideFloatingPanel(panelState.token)
+  }
+
+  const chooseRegion = async () => {
+    if (isRecording) return
+    setSourcePickerView('overview')
+    setSourceSelectionMessage({key: 'regionSelecting'})
+    await hideFloatingPanel(panelState.token)
+    try {
+      await showRegionSelector()
+    } catch (error) {
+      console.error('Failed to show region selector:', error)
+      setSourceSelectionMessage({key: 'sourceQueued'})
+    }
+  }
+
+  const setRecordingModeFromPanel = (mode: RecordingMode) => {
+    setRecordingMode(mode)
+    if (mode === 'audio') void hideRegionFrame()
+    void patchSourceState({recordingMode: mode})
+  }
+
+  const showScreenMarker = (source: CaptureSource) => {
+    if (source.type === 'screen') void showScreenIndicator(source.id)
+  }
+
+  const beginScreenshotCapture = () => {
+    if (isRecording) return
+    void hideFloatingPanel(panelState.token)
+    setScreenshotMessage(copy.screenshot.selecting)
+    void showScreenshotRegionSelector().catch((error) => {
+      setScreenshotMessage(readableError(error) || copy.screenshot.captureFailed)
+    })
+  }
+
+  const beginScrollingScreenshot = () => {
+    if (isRecording) return
+    setScreenshotMessage(copy.screenshot.scrollingPreparing)
+    void startScrollingScreenshot()
+      .then(() => setScreenshotMessage(copy.screenshot.scrollingStarted))
+      .catch((error) => setScreenshotMessage(readableError(error) || copy.screenshot.scrollingUnavailable))
+  }
+
+  const captureScreenshotMode = (mode: 'full' | 'screen' | 'window' | 'focused-window') => {
+    if (isRecording) return
+    void hideFloatingPanel(panelState.token)
+    void captureScreenshot({mode})
+      .then((item) => {
+        setScreenshots((current) => [item, ...current.filter((entry) => entry.id !== item.id)].slice(0, 200))
+        setScreenshotMessage(copy.screenshot.captured(item.width, item.height))
+      })
+      .catch((error) => setScreenshotMessage(readableError(error) || copy.screenshot.captureFailed))
+  }
+
+  const openWhiteboard = () => {
+    void hideFloatingPanel(panelState.token)
+    void showWhiteboardWindow()
+  }
+
+  const applyDataRoot = async () => {
+    const nextRoot = storageRootDraft.trim()
+    if (!nextRoot || storageBusy) return
+    setStorageBusy(true)
+    setStorageMessage({key: 'applying'})
+    try {
+      const info = await setDataRoot(nextRoot)
+      setAppData(info)
+      setStorageRootDraft(info.rootDir)
+      setStorageMessage({key: 'changed', path: info.videoDir})
+    } catch {
+      setStorageMessage({key: 'failed'})
+    } finally {
+      setStorageBusy(false)
+    }
+  }
+
+  const openRecordingsDirectory = async () => {
+    try {
+      const info = await openVideoDirectory()
+      setAppData(info)
+      setStorageRootDraft(info.rootDir)
+    } catch {
+      setStorageMessage({key: 'failed'})
+    }
+  }
+
+  const confirmFloatingCloseApplication = async () => {
+    if (closeBusy) return
+    setCloseBusy(true)
+    try {
+      if (state === 'recording' || state === 'paused') {
+        await stopRecording()
+      }
+      await hideRegionFrame()
+      await hideScreenIndicator()
+      await stopMicrophoneLevelMonitor()
+      await hideFloatingPanel(panelState.token)
+      await quitApplication()
+    } finally {
+      setCloseBusy(false)
+    }
+  }
+
+  if (!panelState.visible) {
+    return <main className="floating-panel-shell empty" aria-hidden="true" />
+  }
+
+  const panel = panelState.kind
+  return (
+    <main ref={panelRef} className={`floating-panel-shell popover panel-${panel ?? 'empty'} drop-${panelState.direction ?? 'down'}`} role="dialog" aria-label={panel === 'close' ? copy.aria.closeApplication : panel ? copy.aria.menu(panel === 'settings' ? 'language' : panel) : undefined}>
+      {panel === 'source' && (
+        <div className="menu-grid source-menu">
+          <div className="mode-toggle" role="group" aria-label={copy.aria.recordingMode}>
+            {(['video', 'audio'] as RecordingMode[]).map((mode) => {
+              const ModeIcon = mode === 'video' ? Video : Volume2
+              const selected = recordingMode === mode
+              return (
+                <button key={mode} type="button" className={selected ? 'selected' : ''} aria-pressed={selected} disabled={isRecording} onClick={() => setRecordingModeFromPanel(mode)}>
+                  <ModeIcon size={16} />
+                  <span>{copy.recordingModes[mode]}</span>
+                </button>
+              )
+            })}
+          </div>
+          {recordingMode === 'video' ? (
+            sourcePickerView === 'windows' ? (
+              <div className="source-window-picker">
+                <div className="source-panel-header">
+                  <button type="button" className="source-back-button" onClick={() => setSourcePickerView('overview')} aria-label={copy.sourceActions.backToSources}>
+                    <ChevronLeft size={16} />
+                  </button>
+                  <span>
+                    <strong>{copy.sourceGroups.window}</strong>
+                    <small>{copy.sourceActions.lockedWindowHint}</small>
+                  </span>
+                </div>
+                <div className="source-list-scroll">
+                  {windowSources.length > 0 ? windowSources.map((source) => (
+                    <SourceMenuRow key={source.id} source={source} copy={copy} selected={selectedSource.id === source.id} disabled={isRecording} onSelect={() => chooseSource(source)} />
+                  )) : (
+                    <div className="source-empty">
+                      <AppWindow size={18} />
+                      <span>{copy.sourceActions.noWindows}</span>
+                    </div>
+                  )}
+                </div>
+              </div>
+            ) : (
+              <div className="source-list-scroll">
+                <SourceGroup title={copy.sourceGroups.screen}>
+                  {allScreensSource && allScreensSource.available !== false && (
+                    <SourceMenuRow source={allScreensSource} copy={copy} selected={selectedSource.id === allScreensSource.id} disabled={isRecording} onSelect={() => chooseSource(allScreensSource)} />
+                  )}
+                  {screenSources.map((source) => (
+                    <SourceMenuRow key={source.id} source={source} copy={copy} selected={selectedSource.id === source.id} disabled={isRecording} onSelect={() => chooseSource(source)} onPreviewStart={() => showScreenMarker(source)} onPreviewEnd={() => void hideScreenIndicator()} />
+                  ))}
+                </SourceGroup>
+                <SourceGroup title={copy.sourceGroups.region}>
+                  {regionSource ? (
+                    <SourceMenuRow source={regionSource} copy={copy} selected={selectedSource.id === regionSource.id} actionLabel={copy.sourceActions.chooseRegion} disabled={isRecording} onSelect={() => void chooseRegion()} />
+                  ) : (
+                    <div className="source-empty">
+                      <Crosshair size={18} />
+                      <span>{copy.sourceActions.regionUnavailable}</span>
+                    </div>
+                  )}
+                </SourceGroup>
+                <SourceGroup title={copy.sourceGroups.window}>
+                  <button className={`menu-row ${selectedWindowSource ? 'selected' : ''}`} type="button" disabled={isRecording} onClick={() => setSourcePickerView('windows')}>
+                    <AppWindow size={18} />
+                    <span>
+                      <strong>{copy.sourceActions.chooseLockedWindow}</strong>
+                      <small>{selectedWindowSource ? sourceName(selectedWindowSource, copy) : copy.sourceActions.lockedWindowHint}</small>
+                    </span>
+                    <ChevronDown size={16} />
+                  </button>
+                </SourceGroup>
+                {sourceSelectionText && <div className="source-selection-note">{sourceSelectionText}</div>}
+              </div>
+            )
+          ) : (
+            <div className="menu-row selected audio-mode-summary" aria-live="polite">
+              <Volume2 size={18} />
+              <span>
+                <strong>{copy.sourceAudioOnly.name}</strong>
+                <small>{audioOnlySourceMeta(systemAudio, microphone, copy)}</small>
+              </span>
+              <Check size={16} />
+            </div>
+          )}
+        </div>
+      )}
+
+      {panel === 'audio' && (
+        <div className="menu-stack">
+          <SwitchRow label={copy.panels.systemAudio} checked={systemAudio} disabled={isRecording} onChange={(value) => commitAudioStatePatch({system: value})} />
+          <label className="field-label" htmlFor="floating-system-audio-device">{copy.panels.systemAudioDevice}</label>
+          <SelectMenu id="floating-system-audio-device" value={selectedSystemAudio} disabled={isRecording} options={availableSystemAudio.map((device) => ({value: device.id, label: mediaDeviceName(device, copy), disabled: device.available === false}))} onChange={(value) => commitAudioStatePatch({systemDeviceId: value})} />
+          <SwitchRow label={copy.panels.microphone} checked={microphone && hasAvailableMicrophone} disabled={isRecording || !hasAvailableMicrophone} onChange={(value) => commitAudioStatePatch(value ? {microphone: true, microphoneDeviceId: selectedMic || availableMicrophones.find((device) => device.available !== false)?.id} : {microphone: false, noiseSuppression: false})} />
+          <SwitchRow label={copy.panels.rnnoise} checked={noiseSuppression} disabled={isRecording || !microphone || selectedMicrophoneDevice?.rnnoiseEligible === false} onChange={(value) => commitAudioStatePatch({noiseSuppression: value && microphone})} />
+          <label className="field-label" htmlFor="floating-mic-device">{copy.panels.microphoneDevice}</label>
+          <SelectMenu id="floating-mic-device" value={selectedMic} disabled={isRecording || !microphone || !hasAvailableMicrophone} options={availableMicrophones.length === 0 ? [{value: '', label: copy.panels.noMicrophones, disabled: true}] : availableMicrophones.map((device) => ({value: device.id, label: mediaDeviceName(device, copy), disabled: device.available === false}))} onChange={(value) => commitAudioStatePatch({microphoneDeviceId: value})} />
+          <div className={`meter ${micMonitorActive ? 'live' : ''} ${micMonitorError ? 'error' : ''}`} aria-label={copy.aria.microphoneLevel} title={micMonitorError ?? micMonitorStatusText}>
+            {micMeterBars.map((bar, index) => <span key={index} className={bar.active ? 'active' : ''} style={{height: bar.height}} />)}
+          </div>
+          <div className="meter-status">
+            <span>{micMonitorStatusText}</span>
+            <b>{Math.round(micPeak * 100)}%</b>
+          </div>
+        </div>
+      )}
+
+      {panel === 'camera' && (
+        <div className="menu-stack">
+          <SwitchRow label={copy.panels.cameraSidecar} checked={camera} disabled={isRecording || !hasUsableCamera} onChange={setCameraEnabled} />
+          <label className="field-label" htmlFor="floating-camera-device">{copy.panels.cameraDevice}</label>
+          <SelectMenu id="floating-camera-device" value={selectedCamera} disabled={isRecording || availableCameras.length === 0} options={availableCameras.map((device) => ({value: device.id, label: mediaDeviceName(device, copy), disabled: !isUsableCameraDevice(device)}))} onChange={chooseCameraDevice} />
+          <div className={`meter-status ${!hasUsableCamera || !selectedCameraUsable ? 'error' : ''}`}><span>{cameraStatusText}</span></div>
+          <label className="field-label" htmlFor="floating-pip-preset">{copy.panels.pipPreset}</label>
+          <SelectMenu id="floating-pip-preset" value={currentPipConfig.preset} disabled={isRecording || !camera || !hasUsableCamera} options={pipPresetOptions.map((preset) => ({value: preset, label: copy.pipPresetLabels[preset]}))} onChange={(value) => commitPipConfigFromPanel({preset: value as PIPPreset, position: value !== 'free' ? defaultPipPosition(value as PIPPreset) : currentPipConfig.position})} />
+          <span className="field-label">{copy.panels.pipShape}</span>
+          <div className="mode-toggle">
+            {pipShapeOptions.map((shape) => {
+              const ShapeIcon = shape === 'circle' ? CircleDot : Square
+              return (
+                <button key={shape} type="button" className={currentPipConfig.shape === shape ? 'selected' : ''} disabled={isRecording || !camera || !hasUsableCamera} onClick={() => commitPipConfigFromPanel({shape})}>
+                  <ShapeIcon size={15} />
+                  <span>{copy.pipShapeLabels[shape]}</span>
+                </button>
+              )
+            })}
+          </div>
+          <SwitchRow label={copy.panels.pipMirror} checked={currentPipConfig.mirror} disabled={isRecording || !camera || !hasUsableCamera} onChange={(value) => commitPipConfigFromPanel({mirror: value})} />
+          <label className="field-label" htmlFor="floating-pip-size">{copy.panels.pipSize}</label>
+          <div className="pip-slider-row">
+            <input id="floating-pip-size" type="range" min={pipMinimumScale} max={pipMaximumScale} step="0.001" value={currentPipConfig.scale} disabled={isRecording || !camera || !hasUsableCamera} onChange={(event) => commitPipConfigFromPanel({scale: Number(event.currentTarget.value)})} />
+            <b>{formatPipScalePercent(currentPipConfig.scale)}</b>
+          </div>
+          <label className="field-label" htmlFor="floating-pip-edge">{copy.panels.pipEdge}</label>
+          <div className="pip-slider-row">
+            <input id="floating-pip-edge" type="range" min="0.02" max="0.42" step="0.01" value={currentPipConfig.edgeFeather} disabled={isRecording || !camera || !hasUsableCamera} onChange={(event) => commitPipConfigFromPanel({edgeFeather: Number(event.currentTarget.value)})} />
+            <b>{Math.round(currentPipConfig.edgeFeather * 100)}%</b>
+          </div>
+        </div>
+      )}
+
+      {panel === 'board' && (
+        <div className="menu-stack board-tools-menu">
+          <div className="board-tool-actions">
+            <button type="button" className="menu-row selected" onClick={beginScreenshotCapture}>
+              <ImageIcon size={18} />
+              <span><strong>{copy.screenshot.region}</strong><small>{formatShortcutForDisplay(settings.shortcuts.openScreenshot)}</small></span>
+            </button>
+            <button type="button" className="menu-row" onClick={() => captureScreenshotMode('full')}>
+              <Maximize2 size={18} />
+              <span><strong>{copy.screenshot.full}</strong><small>{copy.screenshot.fullDetail}</small></span>
+            </button>
+            <button type="button" className="menu-row" onClick={beginScrollingScreenshot}>
+              <ScrollText size={18} />
+              <span><strong>{copy.screenshot.scrolling}</strong><small>{copy.screenshot.scrollingDetail}</small></span>
+            </button>
+            <button type="button" className="menu-row" onClick={openWhiteboard}>
+              <PenLine size={18} />
+              <span><strong>{copy.whiteboard.open}</strong><small>{formatShortcutForDisplay(settings.shortcuts.openWhiteboard)}</small></span>
+            </button>
+          </div>
+          <div className="screenshot-history-header">
+            <span><History size={15} /><strong>{copy.screenshot.history}</strong></span>
+            <small>{screenshotMessage || copy.screenshot.historyDetail}</small>
+          </div>
+          <div className="screenshot-history-list">
+            {screenshots.length > 0 ? screenshots.slice(0, 6).map((item) => (
+              <div className="screenshot-history-row" key={item.id}>
+                <button type="button" className="screenshot-history-main" onClick={() => void openScreenshot(item.id)}>
+                  <ImageIcon size={17} />
+                  <span><strong>{screenshotDisplayName(item)}</strong><small>{screenshotMeta(item, copy)}</small></span>
+                </button>
+                <div className="screenshot-history-actions">
+                  <button type="button" aria-label={copy.screenshot.openFolder} title={copy.screenshot.openFolder} onClick={() => void openScreenshotDirectory(item.id)}><FolderOpen size={15} /></button>
+                  <button type="button" aria-label={copy.screenshot.annotate} title={copy.screenshot.annotate} onClick={() => void openScreenshotInWhiteboard(item.id)}><PenLine size={15} /></button>
+                  <button type="button" aria-label={copy.screenshot.pin} title={copy.screenshot.pin} onClick={() => void showPinnedScreenshot(item.id)}><Pin size={15} /></button>
+                </div>
+              </div>
+            )) : (
+              <div className="source-empty"><ImageIcon size={18} /><span>{copy.screenshot.empty}</span></div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {panel === 'language' && (
+        <div className="menu-grid compact">
+          {localeOptions.map((code) => (
+            <button key={code} type="button" className={`menu-row ${locale === code ? 'selected' : ''}`} onClick={() => {
+              const nextSettings = {...settings, locale: code}
+              setLocale(code)
+              setSettings(nextSettings)
+              void saveSettings(nextSettings).then(applyFloatingSettings)
+              void hideFloatingPanel(panelState.token)
+            }}>
+              <Languages size={16} />
+              <span><strong>{copy.localeNames[code]}</strong></span>
+              {locale === code && <Check size={16} />}
+            </button>
+          ))}
+        </div>
+      )}
+
+      {panel === 'settings' && (
+        <section className="settings-panel settings-sheet floating-settings-panel" role="dialog" aria-label={copy.aria.settingsDialog}>
+          <div className="sheet-header">
+            <div><strong>RecordingFreedom</strong><span>{copy.settings.title}</span></div>
+            <button type="button" className="sheet-close" onClick={() => void hideFloatingPanel(panelState.token)}>{copy.common.close}</button>
+          </div>
+          <div className="settings-list">
+            <SettingLine title={copy.settings.storage} value={appData.videoDir} detail={copy.settings.storageDetail} actionLabel={copy.settings.openRecordings} onAction={() => void openRecordingsDirectory()} />
+            <SettingLine title={copy.settings.storageHealth} value={formatStorageStatusValue(storageStatus, copy)} status={storageStatusForBadge(storageStatus.status)} statusLabel={copy.capabilityStatusLabels[storageStatusForBadge(storageStatus.status)]} detail={storageStatusDetail(storageStatus, copy)} />
+            <SettingTextAction title={copy.settings.dataRoot} value={storageRootDraft} detail={storageMessage ? formatStorageMessage(storageMessage, copy) : copy.settings.dataRootDetail} actionLabel={storageBusy ? copy.common.applying : copy.common.apply} actionDisabled={storageBusy || isRecording} onChange={setStorageRootDraft} onAction={() => void applyDataRoot()} />
+            <SettingLine title={copy.settings.appData} value={appData.rootDir} />
+            <SettingLine title={copy.settings.settingsFile} value={joinDisplayPath(appData.rootDir, 'settings.json')} />
+            <SettingSelect title={copy.settings.language} value={locale} options={localeOptions.map((code) => ({value: code, label: copy.localeNames[code]}))} onChange={(value) => {
+              const nextLocale = normalizeLocale(value)
+              const nextSettings = {...settings, locale: nextLocale}
+              setLocale(nextLocale)
+              setSettings(nextSettings)
+              void saveSettings(nextSettings).then(applyFloatingSettings)
+            }} />
+            <SettingSelect title={copy.settings.theme} value={theme} options={themeOptions.map((option) => ({value: option, label: copy.themeNames[option], swatch: themeSwatches[option]}))} onChange={(value) => commitSettingsPreferencePatch({theme: normalizeTheme(value)})} />
+            <SettingToggle title={copy.settings.startAtLogin} checked={settings.window.startAtLogin} detail={copy.settings.startAtLoginDetail} onChange={(value) => commitSettingsPreferencePatch({startAtLogin: value})} />
+            <SettingLine title={copy.settings.shortcuts} value={copy.settings.shortcutSummary} detail={shortcutError || copy.settings.shortcutDetail} />
+            {shortcutActions.map((action) => (
+              <SettingShortcut
+                key={action}
+                title={copy.settings.shortcutActionLabels[action]}
+                value={formatShortcutForDisplay(shortcuts[action])}
+                detail={shortcutCapture === action ? copy.settings.shortcutHint : undefined}
+                actionLabel={shortcutCapture === action ? copy.settings.shortcutRecording : copy.settings.shortcutRecord}
+                capturing={shortcutCapture === action}
+                onStart={() => {
+                  setShortcutError('')
+                  setShortcutCapture(action)
+                }}
+                onCancel={() => {
+                  setShortcutCapture(null)
+                  setShortcutError('')
+                }}
+                onCapture={(accelerator) => commitFloatingShortcutSettingsPatch(action, accelerator)}
+              />
+            ))}
+            <SettingSelect title={copy.settings.quality} value={settings.recording.quality} options={recordingQualityOptions.map((quality) => ({value: quality, label: copy.recordingQualityLabels[quality]}))} detail={copy.settings.qualityDetail} onChange={(value) => commitSettingsPreferencePatch({recordingQuality: normalizeRecordingQuality(value)})} />
+            <SettingSelect title={copy.settings.fps} value={String(settings.recording.fps)} options={fpsOptions.map((fps) => ({value: String(fps), label: `${fps} ${copy.settings.fps}`}))} onChange={(value) => commitSettingsPreferencePatch({recordingFps: Number(value)})} />
+            <SettingToggle title={copy.settings.captureCursor} checked={settings.recording.captureCursor} onChange={(value) => commitSettingsPreferencePatch({captureCursor: value})} />
+            <SettingSelect title={copy.settings.countdown} value={String(settings.recording.countdownSeconds)} options={countdownOptions.map((seconds) => ({value: String(seconds), label: seconds === 0 ? copy.common.off : `${seconds}s`}))} onChange={(value) => commitSettingsPreferencePatch({countdownSeconds: Number(value)})} />
+            <SettingLine title={copy.settings.recordingBackend} value={lastBackend} detail={copy.settings.recordingBackendDetail} />
+            <SettingLine title={copy.settings.release} value="GitHub Actions Windows portable + setup" />
+          </div>
+        </section>
+      )}
+
+      {panel === 'close' && (
+        <section className="close-confirm-panel floating-close-confirm-panel" role="dialog" aria-modal="true" aria-label={isRecording ? copy.closeDialog.recordingTitle : copy.closeDialog.idleTitle}>
+          <div className="close-confirm-copy">
+            <strong>{isRecording ? copy.closeDialog.recordingTitle : copy.closeDialog.idleTitle}</strong>
+            <span>{isRecording ? copy.closeDialog.recordingMessage : copy.closeDialog.idleMessage}</span>
+          </div>
+          <div className="close-confirm-actions">
+            <button type="button" className="close-confirm-secondary" disabled={closeBusy} onClick={() => void hideFloatingPanel(panelState.token)}>
+              {copy.common.cancel}
+            </button>
+            <button type="button" className="close-confirm-primary" disabled={closeBusy} onClick={() => void confirmFloatingCloseApplication()}>
+              {isRecording ? copy.closeDialog.confirmRecording : copy.closeDialog.confirmIdle}
+            </button>
+          </div>
+        </section>
+      )}
+    </main>
+  )
+}
+
+function FloatingSelectWindow() {
+  const rootRef = useRef<HTMLElement | null>(null)
+  const [selectState, setSelectState] = useState<FloatingSelectState>(() => ({
+    visible: false,
+    anchor: {x: 0, y: 0, width: 0, height: 0},
+    bounds: {x: 0, y: 0, width: 0, height: 0},
+    options: [],
+    token: 0,
+  }))
+
+  useEffect(() => {
+    document.body.classList.add('rf-floating-select-window')
+    return () => document.body.classList.remove('rf-floating-select-window')
+  }, [])
+
+  useEffect(() => {
+    let cancelled = false
+    void getFloatingSelectState()
+      .then((state) => {
+        if (!cancelled) setSelectState(state)
+      })
+      .catch((error) => console.info('Floating select state unavailable:', error))
+    const unsubscribe = subscribeFloatingSelectChanged(setSelectState)
+    return () => {
+      cancelled = true
+      unsubscribe()
+    }
+  }, [])
+
+  useLayoutEffect(() => {
+    const viewportWidth = window.innerWidth || document.documentElement.clientWidth || 0
+    const viewportHeight = window.innerHeight || document.documentElement.clientHeight || 0
+    const region = elementHitRegion(rootRef.current, viewportWidth, viewportHeight, 'round-rect', 16)
+    void setFloatingSelectHitRegions({
+      enabled: Boolean(region),
+      force: true,
+      viewportWidth,
+      viewportHeight,
+      devicePixelRatio: window.devicePixelRatio || 1,
+      regions: region ? [region] : [],
+    })
+  }, [selectState.visible, selectState.options.length])
+
+  useEffect(() => {
+    if (!selectState.visible) return
+    const token = selectState.token
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        event.preventDefault()
+        void hideFloatingSelect(token)
+      }
+    }
+    document.addEventListener('keydown', onKeyDown)
+    return () => {
+      document.removeEventListener('keydown', onKeyDown)
+    }
+  }, [selectState.token, selectState.visible])
+
+  if (!selectState.visible) {
+    return <main className="floating-select-shell empty" aria-hidden="true" />
+  }
+
+  return (
+    <main ref={rootRef} className={`floating-select-shell select-menu-list drop-${selectState.direction ?? 'down'}`} role="listbox">
+      {selectState.options.map((option) => (
+        <button
+          key={option.value}
+          type="button"
+          role="option"
+          className={`select-menu-option ${option.value === selectState.value ? 'selected' : ''}`}
+          aria-selected={option.value === selectState.value}
+          disabled={option.disabled}
+          onPointerDown={(event) => {
+            event.preventDefault()
+            event.stopPropagation()
+          }}
+          onClick={() => {
+            if (option.disabled) return
+            void completeFloatingSelect({
+              id: selectState.id ?? '',
+              value: option.value,
+              token: selectState.token,
+              panelToken: selectState.panelToken,
+            })
+          }}
+        >
+          <span className="select-menu-label">
+            {option.swatch && <i className="select-menu-swatch" style={{background: option.swatch}} aria-hidden="true" />}
+            <span>{option.label}</span>
+          </span>
+          {option.value === selectState.value && <Check size={15} />}
+        </button>
+      ))}
     </main>
   )
 }
@@ -4850,6 +5962,7 @@ function SelectMenu({
   const openedAtRef = useRef(0)
   const pointerInsideAtRef = useRef(0)
   const pointerInsideRef = useRef(false)
+  const floatingSelectTokenRef = useRef(0)
   const selected = options.find((option) => option.value === value) ?? options.find((option) => !option.disabled) ?? options[0]
   const selectOption = (option: SelectMenuOption) => {
     if (option.disabled) return
@@ -4867,6 +5980,7 @@ function SelectMenu({
 
   useEffect(() => {
     if (!open) return
+    if (isWailsDesktopRuntime()) return
     openedAtRef.current = Date.now()
     updateDropDirection()
     const close = () => setOpen(false)
@@ -4923,9 +6037,60 @@ function SelectMenu({
     }
   }, [open, options.length])
 
+  useEffect(() => subscribeFloatingSelectChosen((event) => {
+    if (!isWailsDesktopRuntime()) return
+    if (event.token !== floatingSelectTokenRef.current) return
+    const option = options.find((candidate) => candidate.value === event.value)
+    if (!option || option.disabled) return
+    onChange(option.value)
+    setOpen(false)
+  }), [onChange, options])
+
   useEffect(() => {
-    if (disabled) setOpen(false)
+    if (!disabled) return
+    setOpen(false)
+    if (floatingSelectTokenRef.current) void hideFloatingSelect(floatingSelectTokenRef.current)
   }, [disabled])
+
+  const toggleFloatingSelect = async () => {
+    if (!isWailsDesktopRuntime()) {
+      if (!open) updateDropDirection()
+      setOpen((value) => !value)
+      return
+    }
+    if (open) {
+      await hideFloatingSelect(floatingSelectTokenRef.current)
+      setOpen(false)
+      return
+    }
+    const root = rootRef.current
+    if (!root) return
+    const token = floatingSelectTokenRef.current + 1
+    floatingSelectTokenRef.current = token
+    const anchorWidth = root.getBoundingClientRect().width
+    const placement = await resolveFloatingSelectPlacement(root, {
+      width: clampNumber(anchorWidth, floatingSelectMinWidth, floatingSelectMaxWidth),
+      minWidth: floatingSelectMinWidth,
+      maxWidth: floatingSelectMaxWidth,
+      maxHeight: floatingSelectMaxHeight,
+      optionCount: options.length,
+    })
+    const parentPanel = await getFloatingPanelState().catch(() => undefined)
+    await showFloatingSelect({
+      id: id ?? `select-${token}`,
+      anchor: placement.anchor,
+      bounds: placement.bounds,
+      value,
+      options: options as FloatingSelectOption[],
+      token,
+      panelToken: parentPanel?.visible ? parentPanel.token : undefined,
+      width: placement.bounds.width,
+      maxHeight: placement.bounds.height,
+      screenId: placement.screenId,
+      direction: placement.direction,
+    })
+    setOpen(true)
+  }
 
   return (
     <div
@@ -4947,10 +6112,7 @@ function SelectMenu({
         disabled={disabled || options.length === 0}
         aria-haspopup="listbox"
         aria-expanded={open}
-        onClick={() => {
-          if (!open) updateDropDirection()
-          setOpen((value) => !value)
-        }}
+        onClick={() => void toggleFloatingSelect()}
       >
         <span className="select-menu-label">
           {selected?.swatch && <i className="select-menu-swatch" style={{background: selected.swatch}} aria-hidden="true" />}
@@ -4958,7 +6120,7 @@ function SelectMenu({
         </span>
         <ChevronDown size={16} />
       </button>
-      {open && (
+      {open && !isWailsDesktopRuntime() && (
         <div className="select-menu-list" role="listbox" aria-labelledby={id}>
           {options.map((option) => (
             <button

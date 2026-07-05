@@ -33,6 +33,15 @@
   --radius-pill: 999px;
   --shadow-tight: 0 14px 34px rgba(0, 0, 0, 0.26);
   --shadow-panel: 0 18px 42px rgba(0, 0, 0, 0.34);
+  --floating-panel-width: 320px;
+  --floating-panel-max-height: 340px;
+  --floating-panel-compact-width: 260px;
+  --floating-panel-compact-max-height: 120px;
+  --floating-panel-wide-width: 340px;
+  --floating-panel-wide-max-height: 340px;
+  --floating-select-min-width: 180px;
+  --floating-select-max-width: 280px;
+  --floating-select-max-height: 220px;
 }
 
 :root[data-theme="mountain-green"] {
@@ -212,6 +221,21 @@ body.rf-screenshot-pin-window {
   user-select: none;
 }
 
+body.rf-floating-panel-window,
+body.rf-floating-select-window {
+  width: 100vw;
+  height: 100vh;
+  overflow: hidden;
+  background: transparent;
+}
+
+body.rf-floating-panel-window #root,
+body.rf-floating-select-window #root {
+  width: 100%;
+  height: 100%;
+  background: transparent;
+}
+
 button,
 select,
 input {
@@ -328,7 +352,7 @@ input:disabled,
   height: 64px;
   min-height: 64px;
   max-height: 64px;
-  padding: 8px;
+  padding: 6px;
   border: 1px solid var(--line);
   border-radius: var(--radius-pill);
   background: var(--capsule-bg);
@@ -795,11 +819,11 @@ select:disabled {
   z-index: 5;
   top: 86px;
   left: 62px;
-  width: 360px;
-  max-height: min(430px, calc(100vh - 118px));
+  width: min(var(--floating-panel-width), calc(100vw - 48px));
+  max-height: min(var(--floating-panel-max-height), calc(100vh - 118px));
   padding: 8px;
   border: 1px solid var(--line);
-  border-radius: 22px;
+  border-radius: 18px;
   background: var(--panel-strong);
   box-shadow: var(--shadow-panel);
   backdrop-filter: blur(24px) saturate(150%);
@@ -832,32 +856,218 @@ body.rf-recorder-window .select-menu-list {
     inset 0 -1px 0 rgba(0, 0, 0, 0.34);
 }
 
+.popover.panel-source,
 .popover.panel-audio,
-.popover.panel-camera {
+.popover.panel-camera,
+.popover.panel-board {
   left: 68px;
-  width: 400px;
-}
-
-.popover.panel-camera {
-  max-height: min(468px, calc(100vh - 118px));
-}
-
-.popover.panel-audio {
-  max-height: min(430px, calc(100vh - 118px));
+  width: min(var(--floating-panel-width), calc(100vw - 48px));
+  max-height: min(var(--floating-panel-max-height), calc(100vh - 118px));
 }
 
 .popover.panel-language {
-  max-height: min(180px, calc(100vh - 118px));
+  width: min(var(--floating-panel-compact-width), calc(100vw - 48px));
+  max-height: min(var(--floating-panel-compact-max-height), calc(100vh - 118px));
 }
 
-.popover.panel-source {
-  width: 360px;
+.popover.panel-settings {
+  width: min(var(--floating-panel-wide-width), calc(100vw - 48px));
+  max-height: min(var(--floating-panel-wide-max-height), calc(100vh - 118px));
 }
 
-.popover.panel-board {
-  left: 252px;
-  width: 430px;
-  max-height: min(468px, calc(100vh - 118px));
+.popover.panel-close {
+  width: min(340px, calc(100vw - 48px));
+  max-height: min(170px, calc(100vh - 118px));
+}
+
+.floating-panel-shell.popover {
+  position: fixed;
+  inset: 5px;
+  display: flex;
+  flex-direction: column;
+  width: auto;
+  height: auto;
+  max-height: none;
+  margin: 0;
+  contain: layout paint style;
+  overflow-x: hidden;
+  overflow-y: hidden;
+  clip-path: inset(0 round 20px);
+}
+
+.floating-panel-shell.empty,
+.floating-select-shell.empty {
+  width: 100vw;
+  height: 100vh;
+  background: transparent;
+}
+
+.floating-panel-shell .settings-panel {
+  display: flex;
+  flex-direction: column;
+  position: static;
+  inset: auto;
+  width: 100%;
+  max-width: none;
+  height: 100%;
+  max-height: none;
+  margin: 0;
+  border: 0;
+  border-radius: 18px;
+  background: transparent;
+  box-shadow: none;
+  overflow: hidden;
+}
+
+.floating-panel-shell .settings-list {
+  flex: 1;
+  min-height: 0;
+  max-height: none;
+  overflow-x: hidden;
+  overflow-y: auto;
+  padding-right: 2px;
+}
+
+.floating-settings-panel {
+  padding: 8px;
+  border-radius: 15px;
+}
+
+.floating-settings-panel .sheet-header {
+  gap: 8px;
+}
+
+.floating-settings-panel .sheet-header div {
+  gap: 1px;
+}
+
+.floating-settings-panel .sheet-header strong {
+  font-size: 12.5px;
+}
+
+.floating-settings-panel .sheet-header span {
+  font-size: 10px;
+}
+
+.floating-settings-panel .sheet-close {
+  width: 52px;
+  height: 26px;
+  font-size: 10px;
+}
+
+.floating-settings-panel .settings-list {
+  gap: 4px;
+  max-height: none;
+  margin-top: 6px;
+}
+
+.floating-settings-panel .setting-line {
+  gap: 4px;
+  padding: 7px 8px;
+  border-radius: 11px;
+  align-content: start;
+}
+
+.floating-settings-panel .setting-line span {
+  font-size: 10px;
+  line-height: 1.18;
+}
+
+.floating-settings-panel .setting-line strong {
+  font-size: 11.5px;
+  line-height: 1.22;
+}
+
+.floating-settings-panel .setting-value strong {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.floating-settings-panel .setting-line small {
+  display: -webkit-box;
+  overflow: hidden;
+  font-size: 9.8px;
+  line-height: 1.2;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+.floating-settings-panel .setting-value {
+  gap: 5px;
+  flex-wrap: nowrap;
+}
+
+.floating-settings-panel .setting-action,
+.floating-settings-panel .status-badge {
+  min-width: 50px;
+  height: 22px;
+  padding: 0 6px;
+  font-size: 9.5px;
+}
+
+.floating-settings-panel .setting-control {
+  gap: 5px;
+}
+
+.floating-settings-panel .setting-control-select {
+  height: auto;
+  min-height: 0;
+  border-radius: 0;
+  font-size: 10.5px;
+}
+
+.floating-settings-panel .setting-control-select .select-menu-button {
+  min-height: 34px;
+  height: 34px;
+  padding: 0 9px 0 11px;
+  border-radius: 12px;
+  font-size: 10.5px;
+}
+
+.floating-settings-panel .setting-control-input {
+  height: 30px;
+  border-radius: 9px;
+  font-size: 10.5px;
+}
+
+.floating-settings-panel .setting-input-row {
+  grid-template-columns: minmax(0, 1fr) minmax(50px, auto);
+  gap: 5px;
+}
+
+.floating-panel-shell .close-confirm-panel {
+  position: static;
+  inset: auto;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  box-shadow: none;
+}
+
+.floating-panel-shell.panel-audio > .menu-stack,
+.floating-panel-shell.panel-camera > .menu-stack,
+.floating-panel-shell.panel-board > .menu-stack {
+  flex: 1;
+  min-height: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+  padding-right: 2px;
+}
+
+.floating-panel-shell.panel-source > .source-menu,
+.floating-panel-shell.panel-language > .menu-grid {
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.floating-panel-shell .source-list-scroll {
+  max-height: calc(100vh - 92px);
+}
+
+.floating-panel-shell.panel-source .source-window-picker .source-list-scroll {
+  max-height: calc(100vh - 72px);
 }
 
 .rf-shell.dock-left .popover,
@@ -884,8 +1094,8 @@ body.rf-recorder-window .select-menu-list {
 .rf-shell.dock-right .close-confirm-panel {
   top: 8px;
   bottom: auto;
-  width: min(390px, calc(100vw - 108px));
-  max-width: min(390px, calc(100vw - 108px));
+  width: min(var(--floating-panel-wide-width), calc(100vw - 108px));
+  max-width: min(var(--floating-panel-wide-width), calc(100vw - 108px));
   max-height: calc(100vh - 16px);
 }
 
@@ -1101,15 +1311,15 @@ body.rf-recorder-window .select-menu-list {
 }
 
 .menu-grid.compact {
-  width: 260px;
+  width: 100%;
 }
 
 .mode-toggle {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 4px;
-  min-height: 42px;
-  padding: 4px;
+  min-height: 38px;
+  padding: 3px;
   border: 1px solid var(--line);
   border-radius: var(--radius-pill);
   background: rgba(255, 255, 255, 0.045);
@@ -1119,10 +1329,10 @@ body.rf-recorder-window .select-menu-list {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 7px;
+  gap: 6px;
   min-width: 0;
-  min-height: 32px;
-  padding: 0 10px;
+  min-height: 30px;
+  padding: 0 8px;
   border: 1px solid transparent;
   border-radius: var(--radius-pill);
   background: transparent;
@@ -1145,12 +1355,12 @@ body.rf-recorder-window .select-menu-list {
 .menu-row {
   display: flex;
   align-items: center;
-  gap: 10px;
-  min-height: 48px;
+  gap: 8px;
+  min-height: 42px;
   width: 100%;
-  padding: 8px 10px;
+  padding: 6px 8px;
   border: 1px solid transparent;
-  border-radius: 16px;
+  border-radius: 14px;
   background: transparent;
   color: var(--text);
   text-align: left;
@@ -1235,11 +1445,11 @@ body.rf-recorder-window .select-menu-list {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 12px;
+  gap: 10px;
   width: 100%;
   min-width: 0;
-  min-height: 44px;
-  padding: 6px 8px 6px 12px;
+  min-height: 38px;
+  padding: 5px 7px 5px 10px;
   color: var(--text);
   cursor: pointer;
 }
@@ -1265,9 +1475,9 @@ body.rf-recorder-window .select-menu-list {
 }
 
 .switch-row i {
-  flex: 0 0 44px;
-  width: 44px;
-  height: 26px;
+  flex: 0 0 38px;
+  width: 38px;
+  height: 22px;
   border: 1px solid var(--line);
   border-radius: var(--radius-pill);
   background: rgba(255, 255, 255, 0.08);
@@ -1276,9 +1486,9 @@ body.rf-recorder-window .select-menu-list {
 .switch-row i::after {
   content: "";
   display: block;
-  width: 20px;
-  height: 20px;
-  margin: 2px;
+  width: 18px;
+  height: 18px;
+  margin: 1px;
   border-radius: 50%;
   background: var(--muted);
   transition: transform 160ms ease, background 160ms ease;
@@ -1290,7 +1500,7 @@ body.rf-recorder-window .select-menu-list {
 }
 
 .switch-row input:checked + i::after {
-  transform: translateX(18px);
+  transform: translateX(16px);
   background: var(--teal);
 }
 
@@ -1401,8 +1611,10 @@ select {
   right: 0;
   display: grid;
   contain: layout paint style;
-  max-height: 220px;
-  min-width: 0;
+  width: max(100%, var(--floating-select-min-width));
+  max-width: var(--floating-select-max-width);
+  max-height: var(--floating-select-max-height);
+  min-width: var(--floating-select-min-width);
   overflow: auto;
   padding: 6px;
   border: 1px solid rgba(199, 210, 221, 0.18);
@@ -1411,6 +1623,19 @@ select {
   box-shadow: var(--shadow-panel);
   backdrop-filter: blur(24px) saturate(150%);
   transform: translateZ(0);
+}
+
+.floating-select-shell.select-menu-list {
+  position: fixed;
+  inset: 5px;
+  width: auto;
+  height: auto;
+  max-height: none;
+  min-width: 0;
+  max-width: none;
+  overflow-x: hidden;
+  overflow-y: auto;
+  clip-path: inset(0 round 16px);
 }
 
 .select-menu.drop-up .select-menu-list {
@@ -1422,11 +1647,11 @@ select {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 10px;
-  min-height: 38px;
-  padding: 0 10px;
+  gap: 8px;
+  min-height: 34px;
+  padding: 0 8px;
   border: 1px solid transparent;
-  border-radius: 12px;
+  border-radius: 11px;
   background: transparent;
   color: var(--text);
   text-align: left;
@@ -1613,10 +1838,25 @@ input {
   width: 8px;
 }
 
+.floating-panel-shell .settings-list::-webkit-scrollbar,
+.floating-panel-shell .menu-stack::-webkit-scrollbar,
+.floating-panel-shell .source-list-scroll::-webkit-scrollbar,
+.floating-select-shell.select-menu-list::-webkit-scrollbar {
+  width: 6px;
+}
+
 .settings-panel::-webkit-scrollbar-track,
 .popover::-webkit-scrollbar-track,
 .source-list-scroll::-webkit-scrollbar-track,
 .select-menu-list::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.floating-panel-shell .settings-list::-webkit-scrollbar-track,
+.floating-panel-shell .menu-stack::-webkit-scrollbar-track,
+.floating-panel-shell .source-list-scroll::-webkit-scrollbar-track,
+.floating-select-shell.select-menu-list::-webkit-scrollbar-track {
+  margin: 8px 0;
   background: transparent;
 }
 
@@ -1627,6 +1867,15 @@ input {
   border: 2px solid transparent;
   border-radius: 999px;
   background: rgba(146, 162, 181, 0.34);
+  background-clip: padding-box;
+}
+
+.floating-panel-shell .settings-list::-webkit-scrollbar-thumb,
+.floating-panel-shell .menu-stack::-webkit-scrollbar-thumb,
+.floating-panel-shell .source-list-scroll::-webkit-scrollbar-thumb,
+.floating-select-shell.select-menu-list::-webkit-scrollbar-thumb {
+  border-width: 1px;
+  background: rgba(146, 162, 181, 0.42);
   background-clip: padding-box;
 }
 

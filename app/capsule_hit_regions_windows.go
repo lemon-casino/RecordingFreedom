@@ -56,6 +56,18 @@ func (s *RecordingFreedomService) capsuleWindowWndProcInterceptor(hwnd uintptr, 
 			return s.hitTestWindowRegions(hwnd, lParam, s.annotationHitRegions)
 		}
 	}
+	if s.floatingPanelWindow != nil {
+		nativeWindow := s.floatingPanelWindow.NativeWindow()
+		if nativeWindow != nil && hwnd == uintptr(nativeWindow) {
+			return s.hitTestWindowRegions(hwnd, lParam, s.floatingPanelRegions)
+		}
+	}
+	if s.floatingSelectWindow != nil {
+		nativeWindow := s.floatingSelectWindow.NativeWindow()
+		if nativeWindow != nil && hwnd == uintptr(nativeWindow) {
+			return s.hitTestWindowRegions(hwnd, lParam, s.floatingSelectRegions)
+		}
+	}
 	return 0, false
 }
 
@@ -106,6 +118,49 @@ func (s *RecordingFreedomService) applyCapsuleWindowRegion(state capsuleWindowHi
 
 func (s *RecordingFreedomService) applyAnnotationOverlayHitRegions() error {
 	return nil
+}
+
+func (s *RecordingFreedomService) applyFloatingPanelWindowRegion(state capsuleWindowHitRegionState) error {
+	if s == nil || s.floatingPanelWindow == nil {
+		return nil
+	}
+	return s.applyWindowRegion(s.floatingPanelWindow, state)
+}
+
+func (s *RecordingFreedomService) applyFloatingSelectWindowRegion(state capsuleWindowHitRegionState) error {
+	if s == nil || s.floatingSelectWindow == nil {
+		return nil
+	}
+	return s.applyWindowRegion(s.floatingSelectWindow, state)
+}
+
+func (s *RecordingFreedomService) applyWindowRegion(window *application.WebviewWindow, state capsuleWindowHitRegionState) error {
+	if window == nil {
+		return nil
+	}
+	return application.InvokeSyncWithError(func() error {
+		nativeWindow := window.NativeWindow()
+		if nativeWindow == nil {
+			return nil
+		}
+		hwnd := uintptr(nativeWindow)
+		if !state.enabled || len(state.regions) == 0 {
+			return capsuleSetWindowRegion(hwnd, 0)
+		}
+		clientWidth, clientHeight, ok := capsuleClientSize(hwnd)
+		if !ok {
+			return nil
+		}
+		region, err := capsuleCreateWindowRegion(state, clientWidth, clientHeight)
+		if err != nil {
+			return err
+		}
+		if err := capsuleSetWindowRegion(hwnd, region); err != nil {
+			capsuleDeleteObject(region)
+			return err
+		}
+		return nil
+	})
 }
 
 func capsuleClientPoint(hwnd uintptr, lParam uintptr) (int, int, bool) {

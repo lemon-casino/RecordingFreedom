@@ -15,6 +15,13 @@ import {
   type CameraStatePatchRequest as BoundCameraStatePatchRequest,
   type ExportRecordingPlanResult as BoundExportRecordingPlanResult,
   type ExportRecordingResult as BoundExportRecordingResult,
+  type FloatingPanelRequest as BoundFloatingPanelRequest,
+  type FloatingPanelState as BoundFloatingPanelState,
+  type FloatingRect as BoundFloatingRect,
+  type FloatingSelectChosenEvent as BoundFloatingSelectChosenEvent,
+  type FloatingSelectOption as BoundFloatingSelectOption,
+  type FloatingSelectRequest as BoundFloatingSelectRequest,
+  type FloatingSelectState as BoundFloatingSelectState,
   type PIPPreviewImageRequest as BoundPIPPreviewImageRequest,
   type PIPPreviewImageResult as BoundPIPPreviewImageResult,
   type PIPOverlayRequest as BoundPIPOverlayRequest,
@@ -38,6 +45,9 @@ import {
   type ScreenshotWhiteboardContext as BoundScreenshotWhiteboardContext,
   type SettingsPreferencesPatchRequest as BoundSettingsPreferencesPatchRequest,
   type ShortcutSettingsPatchRequest as BoundShortcutSettingsPatchRequest,
+  type SourceControlState as BoundSourceControlState,
+  type SourceGeometry as BoundSourceGeometry,
+  type SourceStatePatchRequest as BoundSourceStatePatchRequest,
   type WhiteboardExportRequest as BoundWhiteboardExportRequest,
   type WhiteboardExportResult as BoundWhiteboardExportResult,
   type WhiteboardSceneRequest as BoundWhiteboardSceneRequest,
@@ -92,6 +102,7 @@ import {
   type MediaInventory,
   type MockRecordingRequest,
   type PIPConfig,
+  type RecordingMode,
   type RecordingPreflight,
   type ShortcutAction,
   type ShortcutSettings,
@@ -275,6 +286,71 @@ export type CapsuleWindowHitRegion = {
   radius?: number
 }
 
+export type FloatingPanelKind = 'source' | 'audio' | 'camera' | 'board' | 'language' | 'settings' | 'close'
+
+export type FloatingRect = {
+  x: number
+  y: number
+  width: number
+  height: number
+}
+
+export type FloatingPanelState = {
+  visible: boolean
+  kind?: FloatingPanelKind
+  anchor: FloatingRect
+  bounds: FloatingRect
+  dockSide?: CapsuleWindowDockSide | string
+  token: number
+  screenId?: string
+  direction?: string
+}
+
+export type FloatingSelectOption = {
+  value: string
+  label: string
+  disabled?: boolean
+  swatch?: string
+}
+
+export type FloatingSelectState = {
+  visible: boolean
+  id?: string
+  anchor: FloatingRect
+  bounds: FloatingRect
+  value?: string
+  options: FloatingSelectOption[]
+  token: number
+  panelToken?: number
+  screenId?: string
+  direction?: string
+}
+
+export type FloatingSelectChosenEvent = {
+  id: string
+  value: string
+  token: number
+  panelToken?: number
+}
+
+export type SourceControlState = {
+  recordingMode: RecordingMode
+  sourceId?: string
+  sourceType?: CaptureSource['type']
+  sourceGeometry?: {
+    x: number
+    y: number
+    width: number
+    height: number
+    displayIndex?: number
+    nativeId?: string
+  }
+}
+
+export type SourceStatePatch = Partial<SourceControlState> & {
+  clearGeometry?: boolean
+}
+
 const browserSettingsKey = 'recordingfreedom.settings.v1'
 const browserWhiteboardSceneKey = 'recordingfreedom.whiteboard.scene.v1'
 const browserAnnotationSceneKey = 'recordingfreedom.annotation.scene.v1'
@@ -287,6 +363,10 @@ const browserScreenshotCapturedEvent = 'rf-screenshot-captured'
 const browserScreenshotPinEvent = 'rf-screenshot-pin'
 const browserScreenshotWhiteboardEvent = 'rf-screenshot-whiteboard'
 const browserCapsuleDockSideEvent = 'rf-capsule-dock-side'
+const browserFloatingPanelEvent = 'rf-floating-panel'
+const browserFloatingSelectEvent = 'rf-floating-select'
+const browserFloatingSelectChosenEvent = 'rf-floating-select-chosen'
+const browserSourceStateEvent = 'rf-source-state'
 const settingsSchemaVersion = 2
 const legacyPipMinimumScale = 0.016
 const legacyPipMaximumScale = 0.08
@@ -305,7 +385,7 @@ const capsuleEdgeSnapThreshold = 32
 export type CapsuleWindowExpandDirection = 'down' | 'up'
 export type CapsuleWindowDockSide = 'none' | 'left' | 'right' | 'top' | 'bottom'
 
-function isWailsDesktopRuntime(): boolean {
+export function isWailsDesktopRuntime(): boolean {
   if (window.navigator.userAgent.includes('Wails')) return true
   return window.location.hostname === 'wails.localhost'
 }
@@ -350,6 +430,270 @@ export async function setAnnotationOverlayHitRegions(req: {
   } catch (error) {
     ;(window as Window & {__RF_LAST_ANNOTATION_HIT_REGIONS__?: typeof req}).__RF_LAST_ANNOTATION_HIT_REGIONS__ = req
     console.info('Using browser annotation overlay hit-region fallback:', error)
+  }
+}
+
+export async function setFloatingPanelHitRegions(req: {
+  enabled: boolean
+  force?: boolean
+  viewportWidth: number
+  viewportHeight: number
+  devicePixelRatio: number
+  regions: CapsuleWindowHitRegion[]
+}): Promise<void> {
+  try {
+    await RecordingFreedomService.SetFloatingPanelHitRegions(req as BoundCapsuleWindowHitRegionsRequest)
+  } catch (error) {
+    console.info('Using browser floating panel hit-region fallback:', error)
+  }
+}
+
+export async function setFloatingSelectHitRegions(req: {
+  enabled: boolean
+  force?: boolean
+  viewportWidth: number
+  viewportHeight: number
+  devicePixelRatio: number
+  regions: CapsuleWindowHitRegion[]
+}): Promise<void> {
+  try {
+    await RecordingFreedomService.SetFloatingSelectHitRegions(req as BoundCapsuleWindowHitRegionsRequest)
+  } catch (error) {
+    console.info('Using browser floating select hit-region fallback:', error)
+  }
+}
+
+export async function showFloatingPanel(req: {
+  kind: FloatingPanelKind
+  anchor: FloatingRect
+  bounds: FloatingRect
+  dockSide?: CapsuleWindowDockSide | string
+  width: number
+  height: number
+  minWidth?: number
+  maxHeight?: number
+  token: number
+  screenId?: string
+  direction?: string
+}): Promise<FloatingPanelState> {
+  try {
+    return fromBoundFloatingPanelState(await RecordingFreedomService.ShowFloatingPanel(req as BoundFloatingPanelRequest))
+  } catch (error) {
+    console.info('Using browser floating panel fallback:', error)
+    const state: FloatingPanelState = {
+      visible: true,
+      kind: req.kind,
+      anchor: req.anchor,
+      bounds: req.bounds,
+      dockSide: req.dockSide,
+      token: req.token,
+      screenId: req.screenId,
+      direction: req.direction,
+    }
+    ;(window as Window & {__RF_FLOATING_PANEL__?: FloatingPanelState}).__RF_FLOATING_PANEL__ = state
+    window.dispatchEvent(new CustomEvent(browserFloatingPanelEvent, {detail: state}))
+    return state
+  }
+}
+
+export async function updateFloatingPanel(req: Parameters<typeof showFloatingPanel>[0]): Promise<FloatingPanelState> {
+  try {
+    return fromBoundFloatingPanelState(await RecordingFreedomService.UpdateFloatingPanel(req as BoundFloatingPanelRequest))
+  } catch {
+    return showFloatingPanel(req)
+  }
+}
+
+export async function hideFloatingPanel(token = 0): Promise<void> {
+  try {
+    await RecordingFreedomService.HideFloatingPanel(token)
+  } catch (error) {
+    console.info('Using browser floating panel hide fallback:', error)
+    const current = (window as Window & {__RF_FLOATING_PANEL__?: FloatingPanelState}).__RF_FLOATING_PANEL__
+    const state: FloatingPanelState = {...(current ?? emptyFloatingPanelState()), visible: false, token: current?.token ?? token}
+    ;(window as Window & {__RF_FLOATING_PANEL__?: FloatingPanelState}).__RF_FLOATING_PANEL__ = state
+    window.dispatchEvent(new CustomEvent(browserFloatingPanelEvent, {detail: state}))
+  }
+}
+
+export async function getFloatingPanelState(): Promise<FloatingPanelState> {
+  try {
+    return fromBoundFloatingPanelState(await RecordingFreedomService.GetFloatingPanelState())
+  } catch {
+    return (window as Window & {__RF_FLOATING_PANEL__?: FloatingPanelState}).__RF_FLOATING_PANEL__ ?? emptyFloatingPanelState()
+  }
+}
+
+export function subscribeFloatingPanelChanged(handler: (state: FloatingPanelState) => void): () => void {
+  let disposeDesktop = () => {}
+  try {
+    disposeDesktop = Events.On('floating.panel.changed', (event) => {
+      handler(fromBoundFloatingPanelState(event.data as BoundFloatingPanelState))
+    })
+  } catch (error) {
+    console.info('Desktop floating panel events unavailable:', error)
+  }
+  const onBrowserEvent = (event: Event) => {
+    handler((event as CustomEvent<FloatingPanelState>).detail)
+  }
+  window.addEventListener(browserFloatingPanelEvent, onBrowserEvent)
+  return () => {
+    disposeDesktop()
+    window.removeEventListener(browserFloatingPanelEvent, onBrowserEvent)
+  }
+}
+
+export async function showFloatingSelect(req: {
+  id: string
+  anchor: FloatingRect
+  bounds: FloatingRect
+  value: string
+  options: FloatingSelectOption[]
+  token: number
+  panelToken?: number
+  width?: number
+  maxHeight?: number
+  screenId?: string
+  direction?: string
+}): Promise<FloatingSelectState> {
+  try {
+    return fromBoundFloatingSelectState(await RecordingFreedomService.ShowFloatingSelect(req as BoundFloatingSelectRequest))
+  } catch (error) {
+    console.info('Using browser floating select fallback:', error)
+    const state: FloatingSelectState = {
+      visible: true,
+      id: req.id,
+      anchor: req.anchor,
+      bounds: req.bounds,
+      value: req.value,
+      options: req.options,
+      token: req.token,
+      panelToken: req.panelToken,
+      screenId: req.screenId,
+      direction: req.direction,
+    }
+    ;(window as Window & {__RF_FLOATING_SELECT__?: FloatingSelectState}).__RF_FLOATING_SELECT__ = state
+    window.dispatchEvent(new CustomEvent(browserFloatingSelectEvent, {detail: state}))
+    return state
+  }
+}
+
+export async function hideFloatingSelect(token = 0): Promise<void> {
+  try {
+    await RecordingFreedomService.HideFloatingSelect(token)
+  } catch (error) {
+    console.info('Using browser floating select hide fallback:', error)
+    const current = (window as Window & {__RF_FLOATING_SELECT__?: FloatingSelectState}).__RF_FLOATING_SELECT__
+    const state: FloatingSelectState = {...(current ?? emptyFloatingSelectState()), visible: false, token: current?.token ?? token}
+    ;(window as Window & {__RF_FLOATING_SELECT__?: FloatingSelectState}).__RF_FLOATING_SELECT__ = state
+    window.dispatchEvent(new CustomEvent(browserFloatingSelectEvent, {detail: state}))
+  }
+}
+
+export async function completeFloatingSelect(event: FloatingSelectChosenEvent): Promise<void> {
+  try {
+    await RecordingFreedomService.CompleteFloatingSelect(event as BoundFloatingSelectChosenEvent)
+  } catch (error) {
+    console.info('Using browser floating select complete fallback:', error)
+    window.dispatchEvent(new CustomEvent(browserFloatingSelectChosenEvent, {detail: event}))
+    await hideFloatingSelect(event.token)
+  }
+}
+
+export async function getFloatingSelectState(): Promise<FloatingSelectState> {
+  try {
+    return fromBoundFloatingSelectState(await RecordingFreedomService.GetFloatingSelectState())
+  } catch {
+    return (window as Window & {__RF_FLOATING_SELECT__?: FloatingSelectState}).__RF_FLOATING_SELECT__ ?? emptyFloatingSelectState()
+  }
+}
+
+export function subscribeFloatingSelectChanged(handler: (state: FloatingSelectState) => void): () => void {
+  let disposeDesktop = () => {}
+  try {
+    disposeDesktop = Events.On('floating.select.changed', (event) => {
+      handler(fromBoundFloatingSelectState(event.data as BoundFloatingSelectState))
+    })
+  } catch (error) {
+    console.info('Desktop floating select events unavailable:', error)
+  }
+  const onBrowserEvent = (event: Event) => {
+    handler((event as CustomEvent<FloatingSelectState>).detail)
+  }
+  window.addEventListener(browserFloatingSelectEvent, onBrowserEvent)
+  return () => {
+    disposeDesktop()
+    window.removeEventListener(browserFloatingSelectEvent, onBrowserEvent)
+  }
+}
+
+export function subscribeFloatingSelectChosen(handler: (event: FloatingSelectChosenEvent) => void): () => void {
+  let disposeDesktop = () => {}
+  try {
+    disposeDesktop = Events.On('floating.select.chosen', (event) => {
+      handler(fromBoundFloatingSelectChosen(event.data as BoundFloatingSelectChosenEvent))
+    })
+  } catch (error) {
+    console.info('Desktop floating select chosen events unavailable:', error)
+  }
+  const onBrowserEvent = (event: Event) => {
+    handler((event as CustomEvent<FloatingSelectChosenEvent>).detail)
+  }
+  window.addEventListener(browserFloatingSelectChosenEvent, onBrowserEvent)
+  return () => {
+    disposeDesktop()
+    window.removeEventListener(browserFloatingSelectChosenEvent, onBrowserEvent)
+  }
+}
+
+export async function patchSourceState(patch: SourceStatePatch): Promise<SourceControlState> {
+  try {
+    return fromBoundSourceControlState(await RecordingFreedomService.PatchSourceState(toBoundSourceStatePatch(patch)))
+  } catch (error) {
+    console.info('Using browser source state patch fallback:', error)
+    const current = (window as Window & {__RF_SOURCE_STATE__?: SourceControlState}).__RF_SOURCE_STATE__ ?? {
+      recordingMode: 'video' as RecordingMode,
+      sourceType: 'screen' as CaptureSource['type'],
+    }
+    const next: SourceControlState = {
+      ...current,
+      ...patch,
+      sourceGeometry: patch.clearGeometry ? undefined : patch.sourceGeometry ?? current.sourceGeometry,
+      recordingMode: patch.recordingMode ?? current.recordingMode,
+    }
+    ;(window as Window & {__RF_SOURCE_STATE__?: SourceControlState}).__RF_SOURCE_STATE__ = next
+    window.dispatchEvent(new CustomEvent(browserSourceStateEvent, {detail: next}))
+    return next
+  }
+}
+
+export async function getSourceState(): Promise<SourceControlState> {
+  try {
+    return fromBoundSourceControlState(await RecordingFreedomService.GetSourceState())
+  } catch {
+    return (window as Window & {__RF_SOURCE_STATE__?: SourceControlState}).__RF_SOURCE_STATE__ ?? {
+      recordingMode: 'video',
+      sourceType: 'screen',
+    }
+  }
+}
+
+export function subscribeSourceStateChanged(handler: (state: SourceControlState) => void): () => void {
+  let disposeDesktop = () => {}
+  try {
+    disposeDesktop = Events.On('source.state.changed', (event) => {
+      handler(fromBoundSourceControlState(event.data as BoundSourceControlState))
+    })
+  } catch (error) {
+    console.info('Desktop source state events unavailable:', error)
+  }
+  const onBrowserEvent = (event: Event) => {
+    handler((event as CustomEvent<SourceControlState>).detail)
+  }
+  window.addEventListener(browserSourceStateEvent, onBrowserEvent)
+  return () => {
+    disposeDesktop()
+    window.removeEventListener(browserSourceStateEvent, onBrowserEvent)
   }
 }
 
@@ -608,22 +952,20 @@ export async function setCapsuleWindowExpanded(
     const dockSide = lastCapsuleDockSide
     const collapsedVisualSize = capsuleCollapsedWindowSize(compactCollapsed, dockSide, workArea)
     const collapsedVisualPosition = capsuleVisibleCollapsedPosition(dockSide, position, size, collapsedVisualSize, workArea)
-    const reservedWindowSize = capsuleReservedWindowSize(compactCollapsed, dockSide, workArea)
     if (!expanded) {
-      const reservedPosition = capsuleReservedWindowPosition(dockSide, collapsedVisualPosition, collapsedVisualSize, reservedWindowSize, workArea)
-      await setCapsuleWindowBoundsIfChanged(position, size, reservedPosition, reservedWindowSize)
-      await restoreCapsuleWindow(false)
+      const collapsedPosition = capsuleReservedWindowPosition(dockSide, collapsedVisualPosition, collapsedVisualSize, collapsedVisualSize, workArea)
+      await setCapsuleWindowBoundsIfChanged(position, size, collapsedPosition, collapsedVisualSize)
       lastCapsuleCollapsedPosition = null
       return lastCapsuleExpandedDirection
     }
 
+    const reservedWindowSize = capsuleReservedWindowSize(compactCollapsed, dockSide, workArea)
     if (isSideDock(dockSide)) {
       const targetExpandedSize = capsuleReservedWindowSize(compactCollapsed, dockSide, workArea)
       const expandedPosition = capsuleReservedWindowPosition(dockSide, collapsedVisualPosition, collapsedVisualSize, targetExpandedSize, workArea)
       lastCapsuleExpandedDirection = 'down'
       lastCapsuleCollapsedPosition = collapsedVisualPosition
       await setCapsuleWindowBoundsIfChanged(position, size, expandedPosition, targetExpandedSize)
-      await restoreCapsuleWindow(false)
       return 'down'
     }
 
@@ -636,7 +978,6 @@ export async function setCapsuleWindowExpanded(
     lastCapsuleExpandedDirection = direction
     lastCapsuleCollapsedPosition = collapsedVisualPosition
     await setCapsuleWindowBoundsIfChanged(position, size, expandedPosition, reservedWindowSize)
-    await restoreCapsuleWindow(false)
     return direction
   } catch (error) {
     console.info('Using browser capsule window size fallback:', error)
@@ -657,14 +998,11 @@ export async function snapCapsuleWindowToEdge(compactCollapsed = false): Promise
     const dockTarget = resolveCapsuleDockTarget(currentVisualPosition, currentVisualSize, workAreas)
     const dockSide = dockTarget.side
     const targetWorkArea = dockTarget.workArea ?? workArea
-    publishCapsuleDockSide(dockSide)
     lastCapsuleExpandedDirection = dockSide === 'bottom' ? 'up' : 'down'
-    await waitForAnimationFrame()
-    await waitForAnimationFrame()
-    const targetSize = capsuleReservedWindowSize(compactCollapsed, dockSide, targetWorkArea)
+    const targetSize = capsuleCollapsedWindowSize(compactCollapsed, dockSide, targetWorkArea)
     const targetPosition = capsuleReservedWindowPosition(dockSide, currentVisualPosition, currentVisualSize, targetSize, targetWorkArea)
     await setCapsuleWindowBoundsIfChanged(position, size, targetPosition, targetSize)
-    await restoreCapsuleWindow(false)
+    publishCapsuleDockSide(dockSide)
     return dockSide
   } catch (error) {
     console.info('Using browser capsule edge snap fallback:', error)
@@ -676,10 +1014,6 @@ function publishCapsuleDockSide(side: CapsuleWindowDockSide) {
   if (lastCapsuleDockSide === side) return
   lastCapsuleDockSide = side
   window.dispatchEvent(new CustomEvent(browserCapsuleDockSideEvent, {detail: side}))
-}
-
-function waitForAnimationFrame() {
-  return new Promise<void>((resolve) => window.requestAnimationFrame(() => resolve()))
 }
 
 function resolveCapsuleExpandDirection(
@@ -1062,8 +1396,21 @@ async function setCapsuleWindowBoundsIfChanged(
 ) {
   const sizeChanged = Math.abs(currentSize.width - targetSize.width) > 1 || Math.abs(currentSize.height - targetSize.height) > 1
   const positionChanged = Math.abs(currentPosition.x - targetPosition.x) > 1 || Math.abs(currentPosition.y - targetPosition.y) > 1
-  if (sizeChanged) await WailsWindow.SetSize(Math.round(targetSize.width), Math.round(targetSize.height))
-  if (positionChanged) await WailsWindow.SetPosition(Math.round(targetPosition.x), Math.round(targetPosition.y))
+  if (!sizeChanged && !positionChanged) return
+  const bounds = {
+    x: Math.round(targetPosition.x),
+    y: Math.round(targetPosition.y),
+    width: Math.round(targetSize.width),
+    height: Math.round(targetSize.height),
+  }
+  try {
+    await RecordingFreedomService.SetCapsuleWindowBounds(bounds)
+    return
+  } catch (error) {
+    console.info('Using runtime capsule bounds fallback:', error)
+  }
+  if (positionChanged) await WailsWindow.SetPosition(bounds.x, bounds.y)
+  if (sizeChanged) await WailsWindow.SetSize(bounds.width, bounds.height)
 }
 
 function clampCapsuleWindowPosition(
@@ -3018,6 +3365,125 @@ function mediaDeviceMeta(device: BoundMediaDevice) {
     return `${base} · ${device.capability}`
   }
   return base
+}
+
+function emptyFloatingPanelState(): FloatingPanelState {
+  return {
+    visible: false,
+    anchor: {x: 0, y: 0, width: 0, height: 0},
+    bounds: {x: 0, y: 0, width: 0, height: 0},
+    token: 0,
+  }
+}
+
+function emptyFloatingSelectState(): FloatingSelectState {
+  return {
+    visible: false,
+    anchor: {x: 0, y: 0, width: 0, height: 0},
+    bounds: {x: 0, y: 0, width: 0, height: 0},
+    options: [],
+    token: 0,
+  }
+}
+
+function fromBoundFloatingRect(rect: BoundFloatingRect | undefined): FloatingRect {
+  return {
+    x: rect?.x ?? 0,
+    y: rect?.y ?? 0,
+    width: rect?.width ?? 0,
+    height: rect?.height ?? 0,
+  }
+}
+
+function fromBoundFloatingPanelState(state: BoundFloatingPanelState): FloatingPanelState {
+  return {
+    visible: Boolean(state.visible),
+    kind: normalizeFloatingPanelKind(state.kind),
+    anchor: fromBoundFloatingRect(state.anchor),
+    bounds: fromBoundFloatingRect(state.bounds),
+    dockSide: state.dockSide,
+    token: state.token ?? 0,
+    screenId: state.screenId,
+    direction: state.direction,
+  }
+}
+
+function normalizeFloatingPanelKind(value: unknown): FloatingPanelKind | undefined {
+  return value === 'source' || value === 'audio' || value === 'camera' || value === 'board' || value === 'language' || value === 'settings' || value === 'close'
+    ? value
+    : undefined
+}
+
+function fromBoundFloatingSelectOption(option: BoundFloatingSelectOption): FloatingSelectOption {
+  return {
+    value: option.value,
+    label: option.label,
+    disabled: option.disabled,
+    swatch: option.swatch,
+  }
+}
+
+function fromBoundFloatingSelectState(state: BoundFloatingSelectState): FloatingSelectState {
+  return {
+    visible: Boolean(state.visible),
+    id: state.id,
+    anchor: fromBoundFloatingRect(state.anchor),
+    bounds: fromBoundFloatingRect(state.bounds),
+    value: state.value,
+    options: (state.options ?? []).map(fromBoundFloatingSelectOption),
+    token: state.token ?? 0,
+    panelToken: state.panelToken,
+    screenId: state.screenId,
+    direction: state.direction,
+  }
+}
+
+function fromBoundFloatingSelectChosen(event: BoundFloatingSelectChosenEvent): FloatingSelectChosenEvent {
+  return {
+    id: event.id,
+    value: event.value,
+    token: event.token,
+    panelToken: event.panelToken,
+  }
+}
+
+function fromBoundSourceControlState(state: BoundSourceControlState): SourceControlState {
+  return {
+    recordingMode: state.recordingMode === 'audio' ? 'audio' : 'video',
+    sourceId: state.sourceId,
+    sourceType: normalizeSourceType(state.sourceType),
+    sourceGeometry: state.sourceGeometry ? {
+      x: state.sourceGeometry.x,
+      y: state.sourceGeometry.y,
+      width: state.sourceGeometry.width,
+      height: state.sourceGeometry.height,
+      displayIndex: state.sourceGeometry.displayIndex,
+      nativeId: state.sourceGeometry.nativeId,
+    } : undefined,
+  }
+}
+
+function toBoundSourceStatePatch(patch: SourceStatePatch): BoundSourceStatePatchRequest {
+  return {
+    recordingMode: patch.recordingMode,
+    sourceId: patch.sourceId,
+    sourceType: patch.sourceType,
+    sourceGeometry: patch.sourceGeometry ? {
+      x: Math.round(patch.sourceGeometry.x),
+      y: Math.round(patch.sourceGeometry.y),
+      width: Math.round(patch.sourceGeometry.width),
+      height: Math.round(patch.sourceGeometry.height),
+      displayIndex: patch.sourceGeometry.displayIndex ?? 0,
+      nativeId: patch.sourceGeometry.nativeId,
+    } as BoundSourceGeometry : undefined,
+    clearGeometry: patch.clearGeometry,
+  }
+}
+
+function normalizeSourceType(value: unknown): CaptureSource['type'] | undefined {
+  return value === 'screen' || value === 'all-screens' || value === 'region' || value === 'window' || value === 'application'
+    ? value
+    : undefined
 }
 
 function fromBoundSettings(settings: BoundSettings): AppSettings {

@@ -28,6 +28,9 @@ import * as recpackage$0 from "./internal/recpackage/models.js";
 // eslint-disable-next-line @typescript-eslint/ban-ts-comment
 // @ts-ignore: Unused imports
 import * as settings$0 from "./internal/settings/models.js";
+// eslint-disable-next-line @typescript-eslint/ban-ts-comment
+// @ts-ignore: Unused imports
+import * as time$0 from "../../../../time/models.js";
 
 export interface AnnotationCaptureRequest {
     "sceneJson": string;
@@ -180,6 +183,96 @@ export interface ExportRecordingRequest {
 export interface ExportRecordingResult {
     "plan": exportplan$0.Plan;
     "export": exporter$0.Result;
+}
+
+export enum FloatingPanelKind {
+    /**
+     * The Go zero value for the underlying type of the enum.
+     */
+    $zero = "",
+
+    FloatingPanelSource = "source",
+    FloatingPanelAudio = "audio",
+    FloatingPanelCamera = "camera",
+    FloatingPanelBoard = "board",
+    FloatingPanelLanguage = "language",
+    FloatingPanelSettings = "settings",
+    FloatingPanelClose = "close",
+};
+
+export interface FloatingPanelRequest {
+    "kind": FloatingPanelKind;
+    "anchor": FloatingRect;
+    "bounds": FloatingRect;
+    "dockSide"?: string;
+    "width": number;
+    "height": number;
+    "minWidth"?: number;
+    "maxHeight"?: number;
+    "token": number;
+    "screenId"?: string;
+    "direction"?: string;
+}
+
+export interface FloatingPanelState {
+    "visible": boolean;
+    "kind"?: FloatingPanelKind;
+    "anchor": FloatingRect;
+    "bounds": FloatingRect;
+    "dockSide"?: string;
+    "token": number;
+    "screenId"?: string;
+    "direction"?: string;
+    "updatedAt": time$0.Time;
+}
+
+export interface FloatingRect {
+    "x": number;
+    "y": number;
+    "width": number;
+    "height": number;
+}
+
+export interface FloatingSelectChosenEvent {
+    "id": string;
+    "value": string;
+    "token": number;
+    "panelToken"?: number;
+}
+
+export interface FloatingSelectOption {
+    "value": string;
+    "label": string;
+    "disabled"?: boolean;
+    "swatch"?: string;
+}
+
+export interface FloatingSelectRequest {
+    "id": string;
+    "anchor": FloatingRect;
+    "bounds": FloatingRect;
+    "value": string;
+    "options": FloatingSelectOption[] | null;
+    "token": number;
+    "panelToken"?: number;
+    "width"?: number;
+    "maxHeight"?: number;
+    "screenId"?: string;
+    "direction"?: string;
+}
+
+export interface FloatingSelectState {
+    "visible": boolean;
+    "id"?: string;
+    "anchor": FloatingRect;
+    "bounds": FloatingRect;
+    "value"?: string;
+    "options"?: FloatingSelectOption[] | null;
+    "token": number;
+    "panelToken"?: number;
+    "screenId"?: string;
+    "direction"?: string;
+    "updatedAt": time$0.Time;
 }
 
 export interface PIPCamera {
@@ -401,6 +494,31 @@ export interface ShortcutSettingsPatchRequest {
 export interface ShortcutTriggeredEvent {
     "action": settings$0.ShortcutAction;
     "accelerator": string;
+}
+
+export interface SourceControlState {
+    "recordingMode": string;
+    "sourceId"?: string;
+    "sourceType"?: string;
+    "sourceGeometry"?: SourceGeometry | null;
+    "updatedAt": time$0.Time;
+}
+
+export interface SourceGeometry {
+    "x": number;
+    "y": number;
+    "width": number;
+    "height": number;
+    "displayIndex"?: number;
+    "nativeId"?: string;
+}
+
+export interface SourceStatePatchRequest {
+    "recordingMode"?: string;
+    "sourceId"?: string;
+    "sourceType"?: string;
+    "sourceGeometry"?: SourceGeometry | null;
+    "clearGeometry"?: boolean;
 }
 
 export interface WhiteboardExportRequest {

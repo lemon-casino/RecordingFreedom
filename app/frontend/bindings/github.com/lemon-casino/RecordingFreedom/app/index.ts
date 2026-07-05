@@ -6,6 +6,10 @@ export {
     RecordingFreedomService
 };
 
+export {
+    FloatingPanelKind
+} from "./models.js";
+
 export type {
     AnnotationCaptureRequest,
     AnnotationCaptureResult,
@@ -26,6 +30,13 @@ export type {
     ExportRecordingPlanResult,
     ExportRecordingRequest,
     ExportRecordingResult,
+    FloatingPanelRequest,
+    FloatingPanelState,
+    FloatingRect,
+    FloatingSelectChosenEvent,
+    FloatingSelectOption,
+    FloatingSelectRequest,
+    FloatingSelectState,
     PIPCamera,
     PIPOverlayRequest,
     PIPOverlayState,
@@ -57,6 +68,9 @@ export type {
     SettingsPreferencesPatchRequest,
     ShortcutSettingsPatchRequest,
     ShortcutTriggeredEvent,
+    SourceControlState,
+    SourceGeometry,
+    SourceStatePatchRequest,
     WhiteboardExportRequest,
     WhiteboardExportResult,
     WhiteboardSceneRequest,

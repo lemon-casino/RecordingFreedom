@@ -105,52 +105,63 @@ type RecordingFreedomService struct {
 	recorder  *recording.Service
 	settings  *settings.Service
 
-	app                   *application.App
-	capsuleWindow         *application.WebviewWindow
-	settingsWindow        *application.WebviewWindow
-	whiteboardWindow      *application.WebviewWindow
-	annotationOverlay     *application.WebviewWindow
-	annotationRenderer    *application.WebviewWindow
-	regionOverlay         *application.WebviewWindow
-	screenIndicator       *application.WebviewWindow
-	pipOverlay            *application.WebviewWindow
-	screenshotPinWindow   *application.WebviewWindow
-	trayLocale            func(settings.Locale)
-	capsuleHitRegions     capsuleWindowHitRegions
-	annotationHitRegions  capsuleWindowHitRegions
-	settingsMu            sync.Mutex
-	whiteboardMu          sync.Mutex
-	whiteboardVisible     bool
-	annotationMu          sync.Mutex
-	annotationToken       uint64
-	annotationSessionID   string
-	annotationRegionDIP   application.Rect
-	annotationRenderMu    sync.Mutex
-	annotationRenderBatch *annotationRenderBatch
-	regionMu              sync.Mutex
-	regionSession         *RegionSelectionSession
-	regionElementCacheMu  sync.Mutex
-	regionElementCache    regionElementCandidateCache
-	regionSnapshotMu      sync.Mutex
-	regionSnapshotCache   regionAssistSnapshotCache
-	regionAssistLogMu     sync.Mutex
-	regionAssistLogKey    string
-	regionAssistLogAt     time.Time
-	selectedRegionDIP     application.Rect
-	screenshotRegionDIP   application.Rect
-	pipOverlayMu          sync.Mutex
-	pipOverlayToken       uint64
-	micLevelMu            sync.Mutex
-	micLevelSource        audioLevelCaptureSource
-	micLevelDevice        string
-	micLevelToken         uint64
-	logMu                 sync.Mutex
-	shortcutMu            sync.Mutex
-	registeredShortcuts   map[settings.ShortcutAction]string
-	screenshotMu          sync.Mutex
-	screenshotPinState    ScreenshotPinState
-	whiteboardScreenshot  ScreenshotWhiteboardContext
-	screenshotAnnotation  ScreenshotWhiteboardContext
+	app                    *application.App
+	capsuleWindow          *application.WebviewWindow
+	settingsWindow         *application.WebviewWindow
+	whiteboardWindow       *application.WebviewWindow
+	annotationOverlay      *application.WebviewWindow
+	annotationRenderer     *application.WebviewWindow
+	regionOverlay          *application.WebviewWindow
+	screenIndicator        *application.WebviewWindow
+	pipOverlay             *application.WebviewWindow
+	screenshotPinWindow    *application.WebviewWindow
+	floatingPanelWindow    *application.WebviewWindow
+	floatingSelectWindow   *application.WebviewWindow
+	trayLocale             func(settings.Locale)
+	capsuleHitRegions      capsuleWindowHitRegions
+	annotationHitRegions   capsuleWindowHitRegions
+	floatingPanelRegions   capsuleWindowHitRegions
+	floatingSelectRegions  capsuleWindowHitRegions
+	floatingMu             sync.Mutex
+	floatingPanelState     FloatingPanelState
+	floatingSelectState    FloatingSelectState
+	floatingOutsideClickMu sync.Mutex
+	floatingOutsideClickOn bool
+	sourceMu               sync.Mutex
+	sourceState            SourceControlState
+	settingsMu             sync.Mutex
+	whiteboardMu           sync.Mutex
+	whiteboardVisible      bool
+	annotationMu           sync.Mutex
+	annotationToken        uint64
+	annotationSessionID    string
+	annotationRegionDIP    application.Rect
+	annotationRenderMu     sync.Mutex
+	annotationRenderBatch  *annotationRenderBatch
+	regionMu               sync.Mutex
+	regionSession          *RegionSelectionSession
+	regionElementCacheMu   sync.Mutex
+	regionElementCache     regionElementCandidateCache
+	regionSnapshotMu       sync.Mutex
+	regionSnapshotCache    regionAssistSnapshotCache
+	regionAssistLogMu      sync.Mutex
+	regionAssistLogKey     string
+	regionAssistLogAt      time.Time
+	selectedRegionDIP      application.Rect
+	screenshotRegionDIP    application.Rect
+	pipOverlayMu           sync.Mutex
+	pipOverlayToken        uint64
+	micLevelMu             sync.Mutex
+	micLevelSource         audioLevelCaptureSource
+	micLevelDevice         string
+	micLevelToken          uint64
+	logMu                  sync.Mutex
+	shortcutMu             sync.Mutex
+	registeredShortcuts    map[settings.ShortcutAction]string
+	screenshotMu           sync.Mutex
+	screenshotPinState     ScreenshotPinState
+	whiteboardScreenshot   ScreenshotWhiteboardContext
+	screenshotAnnotation   ScreenshotWhiteboardContext
 }
 
 func NewRecordingFreedomService() *RecordingFreedomService {
@@ -199,6 +210,14 @@ func (s *RecordingFreedomService) setPIPOverlayWindow(window *application.Webvie
 
 func (s *RecordingFreedomService) setScreenshotPinWindow(window *application.WebviewWindow) {
 	s.screenshotPinWindow = window
+}
+
+func (s *RecordingFreedomService) setFloatingPanelWindow(window *application.WebviewWindow) {
+	s.floatingPanelWindow = window
+}
+
+func (s *RecordingFreedomService) setFloatingSelectWindow(window *application.WebviewWindow) {
+	s.floatingSelectWindow = window
 }
 
 func (s *RecordingFreedomService) setTrayLocaleUpdater(update func(settings.Locale)) {
@@ -919,6 +938,7 @@ func recorderIsActive(state recording.State) bool {
 }
 
 func (s *RecordingFreedomService) StartRecording(req recording.StartRequest) (recording.Session, error) {
+	_ = s.HideFloatingPanel(0)
 	_ = s.StopMicrophoneLevelMonitor()
 	media := devices.MediaInventory{}
 	if s.devices != nil {
@@ -1057,6 +1077,7 @@ func firstBlockedPreflightReason(summary preflight.Summary) string {
 }
 
 func (s *RecordingFreedomService) StartAudioOnlyRecording(req recording.AudioOnlyRequest) (recording.Session, error) {
+	_ = s.HideFloatingPanel(0)
 	_ = s.StopMicrophoneLevelMonitor()
 	if summary, blocked := s.blockingAudioOnlyPreflight(req); blocked {
 		err := fmt.Errorf("preflight blocked: %s", firstBlockedPreflightReason(summary))
@@ -1114,6 +1135,7 @@ func (s *RecordingFreedomService) ResumeRecording() (recording.Session, error) {
 }
 
 func (s *RecordingFreedomService) StopRecording() (recording.Session, error) {
+	_ = s.HideFloatingPanel(0)
 	s.emitRecordingStatus(recording.StatusEvent{
 		Status:  recording.StateStopping,
 		Backend: s.recorder.ActiveBackendID(),

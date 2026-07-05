@@ -71,6 +71,10 @@ export function CompleteAnnotationRenderJob(result: $models.AnnotationRenderJobR
     return $Call.ByID(1422662043, result);
 }
 
+export function CompleteFloatingSelect(event: $models.FloatingSelectChosenEvent): $CancellablePromise<void> {
+    return $Call.ByID(4224203339, event);
+}
+
 export function CompleteRegionSelection(req: $models.RegionSelectionRequest): $CancellablePromise<$models.RegionSelectionResult> {
     return $Call.ByID(1962254349, req);
 }
@@ -99,12 +103,32 @@ export function GetCaptureCapabilities(): $CancellablePromise<capture$0.Capabili
     return $Call.ByID(4009257246);
 }
 
+export function GetFloatingPanelState(): $CancellablePromise<$models.FloatingPanelState> {
+    return $Call.ByID(1903363539);
+}
+
+export function GetFloatingSelectState(): $CancellablePromise<$models.FloatingSelectState> {
+    return $Call.ByID(1840094509);
+}
+
 export function GetSettings(): $CancellablePromise<settings$0.Settings> {
     return $Call.ByID(1085525119);
 }
 
+export function GetSourceState(): $CancellablePromise<$models.SourceControlState> {
+    return $Call.ByID(2076291368);
+}
+
 export function HideAnnotationOverlay(): $CancellablePromise<void> {
     return $Call.ByID(3633794229);
+}
+
+export function HideFloatingPanel(token: number): $CancellablePromise<void> {
+    return $Call.ByID(1512684834, token);
+}
+
+export function HideFloatingSelect(token: number): $CancellablePromise<void> {
+    return $Call.ByID(1618114412, token);
 }
 
 export function HidePIPOverlay(): $CancellablePromise<void> {
@@ -207,6 +231,10 @@ export function PatchShortcutSettings(patch: $models.ShortcutSettingsPatchReques
     return $Call.ByID(173406099, patch);
 }
 
+export function PatchSourceState(req: $models.SourceStatePatchRequest): $CancellablePromise<$models.SourceControlState> {
+    return $Call.ByID(1531942674, req);
+}
+
 export function PatchWhiteboardSettings(patch: $models.WhiteboardSettingsPatchRequest): $CancellablePromise<settings$0.Settings> {
     return $Call.ByID(3918109714, patch);
 }
@@ -287,6 +315,10 @@ export function SetAnnotationOverlayHitRegions(req: $models.CapsuleWindowHitRegi
     return $Call.ByID(2215651335, req);
 }
 
+export function SetCapsuleWindowBounds(bounds: $models.FloatingRect): $CancellablePromise<void> {
+    return $Call.ByID(1924548276, bounds);
+}
+
 export function SetCapsuleWindowHitRegions(req: $models.CapsuleWindowHitRegionsRequest): $CancellablePromise<void> {
     return $Call.ByID(3454285251, req);
 }
@@ -295,12 +327,28 @@ export function SetDataRoot(rootDir: string): $CancellablePromise<appdata$0.Info
     return $Call.ByID(2213117442, rootDir);
 }
 
+export function SetFloatingPanelHitRegions(req: $models.CapsuleWindowHitRegionsRequest): $CancellablePromise<void> {
+    return $Call.ByID(2411466112, req);
+}
+
+export function SetFloatingSelectHitRegions(req: $models.CapsuleWindowHitRegionsRequest): $CancellablePromise<void> {
+    return $Call.ByID(3851446166, req);
+}
+
 export function ShowAnnotationOverlay(): $CancellablePromise<$models.AnnotationOverlayState> {
     return $Call.ByID(2906956594);
 }
 
 export function ShowAnnotationRegionSelector(): $CancellablePromise<$models.RegionSelectionSession> {
     return $Call.ByID(1624388907);
+}
+
+export function ShowFloatingPanel(req: $models.FloatingPanelRequest): $CancellablePromise<$models.FloatingPanelState> {
+    return $Call.ByID(3749588401, req);
+}
+
+export function ShowFloatingSelect(req: $models.FloatingSelectRequest): $CancellablePromise<$models.FloatingSelectState> {
+    return $Call.ByID(1122872153, req);
 }
 
 export function ShowPIPOverlay(req: $models.PIPOverlayRequest): $CancellablePromise<$models.PIPOverlayState> {
@@ -361,6 +409,10 @@ export function StopRecording(): $CancellablePromise<recording$0.Session> {
 
 export function ToggleWhiteboardWindow(): $CancellablePromise<void> {
     return $Call.ByID(1949585145);
+}
+
+export function UpdateFloatingPanel(req: $models.FloatingPanelRequest): $CancellablePromise<$models.FloatingPanelState> {
+    return $Call.ByID(2509746565, req);
 }
 
 export function UpdatePIPOverlay(req: $models.PIPOverlayRequest): $CancellablePromise<$models.PIPOverlayState> {

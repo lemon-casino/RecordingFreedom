@@ -34,6 +34,10 @@ func init() {
 	application.RegisterEvent[ScreenshotCapturedEvent]("screenshot.captured")
 	application.RegisterEvent[ScreenshotPinEvent]("screenshot.pin")
 	application.RegisterEvent[ScreenshotWhiteboardContext]("screenshot.whiteboard")
+	application.RegisterEvent[FloatingPanelState]("floating.panel.changed")
+	application.RegisterEvent[FloatingSelectState]("floating.select.changed")
+	application.RegisterEvent[FloatingSelectChosenEvent]("floating.select.chosen")
+	application.RegisterEvent[SourceControlState]("source.state.changed")
 }
 
 func main() {
@@ -73,6 +77,8 @@ func main() {
 	screenIndicatorWindow := createScreenIndicatorWindow(app)
 	pipOverlayWindow := createPIPOverlayWindow(app)
 	screenshotPinWindow := createScreenshotPinWindow(app)
+	floatingPanelWindow := createFloatingPanelWindow(app)
+	floatingSelectWindow := createFloatingSelectWindow(app)
 	recordingFreedom.setCapsuleWindow(capsuleWindow)
 	recordingFreedom.setSettingsWindow(settingsWindow)
 	recordingFreedom.setWhiteboardWindow(whiteboardWindow)
@@ -82,6 +88,8 @@ func main() {
 	recordingFreedom.setScreenIndicatorWindow(screenIndicatorWindow)
 	recordingFreedom.setPIPOverlayWindow(pipOverlayWindow)
 	recordingFreedom.setScreenshotPinWindow(screenshotPinWindow)
+	recordingFreedom.setFloatingPanelWindow(floatingPanelWindow)
+	recordingFreedom.setFloatingSelectWindow(floatingSelectWindow)
 	initialSettings := settings.Default()
 	if currentSettings, err := recordingFreedom.settings.Load(); err == nil {
 		initialSettings = currentSettings
