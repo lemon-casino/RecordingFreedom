@@ -115,6 +115,8 @@ export type RecorderCopy = {
     language: string
     theme: string
     themeDetail: string
+    startAtLogin: string
+    startAtLoginDetail: string
     shortcuts: string
     shortcutSummary: string
     shortcutDetail: string
@@ -261,6 +263,11 @@ export type RecorderCopy = {
     toolsShort: string
     region: string
     full: string
+    fullDetail: string
+    window: string
+    windowDetail: string
+    focusedWindow: string
+    focusedWindowDetail: string
     scrolling: string
     scrollingDetail: string
     scrollingPreparing: string
@@ -450,6 +457,8 @@ const zhCN: RecorderCopy = {
     language: '语言',
     theme: '主题',
     themeDetail: '立即应用到胶囊、设置页和下拉列表，并会在下次启动时保留。',
+    startAtLogin: '开机自启',
+    startAtLoginDetail: '默认关闭。开启后会随系统登录自动启动，并直接最小化到托盘。',
     shortcuts: '快捷键',
     shortcutSummary: '全局快捷键',
     shortcutDetail: '点击修改后按下组合键即可保存；普通单字母和仅 Shift 的组合不会生效。',
@@ -602,6 +611,11 @@ const zhCN: RecorderCopy = {
     toolsShort: '工具',
     region: '区域截图',
     full: '全屏截图',
+    fullDetail: '捕获整个虚拟桌面',
+    window: '窗口截图',
+    windowDetail: '捕获可识别窗口',
+    focusedWindow: '焦点窗口截图',
+    focusedWindowDetail: '捕获当前最前窗口',
     scrolling: '滚动截图',
     scrollingDetail: '选择滚动区域后自动拼接',
     scrollingPreparing: '请框选需要滚动截图的区域',
@@ -922,6 +936,8 @@ const en: RecorderCopy = {
     language: 'Language',
     theme: 'Theme',
     themeDetail: 'Applies immediately to the capsule, settings, and dropdown menus, and is kept after restart.',
+    startAtLogin: 'Start at login',
+    startAtLoginDetail: 'Off by default. When enabled, RecordingFreedom starts on system login and opens minimized to tray.',
     shortcuts: 'Shortcuts',
     shortcutSummary: 'Global shortcuts',
     shortcutDetail: 'Click change, then press a key combination to save. Plain letters and Shift-only combos are ignored.',
@@ -1074,6 +1090,11 @@ const en: RecorderCopy = {
     toolsShort: 'Tools',
     region: 'Region screenshot',
     full: 'Full screenshot',
+    fullDetail: 'Capture the virtual desktop',
+    window: 'Window screenshot',
+    windowDetail: 'Capture a detected window',
+    focusedWindow: 'Focused window',
+    focusedWindowDetail: 'Capture the frontmost window',
     scrolling: 'Scrolling screenshot',
     scrollingDetail: 'Select a scrollable area to stitch',
     scrollingPreparing: 'Select the area to capture while scrolling',

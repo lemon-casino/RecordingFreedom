@@ -170,6 +170,54 @@ func TestSaveScreenshotAnnotationCaptureWritesHistoryAndFiles(t *testing.T) {
 	}
 }
 
+func TestSaveWhiteboardSnapshotWritesSceneAndScreenshotHistory(t *testing.T) {
+	service := NewRecordingFreedomService()
+	service.appData = appdata.NewService(t.TempDir())
+
+	result, err := service.SaveWhiteboardSnapshot(WhiteboardSnapshotRequest{
+		SceneJSON:       `{"type":"excalidraw","elements":[{"id":"a","type":"rectangle"}],"appState":{},"files":{}}`,
+		SnapshotDataURL: testPNGDataURL(t, 320, 180),
+	})
+	if err != nil {
+		t.Fatalf("SaveWhiteboardSnapshot() error = %v", err)
+	}
+	if !result.Scene.Available || result.Scene.ScenePath == "" {
+		t.Fatalf("saved scene = %#v, want available scene", result.Scene)
+	}
+	if result.Item.ID == "" || result.Item.Mode != "whiteboard" || result.Item.Path == "" || result.Item.ThumbnailPath == "" {
+		t.Fatalf("saved item = %#v, want whiteboard screenshot history item", result.Item)
+	}
+	history, err := service.loadScreenshotHistory()
+	if err != nil {
+		t.Fatalf("loadScreenshotHistory() error = %v", err)
+	}
+	if len(history) != 1 || history[0].ID != result.Item.ID || history[0].Mode != "whiteboard" {
+		t.Fatalf("history = %#v, want saved whiteboard item", history)
+	}
+}
+
+func TestCaptureScreenshotRectUsesFocusedWindowProvider(t *testing.T) {
+	originalProvider := focusedWindowScreenshotRectProvider
+	focusedWindowScreenshotRectProvider = func() (image.Rectangle, bool) {
+		return image.Rect(21, 31, 301, 241), true
+	}
+	defer func() {
+		focusedWindowScreenshotRectProvider = originalProvider
+	}()
+
+	service := NewRecordingFreedomService()
+	rect, region, err := service.captureScreenshotRect(ScreenshotCaptureRequest{Mode: "focused-window"})
+	if err != nil {
+		t.Fatalf("captureScreenshotRect(focused-window) error = %v", err)
+	}
+	if rect.Min.X != 21 || rect.Min.Y != 31 || rect.Dx() != 280 || rect.Dy() != 210 {
+		t.Fatalf("focused rect = %v, want (21,31) 280x210", rect)
+	}
+	if region == nil || region.X != 21 || region.Y != 31 || region.Width != 280 || region.Height != 210 {
+		t.Fatalf("focused region = %#v, want provider rectangle", region)
+	}
+}
+
 func TestMapRegionSelectionToCaptureRectScalesOverlayToNativeBounds(t *testing.T) {
 	session := RegionSelectionSession{
 		Bounds:        RegionRect{X: 10, Y: 20, Width: 1000, Height: 500},
@@ -178,6 +226,28 @@ func TestMapRegionSelectionToCaptureRectScalesOverlayToNativeBounds(t *testing.T
 	rect := mapRegionSelectionToCaptureRect(session, RegionRect{X: 250, Y: 100, Width: 300, Height: 200})
 	if rect.Min.X != 600 || rect.Min.Y != 400 || rect.Dx() != 600 || rect.Dy() != 400 {
 		t.Fatalf("mapped rect = %+v, want min=(600,400) size=600x400", rect)
+	}
+}
+
+func TestSnapRectToImageEdgesFindsNearestBorder(t *testing.T) {
+	img := image.NewRGBA(image.Rect(0, 0, 320, 220))
+	imagedraw.Draw(img, img.Bounds(), &image.Uniform{C: color.RGBA{R: 245, G: 247, B: 250, A: 255}}, image.Point{}, imagedraw.Src)
+	border := color.RGBA{R: 18, G: 24, B: 38, A: 255}
+	for x := 40; x <= 260; x++ {
+		img.Set(x, 30, border)
+		img.Set(x, 170, border)
+	}
+	for y := 30; y <= 170; y++ {
+		img.Set(40, y, border)
+		img.Set(260, y, border)
+	}
+
+	got, confidence := snapRectToImageEdges(img, image.Rect(47, 37, 253, 163), 18)
+	if confidence < 0.5 {
+		t.Fatalf("confidence = %.3f, want confident edge snap", confidence)
+	}
+	if got.Min.X != 40 || got.Min.Y != 30 || got.Max.X != 260 || got.Max.Y != 170 {
+		t.Fatalf("snapped rect = %v, want (40,30)-(260,170)", got)
 	}
 }
 

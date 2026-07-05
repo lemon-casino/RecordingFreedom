@@ -1,9 +1,11 @@
 package main
 
 import (
+	"fmt"
 	"strconv"
 	"strings"
 
+	"github.com/lemon-casino/RecordingFreedom/app/internal/autostart"
 	"github.com/lemon-casino/RecordingFreedom/app/internal/settings"
 )
 
@@ -13,7 +15,10 @@ type SettingsPreferencesPatchRequest struct {
 	RecordingFPS     *int            `json:"recordingFps,omitempty"`
 	CaptureCursor    *bool           `json:"captureCursor,omitempty"`
 	CountdownSeconds *int            `json:"countdownSeconds,omitempty"`
+	StartAtLogin     *bool           `json:"startAtLogin,omitempty"`
 }
+
+var syncStartAtLogin = autostart.SetEnabled
 
 func (s *RecordingFreedomService) PatchSettingsPreferences(patch SettingsPreferencesPatchRequest) (settings.Settings, error) {
 	s.settingsMu.Lock()
@@ -37,6 +42,16 @@ func (s *RecordingFreedomService) PatchSettingsPreferences(patch SettingsPrefere
 	if patch.CountdownSeconds != nil {
 		currentSettings.Recording.CountdownSeconds = *patch.CountdownSeconds
 	}
+	if patch.StartAtLogin != nil {
+		if err := syncStartAtLogin(*patch.StartAtLogin); err != nil {
+			s.logEvent("settings-preferences", "start-at-login-error", map[string]string{
+				"enabled": strconv.FormatBool(*patch.StartAtLogin),
+				"error":   err.Error(),
+			})
+			return settings.Settings{}, fmt.Errorf("set start at login: %w", err)
+		}
+		currentSettings.Window.StartAtLogin = *patch.StartAtLogin
+	}
 	saved, err := s.settings.Save(currentSettings)
 	if err != nil {
 		return settings.Settings{}, err
@@ -53,6 +68,7 @@ func settingsPreferencesPatchFields(patch SettingsPreferencesPatchRequest, saved
 		"savedRecordingFps":     strconv.Itoa(saved.Recording.FPS),
 		"savedCaptureCursor":    strconv.FormatBool(saved.Recording.CaptureCursor),
 		"savedCountdownSeconds": strconv.Itoa(saved.Recording.CountdownSeconds),
+		"savedStartAtLogin":     strconv.FormatBool(saved.Window.StartAtLogin),
 	}
 	if patch.Theme != nil {
 		fields["theme"] = string(*patch.Theme)
@@ -68,6 +84,9 @@ func settingsPreferencesPatchFields(patch SettingsPreferencesPatchRequest, saved
 	}
 	if patch.CountdownSeconds != nil {
 		fields["countdownSeconds"] = strconv.Itoa(*patch.CountdownSeconds)
+	}
+	if patch.StartAtLogin != nil {
+		fields["startAtLogin"] = strconv.FormatBool(*patch.StartAtLogin)
 	}
 	return fields
 }

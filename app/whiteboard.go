@@ -1,10 +1,12 @@
 package main
 
 import (
+	"bytes"
 	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"image/png"
 	"os"
 	"path/filepath"
 	"strings"
@@ -47,6 +49,16 @@ type WhiteboardExportResult struct {
 	Format     string `json:"format"`
 	OutputPath string `json:"outputPath"`
 	Bytes      int64  `json:"bytes"`
+}
+
+type WhiteboardSnapshotRequest struct {
+	SceneJSON       string `json:"sceneJson"`
+	SnapshotDataURL string `json:"snapshotDataUrl"`
+}
+
+type WhiteboardSnapshotResult struct {
+	Scene WhiteboardSceneResult `json:"scene"`
+	Item  ScreenshotItem        `json:"item"`
 }
 
 type WhiteboardSettingsPatchRequest struct {
@@ -171,6 +183,33 @@ func (s *RecordingFreedomService) SaveWhiteboardScene(req WhiteboardSceneRequest
 		"bytes": fmt.Sprint(len(sceneJSON)),
 	})
 	return s.LoadWhiteboardScene()
+}
+
+func (s *RecordingFreedomService) SaveWhiteboardSnapshot(req WhiteboardSnapshotRequest) (WhiteboardSnapshotResult, error) {
+	savedScene, err := s.SaveWhiteboardScene(WhiteboardSceneRequest{SceneJSON: req.SceneJSON})
+	if err != nil {
+		return WhiteboardSnapshotResult{}, err
+	}
+	data, err := decodeAnnotationSnapshot(req.SnapshotDataURL)
+	if err != nil {
+		return WhiteboardSnapshotResult{}, err
+	}
+	img, err := png.Decode(bytes.NewReader(data))
+	if err != nil {
+		return WhiteboardSnapshotResult{}, fmt.Errorf("whiteboard snapshot PNG is invalid: %w", err)
+	}
+	item, err := s.saveScreenshotImage(img, "whiteboard", nil)
+	if err != nil {
+		return WhiteboardSnapshotResult{}, err
+	}
+	s.emitScreenshotCaptured(item)
+	s.logEvent("whiteboard", "save-snapshot", map[string]string{
+		"id":     item.ID,
+		"path":   item.Path,
+		"width":  fmt.Sprint(item.Width),
+		"height": fmt.Sprint(item.Height),
+	})
+	return WhiteboardSnapshotResult{Scene: savedScene, Item: item}, nil
 }
 
 func (s *RecordingFreedomService) SaveWhiteboardExport(req WhiteboardExportRequest) (WhiteboardExportResult, error) {

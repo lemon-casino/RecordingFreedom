@@ -4,6 +4,11 @@
 
 ## 本轮已完成并纳入 v0.1.11
 
+- 已克隆并分析 `mg-chao/snow-shot`：其智能选择核心是平台窗口矩形、Windows UI Automation 子元素矩形和前端 Flatbush/RTree 选择层组合，而不是单纯图像边缘检测；分析结果已落地到 `15-smart-screenshot-region-assist.md`。
+- 新增智能区域候选合同：`RegionSmartCandidate`、`RegionSelectionSession.candidates` 和 `AssistRegionSelection()` 已接入截图、滚动截图、录制中标注画板和自定义区域录制选择流程。
+- 自定义区域与截图区域选择新增图像边缘吸附：拖选结束后会围绕选择区域截取局部屏幕图像，寻找附近强边缘，并在置信度足够时把区域吸附到目标元素边界。
+- 截图菜单已补齐区域、全屏、窗口、焦点窗口和滚动截图；焦点窗口截图不再复用普通窗口截图逻辑，Windows 使用前台 HWND，macOS 使用 CoreGraphics 前台可见窗口，其他平台保持枚举窗口降级。
+- 普通画板手动保存已改为保存 Excalidraw scene + PNG 快照，并把快照写入截图历史，模式为 `whiteboard`。
 - 区域截图和录制中画板共用的标注 overlay 保存状态已修复：点击保存并写入截图历史或录制标注包后，胶囊保存按钮会稳定显示“已保存 / Saved”，不会被 Excalidraw 后续重复 `onChange` 重新标回“未保存 / Unsaved”。
 - 标注 overlay 保存状态机新增“最后已保存场景”基准：只有当前场景 JSON 和最后成功保存的场景不同，才进入未保存状态；保存成功后同一场景的重复变更事件会被忽略。
 - 保存动作新增明确的“保存中 / Saving”文案，保存失败时保持 dirty 状态，方便用户再次点击保存。

@@ -14,12 +14,13 @@ const (
 	capsuleWindowExpandedHeight  = 600
 )
 
-func createCapsuleWindow(app *application.App) *application.WebviewWindow {
+func createCapsuleWindow(app *application.App, hidden bool) *application.WebviewWindow {
 	window := app.Window.NewWithOptions(application.WebviewWindowOptions{
 		Name:           "capsule-recorder",
 		Title:          "RecordingFreedom",
 		Width:          capsuleWindowWidth,
 		Height:         capsuleWindowCollapsedHeight,
+		Hidden:         hidden,
 		Frameless:      true,
 		AlwaysOnTop:    true,
 		DisableResize:  true,

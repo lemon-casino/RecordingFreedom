@@ -22,7 +22,7 @@ import type {ExcalidrawImperativeAPI} from '@excalidraw/excalidraw/types'
 import '@excalidraw/excalidraw/index.css'
 import {copyByLocale} from './i18n'
 import {defaultSettings, normalizeLocale, normalizeTheme, type AppSettings, type LocaleCode, type ThemeCode, type WhiteboardStrokeWidth, type WhiteboardTool} from './services/mockBackend'
-import {consumeScreenshotWhiteboardContext, hideWhiteboardWindow, loadSettings, loadWhiteboardScene, patchWhiteboardSettings, saveWhiteboardExport, saveWhiteboardScene, subscribeScreenshotWhiteboardContext, subscribeSettingsChanged, type ScreenshotWhiteboardContext} from './services/recorderBackend'
+import {consumeScreenshotWhiteboardContext, hideWhiteboardWindow, loadSettings, loadWhiteboardScene, patchWhiteboardSettings, saveWhiteboardExport, saveWhiteboardScene, saveWhiteboardSnapshot, subscribeScreenshotWhiteboardContext, subscribeSettingsChanged, type ScreenshotWhiteboardContext} from './services/recorderBackend'
 
 type SaveState = 'ready' | 'dirty' | 'saving' | 'saved' | 'failed'
 type WhiteboardWindowGlobal = Window & {__RF_SCREENSHOT_WHITEBOARD__?: ScreenshotWhiteboardContext}
@@ -183,11 +183,14 @@ function WhiteboardWindow() {
     }, 700)
   }, [copy.whiteboard.unsaved])
 
-  const saveScene = async (sceneJson = lastSceneRef.current) => {
+  const saveScene = async (sceneJson = lastSceneRef.current, options: {snapshot?: boolean} = {}) => {
     if (!sceneJson.trim()) return
     setSaveState('saving')
     try {
-      const saved = await saveWhiteboardScene(sceneJson)
+      const saved = options.snapshot
+        ? (await saveWhiteboardSnapshot({sceneJson, snapshotDataUrl: await currentSnapshotDataURL()})).scene
+        : await saveWhiteboardScene(sceneJson)
+      lastSceneRef.current = sceneJson
       setSaveState('saved')
       setStatusText(saved.updatedAt ? `${copy.whiteboard.saved} · ${saved.scenePath}` : copy.whiteboard.saved)
     } catch (error) {
@@ -240,7 +243,7 @@ function WhiteboardWindow() {
   }, [scheduleSave])
 
   const saveNow = () => {
-    void saveScene()
+    void saveScene(currentSceneJSON(), {snapshot: true})
   }
 
   const clearScene = () => {
@@ -321,6 +324,28 @@ function WhiteboardWindow() {
       console.error('Failed to serialize current whiteboard scene:', error)
       return lastSceneRef.current
     }
+  }
+
+  const currentSnapshotDataURL = async () => {
+    const api = apiRef.current
+    if (!api) throw new Error('whiteboard canvas is not ready')
+    const canvasRect = document.querySelector<HTMLElement>('.whiteboard-canvas')?.getBoundingClientRect()
+    const width = Math.round(Math.max(640, Math.min(2400, canvasRect?.width ?? 1120)))
+    const height = Math.round(Math.max(360, Math.min(1600, canvasRect?.height ?? 720)))
+    const blob = await exportToBlob({
+      elements: api.getSceneElements(),
+      appState: {
+        ...api.getAppState(),
+        exportBackground: true,
+        exportScale: 1,
+        viewBackgroundColor: api.getAppState().viewBackgroundColor,
+      },
+      files: api.getFiles(),
+      mimeType: 'image/png',
+      exportPadding: 0,
+      getDimensions: () => ({width, height, scale: 1}),
+    } as any)
+    return blobToDataURL(blob)
   }
 
   const exportSVG = async () => {

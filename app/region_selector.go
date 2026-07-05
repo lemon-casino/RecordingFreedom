@@ -26,13 +26,14 @@ type RegionRect struct {
 }
 
 type RegionSelectionSession struct {
-	ID            string      `json:"id"`
-	Bounds        RegionRect  `json:"bounds"`
-	CaptureBounds *RegionRect `json:"captureBounds,omitempty"`
-	MinimumWidth  int         `json:"minimumWidth"`
-	MinimumHeight int         `json:"minimumHeight"`
-	DisplayCount  int         `json:"displayCount"`
-	Purpose       string      `json:"purpose,omitempty"`
+	ID            string                 `json:"id"`
+	Bounds        RegionRect             `json:"bounds"`
+	CaptureBounds *RegionRect            `json:"captureBounds,omitempty"`
+	MinimumWidth  int                    `json:"minimumWidth"`
+	MinimumHeight int                    `json:"minimumHeight"`
+	DisplayCount  int                    `json:"displayCount"`
+	Purpose       string                 `json:"purpose,omitempty"`
+	Candidates    []RegionSmartCandidate `json:"candidates,omitempty"`
 }
 
 type RegionSelectionRequest struct {
@@ -66,14 +67,17 @@ func (s *RecordingFreedomService) ShowRegionSelector() (RegionSelectionSession, 
 	}
 
 	bounds, displayCount := regionOverlayBounds(s.app.Screen.GetAll())
+	captureBounds := screenshotCaptureUnionBounds()
 	session := RegionSelectionSession{
 		ID:            fmt.Sprintf("region-%d", time.Now().UnixNano()),
 		Bounds:        regionRectFromAppRect(bounds),
+		CaptureBounds: &captureBounds,
 		MinimumWidth:  minRegionWidth,
 		MinimumHeight: minRegionHeight,
 		DisplayCount:  displayCount,
 		Purpose:       regionSelectionPurposeCapture,
 	}
+	session.Candidates = s.regionSmartCandidates(session)
 
 	s.regionMu.Lock()
 	s.regionSession = &session

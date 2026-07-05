@@ -31,11 +31,14 @@ export type {
     PIPOverlayState,
     PIPPreviewImageRequest,
     PIPPreviewImageResult,
+    RegionAssistRequest,
+    RegionAssistResult,
     RegionFrameState,
     RegionRect,
     RegionSelectionRequest,
     RegionSelectionResult,
     RegionSelectionSession,
+    RegionSmartCandidate,
     ScreenIndicatorRequest,
     ScreenIndicatorResult,
     ScreenshotCaptureRequest,
@@ -57,5 +60,7 @@ export type {
     WhiteboardSceneRequest,
     WhiteboardSceneResult,
     WhiteboardSettingsPatchRequest,
+    WhiteboardSnapshotRequest,
+    WhiteboardSnapshotResult,
     WhiteboardVisibilityEvent
 } from "./models.js";

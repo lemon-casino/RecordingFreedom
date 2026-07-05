@@ -160,6 +160,7 @@ func (s *RecordingFreedomService) ShowAnnotationRegionSelector() (RegionSelectio
 		DisplayCount:  displayCount,
 		Purpose:       regionSelectionPurposeAnnotation,
 	}
+	selection.Candidates = s.regionSmartCandidates(selection)
 
 	s.regionMu.Lock()
 	s.regionSession = &selection

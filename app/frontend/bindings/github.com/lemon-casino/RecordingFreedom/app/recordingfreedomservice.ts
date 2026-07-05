@@ -31,6 +31,10 @@ import * as settings$0 from "./internal/settings/models.js";
 // @ts-ignore: Unused imports
 import * as $models from "./models.js";
 
+export function AssistRegionSelection(req: $models.RegionAssistRequest): $CancellablePromise<$models.RegionAssistResult> {
+    return $Call.ByID(1724463825, req);
+}
+
 export function BeginScreenshotAnnotationOverlay(req: $models.RegionSelectionRequest): $CancellablePromise<$models.AnnotationOverlayState> {
     return $Call.ByID(1272692414, req);
 }
@@ -269,6 +273,10 @@ export function SaveWhiteboardExport(req: $models.WhiteboardExportRequest): $Can
 
 export function SaveWhiteboardScene(req: $models.WhiteboardSceneRequest): $CancellablePromise<$models.WhiteboardSceneResult> {
     return $Call.ByID(1809937380, req);
+}
+
+export function SaveWhiteboardSnapshot(req: $models.WhiteboardSnapshotRequest): $CancellablePromise<$models.WhiteboardSnapshotResult> {
+    return $Call.ByID(1135510088, req);
 }
 
 export function ScanRecordingPackages(): $CancellablePromise<recpackage$0.RecoverySummary[] | null> {

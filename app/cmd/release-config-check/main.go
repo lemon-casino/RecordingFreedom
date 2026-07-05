@@ -202,6 +202,19 @@ var releaseConfigChecks = []configCheck{
 	},
 	{
 		File: ".github/workflows/release.yml",
+		Name: "Release notes include smart screenshot and whiteboard history behavior",
+		Needles: []string{
+			"focused-window screenshot",
+			"Smart screenshot and region assist",
+			"RegionSmartCandidate",
+			"mg-chao/snow-shot",
+			"manual normal whiteboard save now writes the Excalidraw scene and a PNG snapshot into screenshot history",
+			"mode=whiteboard",
+			"recording annotation saves continue to write into the active .rfrec annotation package",
+		},
+	},
+	{
+		File: ".github/workflows/release.yml",
 		Name: "Release stages verified Windows portable zip and installer",
 		Needles: []string{
 			"./scripts/ensure-windows-ffmpeg.ps1 -Architecture \"${{ matrix.ffmpeg_arch }}\"",

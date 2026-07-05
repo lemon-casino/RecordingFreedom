@@ -110,4 +110,5 @@ export interface WhiteboardSettings {
 export interface WindowSettings {
     "minimizeToTray": boolean;
     "theme": Theme;
+    "startAtLogin": boolean;
 }

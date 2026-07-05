@@ -42,6 +42,9 @@ func TestLoadMissingSettingsReturnsDefaults(t *testing.T) {
 	if !got.Window.MinimizeToTray {
 		t.Fatal("default settings should minimize to tray")
 	}
+	if got.Window.StartAtLogin {
+		t.Fatal("default settings should not start at login until the user enables it")
+	}
 	if got.Window.Theme != ThemeNightTeal {
 		t.Fatalf("default theme = %q, want %q", got.Window.Theme, ThemeNightTeal)
 	}
@@ -109,7 +112,7 @@ func TestSaveAndLoadSettings(t *testing.T) {
 			ToggleCamera:    "CmdOrCtrl+Shift+C",
 			OpenWhiteboard:  "CmdOrCtrl+Shift+B",
 		},
-		Window: WindowSettings{MinimizeToTray: true, Theme: ThemeSunsetYellow},
+		Window: WindowSettings{MinimizeToTray: true, Theme: ThemeSunsetYellow, StartAtLogin: true},
 	})
 	if err != nil {
 		t.Fatalf("Save() error = %v", err)
@@ -151,6 +154,9 @@ func TestSaveAndLoadSettings(t *testing.T) {
 	}
 	if loaded.Window.Theme != ThemeSunsetYellow {
 		t.Fatalf("theme = %q, want %q", loaded.Window.Theme, ThemeSunsetYellow)
+	}
+	if !loaded.Window.StartAtLogin {
+		t.Fatal("start at login setting was not persisted")
 	}
 	if loaded.Shortcuts.ToggleRecording != "CmdOrCtrl+Shift+R" || loaded.Shortcuts.TogglePause != "CmdOrCtrl+OptionOrAlt+P" {
 		t.Fatalf("shortcuts were not normalized and persisted: %#v", loaded.Shortcuts)

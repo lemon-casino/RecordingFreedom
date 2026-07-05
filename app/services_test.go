@@ -262,11 +262,21 @@ func TestPatchSettingsPreferencesPersistsRecordingAndTheme(t *testing.T) {
 		appData:  data,
 		settings: settings.NewService(data),
 	}
+	originalSyncStartAtLogin := syncStartAtLogin
+	var syncedStartAtLogin []bool
+	syncStartAtLogin = func(enabled bool) error {
+		syncedStartAtLogin = append(syncedStartAtLogin, enabled)
+		return nil
+	}
+	t.Cleanup(func() {
+		syncStartAtLogin = originalSyncStartAtLogin
+	})
 	theme := settings.ThemeSageGray
 	quality := recordingprofile.QualityHigh
 	fps := 60
 	captureCursor := false
 	countdown := 5
+	startAtLogin := true
 
 	saved, err := service.PatchSettingsPreferences(SettingsPreferencesPatchRequest{
 		Theme:            &theme,
@@ -274,19 +284,50 @@ func TestPatchSettingsPreferencesPersistsRecordingAndTheme(t *testing.T) {
 		RecordingFPS:     &fps,
 		CaptureCursor:    &captureCursor,
 		CountdownSeconds: &countdown,
+		StartAtLogin:     &startAtLogin,
 	})
 	if err != nil {
 		t.Fatalf("PatchSettingsPreferences() error = %v", err)
 	}
-	if saved.Window.Theme != theme || saved.Recording.Quality != quality || saved.Recording.FPS != fps || saved.Recording.CaptureCursor || saved.Recording.CountdownSeconds != countdown {
+	if saved.Window.Theme != theme || !saved.Window.StartAtLogin || saved.Recording.Quality != quality || saved.Recording.FPS != fps || saved.Recording.CaptureCursor || saved.Recording.CountdownSeconds != countdown {
 		t.Fatalf("saved preferences = theme %q recording %#v, want patched preferences", saved.Window.Theme, saved.Recording)
+	}
+	if len(syncedStartAtLogin) != 1 || !syncedStartAtLogin[0] {
+		t.Fatalf("start at login sync calls = %#v, want enabled once", syncedStartAtLogin)
 	}
 	loaded, err := service.GetSettings()
 	if err != nil {
 		t.Fatalf("GetSettings() error = %v", err)
 	}
-	if loaded.Window.Theme != theme || loaded.Recording.Quality != quality || loaded.Recording.FPS != fps || loaded.Recording.CaptureCursor || loaded.Recording.CountdownSeconds != countdown {
+	if loaded.Window.Theme != theme || !loaded.Window.StartAtLogin || loaded.Recording.Quality != quality || loaded.Recording.FPS != fps || loaded.Recording.CaptureCursor || loaded.Recording.CountdownSeconds != countdown {
 		t.Fatalf("loaded preferences = theme %q recording %#v, want patched preferences", loaded.Window.Theme, loaded.Recording)
+	}
+}
+
+func TestPatchSettingsPreferencesRejectsStartAtLoginWhenSystemSyncFails(t *testing.T) {
+	data := appdata.NewService(t.TempDir())
+	service := &RecordingFreedomService{
+		appData:  data,
+		settings: settings.NewService(data),
+	}
+	originalSyncStartAtLogin := syncStartAtLogin
+	syncStartAtLogin = func(enabled bool) error {
+		return errors.New("login item denied")
+	}
+	t.Cleanup(func() {
+		syncStartAtLogin = originalSyncStartAtLogin
+	})
+	startAtLogin := true
+
+	if _, err := service.PatchSettingsPreferences(SettingsPreferencesPatchRequest{StartAtLogin: &startAtLogin}); err == nil {
+		t.Fatal("PatchSettingsPreferences() accepted a failed start at login sync")
+	}
+	loaded, err := service.GetSettings()
+	if err != nil {
+		t.Fatalf("GetSettings() error = %v", err)
+	}
+	if loaded.Window.StartAtLogin {
+		t.Fatal("start at login was persisted even though system sync failed")
 	}
 }
 
@@ -395,9 +436,18 @@ func TestSaveSettingsDoesNotOverwritePatchedPreferences(t *testing.T) {
 	if _, err := service.PatchShortcutSettings(ShortcutSettingsPatchRequest{OpenWhiteboard: &shortcut}); err != nil {
 		t.Fatalf("PatchShortcutSettings() error = %v", err)
 	}
+	current, err := service.settings.Load()
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+	current.Window.StartAtLogin = true
+	if _, err := service.settings.Save(current); err != nil {
+		t.Fatalf("Save(start at login) error = %v", err)
+	}
 	stale := settings.Default()
 	stale.Locale = settings.LocaleEN
 	stale.Window.Theme = settings.ThemeSkyBlue
+	stale.Window.StartAtLogin = false
 	stale.Recording.Quality = recordingprofile.QualityStandard
 	stale.Recording.FPS = 24
 	stale.Shortcuts.OpenWhiteboard = "CmdOrCtrl+Shift+W"
@@ -410,6 +460,9 @@ func TestSaveSettingsDoesNotOverwritePatchedPreferences(t *testing.T) {
 	}
 	if saved.Window.Theme != theme || saved.Recording.Quality != quality || saved.Recording.FPS != fps {
 		t.Fatalf("SaveSettings overwrote patched preferences: theme %q recording %#v", saved.Window.Theme, saved.Recording)
+	}
+	if !saved.Window.StartAtLogin {
+		t.Fatal("SaveSettings overwrote patched start at login preference")
 	}
 	if saved.Shortcuts.OpenWhiteboard != shortcut {
 		t.Fatalf("SaveSettings overwrote patched shortcut: %q, want %q", saved.Shortcuts.OpenWhiteboard, shortcut)

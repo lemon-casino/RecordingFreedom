@@ -22,6 +22,29 @@ test('settings captures and persists shortcut changes', async ({page}) => {
   }, browserSettingsKey)).toBe('CmdOrCtrl+OptionOrAlt+P')
 })
 
+test('settings persists start at login toggle', async ({page}) => {
+  await openRecorderShell(page)
+
+  await page.getByRole('button', {name: 'Open settings'}).click()
+  const startAtLoginRow = page.locator('.setting-control').filter({hasText: 'Start at login'})
+  const startAtLogin = startAtLoginRow.getByLabel('Start at login')
+  await expect(startAtLogin).not.toBeChecked()
+
+  await startAtLoginRow.locator('.switch-row').click()
+  await expect(startAtLogin).toBeChecked()
+  await expect.poll(async () => page.evaluate((settingsKey) => {
+    const raw = window.localStorage.getItem(settingsKey)
+    return raw ? JSON.parse(raw).window?.startAtLogin : null
+  }, browserSettingsKey)).toBe(true)
+
+  await startAtLoginRow.locator('.switch-row').click()
+  await expect(startAtLogin).not.toBeChecked()
+  await expect.poll(async () => page.evaluate((settingsKey) => {
+    const raw = window.localStorage.getItem(settingsKey)
+    return raw ? JSON.parse(raw).window?.startAtLogin : null
+  }, browserSettingsKey)).toBe(false)
+})
+
 async function openRecorderShell(page: Page) {
   await page.addInitScript((settingsKey) => {
     window.localStorage.setItem(settingsKey, JSON.stringify({
@@ -70,10 +93,12 @@ async function openRecorderShell(page: Page) {
         togglePause: 'CmdOrCtrl+Shift+P',
         toggleCamera: 'CmdOrCtrl+Shift+C',
         openWhiteboard: 'CmdOrCtrl+Shift+B',
+        openScreenshot: 'CmdOrCtrl+Shift+S',
       },
       window: {
         minimizeToTray: true,
         theme: 'night-teal',
+        startAtLogin: false,
       },
     }))
   }, browserSettingsKey)

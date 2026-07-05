@@ -222,6 +222,19 @@ export interface PIPPreviewImageResult {
     "modifiedUnixNano"?: number;
 }
 
+export interface RegionAssistRequest {
+    "sessionId"?: string;
+    "purpose"?: string;
+    "pointerX"?: number;
+    "pointerY"?: number;
+    "selection"?: RegionRect | null;
+}
+
+export interface RegionAssistResult {
+    "candidates": RegionSmartCandidate[] | null;
+    "best"?: RegionSmartCandidate | null;
+}
+
 export interface RegionFrameState {
     "bounds": RegionRect;
     "overlayBounds"?: RegionRect;
@@ -259,6 +272,16 @@ export interface RegionSelectionSession {
     "minimumHeight": number;
     "displayCount": number;
     "purpose"?: string;
+    "candidates"?: RegionSmartCandidate[] | null;
+}
+
+export interface RegionSmartCandidate {
+    "id": string;
+    "kind": string;
+    "label"?: string;
+    "bounds": RegionRect;
+    "sourceId"?: string;
+    "score"?: number;
 }
 
 export interface ScreenIndicatorRequest {
@@ -348,6 +371,7 @@ export interface SettingsPreferencesPatchRequest {
     "recordingFps"?: number | null;
     "captureCursor"?: boolean | null;
     "countdownSeconds"?: number | null;
+    "startAtLogin"?: boolean | null;
 }
 
 export interface ShortcutSettingsPatchRequest {
@@ -396,6 +420,16 @@ export interface WhiteboardSettingsPatchRequest {
     "lastStrokeWidth"?: string | null;
     "lastOpacity"?: number | null;
     "capturePolicy"?: string | null;
+}
+
+export interface WhiteboardSnapshotRequest {
+    "sceneJson": string;
+    "snapshotDataUrl": string;
+}
+
+export interface WhiteboardSnapshotResult {
+    "scene": WhiteboardSceneResult;
+    "item": ScreenshotItem;
 }
 
 export interface WhiteboardVisibilityEvent {

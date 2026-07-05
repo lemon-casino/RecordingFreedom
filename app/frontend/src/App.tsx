@@ -71,7 +71,7 @@ import {
   fallbackCapabilities,
   fallbackStorageStatus,
 } from './services/mockBackend'
-import {beginScreenshotAnnotationOverlay, cancelRegionSelector, cancelSelectedRegion, completeAnnotationRegionSelection, completeRegionSelection, completeScreenshotRegionSelection, completeScrollingScreenshotSelection, deleteScreenshotItem, exportRecordingPackage, hidePinnedScreenshot, hidePipOverlay, hideRegionFrame, hideScreenIndicator, hideSettingsWindow, listScreenshots, loadBootstrap, loadPinnedScreenshot, loadSettings, logClientEvent, openRecordingPackage, openScreenshot, openScreenshotDirectory, openScreenshotInWhiteboard, openVideoDirectory, patchAudioState, patchCameraState, patchScreenshotItem, patchSettingsPreferences, patchShortcutSettings, patchWhiteboardSettings, pauseRecording, preflightAudioOnlyRecording, preflightRecording, previewExportRecordingPackage, quitApplication, readAnnotationPreviewImage, readPipPreviewImage, recoverRecordingPackage, restoreCapsuleWindow, resumeRecording, saveSettings, setCapsuleWindowExpanded, setCapsuleWindowHitRegions, setDataRoot, showAnnotationOverlay, showAnnotationRegionSelector, showPinnedScreenshot, showPipOverlay, showRegionSelector, showScreenIndicator, showScreenshotRegionSelector, showWhiteboardWindow, snapCapsuleWindowToEdge, startAudioOnlyRecording, startMicrophoneLevelMonitor, startRecording, startScrollingScreenshot, stopMicrophoneLevelMonitor, stopRecording, subscribeAudioLevel, subscribeAudioState, subscribeCapsuleDockSide, subscribeCapsuleWindowMoveEnded, subscribeRecordingStatus, subscribeRegionSelection, subscribeScreenshotCaptured, subscribeScreenshotPin, subscribeSettingsChanged, subscribeShortcutTriggered, subscribeWhiteboardVisibility, updatePipOverlay, updateScreenshotRegionSelection, updateSelectedRegion, type AudioControlState, type AudioLevelUpdate, type AudioStatePatch, type CapsuleWindowDockSide, type CapsuleWindowExpandDirection, type CapsuleWindowHitRegion, type PIPOverlayCamera, type PIPOverlayState, type RecordingExportPlan, type RecordingRecovery, type RecordingStatusUpdate, type RegionSelectionSession, type ScreenshotPinState, type SettingsPreferencesPatch, type ShortcutSettingsPatch, type WhiteboardSettingsPatch, type WhiteboardVisibilityUpdate} from './services/recorderBackend'
+import {assistRegionSelection, beginScreenshotAnnotationOverlay, cancelRegionSelector, cancelSelectedRegion, captureScreenshot, completeAnnotationRegionSelection, completeRegionSelection, completeScreenshotRegionSelection, completeScrollingScreenshotSelection, deleteScreenshotItem, exportRecordingPackage, hidePinnedScreenshot, hidePipOverlay, hideRegionFrame, hideScreenIndicator, hideSettingsWindow, listScreenshots, loadBootstrap, loadPinnedScreenshot, loadSettings, logClientEvent, openRecordingPackage, openScreenshot, openScreenshotDirectory, openScreenshotInWhiteboard, openVideoDirectory, patchAudioState, patchCameraState, patchScreenshotItem, patchSettingsPreferences, patchShortcutSettings, patchWhiteboardSettings, pauseRecording, preflightAudioOnlyRecording, preflightRecording, previewExportRecordingPackage, quitApplication, readAnnotationPreviewImage, readPipPreviewImage, recoverRecordingPackage, restoreCapsuleWindow, resumeRecording, saveSettings, setCapsuleWindowExpanded, setCapsuleWindowHitRegions, setDataRoot, showAnnotationOverlay, showAnnotationRegionSelector, showPinnedScreenshot, showPipOverlay, showRegionSelector, showScreenIndicator, showScreenshotRegionSelector, showWhiteboardWindow, snapCapsuleWindowToEdge, startAudioOnlyRecording, startMicrophoneLevelMonitor, startRecording, startScrollingScreenshot, stopMicrophoneLevelMonitor, stopRecording, subscribeAudioLevel, subscribeAudioState, subscribeCapsuleDockSide, subscribeCapsuleWindowMoveEnded, subscribeRecordingStatus, subscribeRegionSelection, subscribeScreenshotCaptured, subscribeScreenshotPin, subscribeSettingsChanged, subscribeShortcutTriggered, subscribeWhiteboardVisibility, updatePipOverlay, updateScreenshotRegionSelection, updateSelectedRegion, type AudioControlState, type AudioLevelUpdate, type AudioStatePatch, type CapsuleWindowDockSide, type CapsuleWindowExpandDirection, type CapsuleWindowHitRegion, type PIPOverlayCamera, type PIPOverlayState, type RecordingExportPlan, type RecordingRecovery, type RecordingStatusUpdate, type RegionSelectionSession, type RegionSmartCandidate, type ScreenshotPinState, type SettingsPreferencesPatch, type ShortcutSettingsPatch, type WhiteboardSettingsPatch, type WhiteboardVisibilityUpdate} from './services/recorderBackend'
 
 const AnnotationOverlayWindow = lazy(() => import('./AnnotationOverlayWindow'))
 const AnnotationRenderWindow = lazy(() => import('./AnnotationRenderWindow'))
@@ -400,6 +400,7 @@ function App() {
   const [pipEdgeFeather, setPipEdgeFeather] = useState(0.16)
   const [locale, setLocale] = useState<LocaleCode>('zh-CN')
   const [theme, setTheme] = useState<ThemeCode>('night-teal')
+  const [startAtLogin, setStartAtLogin] = useState(false)
   const [shortcuts, setShortcuts] = useState<ShortcutSettings>(defaultSettings.shortcuts)
   const [shortcutCapture, setShortcutCapture] = useState<ShortcutAction | null>(null)
   const [shortcutError, setShortcutError] = useState('')
@@ -554,6 +555,7 @@ function App() {
       window: {
         minimizeToTray: true,
         theme,
+        startAtLogin,
       },
     }
     if (!isSettingsWindow || !persistedSettingsRef.current) return nextSettings
@@ -578,9 +580,10 @@ function App() {
       window: {
         minimizeToTray: true,
         theme,
+        startAtLogin,
       },
     }
-  }, [appData.rootDir, camera, captureCursor, countdownSeconds, includeAnnotationsInExport, isSettingsWindow, locale, microphone, noiseSuppression, pipEdgeFeather, pipMirror, pipPosition, pipPreset, pipScale, pipShape, recordingFPS, recordingQuality, selectedCamera, selectedMic, selectedSource.id, selectedSource.type, selectedSystemAudio, shortcuts, systemAudio, theme])
+  }, [appData.rootDir, camera, captureCursor, countdownSeconds, includeAnnotationsInExport, isSettingsWindow, locale, microphone, noiseSuppression, pipEdgeFeather, pipMirror, pipPosition, pipPreset, pipScale, pipShape, recordingFPS, recordingQuality, selectedCamera, selectedMic, selectedSource.id, selectedSource.type, selectedSystemAudio, shortcuts, startAtLogin, systemAudio, theme])
   const settingsAutosaveKey = useMemo(() => JSON.stringify({
     locale,
     sourceId: selectedSource.id,
@@ -882,11 +885,13 @@ function App() {
       window: {
         ...settings.window,
         theme: patch.theme ?? settings.window.theme,
+        startAtLogin: patch.startAtLogin ?? settings.window.startAtLogin,
       },
     }
   }
   const applyLocalPreferencePatch = (patch: SettingsPreferencesPatch) => {
     if (patch.theme !== undefined) setTheme(normalizeTheme(patch.theme))
+    if (patch.startAtLogin !== undefined) setStartAtLogin(patch.startAtLogin)
     if (patch.recordingQuality !== undefined) setRecordingQuality(normalizeRecordingQuality(patch.recordingQuality))
     if (patch.recordingFps !== undefined) setRecordingFPS(fpsOptions.includes(patch.recordingFps) ? patch.recordingFps : 30)
     if (patch.captureCursor !== undefined) setCaptureCursor(patch.captureCursor)
@@ -901,6 +906,7 @@ function App() {
     applyLocalPreferencePatch(patch)
     void logClientEvent('settings-preferences', 'patch-request', {
       theme: patch.theme ?? '',
+      startAtLogin: patch.startAtLogin ?? '',
       recordingQuality: patch.recordingQuality ?? '',
       recordingFps: patch.recordingFps ?? '',
       captureCursor: patch.captureCursor ?? '',
@@ -912,6 +918,7 @@ function App() {
         localPreferenceIntentUntilRef.current = Date.now() + 3000
         void logClientEvent('settings-preferences', 'patch-success', {
           theme: settings.window.theme,
+          startAtLogin: settings.window.startAtLogin,
           recordingQuality: settings.recording.quality,
           recordingFps: settings.recording.fps,
           captureCursor: settings.recording.captureCursor,
@@ -1116,6 +1123,7 @@ function App() {
           ? {
               ...effectiveSettings.window,
               theme: currentSettingsRef.current.window.theme,
+              startAtLogin: currentSettingsRef.current.window.startAtLogin,
             }
           : effectiveSettings.window,
         camera: options.preservePipConfig
@@ -1140,6 +1148,7 @@ function App() {
     if (!options.preserveTheme) {
       setTheme(normalizeTheme(effectiveSettings.window.theme))
     }
+    setStartAtLogin(Boolean(effectiveSettings.window.startAtLogin))
     if (!options.preserveRecordingSettings) {
       setRecordingQuality(normalizeRecordingQuality(effectiveSettings.recording.quality))
       setRecordingFPS(fpsOptions.includes(effectiveSettings.recording.fps) ? effectiveSettings.recording.fps : 30)
@@ -2270,6 +2279,23 @@ function App() {
       })
   }
 
+  const captureScreenshotMode = (mode: 'full' | 'screen' | 'window' | 'focused-window') => {
+    if (isRecording) return
+    setActivePanel(null)
+    setSettingsOpen(false)
+    setClosePromptOpen(false)
+    void captureScreenshot({mode})
+      .then((item) => {
+        setScreenshots((current) => [item, ...current.filter((entry) => entry.id !== item.id)].slice(0, 200))
+        setScreenshotMessage(copy.screenshot.captured(item.width, item.height))
+      })
+      .catch((error) => {
+        const message = readableError(error)
+        console.error('Failed to capture screenshot:', error)
+        setScreenshotMessage(message || copy.screenshot.captureFailed)
+      })
+  }
+
   const openScreenshotFile = (item: ScreenshotItem) => {
     void openScreenshot(item.id)
       .catch((error) => {
@@ -2464,6 +2490,12 @@ function App() {
           options={themeOptions.map((code) => ({value: code, label: copy.themeNames[code], swatch: themeSwatches[code]}))}
           detail={copy.settings.themeDetail}
           onChange={(value) => commitSettingsPreferencePatch({theme: normalizeTheme(value)})}
+        />
+        <SettingToggle
+          title={copy.settings.startAtLogin}
+          checked={startAtLogin}
+          detail={copy.settings.startAtLoginDetail}
+          onChange={(value) => commitSettingsPreferencePatch({startAtLogin: value})}
         />
         <SettingLine
           title={copy.settings.shortcuts}
@@ -3014,6 +3046,27 @@ function App() {
                     <span>
                       <strong>{copy.screenshot.region}</strong>
                       <small>{formatShortcutForDisplay(shortcuts.openScreenshot)}</small>
+                    </span>
+                  </button>
+                  <button type="button" className="menu-row" onClick={() => captureScreenshotMode('full')}>
+                    <Maximize2 size={18} />
+                    <span>
+                      <strong>{copy.screenshot.full}</strong>
+                      <small>{copy.screenshot.fullDetail}</small>
+                    </span>
+                  </button>
+                  <button type="button" className="menu-row" onClick={() => captureScreenshotMode('window')}>
+                    <AppWindow size={18} />
+                    <span>
+                      <strong>{copy.screenshot.window}</strong>
+                      <small>{copy.screenshot.windowDetail}</small>
+                    </span>
+                  </button>
+                  <button type="button" className="menu-row" onClick={() => captureScreenshotMode('focused-window')}>
+                    <MousePointer2 size={18} />
+                    <span>
+                      <strong>{copy.screenshot.focusedWindow}</strong>
+                      <small>{copy.screenshot.focusedWindowDetail}</small>
                     </span>
                   </button>
                   <button type="button" className="menu-row" onClick={beginScrollingScreenshot}>
@@ -4121,6 +4174,7 @@ function RegionOverlayWindow() {
   const [drag, setDrag] = useState<{startX: number; startY: number; currentX: number; currentY: number} | null>(null)
   const [cursor, setCursor] = useState({x: -1, y: -1})
   const [invalid, setInvalid] = useState(false)
+  const [assistCandidate, setAssistCandidate] = useState<RegionSmartCandidate | null>(null)
   const shellRef = useRef<HTMLElement | null>(null)
   const [overlayLocale, setOverlayLocale] = useState<LocaleCode>(navigator.language.toLowerCase().startsWith('zh') ? 'zh-CN' : 'en')
   const [overlayTheme, setOverlayTheme] = useState<ThemeCode>('night-teal')
@@ -4133,6 +4187,12 @@ function RegionOverlayWindow() {
   const isAnnotationRegionSelection = session?.purpose === 'annotation'
   const isScreenshotRegionSelection = session?.purpose === 'screenshot'
   const isScrollingScreenshotSelection = session?.purpose === 'scrolling-screenshot'
+  const sessionCandidates = session?.candidates ?? []
+  const visibleAssistCandidate = !isEditingRegion && !isRecordingRegion
+    ? selectedRect
+      ? bestLocalRegionCandidate(sessionCandidates, selectedRect) ?? assistCandidate
+      : assistCandidate
+    : null
   const overlayOrigin = editFrame?.overlayBounds ?? session?.bounds ?? {x: 0, y: 0, width: 0, height: 0}
   const editableRect = isEditingRegion ? {
     x: editFrame.bounds.x - overlayOrigin.x,
@@ -4173,7 +4233,10 @@ function RegionOverlayWindow() {
   useEffect(() => {
     const onSession = (event: Event) => {
       const next = (event as CustomEvent<RegionSelectionSession>).detail
-      if (next) setSession(next)
+      if (next) {
+        setSession(next)
+        setAssistCandidate(null)
+      }
     }
     window.addEventListener('rf-region-session', onSession)
     return () => window.removeEventListener('rf-region-session', onSession)
@@ -4225,6 +4288,24 @@ function RegionOverlayWindow() {
     }
   }
 
+  const assistedSelection = async (rect: RegionSelectionSession['bounds'], point: {x: number; y: number}) => {
+    if (!session) return rect
+    try {
+      const result = await assistRegionSelection({
+        sessionId: session.id,
+        purpose: session.purpose,
+        pointerX: point.x,
+        pointerY: point.y,
+        selection: rect,
+        candidates: sessionCandidates,
+      })
+      return result.best?.bounds ?? rect
+    } catch (error) {
+      console.info('Region assist failed; using manual selection:', error)
+      return rect
+    }
+  }
+
   const shellMode = isRecordingRegion ? 'recording' : isEditingRegion ? 'editing' : 'selecting'
 
   return (
@@ -4239,7 +4320,11 @@ function RegionOverlayWindow() {
         const point = clampedClientPoint(event.clientX, event.clientY)
         setCursor(point)
         if (drag) {
-          setDrag({...drag, currentX: point.x, currentY: point.y})
+          const nextDrag = {...drag, currentX: point.x, currentY: point.y}
+          setDrag(nextDrag)
+          setAssistCandidate(bestLocalRegionCandidate(sessionCandidates, normalizedClientRect(nextDrag.startX, nextDrag.startY, nextDrag.currentX, nextDrag.currentY)))
+        } else {
+          setAssistCandidate(bestLocalRegionCandidateForPoint(sessionCandidates, point))
         }
       }}
       onPointerDown={(event) => {
@@ -4248,6 +4333,7 @@ function RegionOverlayWindow() {
         event.currentTarget.setPointerCapture(event.pointerId)
         const point = clampedClientPoint(event.clientX, event.clientY)
         setDrag({startX: point.x, startY: point.y, currentX: point.x, currentY: point.y})
+        setAssistCandidate(null)
         setInvalid(false)
       }}
       onPointerUp={(event) => {
@@ -4263,7 +4349,8 @@ function RegionOverlayWindow() {
         const point = clampedClientPoint(event.clientX, event.clientY)
         const rect = normalizedClientRect(drag.startX, drag.startY, point.x, point.y)
         setDrag(null)
-        void completeSelection(rect)
+        setAssistCandidate(null)
+        void assistedSelection(rect, point).then((nextRect) => completeSelection(nextRect))
       }}
       onPointerLeave={(event) => {
         if (isEditingRegion || isRecordingRegion) return
@@ -4276,6 +4363,17 @@ function RegionOverlayWindow() {
           <div className="region-crosshair horizontal" style={{top: cursor.y}} />
           <div className="region-crosshair vertical" style={{left: cursor.x}} />
         </>
+      )}
+      {visibleAssistCandidate && (
+        <div
+          className={`region-smart-candidate ${visibleAssistCandidate.kind}`}
+          style={{
+            left: visibleAssistCandidate.bounds.x,
+            top: visibleAssistCandidate.bounds.y,
+            width: visibleAssistCandidate.bounds.width,
+            height: visibleAssistCandidate.bounds.height,
+          }}
+        />
       )}
       {!isEditingRegion && !isRecordingRegion && selectedRect && (
         <div
@@ -4372,6 +4470,57 @@ function RegionOverlayWindow() {
       </div>}
     </main>
   )
+}
+
+function bestLocalRegionCandidateForPoint(candidates: RegionSmartCandidate[], point: {x: number; y: number}) {
+  let best: RegionSmartCandidate | null = null
+  let bestScore = -1
+  for (const candidate of candidates) {
+    if (!rectContainsPoint(candidate.bounds, point)) continue
+    const area = Math.max(1, candidate.bounds.width * candidate.bounds.height)
+    const score = (candidate.score ?? 0) + 1000000 / area
+    if (score > bestScore) {
+      best = candidate
+      bestScore = score
+    }
+  }
+  return best
+}
+
+function bestLocalRegionCandidate(candidates: RegionSmartCandidate[], selection: RegionSelectionSession['bounds']) {
+  let best: RegionSmartCandidate | null = null
+  let bestScore = -1
+  for (const candidate of candidates) {
+    const score = localRegionCandidateScore(candidate.bounds, selection)
+    if (score > bestScore) {
+      best = candidate
+      bestScore = score
+    }
+  }
+  return bestScore >= 0.5 ? best : null
+}
+
+function localRegionCandidateScore(candidate: RegionSelectionSession['bounds'], selection: RegionSelectionSession['bounds']) {
+  const left = Math.max(candidate.x, selection.x)
+  const top = Math.max(candidate.y, selection.y)
+  const right = Math.min(candidate.x + candidate.width, selection.x + selection.width)
+  const bottom = Math.min(candidate.y + candidate.height, selection.y + selection.height)
+  if (right <= left || bottom <= top) return -1
+  const intersection = (right - left) * (bottom - top)
+  const candidateArea = Math.max(1, candidate.width * candidate.height)
+  const selectionArea = Math.max(1, selection.width * selection.height)
+  const overlap = intersection / Math.min(candidateArea, selectionArea)
+  const edgeDistance = Math.abs(candidate.x - selection.x) +
+    Math.abs(candidate.y - selection.y) +
+    Math.abs(candidate.x + candidate.width - selection.x - selection.width) +
+    Math.abs(candidate.y + candidate.height - selection.y - selection.height)
+  const closeEdges = Math.max(0, 1 - edgeDistance / 280)
+  const areaRatio = Math.min(candidateArea, selectionArea) / Math.max(candidateArea, selectionArea)
+  return overlap * 0.54 + closeEdges * 0.34 + areaRatio * 0.12
+}
+
+function rectContainsPoint(rect: RegionSelectionSession['bounds'], point: {x: number; y: number}) {
+  return point.x >= rect.x && point.x <= rect.x + rect.width && point.y >= rect.y && point.y <= rect.y + rect.height
 }
 
 function SwitchRow({label, checked, disabled = false, onChange}: {label: string; checked: boolean; disabled?: boolean; onChange: (value: boolean) => void}) {
@@ -4807,7 +4956,13 @@ function screenshotMeta(item: ScreenshotItem, copy: RecorderCopy) {
     ? copy.screenshot.scrolling
     : item.mode === 'full'
       ? copy.screenshot.full
-      : copy.screenshot.region
+      : item.mode === 'window'
+        ? copy.screenshot.window
+        : item.mode === 'focused-window'
+          ? copy.screenshot.focusedWindow
+          : item.mode === 'whiteboard'
+            ? copy.whiteboard.open
+            : copy.screenshot.region
   const flags = [
     item.fixed ? copy.screenshot.fixed : '',
   ].filter(Boolean)

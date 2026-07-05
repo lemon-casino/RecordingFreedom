@@ -18,6 +18,9 @@ Add a durable screenshot tool group to the capsule recorder. When recording is n
 - Screenshot-backed whiteboard import is guarded against the startup empty-scene save path, so imported screenshots are not overwritten by an empty board.
 - Screenshot and whiteboard both have configurable global shortcuts.
 - Hover tooltips for shortcut-backed buttons include their shortcuts.
+- Normal whiteboard manual save now saves the Excalidraw scene and also writes a PNG snapshot into screenshot history with `mode: whiteboard`.
+- Screenshot capture modes now include region, full, window, focused-window, and scrolling screenshot entries from the capsule screenshot/whiteboard menu.
+- Region selection sessions carry smart screen/window/edge candidates so screenshots, scrolling screenshots, annotation overlay, and custom region recording can share the same boundary detection path.
 
 ## Data Model
 
@@ -46,6 +49,10 @@ Live pin-window state is kept separately from screenshot history and contains:
 ## Native Capture
 
 The first native backend uses `github.com/kbinani/screenshot` and captures a selected desktop rectangle as PNG. The region selector tracks both the Wails overlay bounds and the native screenshot capture bounds, then maps the selected overlay rectangle to native capture coordinates before saving.
+
+`focused-window` is handled separately from normal `window` screenshots. Windows uses the foreground HWND and DWM frame bounds where available; macOS uses CoreGraphics visible window z-order and skips RecordingFreedom's own process; unsupported platforms fall back to the existing enumerated window source.
+
+Smart region assist is documented in [15-smart-screenshot-region-assist.md](15-smart-screenshot-region-assist.md).
 
 ## Scrolling Screenshot
 

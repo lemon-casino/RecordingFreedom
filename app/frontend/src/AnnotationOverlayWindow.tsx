@@ -58,6 +58,7 @@ function AnnotationOverlayWindow() {
   const [saving, setSaving] = useState(false)
   const apiRef = useRef<ExcalidrawImperativeAPI | null>(null)
   const lastSavedSceneRef = useRef('')
+  const lastSavedContentSignatureRef = useRef('')
   const saveTimerRef = useRef<number | null>(null)
   const elementSignatureRef = useRef<Map<string, string>>(new Map())
   const pendingElementEventsRef = useRef<Map<string, AnnotationElementEvent>>(new Map())
@@ -170,7 +171,9 @@ function AnnotationOverlayWindow() {
         const nextInitialData = parsed ?? defaultAnnotationScene(settings)
         resetAnnotationElementTracking(nextInitialData)
         setInitialData(nextInitialData)
-        lastSavedSceneRef.current = 'sceneJson' in scene ? scene.sceneJson ?? '' : ''
+        const loadedSceneJson = 'sceneJson' in scene ? scene.sceneJson ?? '' : ''
+        lastSavedSceneRef.current = loadedSceneJson
+        lastSavedContentSignatureRef.current = loadedSceneJson ? annotationContentSignatureFromScene(nextInitialData) : ''
       })
       .catch((error) => {
         console.info('Using annotation overlay load fallback:', error)
@@ -179,6 +182,7 @@ function AnnotationOverlayWindow() {
           resetAnnotationElementTracking(nextInitialData)
           setInitialData(nextInitialData)
           lastSavedSceneRef.current = ''
+          lastSavedContentSignatureRef.current = ''
         }
       })
     return () => {
@@ -287,9 +291,9 @@ function AnnotationOverlayWindow() {
     }
   }
 
-  const scheduleSave = useCallback((sceneJson: string, hasElements: boolean) => {
+  const scheduleSave = useCallback((sceneJson: string, hasElements: boolean, contentSignature: string) => {
     if (!hasElements && !lastSavedSceneRef.current) return
-    if (sceneJson === lastSavedSceneRef.current) {
+    if (contentSignature && contentSignature === lastSavedContentSignatureRef.current) {
       if (saveTimerRef.current !== null) {
         window.clearTimeout(saveTimerRef.current)
         saveTimerRef.current = null
@@ -314,8 +318,10 @@ function AnnotationOverlayWindow() {
     }
     try {
       const sceneElements = api.getSceneElements()
-      const sceneJson = (serializeAsJSON as any)(sceneElements, api.getAppState(), api.getFiles(), 'local')
-      if (!dirty && sceneJson === lastSavedSceneRef.current && pendingElementEventsRef.current.size === 0) return
+      const files = api.getFiles()
+      const sceneJson = (serializeAsJSON as any)(sceneElements, api.getAppState(), files, 'local')
+      const contentSignature = annotationContentSignature(sceneElements, files)
+      if (!dirty && contentSignature === lastSavedContentSignatureRef.current && pendingElementEventsRef.current.size === 0) return
       setSaving(true)
       const canvasSize = annotationSnapshotCanvasSize(overlayState)
       const blob = await exportToBlob({
@@ -326,7 +332,7 @@ function AnnotationOverlayWindow() {
           exportScale: 1,
           viewBackgroundColor: 'transparent',
         },
-        files: api.getFiles(),
+        files,
         mimeType: 'image/png',
         exportPadding: 0,
         getDimensions: () => ({width: canvasSize.width, height: canvasSize.height, scale: 1}),
@@ -340,7 +346,14 @@ function AnnotationOverlayWindow() {
       }
       pendingElementEventsRef.current.clear()
       lastSavedSceneRef.current = sceneJson
+      lastSavedContentSignatureRef.current = contentSignature
       setDirty(false)
+      window.setTimeout(() => {
+        const currentApi = apiRef.current
+        if (!currentApi) return
+        const currentSignature = annotationContentSignature(currentApi.getSceneElements(), currentApi.getFiles())
+        if (currentSignature === lastSavedContentSignatureRef.current) setDirty(false)
+      }, 0)
     } catch (error) {
       console.error('Failed to save annotation capture:', error)
       setDirty(true)
@@ -356,6 +369,7 @@ function AnnotationOverlayWindow() {
     }
     pendingElementEventsRef.current.clear()
     lastSavedSceneRef.current = ''
+    lastSavedContentSignatureRef.current = ''
     setDirty(false)
     const scene = defaultAnnotationScene({
       ...defaultSettings,
@@ -478,7 +492,7 @@ function AnnotationOverlayWindow() {
             try {
               trackAnnotationElementEvents(elements)
               const sceneJson = (serializeAsJSON as any)(elements, appState, files, 'local')
-              scheduleSave(sceneJson, elements.length > 0)
+              scheduleSave(sceneJson, elements.length > 0, annotationContentSignature(elements, files))
             } catch (error) {
               console.error('Failed to serialize annotation scene:', error)
             }
@@ -526,6 +540,47 @@ function normalizeOpacity(value: unknown) {
 
 function annotationCanvasReceivesInput(tool: WhiteboardTool) {
   return tool !== 'selection' && tool !== 'hand'
+}
+
+function annotationContentSignature(elements: readonly unknown[], files: unknown) {
+  const fileEntries = Object.entries((files && typeof files === 'object' ? files : {}) as Record<string, any>)
+    .sort(([left], [right]) => left.localeCompare(right))
+    .map(([id, file]) => ({
+      id,
+      mimeType: file?.mimeType,
+      dataLength: typeof file?.dataURL === 'string' ? file.dataURL.length : 0,
+    }))
+  return JSON.stringify({
+    elements: elements.map(annotationContentElement),
+    files: fileEntries,
+  })
+}
+
+function annotationContentSignatureFromScene(scene: any) {
+  return annotationContentSignature(scene?.elements ?? [], scene?.files ?? {})
+}
+
+function annotationContentElement(element: unknown) {
+  if (!element || typeof element !== 'object') return element
+  const record = element as Record<string, any>
+  return {
+    id: record.id,
+    type: record.type,
+    version: record.version,
+    isDeleted: record.isDeleted === true,
+    x: record.x,
+    y: record.y,
+    width: record.width,
+    height: record.height,
+    angle: record.angle,
+    strokeColor: record.strokeColor,
+    backgroundColor: record.backgroundColor,
+    strokeWidth: record.strokeWidth,
+    opacity: record.opacity,
+    text: record.text,
+    points: record.points,
+    fileId: record.fileId,
+  }
 }
 
 function elementHitRegion(element: HTMLElement | null, kind: CapsuleWindowHitRegion['kind'], radius: number): CapsuleWindowHitRegion | null {

@@ -178,6 +178,7 @@ export type AppSettings = {
   window: {
     minimizeToTray: boolean
     theme: ThemeCode
+    startAtLogin: boolean
   }
   updatedAt?: string
 }
@@ -544,6 +545,7 @@ export const defaultSettings: AppSettings = {
   window: {
     minimizeToTray: true,
     theme: 'night-teal',
+    startAtLogin: false,
   },
 }
 

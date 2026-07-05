@@ -2588,6 +2588,25 @@ body.rf-annotation-overlay-window {
   box-shadow: none;
 }
 
+.region-smart-candidate {
+  position: fixed;
+  z-index: 2;
+  pointer-events: none;
+  border: 1px dashed rgba(255, 255, 255, 0.78);
+  border-radius: 8px;
+  background: transparent;
+  box-shadow: 0 0 0 1px rgba(15, 23, 42, 0.42), 0 0 18px rgba(56, 189, 248, 0.32);
+}
+
+.region-smart-candidate.window {
+  border-color: rgba(56, 189, 248, 0.88);
+}
+
+.region-smart-candidate.edge {
+  border-color: rgba(255, 71, 71, 0.95);
+  box-shadow: 0 0 0 1px rgba(15, 23, 42, 0.42), 0 0 18px rgba(255, 71, 71, 0.28);
+}
+
 .region-selection-rect.invalid {
   border-color: #ffb020;
   animation: region-shake 180ms ease-in-out 2;

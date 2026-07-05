@@ -3,7 +3,9 @@ package main
 import (
 	"embed"
 	"log"
+	"os"
 	"runtime"
+	"strings"
 
 	"github.com/lemon-casino/RecordingFreedom/app/internal/recording"
 	"github.com/lemon-casino/RecordingFreedom/app/internal/settings"
@@ -35,8 +37,12 @@ func init() {
 }
 
 func main() {
+	startMinimizedToTray := shouldStartMinimizedToTray(os.Args[1:])
 	recordingFreedom := NewRecordingFreedomService()
-	recordingFreedom.logEvent("app", "startup", map[string]string{"platform": runtime.GOOS})
+	recordingFreedom.logEvent("app", "startup", map[string]string{
+		"platform":           runtime.GOOS,
+		"minimizedToTrayArg": boolLogValue(startMinimizedToTray),
+	})
 
 	app := application.New(application.Options{
 		Name:        "RecordingFreedom",
@@ -58,7 +64,7 @@ func main() {
 	})
 	recordingFreedom.setApp(app)
 
-	capsuleWindow := createCapsuleWindow(app)
+	capsuleWindow := createCapsuleWindow(app, startMinimizedToTray)
 	settingsWindow := createSettingsWindow(app)
 	whiteboardWindow := createWhiteboardWindow(app)
 	annotationOverlayWindow := createAnnotationOverlayWindow(app)
@@ -88,4 +94,21 @@ func main() {
 	if err := app.Run(); err != nil {
 		log.Fatal(err)
 	}
+}
+
+func shouldStartMinimizedToTray(args []string) bool {
+	for _, arg := range args {
+		switch strings.ToLower(strings.TrimSpace(arg)) {
+		case "--minimized-to-tray", "--start-at-login":
+			return true
+		}
+	}
+	return false
+}
+
+func boolLogValue(value bool) string {
+	if value {
+		return "true"
+	}
+	return "false"
 }

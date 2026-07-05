@@ -24,6 +24,8 @@ typedef struct {
 	int pid;
 	char *owner;
 	char *title;
+	int x;
+	int y;
 	int width;
 	int height;
 } RFWindow;
@@ -176,6 +178,8 @@ static int rf_list_windows(RFWindow **outItems, int *outCount) {
 		items[used].pid = pid;
 		items[used].owner = owner;
 		items[used].title = title;
+		items[used].x = (int)bounds.origin.x;
+		items[used].y = (int)bounds.origin.y;
 		items[used].width = (int)bounds.size.width;
 		items[used].height = (int)bounds.size.height;
 		used++;
@@ -292,6 +296,8 @@ func listDarwinWindowSources() []CaptureSource {
 			Type:       SourceWindow,
 			Name:       name,
 			Subtitle:   subtitle,
+			X:          int(window.x),
+			Y:          int(window.y),
 			Width:      int(window.width),
 			Height:     int(window.height),
 			NativeID:   fmt.Sprintf("cgwindow:%d", windowID),

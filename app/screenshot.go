@@ -16,6 +16,7 @@ import (
 	"time"
 
 	desktopscreenshot "github.com/kbinani/screenshot"
+	"github.com/lemon-casino/RecordingFreedom/app/internal/devices"
 	"github.com/lemon-casino/RecordingFreedom/app/internal/recpackage"
 	"github.com/wailsapp/wails/v3/pkg/application"
 	"golang.org/x/image/draw"
@@ -155,6 +156,7 @@ func (s *RecordingFreedomService) ShowScreenshotRegionSelector() (RegionSelectio
 		DisplayCount:  displayCount,
 		Purpose:       regionSelectionPurposeScreenshot,
 	}
+	session.Candidates = s.regionSmartCandidates(session)
 	s.regionMu.Lock()
 	s.regionSession = &session
 	s.regionMu.Unlock()
@@ -681,6 +683,7 @@ func (s *RecordingFreedomService) StartScrollingScreenshot() (RegionSelectionSes
 		DisplayCount:  displayCount,
 		Purpose:       regionSelectionPurposeScrolling,
 	}
+	session.Candidates = s.regionSmartCandidates(session)
 	s.regionMu.Lock()
 	s.regionSession = &session
 	s.regionMu.Unlock()
@@ -749,7 +752,7 @@ func (s *RecordingFreedomService) CompleteScrollingScreenshotSelection(req Regio
 }
 
 func (s *RecordingFreedomService) captureScreenshotRect(req ScreenshotCaptureRequest) (image.Rectangle, *RegionRect, error) {
-	mode := strings.TrimSpace(req.Mode)
+	mode := strings.ToLower(strings.TrimSpace(req.Mode))
 	if mode == "" {
 		mode = "full"
 	}
@@ -760,12 +763,69 @@ func (s *RecordingFreedomService) captureScreenshotRect(req ScreenshotCaptureReq
 		}
 		return image.Rect(region.X, region.Y, region.X+region.Width, region.Y+region.Height), &region, nil
 	}
+	switch mode {
+	case "screen":
+		rect, ok := firstDisplayScreenshotRect()
+		if ok {
+			region := RegionRect{X: rect.Min.X, Y: rect.Min.Y, Width: rect.Dx(), Height: rect.Dy()}
+			return rect, &region, nil
+		}
+	case "window":
+		rect, ok := s.firstWindowScreenshotRect()
+		if ok {
+			region := RegionRect{X: rect.Min.X, Y: rect.Min.Y, Width: rect.Dx(), Height: rect.Dy()}
+			return rect, &region, nil
+		}
+		return image.Rectangle{}, nil, errors.New("no visible window is available for window screenshot")
+	case "focused-window":
+		rect, ok := s.focusedWindowScreenshotRect()
+		if ok {
+			region := RegionRect{X: rect.Min.X, Y: rect.Min.Y, Width: rect.Dx(), Height: rect.Dy()}
+			return rect, &region, nil
+		}
+		rect, ok = s.firstWindowScreenshotRect()
+		if ok {
+			region := RegionRect{X: rect.Min.X, Y: rect.Min.Y, Width: rect.Dx(), Height: rect.Dy()}
+			return rect, &region, nil
+		}
+		return image.Rectangle{}, nil, errors.New("no focused or visible window is available for focused window screenshot")
+	}
 	bounds := screenshotCaptureUnionBounds()
 	if bounds.Width <= 0 || bounds.Height <= 0 {
 		return image.Rectangle{}, nil, errors.New("no active display is available for screenshots")
 	}
 	region := bounds
 	return image.Rect(bounds.X, bounds.Y, bounds.X+bounds.Width, bounds.Y+bounds.Height), &region, nil
+}
+
+var focusedWindowScreenshotRectProvider = detectFocusedWindowScreenshotRect
+
+func (s *RecordingFreedomService) focusedWindowScreenshotRect() (image.Rectangle, bool) {
+	return focusedWindowScreenshotRectProvider()
+}
+
+func firstDisplayScreenshotRect() (image.Rectangle, bool) {
+	if desktopscreenshot.NumActiveDisplays() <= 0 {
+		return image.Rectangle{}, false
+	}
+	rect := desktopscreenshot.GetDisplayBounds(0)
+	return rect, !rect.Empty()
+}
+
+func (s *RecordingFreedomService) firstWindowScreenshotRect() (image.Rectangle, bool) {
+	if s == nil || s.devices == nil {
+		return image.Rectangle{}, false
+	}
+	for _, source := range s.devices.ListSources() {
+		if source.Type != devices.SourceWindow || source.Width <= 0 || source.Height <= 0 {
+			continue
+		}
+		rect := image.Rect(source.X, source.Y, source.X+source.Width, source.Y+source.Height)
+		if !rect.Empty() {
+			return rect, true
+		}
+	}
+	return image.Rectangle{}, false
 }
 
 func (s *RecordingFreedomService) captureScreenshot(rect image.Rectangle, mode string, region *RegionRect) (ScreenshotItem, error) {

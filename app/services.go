@@ -755,6 +755,7 @@ func (s *RecordingFreedomService) SaveSettings(next settings.Settings) (settings
 		next.Camera = currentSettings.Camera
 		next.Whiteboard = currentSettings.Whiteboard
 		next.Window.Theme = currentSettings.Window.Theme
+		next.Window.StartAtLogin = currentSettings.Window.StartAtLogin
 		next.Shortcuts = currentSettings.Shortcuts
 	}
 	next.Storage.DataRootDir = info.RootDir

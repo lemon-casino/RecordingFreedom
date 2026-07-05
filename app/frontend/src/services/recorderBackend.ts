@@ -19,9 +19,12 @@ import {
   type PIPPreviewImageResult as BoundPIPPreviewImageResult,
   type PIPOverlayRequest as BoundPIPOverlayRequest,
   type PIPOverlayState as BoundPIPOverlayState,
+  type RegionAssistRequest as BoundRegionAssistRequest,
+  type RegionAssistResult as BoundRegionAssistResult,
   type RegionSelectionRequest as BoundRegionSelectionRequest,
   type RegionSelectionResult as BoundRegionSelectionResult,
   type RegionSelectionSession as BoundRegionSelectionSession,
+  type RegionSmartCandidate as BoundRegionSmartCandidate,
   type ScreenIndicatorRequest as BoundScreenIndicatorRequest,
   type ScreenIndicatorResult as BoundScreenIndicatorResult,
   type ScreenshotCaptureRequest as BoundScreenshotCaptureRequest,
@@ -40,6 +43,8 @@ import {
   type WhiteboardSceneRequest as BoundWhiteboardSceneRequest,
   type WhiteboardSceneResult as BoundWhiteboardSceneResult,
   type WhiteboardSettingsPatchRequest as BoundWhiteboardSettingsPatchRequest,
+  type WhiteboardSnapshotRequest as BoundWhiteboardSnapshotRequest,
+  type WhiteboardSnapshotResult as BoundWhiteboardSnapshotResult,
 } from '../../bindings/github.com/lemon-casino/RecordingFreedom/app/models'
 import {
   type Capabilities as BoundCaptureCapabilities,
@@ -159,6 +164,7 @@ export type SettingsPreferencesPatch = {
   recordingFps?: number
   captureCursor?: boolean
   countdownSeconds?: number
+  startAtLogin?: boolean
 }
 
 export type ShortcutSettingsPatch = Partial<ShortcutSettings>
@@ -402,6 +408,15 @@ export async function logClientEvent(component: string, event: string, fields: R
 
 export type RegionSelectionPurpose = 'capture' | 'annotation' | 'screenshot' | 'scrolling-screenshot'
 
+export type RegionSmartCandidate = {
+  id: string
+  kind: 'screen' | 'window' | 'edge' | string
+  label?: string
+  bounds: {x: number; y: number; width: number; height: number}
+  sourceId?: string
+  score?: number
+}
+
 export type RegionSelectionSession = {
   id: string
   bounds: {x: number; y: number; width: number; height: number}
@@ -410,6 +425,21 @@ export type RegionSelectionSession = {
   minimumHeight: number
   displayCount: number
   purpose?: RegionSelectionPurpose
+  candidates?: RegionSmartCandidate[]
+}
+
+export type RegionAssistRequest = {
+  sessionId?: string
+  purpose?: RegionSelectionPurpose
+  pointerX?: number
+  pointerY?: number
+  selection?: RegionSelectionSession['bounds']
+  candidates?: RegionSmartCandidate[]
+}
+
+export type RegionAssistResult = {
+  candidates: RegionSmartCandidate[]
+  best?: RegionSmartCandidate
 }
 
 export type RegionSelectionResult = {
@@ -1722,6 +1752,47 @@ export async function saveWhiteboardScene(sceneJson: string): Promise<Whiteboard
   }
 }
 
+export async function saveWhiteboardSnapshot(request: {sceneJson: string; snapshotDataUrl: string}): Promise<{scene: WhiteboardScene; item: ScreenshotItem}> {
+  if (!isWailsDesktopRuntime()) {
+    window.localStorage?.setItem(browserWhiteboardSceneKey, request.sceneJson)
+    const item = createBrowserScreenshotItem('whiteboard')
+    saveBrowserScreenshotHistory([item, ...loadBrowserScreenshotHistory()])
+    window.dispatchEvent(new CustomEvent(browserScreenshotCapturedEvent, {detail: item}))
+    return {
+      scene: {
+        available: true,
+        scenePath: 'browser-preview/data/whiteboards/board-current.excalidraw',
+        sceneJson: request.sceneJson,
+        bytes: request.sceneJson.length,
+        updatedAt: new Date().toISOString(),
+        contentType: 'application/vnd.excalidraw+json',
+      },
+      item,
+    }
+  }
+  try {
+    return fromBoundWhiteboardSnapshot(await RecordingFreedomService.SaveWhiteboardSnapshot(request as BoundWhiteboardSnapshotRequest))
+  } catch (error) {
+    if (isWailsDesktopRuntime()) throw error
+    console.info('Using browser whiteboard snapshot save fallback:', error)
+    window.localStorage?.setItem(browserWhiteboardSceneKey, request.sceneJson)
+    const item = createBrowserScreenshotItem('whiteboard')
+    saveBrowserScreenshotHistory([item, ...loadBrowserScreenshotHistory()])
+    window.dispatchEvent(new CustomEvent(browserScreenshotCapturedEvent, {detail: item}))
+    return {
+      scene: {
+        available: true,
+        scenePath: 'browser-preview/data/whiteboards/board-current.excalidraw',
+        sceneJson: request.sceneJson,
+        bytes: request.sceneJson.length,
+        updatedAt: new Date().toISOString(),
+        contentType: 'application/vnd.excalidraw+json',
+      },
+      item,
+    }
+  }
+}
+
 export async function saveWhiteboardExport(request: {format: 'png' | 'svg' | 'excalidraw'; dataUrl?: string; payload?: string}): Promise<WhiteboardExport> {
   try {
     return fromBoundWhiteboardExport(await RecordingFreedomService.SaveWhiteboardExport(request as BoundWhiteboardExportRequest))
@@ -1990,6 +2061,16 @@ export async function completeRegionSelection(request: RegionSelectionSession['b
   }
 }
 
+export async function assistRegionSelection(request: RegionAssistRequest): Promise<RegionAssistResult> {
+  try {
+    return fromBoundRegionAssistResult(await RecordingFreedomService.AssistRegionSelection(toBoundRegionAssistRequest(request)))
+  } catch (error) {
+    if (isWailsDesktopRuntime()) throw error
+    console.info('Using browser region assist fallback:', error)
+    return browserRegionAssist(request)
+  }
+}
+
 export async function cancelRegionSelector(): Promise<RegionSelectionResult> {
   try {
     return fromBoundRegionSelectionResult(await RecordingFreedomService.CancelRegionSelection())
@@ -2159,6 +2240,7 @@ export async function saveSettings(settings: AppSettings): Promise<AppSettings> 
       window: {
         ...settings.window,
         theme: current.window.theme,
+        startAtLogin: current.window.startAtLogin,
       },
       updatedAt: new Date().toISOString(),
     }
@@ -2447,6 +2529,25 @@ function fromBoundRegionSelectionSession(session: BoundRegionSelectionSession): 
     minimumHeight: session.minimumHeight,
     displayCount: session.displayCount,
     purpose: session.purpose === 'annotation' || session.purpose === 'screenshot' || session.purpose === 'scrolling-screenshot' ? session.purpose : 'capture',
+    candidates: (session.candidates ?? []).map(fromBoundRegionSmartCandidate),
+  }
+}
+
+function fromBoundRegionSmartCandidate(candidate: BoundRegionSmartCandidate): RegionSmartCandidate {
+  return {
+    id: candidate.id,
+    kind: candidate.kind,
+    label: candidate.label,
+    bounds: fromBoundRegionRect(candidate.bounds),
+    sourceId: candidate.sourceId,
+    score: candidate.score,
+  }
+}
+
+function fromBoundRegionAssistResult(result: BoundRegionAssistResult): RegionAssistResult {
+  return {
+    candidates: (result.candidates ?? []).map(fromBoundRegionSmartCandidate),
+    best: result.best ? fromBoundRegionSmartCandidate(result.best) : undefined,
   }
 }
 
@@ -2533,6 +2634,13 @@ function fromBoundWhiteboardExport(result: BoundWhiteboardExportResult): Whitebo
 
 function fromBoundScreenshotCaptureResult(result: BoundScreenshotCaptureResult): {item: ScreenshotItem} {
   return {
+    item: fromBoundScreenshotItem(result.item),
+  }
+}
+
+function fromBoundWhiteboardSnapshot(result: BoundWhiteboardSnapshotResult): {scene: WhiteboardScene; item: ScreenshotItem} {
+  return {
+    scene: fromBoundWhiteboardScene(result.scene),
     item: fromBoundScreenshotItem(result.item),
   }
 }
@@ -2766,6 +2874,7 @@ function toBoundSettingsPreferencesPatch(patch: SettingsPreferencesPatch): Bound
     recordingFps: patch.recordingFps,
     captureCursor: patch.captureCursor,
     countdownSeconds: patch.countdownSeconds,
+    startAtLogin: patch.startAtLogin,
   }
 }
 
@@ -2782,6 +2891,7 @@ function applyBrowserSettingsPreferencesPatch(settings: AppSettings, patch: Sett
     window: {
       ...settings.window,
       theme: patch.theme ?? settings.window.theme,
+      startAtLogin: patch.startAtLogin ?? settings.window.startAtLogin,
     },
     updatedAt: new Date().toISOString(),
   }
@@ -2898,6 +3008,7 @@ function fromBoundSettings(settings: BoundSettings): AppSettings {
     window: {
       minimizeToTray: settings.window.minimizeToTray,
       theme: normalizeTheme(settings.window.theme),
+      startAtLogin: Boolean((settings.window as BoundSettings['window'] & {startAtLogin?: boolean}).startAtLogin),
     },
     updatedAt: typeof settings.updatedAt === 'string' ? settings.updatedAt : undefined,
   }
@@ -2939,6 +3050,7 @@ function toBoundSettings(settings: AppSettings): BoundSettings {
     window: {
       minimizeToTray: settings.window.minimizeToTray,
       theme: settings.window.theme as BoundSettings['window']['theme'],
+      startAtLogin: settings.window.startAtLogin,
     },
     updatedAt: settings.updatedAt ?? new Date(0).toISOString(),
   }
@@ -3008,6 +3120,57 @@ function browserScreenshotDataUrl(item: ScreenshotItem | undefined | null): stri
   return `data:image/svg+xml;base64,${window.btoa(unescape(encodeURIComponent(svg)))}`
 }
 
+function browserRegionAssist(request: RegionAssistRequest): RegionAssistResult {
+  const candidates = request.candidates ?? []
+  let best: RegionSmartCandidate | undefined
+  let bestScore = -1
+  if (request.selection) {
+    for (const candidate of candidates) {
+      const score = browserCandidateSelectionScore(candidate.bounds, request.selection)
+      if (score > bestScore) {
+        best = {...candidate, score}
+        bestScore = score
+      }
+    }
+    if (bestScore < 0.5) best = undefined
+  } else {
+    const point = {x: request.pointerX ?? -1, y: request.pointerY ?? -1}
+    for (const candidate of candidates) {
+      if (!browserRectContainsPoint(candidate.bounds, point)) continue
+      const area = Math.max(1, candidate.bounds.width * candidate.bounds.height)
+      const score = (candidate.score ?? 0) + 1000000 / area
+      if (score > bestScore) {
+        best = {...candidate, score}
+        bestScore = score
+      }
+    }
+  }
+  return {candidates, best}
+}
+
+function browserCandidateSelectionScore(candidate: RegionSelectionSession['bounds'], selection: RegionSelectionSession['bounds']) {
+  const left = Math.max(candidate.x, selection.x)
+  const top = Math.max(candidate.y, selection.y)
+  const right = Math.min(candidate.x + candidate.width, selection.x + selection.width)
+  const bottom = Math.min(candidate.y + candidate.height, selection.y + selection.height)
+  if (right <= left || bottom <= top) return -1
+  const intersection = (right - left) * (bottom - top)
+  const candidateArea = Math.max(1, candidate.width * candidate.height)
+  const selectionArea = Math.max(1, selection.width * selection.height)
+  const overlap = intersection / Math.min(candidateArea, selectionArea)
+  const edgeDistance = Math.abs(candidate.x - selection.x) +
+    Math.abs(candidate.y - selection.y) +
+    Math.abs(candidate.x + candidate.width - selection.x - selection.width) +
+    Math.abs(candidate.y + candidate.height - selection.y - selection.height)
+  const closeEdges = Math.max(0, 1 - edgeDistance / 280)
+  const areaRatio = Math.min(candidateArea, selectionArea) / Math.max(candidateArea, selectionArea)
+  return overlap * 0.54 + closeEdges * 0.34 + areaRatio * 0.12
+}
+
+function browserRectContainsPoint(rect: RegionSelectionSession['bounds'], point: {x: number; y: number}) {
+  return point.x >= rect.x && point.x <= rect.x + rect.width && point.y >= rect.y && point.y <= rect.y + rect.height
+}
+
 function fromBrowserScreenshotPinState(value: unknown): ScreenshotPinState {
   const record = value && typeof value === 'object' ? value as Partial<ScreenshotPinState> : {}
   const item = fromBrowserScreenshotItem(record.item)
@@ -3060,7 +3223,7 @@ function loadBrowserSettings(): AppSettings {
       pip: fromBoundPipConfig(next.camera.pip, next.camera.pipPreset),
     }
     camera.pipPreset = camera.pip.preset
-    return {...next, camera, locale: normalizeLocale(next.locale), shortcuts: normalizeShortcutSettings(next.shortcuts), window: {...next.window, theme: normalizeTheme(next.window.theme)}}
+    return {...next, camera, locale: normalizeLocale(next.locale), shortcuts: normalizeShortcutSettings(next.shortcuts), window: {...next.window, theme: normalizeTheme(next.window.theme), startAtLogin: Boolean(next.window.startAtLogin)}}
   } catch {
     return defaultSettings
   }
@@ -3196,6 +3359,16 @@ function toBoundRegionSelectionRequest(request: RegionSelectionSession['bounds']
     y: Math.round(request.y),
     width: Math.round(request.width),
     height: Math.round(request.height),
+  }
+}
+
+function toBoundRegionAssistRequest(request: RegionAssistRequest): BoundRegionAssistRequest {
+  return {
+    sessionId: request.sessionId,
+    purpose: request.purpose,
+    pointerX: Math.round(request.pointerX ?? 0),
+    pointerY: Math.round(request.pointerY ?? 0),
+    selection: request.selection ? toBoundRegionSelectionRequest(request.selection) : undefined,
   }
 }
 

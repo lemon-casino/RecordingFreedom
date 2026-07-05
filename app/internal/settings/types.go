@@ -104,4 +104,5 @@ type ShortcutBinding struct {
 type WindowSettings struct {
 	MinimizeToTray bool  `json:"minimizeToTray"`
 	Theme          Theme `json:"theme"`
+	StartAtLogin   bool  `json:"startAtLogin"`
 }
