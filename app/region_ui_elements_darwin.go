@@ -377,7 +377,7 @@ func collectRegionAXElementRects(point image.Point, currentPID int) ([]regionAXE
 		return nil, nil
 	}
 	var element C.AXUIElementRef
-	if C.rf_ax_element_at_position(C.double(point.X), C.double(point.Y), &element) == 0 || element == nil {
+	if C.rf_ax_element_at_position(C.double(point.X), C.double(point.Y), &element) == 0 || darwinAXElementIsZero(element) {
 		return nil, nil
 	}
 	defer C.CFRelease(C.CFTypeRef(element))
@@ -393,21 +393,21 @@ func collectRegionAXElementRects(point image.Point, currentPID int) ([]regionAXE
 	}
 
 	current := element
-	for depth := 0; current != nil && depth < darwinMaxAXAncestorDepth; depth++ {
+	for depth := 0; !darwinAXElementIsZero(current) && depth < darwinMaxAXAncestorDepth; depth++ {
 		source := "accessibility:child"
 		if depth == 0 {
 			source = "accessibility:point"
 		}
 		appendInfo(current, source)
 		child := C.rf_ax_copy_best_child_at_position(current, C.double(point.X), C.double(point.Y))
-		if child == nil {
+		if darwinAXElementIsZero(child) {
 			break
 		}
 		heldChildren = append(heldChildren, child)
 		current = child
 	}
 	parent := C.rf_ax_copy_parent(current)
-	for depth := 0; parent != nil && depth < darwinMaxAXAncestorDepth; depth++ {
+	for depth := 0; !darwinAXElementIsZero(parent) && depth < darwinMaxAXAncestorDepth; depth++ {
 		appendInfo(parent, "accessibility:ancestor")
 		next := C.rf_ax_copy_parent(parent)
 		C.CFRelease(C.CFTypeRef(parent))
@@ -418,6 +418,10 @@ func collectRegionAXElementRects(point image.Point, currentPID int) ([]regionAXE
 	}
 	rects = normalizeRegionAXElementRects(rects, point)
 	return rects, nil
+}
+
+func darwinAXElementIsZero(element C.AXUIElementRef) bool {
+	return element == C.AXUIElementRef(0)
 }
 
 func collectRegionDarwinWindowRects(currentPID int) []regionDarwinWindowRect {
