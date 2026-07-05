@@ -193,7 +193,7 @@ test('region screenshot reuses the annotation overlay before saving', async ({pa
   await expect.poll(async () => page.evaluate((key) => JSON.parse(window.localStorage.getItem(key) || '[]').length, browserScreenshotHistoryKey)).toBe(0)
 })
 
-test('region screenshot recognizes hover candidates and selects them by click', async ({page}) => {
+test('region screenshot recognizes element hover candidates and cycles parent levels', async ({page}) => {
   await page.addInitScript(({settingsKey, settings}) => {
     window.localStorage.setItem(settingsKey, JSON.stringify(settings))
     ;(window as Window & {__RF_REGION_SESSION__?: unknown}).__RF_REGION_SESSION__ = {
@@ -204,21 +204,74 @@ test('region screenshot recognizes hover candidates and selects them by click', 
       minimumHeight: 64,
       displayCount: 1,
       purpose: 'screenshot',
-      candidates: [{
-        id: 'window:test-browser',
-        kind: 'window',
-        label: 'Browser content',
-        bounds: {x: 180, y: 110, width: 280, height: 180},
-        sourceId: 'window:test-browser',
-        score: 0.9,
-      }],
+      candidates: [
+        {
+          id: 'screen:test-primary',
+          kind: 'screen',
+          label: 'Screen',
+          bounds: {x: 0, y: 0, width: 900, height: 620},
+          score: 0.99,
+        },
+        {
+          id: 'window:test-app',
+          kind: 'window',
+          label: 'App window',
+          bounds: {x: 120, y: 80, width: 680, height: 470},
+          score: 0.98,
+        },
+        {
+          id: 'element:test-sidebar-item',
+          kind: 'element',
+          label: 'Sidebar item',
+          bounds: {x: 210, y: 140, width: 130, height: 84},
+          score: 0.95,
+        },
+        {
+          id: 'element:test-sidebar-pane',
+          kind: 'element',
+          label: 'Sidebar pane',
+          bounds: {x: 180, y: 110, width: 280, height: 360},
+          score: 0.9,
+        },
+        {
+          id: 'edge:test-sidebar-panel',
+          kind: 'edge',
+          label: 'Smart panel',
+          bounds: {x: 170, y: 100, width: 310, height: 390},
+          score: 0.86,
+        },
+      ],
     }
   }, {settingsKey: browserSettingsKey, settings: baseBrowserSettings('en', false, false)})
   await page.goto('/#/region-overlay')
 
   await page.mouse.move(260, 180)
-  await expect(page.locator('.region-smart-candidate.window')).toBeVisible()
-  await expect(page.locator('.region-smart-candidate.window')).toContainText('Browser content')
+  await expect(page.locator('.region-smart-candidate.element')).toBeVisible()
+  await expect(page.locator('.region-smart-candidate.element')).toContainText('Sidebar item')
+  await expect.poll(async () => page.evaluate(() => (
+    (window as Window & {__RF_LAST_REGION_ASSIST__?: {source?: string; best?: {id?: string}}}).__RF_LAST_REGION_ASSIST__
+  ))).toMatchObject({
+    source: 'element',
+    best: {id: 'element:test-sidebar-item'},
+  })
+
+  await page.mouse.wheel(0, -120)
+  await expect(page.locator('.region-smart-candidate.element')).toContainText('Sidebar pane')
+  await expect.poll(async () => page.evaluate(() => (
+    (window as Window & {__RF_LAST_REGION_ASSIST__?: {source?: string; best?: {id?: string}}}).__RF_LAST_REGION_ASSIST__
+  ))).toMatchObject({
+    source: 'element',
+    best: {id: 'element:test-sidebar-pane'},
+  })
+
+  await page.mouse.wheel(0, -120)
+  await expect(page.locator('.region-smart-candidate.edge')).toContainText('Smart panel')
+  await expect.poll(async () => page.evaluate(() => (
+    (window as Window & {__RF_LAST_REGION_ASSIST__?: {source?: string; best?: {id?: string}}}).__RF_LAST_REGION_ASSIST__
+  ))).toMatchObject({
+    source: 'image-hover',
+    best: {id: 'edge:test-sidebar-panel'},
+  })
 
   await page.mouse.click(260, 180)
 
@@ -234,8 +287,586 @@ test('region screenshot recognizes hover candidates and selects them by click', 
   })).toEqual({
     mode: 'screenshot',
     targetType: 'screenshot-region',
-    geometry: {x: 180, y: 110, width: 280, height: 180},
+    geometry: {x: 170, y: 100, width: 310, height: 390},
   })
+})
+
+test('region overlay recognizes the initial pointer before the first mouse move', async ({page}) => {
+  await page.addInitScript(({settingsKey, settings}) => {
+    window.localStorage.setItem(settingsKey, JSON.stringify(settings))
+    ;(window as Window & {__RF_REGION_SESSION__?: unknown}).__RF_REGION_SESSION__ = {
+      id: 'region-initial-pointer-test',
+      bounds: {x: 0, y: 0, width: 900, height: 620},
+      captureBounds: {x: 0, y: 0, width: 900, height: 620},
+      minimumWidth: 64,
+      minimumHeight: 64,
+      displayCount: 1,
+      purpose: 'capture',
+      initialPointer: {x: 260, y: 180},
+      candidates: [{
+        id: 'element:initial-pointer',
+        kind: 'element',
+        label: 'Initial pointer target',
+        bounds: {x: 210, y: 140, width: 180, height: 120},
+        score: 0.95,
+      }],
+    }
+  }, {settingsKey: browserSettingsKey, settings: baseBrowserSettings('en', false, false)})
+  await page.goto('/#/region-overlay')
+
+  await expect(page.locator('.region-smart-candidate.element')).toContainText('Initial pointer target')
+  await expect(page.locator('.region-crosshair')).toHaveCount(0)
+  await expect.poll(async () => page.evaluate(() => (
+    (window as Window & {__RF_LAST_REGION_ASSIST__?: {source?: string; best?: {id?: string}}}).__RF_LAST_REGION_ASSIST__
+  ))).toMatchObject({
+    source: 'element',
+    best: {id: 'element:initial-pointer'},
+  })
+})
+
+test('region overlay does not keep an element candidate on its right or bottom edge', async ({page}) => {
+  await page.addInitScript(({settingsKey, settings}) => {
+    window.localStorage.setItem(settingsKey, JSON.stringify(settings))
+    ;(window as Window & {__RF_REGION_SESSION__?: unknown}).__RF_REGION_SESSION__ = {
+      id: 'region-half-open-edge-test',
+      bounds: {x: 0, y: 0, width: 900, height: 620},
+      captureBounds: {x: 0, y: 0, width: 900, height: 620},
+      minimumWidth: 64,
+      minimumHeight: 64,
+      displayCount: 1,
+      purpose: 'capture',
+      candidates: [{
+        id: 'element:half-open',
+        kind: 'element',
+        label: 'Half-open target',
+        bounds: {x: 210, y: 140, width: 180, height: 120},
+        score: 0.95,
+      }],
+    }
+  }, {settingsKey: browserSettingsKey, settings: baseBrowserSettings('en', false, false)})
+  await page.goto('/#/region-overlay')
+
+  await page.mouse.move(389, 259)
+  await expect(page.locator('.region-smart-candidate.element')).toContainText('Half-open target')
+
+  await page.mouse.move(390, 259)
+  await expect(page.locator('.region-smart-candidate.element')).toHaveCount(0)
+  await expect.poll(async () => page.evaluate(() => (
+    (window as Window & {__RF_LAST_REGION_ASSIST__?: {best?: unknown}}).__RF_LAST_REGION_ASSIST__?.best ?? null
+  ))).toBeNull()
+
+  await page.mouse.move(389, 260)
+  await expect(page.locator('.region-smart-candidate.element')).toHaveCount(0)
+})
+
+test('region overlay keeps auto recognition during small pointer jitter', async ({page}) => {
+  await page.addInitScript(({settingsKey, settings}) => {
+    window.localStorage.setItem(settingsKey, JSON.stringify(settings))
+    ;(window as Window & {__RF_REGION_SESSION__?: unknown}).__RF_REGION_SESSION__ = {
+      id: 'region-auto-jitter-test',
+      bounds: {x: 0, y: 0, width: 900, height: 620},
+      captureBounds: {x: 0, y: 0, width: 900, height: 620},
+      minimumWidth: 64,
+      minimumHeight: 64,
+      displayCount: 1,
+      purpose: 'capture',
+      candidates: [{
+        id: 'element:auto-jitter',
+        kind: 'element',
+        label: 'Auto jitter target',
+        bounds: {x: 210, y: 140, width: 180, height: 120},
+        score: 0.95,
+      }],
+    }
+  }, {settingsKey: browserSettingsKey, settings: baseBrowserSettings('en', false, false)})
+  await page.goto('/#/region-overlay')
+
+  await page.mouse.move(250, 180)
+  await expect(page.locator('.region-smart-candidate.element')).toContainText('Auto jitter target')
+  await page.mouse.down({button: 'left'})
+  await page.mouse.move(254, 183)
+  await expect(page.locator('.region-selection-rect')).toHaveCount(0)
+  await expect(page.locator('.region-smart-candidate.element')).toContainText('Auto jitter target')
+  await page.mouse.up({button: 'left'})
+  await expect.poll(async () => page.evaluate(() => (
+    (window as Window & {__RF_LAST_REGION_SELECTION__?: {geometry?: {x: number; y: number; width: number; height: number}}}).__RF_LAST_REGION_SELECTION__?.geometry
+  ))).toEqual({x: 210, y: 140, width: 180, height: 120})
+})
+
+test('region overlay falls back to the topmost window candidate when no element is available', async ({page}) => {
+  await page.addInitScript(({settingsKey, settings}) => {
+    window.localStorage.setItem(settingsKey, JSON.stringify(settings))
+    ;(window as Window & {__RF_REGION_SESSION__?: unknown}).__RF_REGION_SESSION__ = {
+      id: 'region-window-fallback-test',
+      bounds: {x: 0, y: 0, width: 900, height: 620},
+      captureBounds: {x: 0, y: 0, width: 900, height: 620},
+      minimumWidth: 64,
+      minimumHeight: 64,
+      displayCount: 1,
+      purpose: 'capture',
+      candidates: [
+        {
+          id: 'window:front',
+          kind: 'window',
+          label: 'Front window',
+          bounds: {x: 180, y: 120, width: 340, height: 240},
+          score: 0.82,
+        },
+        {
+          id: 'window:back',
+          kind: 'window',
+          label: 'Back window',
+          bounds: {x: 140, y: 90, width: 460, height: 330},
+          score: 0.72,
+        },
+      ],
+    }
+  }, {settingsKey: browserSettingsKey, settings: baseBrowserSettings('en', false, false)})
+  await page.goto('/#/region-overlay')
+
+  await page.mouse.move(240, 180)
+  await expect(page.locator('.region-smart-candidate.window')).toContainText('Front window')
+  await expect(page.locator('.region-crosshair')).toHaveCount(0)
+  await expect.poll(async () => page.evaluate(() => (
+    (window as Window & {__RF_LAST_REGION_ASSIST__?: {source?: string; best?: {id?: string}}}).__RF_LAST_REGION_ASSIST__
+  ))).toMatchObject({
+    source: 'static',
+    best: {id: 'window:front'},
+  })
+
+  await page.mouse.click(240, 180)
+  await expect.poll(async () => page.evaluate(() => (
+    (window as Window & {__RF_LAST_REGION_SELECTION__?: {geometry?: {x: number; y: number; width: number; height: number}}}).__RF_LAST_REGION_SELECTION__?.geometry ?? null
+  ))).toEqual({x: 180, y: 120, width: 340, height: 240})
+})
+
+test('region smart candidate keeps its center transparent and dims only outside the target', async ({page}) => {
+  await page.addInitScript(({settingsKey, settings}) => {
+    window.localStorage.setItem(settingsKey, JSON.stringify(settings))
+    ;(window as Window & {__RF_REGION_SESSION__?: unknown}).__RF_REGION_SESSION__ = {
+      id: 'region-candidate-visual-test',
+      bounds: {x: 0, y: 0, width: 900, height: 620},
+      captureBounds: {x: 0, y: 0, width: 900, height: 620},
+      minimumWidth: 64,
+      minimumHeight: 64,
+      displayCount: 1,
+      purpose: 'capture',
+      candidates: [{
+        id: 'element:visual-target',
+        kind: 'element',
+        label: 'Visual target',
+        bounds: {x: 210, y: 140, width: 180, height: 120},
+        score: 0.95,
+      }],
+    }
+  }, {settingsKey: browserSettingsKey, settings: baseBrowserSettings('en', false, false)})
+  await page.goto('/#/region-overlay')
+
+  await page.mouse.move(260, 180)
+  const candidate = page.locator('.region-smart-candidate.element')
+  await expect(candidate).toContainText('Visual target')
+  await expect(page.locator('.region-crosshair')).toHaveCount(0)
+  await expect(candidate).toHaveCSS('background-color', 'rgba(0, 0, 0, 0)')
+  await expect.poll(async () => candidate.evaluate((element) => getComputedStyle(element).boxShadow)).toContain('9999px')
+  await expect.poll(async () => candidate.evaluate((element) => {
+    const box = element.getBoundingClientRect()
+    return {
+      left: Math.round(box.left),
+      top: Math.round(box.top),
+      width: Math.round(box.width),
+      height: Math.round(box.height),
+    }
+  })).toEqual({left: 210, top: 140, width: 180, height: 120})
+})
+
+test('region overlay right click returns from manual selection to auto detection, then cancels', async ({page}) => {
+  await page.addInitScript(({settingsKey, settings}) => {
+    window.localStorage.setItem(settingsKey, JSON.stringify(settings))
+    ;(window as Window & {__RF_REGION_SESSION__?: unknown}).__RF_REGION_SESSION__ = {
+      id: 'region-right-click-test',
+      bounds: {x: 0, y: 0, width: 900, height: 620},
+      captureBounds: {x: 0, y: 0, width: 900, height: 620},
+      minimumWidth: 64,
+      minimumHeight: 64,
+      displayCount: 1,
+      purpose: 'capture',
+      candidates: [{
+        id: 'element:test-auto',
+        kind: 'element',
+        label: 'Auto target',
+        bounds: {x: 210, y: 140, width: 180, height: 120},
+        score: 0.95,
+      }],
+    }
+  }, {settingsKey: browserSettingsKey, settings: baseBrowserSettings('en', false, false)})
+  await page.goto('/#/region-overlay')
+
+  await page.mouse.move(260, 180)
+  await expect(page.locator('.region-smart-candidate.element')).toContainText('Auto target')
+  await expect.poll(async () => page.evaluate(() => (
+    (window as Window & {__RF_LAST_REGION_ASSIST__?: {source?: string}}).__RF_LAST_REGION_ASSIST__?.source
+  ))).toBe('element')
+
+  await page.mouse.move(120, 120)
+  await page.mouse.down()
+  await page.mouse.move(420, 300)
+  await expect(page.locator('.region-selection-rect')).toBeVisible()
+  await page.locator('.region-overlay-shell').dispatchEvent('contextmenu', {
+    clientX: 260,
+    clientY: 180,
+    button: 2,
+    bubbles: true,
+    cancelable: true,
+  })
+
+  await expect(page.locator('.region-selection-rect')).toHaveCount(0)
+  await page.mouse.up()
+  await page.mouse.move(260, 180)
+  await expect(page.locator('.region-smart-candidate.element')).toContainText('Auto target')
+
+  await page.locator('.region-overlay-shell').dispatchEvent('contextmenu', {
+    clientX: 260,
+    clientY: 180,
+    button: 2,
+    bubbles: true,
+    cancelable: true,
+  })
+  await expect.poll(async () => page.evaluate(() => (
+    (window as Window & {__RF_LAST_REGION_CANCEL__?: {cancelled?: boolean}}).__RF_LAST_REGION_CANCEL__?.cancelled === true
+  ))).toBe(true)
+})
+
+test('region overlay native right pointer cancels an active manual drag before the left button is released', async ({page}) => {
+  await page.addInitScript(({settingsKey, settings}) => {
+    window.localStorage.setItem(settingsKey, JSON.stringify(settings))
+    ;(window as Window & {__RF_REGION_SESSION__?: unknown}).__RF_REGION_SESSION__ = {
+      id: 'region-right-pointer-drag-test',
+      bounds: {x: 0, y: 0, width: 900, height: 620},
+      captureBounds: {x: 0, y: 0, width: 900, height: 620},
+      minimumWidth: 64,
+      minimumHeight: 64,
+      displayCount: 1,
+      purpose: 'capture',
+      candidates: [{
+        id: 'element:right-pointer-auto',
+        kind: 'element',
+        label: 'Right pointer target',
+        bounds: {x: 210, y: 140, width: 180, height: 120},
+        score: 0.95,
+      }],
+    }
+  }, {settingsKey: browserSettingsKey, settings: baseBrowserSettings('en', false, false)})
+  await page.goto('/#/region-overlay')
+
+  await page.mouse.move(120, 120)
+  await page.mouse.down({button: 'left'})
+  await page.mouse.move(420, 300)
+  await expect(page.locator('.region-selection-rect')).toBeVisible()
+
+  await page.mouse.move(260, 180)
+  await page.mouse.down({button: 'right'})
+  await expect(page.locator('.region-selection-rect')).toHaveCount(0)
+  await expect(page.locator('.region-smart-candidate.element')).toContainText('Right pointer target')
+  await page.mouse.up({button: 'right'})
+  await page.mouse.up({button: 'left'})
+
+  await page.mouse.click(260, 180, {button: 'right'})
+  await expect.poll(async () => page.evaluate(() => (
+    (window as Window & {__RF_LAST_REGION_CANCEL__?: {cancelled?: boolean}}).__RF_LAST_REGION_CANCEL__?.cancelled === true
+  ))).toBe(true)
+})
+
+test('region overlay right click returns from selected edit frame to auto detection before cancelling', async ({page}) => {
+  await page.addInitScript(({settingsKey, settings}) => {
+    window.localStorage.setItem(settingsKey, JSON.stringify(settings))
+    const session = {
+      id: 'region-edit-right-click-test',
+      bounds: {x: 0, y: 0, width: 900, height: 620},
+      captureBounds: {x: 0, y: 0, width: 900, height: 620},
+      minimumWidth: 64,
+      minimumHeight: 64,
+      displayCount: 1,
+      purpose: 'capture',
+      candidates: [{
+        id: 'element:edit-auto',
+        kind: 'element',
+        label: 'Edit auto target',
+        bounds: {x: 210, y: 140, width: 180, height: 120},
+        score: 0.95,
+      }],
+    }
+    ;(window as Window & {__RF_REGION_SESSION__?: unknown}).__RF_REGION_SESSION__ = session
+    ;(window as Window & {__RF_REGION_FRAME__?: unknown}).__RF_REGION_FRAME__ = {
+      bounds: {x: 180, y: 110, width: 280, height: 220},
+      overlayBounds: {x: 0, y: 0, width: 900, height: 620},
+      mode: 'edit',
+      purpose: 'capture',
+    }
+  }, {settingsKey: browserSettingsKey, settings: baseBrowserSettings('en', false, false)})
+  await page.goto('/#/region-overlay')
+
+  await expect(page.locator('.region-edit-rect')).toBeVisible()
+  await page.mouse.click(260, 180, {button: 'right'})
+
+  await expect(page.locator('.region-edit-rect')).toHaveCount(0)
+  await expect(page.locator('.region-smart-candidate.element')).toContainText('Edit auto target')
+  await expect.poll(async () => page.evaluate(() => (
+    (window as Window & {__RF_LAST_REGION_ASSIST__?: {source?: string; best?: {id?: string}}}).__RF_LAST_REGION_ASSIST__
+  ))).toMatchObject({
+    source: 'element',
+    best: {id: 'element:edit-auto'},
+  })
+
+  await page.locator('.region-overlay-shell').dispatchEvent('contextmenu', {
+    clientX: 260,
+    clientY: 180,
+    button: 2,
+    bubbles: true,
+    cancelable: true,
+  })
+  await expect.poll(async () => page.evaluate(() => (
+    (window as Window & {__RF_LAST_REGION_CANCEL__?: {cancelled?: boolean}}).__RF_LAST_REGION_CANCEL__?.cancelled === true
+  ))).toBe(true)
+})
+
+test('region overlay uses the same selected-edit right click rule for every selector purpose', async ({page}) => {
+  await page.addInitScript(({settingsKey, settings}) => {
+    window.localStorage.setItem(settingsKey, JSON.stringify(settings))
+  }, {settingsKey: browserSettingsKey, settings: baseBrowserSettings('en', false, false)})
+  await page.goto('/#/region-overlay')
+
+  for (const purpose of ['capture', 'screenshot', 'scrolling-screenshot', 'annotation'] as const) {
+    const label = `Edit ${purpose} target`
+    await page.evaluate(({nextPurpose, nextLabel}) => {
+      const session = {
+        id: `region-edit-purpose-${nextPurpose}`,
+        bounds: {x: 0, y: 0, width: 900, height: 620},
+        captureBounds: {x: 0, y: 0, width: 900, height: 620},
+        minimumWidth: nextPurpose === 'screenshot' ? 12 : 64,
+        minimumHeight: nextPurpose === 'screenshot' ? 12 : 64,
+        displayCount: 1,
+        purpose: nextPurpose,
+        candidates: [{
+          id: `element:edit-${nextPurpose}`,
+          kind: 'element',
+          label: nextLabel,
+          bounds: {x: 210, y: 140, width: 180, height: 120},
+          score: 0.95,
+        }],
+      }
+      const frame = {
+        bounds: {x: 180, y: 110, width: 280, height: 220},
+        overlayBounds: {x: 0, y: 0, width: 900, height: 620},
+        mode: 'edit',
+        purpose: nextPurpose,
+      }
+      delete (window as Window & {__RF_LAST_REGION_ASSIST__?: unknown}).__RF_LAST_REGION_ASSIST__
+      delete (window as Window & {__RF_LAST_REGION_CANCEL__?: unknown}).__RF_LAST_REGION_CANCEL__
+      ;(window as Window & {__RF_REGION_SESSION__?: unknown}).__RF_REGION_SESSION__ = session
+      ;(window as Window & {__RF_REGION_FRAME__?: unknown}).__RF_REGION_FRAME__ = frame
+      window.dispatchEvent(new CustomEvent('rf-region-session', {detail: session}))
+      window.dispatchEvent(new CustomEvent('rf-region-frame', {detail: frame}))
+    }, {nextPurpose: purpose, nextLabel: label})
+
+    await expect(page.locator('.region-edit-rect')).toBeVisible()
+    await page.mouse.click(260, 180, {button: 'right'})
+    await expect(page.locator('.region-edit-rect')).toHaveCount(0)
+    await expect(page.locator('.region-smart-candidate.element')).toContainText(label)
+    await expect.poll(async () => page.evaluate(() => {
+      const state = (window as Window & {
+        __RF_REGION_SESSION__?: {purpose?: string}
+        __RF_LAST_REGION_ASSIST__?: {source?: string; best?: {id?: string}}
+      })
+      return {
+        purpose: state.__RF_REGION_SESSION__?.purpose,
+        source: state.__RF_LAST_REGION_ASSIST__?.source,
+        best: state.__RF_LAST_REGION_ASSIST__?.best?.id,
+      }
+    })).toEqual({
+      purpose,
+      source: 'element',
+      best: `element:edit-${purpose}`,
+    })
+
+    await page.mouse.click(260, 180, {button: 'right'})
+    await expect.poll(async () => page.evaluate(() => (
+      (window as Window & {__RF_LAST_REGION_CANCEL__?: {cancelled?: boolean}}).__RF_LAST_REGION_CANCEL__?.cancelled === true
+    ))).toBe(true)
+  }
+})
+
+test('dynamic region recognition is shared by capture screenshot scrolling and annotation selectors', async ({page}) => {
+  await page.addInitScript(({settingsKey, settings}) => {
+    window.localStorage.setItem(settingsKey, JSON.stringify(settings))
+  }, {settingsKey: browserSettingsKey, settings: baseBrowserSettings('en', false, false)})
+  await page.goto('/#/region-overlay')
+
+  for (const purpose of ['capture', 'screenshot', 'scrolling-screenshot', 'annotation'] as const) {
+    await page.evaluate((nextPurpose) => {
+      const session = {
+        id: `region-purpose-${nextPurpose}`,
+        bounds: {x: 0, y: 0, width: 900, height: 620},
+        captureBounds: {x: 0, y: 0, width: 900, height: 620},
+        minimumWidth: 64,
+        minimumHeight: 64,
+        displayCount: 1,
+        purpose: nextPurpose,
+        candidates: [{
+          id: `element:${nextPurpose}`,
+          kind: 'element',
+          label: `Element ${nextPurpose}`,
+          bounds: {x: 200, y: 130, width: 220, height: 150},
+          score: 0.95,
+        }],
+      }
+      ;(window as Window & {__RF_REGION_SESSION__?: unknown}).__RF_REGION_SESSION__ = session
+      window.dispatchEvent(new CustomEvent('rf-region-session', {detail: session}))
+    }, purpose)
+    await page.mouse.move(250, 180)
+    await expect(page.locator('.region-smart-candidate.element')).toContainText(`Element ${purpose}`)
+    await expect.poll(async () => page.evaluate(() => (
+      (window as Window & {__RF_LAST_REGION_ASSIST__?: {source?: string; best?: {id?: string}}}).__RF_LAST_REGION_ASSIST__
+    ))).toMatchObject({
+      source: 'element',
+      best: {id: `element:${purpose}`},
+    })
+    await page.mouse.move(252, 182)
+  }
+})
+
+test('region overlay waits for hover recognition before showing manual crosshair', async ({page}) => {
+  await page.addInitScript(({settingsKey, settings}) => {
+    window.localStorage.setItem(settingsKey, JSON.stringify(settings))
+    ;(window as Window & {__RF_REGION_SESSION__?: unknown}).__RF_REGION_SESSION__ = {
+      id: 'region-hover-pending',
+      bounds: {x: 0, y: 0, width: 900, height: 620},
+      captureBounds: {x: 0, y: 0, width: 900, height: 620},
+      minimumWidth: 64,
+      minimumHeight: 64,
+      displayCount: 1,
+      purpose: 'capture',
+      candidates: [],
+    }
+  }, {settingsKey: browserSettingsKey, settings: baseBrowserSettings('en', false, false)})
+  await page.goto('/#/region-overlay')
+
+  await page.mouse.move(440, 280)
+  await expect(page.locator('.region-crosshair')).toHaveCount(0)
+  await page.waitForTimeout(110)
+  await expect(page.locator('.region-crosshair')).toHaveCount(2)
+})
+
+test('region overlay right click cancels while hover recognition is pending', async ({page}) => {
+  await page.addInitScript(({settingsKey, settings}) => {
+    window.localStorage.setItem(settingsKey, JSON.stringify(settings))
+    ;(window as Window & {__RF_REGION_SESSION__?: unknown}).__RF_REGION_SESSION__ = {
+      id: 'region-pending-right-click',
+      bounds: {x: 0, y: 0, width: 900, height: 620},
+      captureBounds: {x: 0, y: 0, width: 900, height: 620},
+      minimumWidth: 64,
+      minimumHeight: 64,
+      displayCount: 1,
+      purpose: 'capture',
+      candidates: [],
+    }
+  }, {settingsKey: browserSettingsKey, settings: baseBrowserSettings('en', false, false)})
+  await page.goto('/#/region-overlay')
+
+  await page.mouse.move(440, 280)
+  await expect(page.locator('.region-crosshair')).toHaveCount(0)
+  await page.mouse.click(440, 280, {button: 'right'})
+  await expect.poll(async () => page.evaluate(() => (
+    (window as Window & {__RF_LAST_REGION_CANCEL__?: {cancelled?: boolean}}).__RF_LAST_REGION_CANCEL__?.cancelled === true
+  ))).toBe(true)
+  await expect.poll(async () => page.evaluate(() => {
+    const state = window as Window & {
+      __RF_REGION_SESSION__?: unknown
+      __RF_LAST_REGION_ASSIST__?: unknown
+    }
+    return {
+      session: state.__RF_REGION_SESSION__ ?? null,
+      assist: state.__RF_LAST_REGION_ASSIST__ ?? null,
+    }
+  })).toEqual({session: null, assist: null})
+  await page.waitForTimeout(120)
+  await expect(page.locator('.region-crosshair')).toHaveCount(0)
+  await expect(page.locator('.region-smart-candidate')).toHaveCount(0)
+})
+
+test('region overlay drops stale hover candidates when the session changes or pointer leaves', async ({page}) => {
+  await page.addInitScript(({settingsKey, settings}) => {
+    window.localStorage.setItem(settingsKey, JSON.stringify(settings))
+    ;(window as Window & {__RF_REGION_SESSION__?: unknown}).__RF_REGION_SESSION__ = {
+      id: 'region-stale-hover-old',
+      bounds: {x: 0, y: 0, width: 900, height: 620},
+      captureBounds: {x: 0, y: 0, width: 900, height: 620},
+      minimumWidth: 64,
+      minimumHeight: 64,
+      displayCount: 1,
+      purpose: 'capture',
+      candidates: [{
+        id: 'element:old-session',
+        kind: 'element',
+        label: 'Old session',
+        bounds: {x: 210, y: 140, width: 180, height: 120},
+        score: 0.95,
+      }],
+    }
+  }, {settingsKey: browserSettingsKey, settings: baseBrowserSettings('en', false, false)})
+  await page.goto('/#/region-overlay')
+
+  await page.mouse.move(260, 180)
+  await expect(page.locator('.region-smart-candidate.element')).toContainText('Old session')
+
+  await page.evaluate(() => {
+    const session = {
+      id: 'region-stale-hover-new',
+      bounds: {x: 0, y: 0, width: 900, height: 620},
+      captureBounds: {x: 0, y: 0, width: 900, height: 620},
+      minimumWidth: 64,
+      minimumHeight: 64,
+      displayCount: 1,
+      purpose: 'capture',
+      candidates: [{
+        id: 'element:new-session',
+        kind: 'element',
+        label: 'New session',
+        bounds: {x: 500, y: 210, width: 180, height: 120},
+        score: 0.95,
+      }],
+    }
+    ;(window as Window & {__RF_REGION_SESSION__?: unknown}).__RF_REGION_SESSION__ = session
+    window.dispatchEvent(new CustomEvent('rf-region-session', {detail: session}))
+  })
+  await page.waitForTimeout(120)
+  await expect(page.locator('.region-smart-candidate')).toHaveCount(0)
+  await expect(page.locator('.region-crosshair')).toHaveCount(0)
+  await expect.poll(async () => page.evaluate(() => (
+    (window as Window & {__RF_LAST_REGION_ASSIST__?: unknown}).__RF_LAST_REGION_ASSIST__ ?? null
+  ))).toBeNull()
+
+  await page.mouse.move(540, 250)
+  await expect(page.locator('.region-smart-candidate.element')).toContainText('New session')
+  await expect(page.locator('.region-crosshair')).toHaveCount(0)
+  await expect.poll(async () => page.evaluate(() => (
+    (window as Window & {__RF_LAST_REGION_ASSIST__?: {best?: {id?: string}}}).__RF_LAST_REGION_ASSIST__?.best?.id
+  ))).toBe('element:new-session')
+
+  await page.evaluate(() => {
+    const shell = document.querySelector('.region-overlay-shell')
+    shell?.dispatchEvent(new PointerEvent('pointerout', {
+      clientX: 900,
+      clientY: 620,
+      bubbles: true,
+      cancelable: true,
+      relatedTarget: document.body,
+    }))
+  })
+  await expect(page.locator('.region-smart-candidate')).toHaveCount(0)
+  await expect(page.locator('.region-crosshair')).toHaveCount(0)
+  await expect.poll(async () => page.evaluate(() => (
+    (window as Window & {__RF_LAST_REGION_ASSIST__?: unknown}).__RF_LAST_REGION_ASSIST__ ?? null
+  ))).toBeNull()
 })
 
 async function openRecorderShell(page: Page, options: {locale?: 'zh-CN' | 'en'; microphone?: boolean; systemAudio?: boolean; screenshotHistory?: unknown[]} = {}) {

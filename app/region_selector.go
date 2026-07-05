@@ -4,7 +4,9 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"image"
 	"runtime"
+	"strings"
 	"time"
 
 	"github.com/lemon-casino/RecordingFreedom/app/internal/devices"
@@ -25,15 +27,29 @@ type RegionRect struct {
 	Height int `json:"height"`
 }
 
+type RegionPoint struct {
+	X int `json:"x"`
+	Y int `json:"y"`
+}
+
+type RegionDisplayBounds struct {
+	ID            string     `json:"id,omitempty"`
+	Bounds        RegionRect `json:"bounds"`
+	CaptureBounds RegionRect `json:"captureBounds"`
+	ScaleFactor   float64    `json:"scaleFactor,omitempty"`
+}
+
 type RegionSelectionSession struct {
-	ID            string                 `json:"id"`
-	Bounds        RegionRect             `json:"bounds"`
-	CaptureBounds *RegionRect            `json:"captureBounds,omitempty"`
-	MinimumWidth  int                    `json:"minimumWidth"`
-	MinimumHeight int                    `json:"minimumHeight"`
-	DisplayCount  int                    `json:"displayCount"`
-	Purpose       string                 `json:"purpose,omitempty"`
-	Candidates    []RegionSmartCandidate `json:"candidates,omitempty"`
+	ID             string                 `json:"id"`
+	Bounds         RegionRect             `json:"bounds"`
+	CaptureBounds  *RegionRect            `json:"captureBounds,omitempty"`
+	DisplayBounds  []RegionDisplayBounds  `json:"displayBounds,omitempty"`
+	MinimumWidth   int                    `json:"minimumWidth"`
+	MinimumHeight  int                    `json:"minimumHeight"`
+	DisplayCount   int                    `json:"displayCount"`
+	Purpose        string                 `json:"purpose,omitempty"`
+	Candidates     []RegionSmartCandidate `json:"candidates,omitempty"`
+	InitialPointer *RegionPoint           `json:"initialPointer,omitempty"`
 }
 
 type RegionSelectionRequest struct {
@@ -58,6 +74,11 @@ type RegionFrameState struct {
 	Purpose       string     `json:"purpose,omitempty"`
 }
 
+type regionSelectionSessionReset struct {
+	ClearSelected   bool
+	ClearScreenshot bool
+}
+
 func (s *RecordingFreedomService) ShowRegionSelector() (RegionSelectionSession, error) {
 	if recorderIsActive(s.recorder.State()) {
 		return RegionSelectionSession{}, errors.New("cannot select a region while recording is active")
@@ -72,17 +93,60 @@ func (s *RecordingFreedomService) ShowRegionSelector() (RegionSelectionSession, 
 		ID:            fmt.Sprintf("region-%d", time.Now().UnixNano()),
 		Bounds:        regionRectFromAppRect(bounds),
 		CaptureBounds: &captureBounds,
+		DisplayBounds: regionDisplayBoundsForScreens(s.app.Screen.GetAll(), screenshotCaptureDisplayBounds()),
 		MinimumWidth:  minRegionWidth,
 		MinimumHeight: minRegionHeight,
 		DisplayCount:  displayCount,
 		Purpose:       regionSelectionPurposeCapture,
 	}
-	session.Candidates = s.regionSmartCandidates(session)
+
+	return s.showRegionSelectionSession(session, bounds, regionSelectionSessionReset{ClearSelected: true})
+}
+
+func (s *RecordingFreedomService) showRegionSelectionSession(session RegionSelectionSession, overlayBounds application.Rect, reset regionSelectionSessionReset) (RegionSelectionSession, error) {
+	if s.app == nil || s.regionOverlay == nil {
+		return RegionSelectionSession{}, errors.New("region overlay window is not configured")
+	}
+	if len(session.Candidates) == 0 {
+		session.Candidates = s.regionSmartCandidates(session)
+	}
+	if session.InitialPointer == nil {
+		session.InitialPointer = s.regionInitialPointer(session)
+	}
 
 	s.regionMu.Lock()
+	if reset.ClearSelected {
+		s.selectedRegionDIP = application.Rect{}
+	}
+	if reset.ClearScreenshot {
+		s.screenshotRegionDIP = application.Rect{}
+	}
 	s.regionSession = &session
 	s.regionMu.Unlock()
 
+	s.resetRegionElementCache(session.ID)
+	s.prepareRegionAssistSnapshot(session)
+	s.showRegionSelectionOverlay(overlayBounds, session)
+	return session, nil
+}
+
+func (s *RecordingFreedomService) regionInitialPointer(session RegionSelectionSession) *RegionPoint {
+	point, ok := currentRegionCursorPoint(session)
+	return regionInitialPointerFromPoint(session, point, ok)
+}
+
+func regionInitialPointerFromPoint(session RegionSelectionSession, point image.Point, ok bool) *RegionPoint {
+	if !ok || !regionRectContainsPoint(RegionRect{Width: session.Bounds.Width, Height: session.Bounds.Height}, point) {
+		return nil
+	}
+	return &RegionPoint{X: point.X, Y: point.Y}
+}
+
+func (s *RecordingFreedomService) showRegionSelectionOverlay(bounds application.Rect, session RegionSelectionSession) {
+	if s.regionOverlay == nil {
+		return
+	}
+	s.regionOverlay.SetIgnoreMouseEvents(false)
 	s.regionOverlay.SetBounds(bounds)
 	s.regionOverlay.SetAlwaysOnTop(true)
 	s.regionOverlay.Show()
@@ -94,7 +158,6 @@ func (s *RecordingFreedomService) ShowRegionSelector() (RegionSelectionSession, 
 			string(payload),
 		))
 	}
-	return session, nil
 }
 
 func (s *RecordingFreedomService) CompleteRegionSelection(req RegionSelectionRequest) (RegionSelectionResult, error) {
@@ -106,6 +169,8 @@ func (s *RecordingFreedomService) CompleteRegionSelection(req RegionSelectionReq
 	if session == nil {
 		return RegionSelectionResult{}, errors.New("no active region selection session")
 	}
+	s.clearRegionElementCache(session.ID)
+	s.clearRegionAssistSnapshot(session.ID)
 	if session.Purpose != "" && session.Purpose != regionSelectionPurposeCapture {
 		return RegionSelectionResult{}, errors.New("active region selection session is not for capture")
 	}
@@ -153,6 +218,10 @@ func (s *RecordingFreedomService) CancelRegionSelection() RegionSelectionResult 
 	session := s.regionSession
 	s.regionSession = nil
 	s.regionMu.Unlock()
+	if session != nil {
+		s.clearRegionElementCache(session.ID)
+		s.clearRegionAssistSnapshot(session.ID)
+	}
 
 	result := RegionSelectionResult{Cancelled: true}
 	if session != nil {
@@ -453,6 +522,33 @@ func regionOverlayBounds(screens []*application.Screen) (application.Rect, int) 
 		height = 720
 	}
 	return application.Rect{X: minX, Y: minY, Width: width, Height: height}, len(screens)
+}
+
+func regionDisplayBoundsForScreens(screens []*application.Screen, captureDisplays []RegionRect) []RegionDisplayBounds {
+	if len(screens) == 0 {
+		return nil
+	}
+	displays := make([]RegionDisplayBounds, 0, len(screens))
+	for index, screen := range screens {
+		if screen == nil || screen.Bounds.Width <= 0 || screen.Bounds.Height <= 0 {
+			continue
+		}
+		capture := regionRectFromAppRect(screen.PhysicalBounds)
+		if capture.Width <= 0 || capture.Height <= 0 {
+			if index < len(captureDisplays) && captureDisplays[index].Width > 0 && captureDisplays[index].Height > 0 {
+				capture = captureDisplays[index]
+			} else {
+				capture = regionRectFromAppRect(screen.Bounds)
+			}
+		}
+		displays = append(displays, RegionDisplayBounds{
+			ID:            strings.TrimSpace(screen.ID),
+			Bounds:        regionRectFromAppRect(screen.Bounds),
+			CaptureBounds: capture,
+			ScaleFactor:   float64(screen.ScaleFactor),
+		})
+	}
+	return displays
 }
 
 func regionRectFromAppRect(rect application.Rect) RegionRect {

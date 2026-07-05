@@ -155,28 +155,15 @@ func (s *RecordingFreedomService) ShowAnnotationRegionSelector() (RegionSelectio
 	selection := RegionSelectionSession{
 		ID:            fmt.Sprintf("annotation-region-%d", time.Now().UnixNano()),
 		Bounds:        regionRectFromAppRect(bounds),
+		DisplayBounds: regionDisplayBoundsForScreens(s.app.Screen.GetAll(), screenshotCaptureDisplayBounds()),
 		MinimumWidth:  minRegionWidth,
 		MinimumHeight: minRegionHeight,
 		DisplayCount:  displayCount,
 		Purpose:       regionSelectionPurposeAnnotation,
 	}
-	selection.Candidates = s.regionSmartCandidates(selection)
-
-	s.regionMu.Lock()
-	s.regionSession = &selection
-	s.regionMu.Unlock()
-
-	s.regionOverlay.SetIgnoreMouseEvents(false)
-	s.regionOverlay.SetAlwaysOnTop(true)
-	s.regionOverlay.SetBounds(bounds)
-	s.regionOverlay.Show()
-	s.regionOverlay.SetBounds(bounds)
-	s.regionOverlay.Focus()
-	if payload, err := json.Marshal(selection); err == nil {
-		s.regionOverlay.ExecJS(fmt.Sprintf(
-			"window.__RF_REGION_SESSION__=%s;window.dispatchEvent(new CustomEvent('rf-region-session',{detail:window.__RF_REGION_SESSION__}));",
-			string(payload),
-		))
+	selection, err := s.showRegionSelectionSession(selection, bounds, regionSelectionSessionReset{})
+	if err != nil {
+		return RegionSelectionSession{}, err
 	}
 	s.logEvent("annotation-overlay", "region-selector-show", map[string]string{
 		"sessionId": session.ID,
@@ -205,6 +192,8 @@ func (s *RecordingFreedomService) CompleteAnnotationRegionSelection(req RegionSe
 	if selection == nil {
 		return AnnotationOverlayState{}, errors.New("no active annotation region selection session")
 	}
+	s.clearRegionElementCache(selection.ID)
+	s.clearRegionAssistSnapshot(selection.ID)
 
 	relative := normalizeRegionSelection(req)
 	if relative.Width < selection.MinimumWidth || relative.Height < selection.MinimumHeight {

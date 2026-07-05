@@ -228,11 +228,20 @@ export interface RegionAssistRequest {
     "pointerX"?: number;
     "pointerY"?: number;
     "selection"?: RegionRect | null;
+    "candidateLevel"?: number;
 }
 
 export interface RegionAssistResult {
     "candidates": RegionSmartCandidate[] | null;
     "best"?: RegionSmartCandidate | null;
+    "source"?: string;
+}
+
+export interface RegionDisplayBounds {
+    "id"?: string;
+    "bounds": RegionRect;
+    "captureBounds": RegionRect;
+    "scaleFactor"?: number;
 }
 
 export interface RegionFrameState {
@@ -240,6 +249,11 @@ export interface RegionFrameState {
     "overlayBounds"?: RegionRect;
     "mode": string;
     "purpose"?: string;
+}
+
+export interface RegionPoint {
+    "x": number;
+    "y": number;
 }
 
 export interface RegionRect {
@@ -268,11 +282,13 @@ export interface RegionSelectionSession {
     "id": string;
     "bounds": RegionRect;
     "captureBounds"?: RegionRect | null;
+    "displayBounds"?: RegionDisplayBounds[] | null;
     "minimumWidth": number;
     "minimumHeight": number;
     "displayCount": number;
     "purpose"?: string;
     "candidates"?: RegionSmartCandidate[] | null;
+    "initialPointer"?: RegionPoint | null;
 }
 
 export interface RegionSmartCandidate {

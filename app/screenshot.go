@@ -27,6 +27,7 @@ const (
 	screenshotHistoryFileName        = "history.json"
 	screenshotMaxPreviewBytes        = 16 * 1024 * 1024
 	screenshotThumbnailMaxSide       = 320
+	screenshotMinRegionSize          = 12
 	regionSelectionPurposeScreenshot = "screenshot"
 	regionSelectionPurposeScrolling  = "scrolling-screenshot"
 	annotationOverlayModeScreenshot  = "screenshot"
@@ -151,25 +152,15 @@ func (s *RecordingFreedomService) ShowScreenshotRegionSelector() (RegionSelectio
 		ID:            fmt.Sprintf("screenshot-%d", time.Now().UnixNano()),
 		Bounds:        regionRectFromAppRect(bounds),
 		CaptureBounds: &captureBounds,
-		MinimumWidth:  minRegionWidth,
-		MinimumHeight: minRegionHeight,
+		DisplayBounds: regionDisplayBoundsForScreens(s.app.Screen.GetAll(), screenshotCaptureDisplayBounds()),
+		MinimumWidth:  screenshotMinRegionSize,
+		MinimumHeight: screenshotMinRegionSize,
 		DisplayCount:  displayCount,
 		Purpose:       regionSelectionPurposeScreenshot,
 	}
-	session.Candidates = s.regionSmartCandidates(session)
-	s.regionMu.Lock()
-	s.regionSession = &session
-	s.regionMu.Unlock()
-	s.regionOverlay.SetBounds(bounds)
-	s.regionOverlay.SetAlwaysOnTop(true)
-	s.regionOverlay.Show()
-	s.regionOverlay.SetBounds(bounds)
-	s.regionOverlay.Focus()
-	if payload, err := json.Marshal(session); err == nil {
-		s.regionOverlay.ExecJS(fmt.Sprintf(
-			"window.__RF_REGION_SESSION__=%s;window.dispatchEvent(new CustomEvent('rf-region-session',{detail:window.__RF_REGION_SESSION__}));",
-			string(payload),
-		))
+	session, err := s.showRegionSelectionSession(session, bounds, regionSelectionSessionReset{ClearScreenshot: true})
+	if err != nil {
+		return RegionSelectionSession{}, err
 	}
 	s.logEvent("screenshot", "region-selector-show", map[string]string{
 		"sessionId": session.ID,
@@ -188,6 +179,8 @@ func (s *RecordingFreedomService) CompleteScreenshotRegionSelection(req RegionSe
 	if session == nil {
 		return ScreenshotCaptureResult{}, errors.New("no active screenshot selection session")
 	}
+	s.clearRegionElementCache(session.ID)
+	s.clearRegionAssistSnapshot(session.ID)
 	if session.Purpose != regionSelectionPurposeScreenshot {
 		return ScreenshotCaptureResult{}, errors.New("active region selection session is not for screenshots")
 	}
@@ -284,6 +277,8 @@ func (s *RecordingFreedomService) BeginScreenshotAnnotationOverlay(req RegionSel
 	s.regionSession = nil
 	s.screenshotRegionDIP = application.Rect{}
 	s.regionMu.Unlock()
+	s.clearRegionElementCache(session.ID)
+	s.clearRegionAssistSnapshot(session.ID)
 	if s.regionOverlay != nil {
 		s.regionOverlay.Hide()
 	}
@@ -678,25 +673,15 @@ func (s *RecordingFreedomService) StartScrollingScreenshot() (RegionSelectionSes
 		ID:            fmt.Sprintf("scrolling-screenshot-%d", time.Now().UnixNano()),
 		Bounds:        regionRectFromAppRect(bounds),
 		CaptureBounds: &captureBounds,
+		DisplayBounds: regionDisplayBoundsForScreens(s.app.Screen.GetAll(), screenshotCaptureDisplayBounds()),
 		MinimumWidth:  minRegionWidth,
 		MinimumHeight: minRegionHeight,
 		DisplayCount:  displayCount,
 		Purpose:       regionSelectionPurposeScrolling,
 	}
-	session.Candidates = s.regionSmartCandidates(session)
-	s.regionMu.Lock()
-	s.regionSession = &session
-	s.regionMu.Unlock()
-	s.regionOverlay.SetBounds(bounds)
-	s.regionOverlay.SetAlwaysOnTop(true)
-	s.regionOverlay.Show()
-	s.regionOverlay.SetBounds(bounds)
-	s.regionOverlay.Focus()
-	if payload, err := json.Marshal(session); err == nil {
-		s.regionOverlay.ExecJS(fmt.Sprintf(
-			"window.__RF_REGION_SESSION__=%s;window.dispatchEvent(new CustomEvent('rf-region-session',{detail:window.__RF_REGION_SESSION__}));",
-			string(payload),
-		))
+	session, err := s.showRegionSelectionSession(session, bounds, regionSelectionSessionReset{ClearScreenshot: true})
+	if err != nil {
+		return RegionSelectionSession{}, err
 	}
 	s.logEvent("screenshot", "scrolling-selector-show", map[string]string{
 		"sessionId": session.ID,
@@ -714,6 +699,8 @@ func (s *RecordingFreedomService) CompleteScrollingScreenshotSelection(req Regio
 	if session == nil {
 		return ScreenshotCaptureResult{}, errors.New("no active scrolling screenshot selection session")
 	}
+	s.clearRegionElementCache(session.ID)
+	s.clearRegionAssistSnapshot(session.ID)
 	if session.Purpose != regionSelectionPurposeScrolling {
 		return ScreenshotCaptureResult{}, errors.New("active region selection session is not for scrolling screenshots")
 	}
@@ -1336,7 +1323,31 @@ func screenshotCaptureUnionBounds() RegionRect {
 	}
 }
 
+func screenshotCaptureDisplayBounds() []RegionRect {
+	count := desktopscreenshot.NumActiveDisplays()
+	if count <= 0 {
+		return nil
+	}
+	displays := make([]RegionRect, 0, count)
+	for index := 0; index < count; index++ {
+		bounds := desktopscreenshot.GetDisplayBounds(index)
+		if bounds.Empty() {
+			continue
+		}
+		displays = append(displays, RegionRect{
+			X:      bounds.Min.X,
+			Y:      bounds.Min.Y,
+			Width:  bounds.Dx(),
+			Height: bounds.Dy(),
+		})
+	}
+	return displays
+}
+
 func mapRegionSelectionToCaptureRect(session RegionSelectionSession, relative RegionRect) image.Rectangle {
+	if rect, ok := mapRegionSelectionToDisplayCaptureRect(session, relative); ok {
+		return rect
+	}
 	capture := session.CaptureBounds
 	if capture == nil || capture.Width <= 0 || capture.Height <= 0 || session.Bounds.Width <= 0 || session.Bounds.Height <= 0 {
 		absolute := application.Rect{

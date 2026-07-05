@@ -61,6 +61,36 @@ Run Go tests:
 go test ./...
 ```
 
+Probe desktop UI element recognition at a real point:
+
+```powershell
+# Windows PowerShell
+$env:RECORDINGFREEDOM_REGION_PROBE = "cursor" # or "120,340"
+go test -run "TestRegion(UIElement|Accessibility)ProbeFromEnv" -v .
+go test -run "TestRegionAssistDesktopProbeFromEnv" -v .
+Remove-Item Env:\RECORDINGFREEDOM_REGION_PROBE
+```
+
+```bash
+# macOS, after granting Accessibility permission to the terminal running this command
+RECORDINGFREEDOM_REGION_PROBE=cursor go test -run 'TestRegion(UIElement|Accessibility)ProbeFromEnv' -v .
+RECORDINGFREEDOM_REGION_PROBE=cursor go test -run TestRegionAssistDesktopProbeFromEnv -v .
+```
+
+Or run the dedicated macOS verifier from the repository root:
+
+```bash
+bash scripts/verify-region-recognition-macos.sh
+```
+
+The first probe prints the native candidate chain; the assist probe verifies the full `AssistRegionSelection` path returns `source=element` and a best element bound at the pointer.
+The macOS verifier requires cgo and fails if it cannot prove both an Accessibility candidate chain and `region-assist source=element`.
+These probes cover the candidate chain used by region screenshot, scrolling screenshot, annotation-region, and recording-region selection.
+On Windows this uses UI Automation; on macOS cgo builds use Accessibility. If macOS Accessibility permission is missing, element recognition falls back to image/window candidates instead of fabricating a match.
+All four region-selection entry points share the same dynamic element candidate cache and parent-level cycling; right-click returns a manual drag/edit back to auto-recognition, and right-click in auto mode cancels selection.
+Selector sessions include an `initialPointer` when the current cursor is inside the overlay, so the overlay immediately runs hover recognition before the first mouse move.
+Multi-display region coordinates must use the per-display `RegionSelectionSession.displayBounds` mapping. Do not map the whole virtual desktop with a single scale ratio; mixed-DPI desktops need each display's logical bounds and capture bounds to be converted independently.
+
 Build and test the RNNoise dynamic native module:
 
 ```bash

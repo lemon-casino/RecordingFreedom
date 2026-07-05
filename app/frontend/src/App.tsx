@@ -32,7 +32,7 @@ import {
   Pin,
   Unlock,
 } from 'lucide-react'
-import {Suspense, lazy, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type PointerEvent as ReactPointerEvent, type ReactNode} from 'react'
+import {Suspense, lazy, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type PointerEvent as ReactPointerEvent, type ReactNode} from 'react'
 import {copyByLocale, type RecorderCopy, type RecoveryMessageKey, type SourceSelectionMessageKey, type StatusMessageKey, type StorageMessageKey} from './i18n'
 import {
   cameraDevices,
@@ -4061,17 +4061,31 @@ const regionResizeActions: RegionEditAction[] = ['n', 'e', 's', 'w', 'ne', 'nw',
 function useRegionFrameState() {
   const frameWindow = window as Window & {__RF_REGION_FRAME__?: RegionFrameState}
   const [frame, setFrame] = useState<RegionFrameState | undefined>(frameWindow.__RF_REGION_FRAME__)
+  const clearFrame = useCallback(() => {
+    delete (window as Window & {__RF_REGION_FRAME__?: RegionFrameState}).__RF_REGION_FRAME__
+    setFrame(undefined)
+  }, [])
 
   useEffect(() => {
     const onFrame = (event: Event) => {
-      const next = (event as CustomEvent<RegionFrameState>).detail
-      if (next) setFrame(next)
+      const next = (event as CustomEvent<RegionFrameState | undefined>).detail
+      if (next?.bounds) {
+        ;(window as Window & {__RF_REGION_FRAME__?: RegionFrameState}).__RF_REGION_FRAME__ = next
+        setFrame(next)
+      } else {
+        clearFrame()
+      }
     }
     window.addEventListener('rf-region-frame', onFrame)
     return () => window.removeEventListener('rf-region-frame', onFrame)
-  }, [])
+  }, [clearFrame])
 
-  return frame
+  useEffect(() => {
+    window.addEventListener('rf-region-session', clearFrame)
+    return () => window.removeEventListener('rf-region-session', clearFrame)
+  }, [clearFrame])
+
+  return [frame, clearFrame] as const
 }
 
 function useRegionEditorDrag(bounds: RegionFrameState['bounds'] | undefined, updateRegion: (bounds: RegionFrameState['bounds']) => Promise<unknown>) {
@@ -4146,11 +4160,12 @@ function resizeRegionBounds(bounds: RegionFrameState['bounds'], action: RegionEd
 }
 
 const minRegionEditorSize = 64
+const regionManualDragThreshold = 6
 
 function RegionOverlayWindow() {
   const overlayWindow = window as Window & {__RF_REGION_SESSION__?: RegionSelectionSession}
   const initialSession = overlayWindow.__RF_REGION_SESSION__
-  const editFrame = useRegionFrameState()
+  const [editFrame, clearEditFrame] = useRegionFrameState()
   const isScreenshotRegionEdit = editFrame?.mode === 'edit' && editFrame.purpose === 'screenshot'
   const editDrag = useRegionEditorDrag(
     editFrame?.mode === 'edit' ? editFrame.bounds : undefined,
@@ -4161,14 +4176,22 @@ function RegionOverlayWindow() {
   const [cursor, setCursor] = useState({x: -1, y: -1})
   const [invalid, setInvalid] = useState(false)
   const [assistCandidate, setAssistCandidate] = useState<RegionSmartCandidate | null>(null)
+  const [assistRequestPending, setAssistRequestPending] = useState(false)
   const shellRef = useRef<HTMLElement | null>(null)
   const pointerDownCandidateRef = useRef<RegionSmartCandidate | null>(null)
+  const assistRequestSeqRef = useRef(0)
+  const assistTimerRef = useRef<number | null>(null)
+  const assistCandidateLevelRef = useRef(0)
+  const lastAssistPointRef = useRef<{x: number; y: number} | null>(null)
+  const handledRightPointerRef = useRef(false)
   const [overlayLocale, setOverlayLocale] = useState<LocaleCode>(navigator.language.toLowerCase().startsWith('zh') ? 'zh-CN' : 'en')
   const [overlayTheme, setOverlayTheme] = useState<ThemeCode>('night-teal')
   const copy = copyByLocale[overlayLocale]
   const minimumWidth = session?.minimumWidth ?? 64
   const minimumHeight = session?.minimumHeight ?? 64
-  const selectedRect = drag ? normalizedClientRect(drag.startX, drag.startY, drag.currentX, drag.currentY) : null
+  const dragDistance = drag ? pointerDistance(drag.startX, drag.startY, drag.currentX, drag.currentY) : 0
+  const isManualDrag = Boolean(drag && dragDistance > regionManualDragThreshold)
+  const selectedRect = drag && isManualDrag ? normalizedClientRect(drag.startX, drag.startY, drag.currentX, drag.currentY) : null
   const isEditingRegion = editFrame?.mode === 'edit'
   const isRecordingRegion = editFrame?.mode === 'recording'
   const isAnnotationRegionSelection = session?.purpose === 'annotation'
@@ -4180,6 +4203,12 @@ function RegionOverlayWindow() {
       ? bestLocalRegionCandidate(sessionCandidates, selectedRect) ?? assistCandidate
       : assistCandidate
     : null
+  const shouldShowCrosshair = !isEditingRegion &&
+    !isRecordingRegion &&
+    cursor.x >= 0 &&
+    !selectedRect &&
+    !visibleAssistCandidate &&
+    !assistRequestPending
   const overlayOrigin = editFrame?.overlayBounds ?? session?.bounds ?? {x: 0, y: 0, width: 0, height: 0}
   const editableRect = isEditingRegion ? {
     x: editFrame.bounds.x - overlayOrigin.x,
@@ -4196,7 +4225,13 @@ function RegionOverlayWindow() {
 
   useEffect(() => {
     document.body.classList.add('rf-region-overlay-window')
-    return () => document.body.classList.remove('rf-region-overlay-window')
+    return () => {
+      document.body.classList.remove('rf-region-overlay-window')
+      if (assistTimerRef.current !== null) {
+        window.clearTimeout(assistTimerRef.current)
+        assistTimerRef.current = null
+      }
+    }
   }, [])
 
   useEffect(() => {
@@ -4221,29 +4256,77 @@ function RegionOverlayWindow() {
     const onSession = (event: Event) => {
       const next = (event as CustomEvent<RegionSelectionSession>).detail
       if (next) {
+        assistRequestSeqRef.current += 1
+        if (assistTimerRef.current !== null) {
+          window.clearTimeout(assistTimerRef.current)
+          assistTimerRef.current = null
+        }
+        delete (window as Window & {__RF_LAST_REGION_ASSIST__?: unknown}).__RF_LAST_REGION_ASSIST__
         setSession(next)
+        setDrag(null)
+        setCursor({x: -1, y: -1})
+        setInvalid(false)
         setAssistCandidate(null)
+        setAssistRequestPending(false)
+        pointerDownCandidateRef.current = null
+        assistCandidateLevelRef.current = 0
+        lastAssistPointRef.current = null
       }
     }
     window.addEventListener('rf-region-session', onSession)
     return () => window.removeEventListener('rf-region-session', onSession)
   }, [])
 
+  const clearRegionSelectionRuntimeState = () => {
+    assistRequestSeqRef.current += 1
+    if (assistTimerRef.current !== null) {
+      window.clearTimeout(assistTimerRef.current)
+      assistTimerRef.current = null
+    }
+    delete (window as Window & {__RF_REGION_SESSION__?: RegionSelectionSession}).__RF_REGION_SESSION__
+    delete (window as Window & {__RF_LAST_REGION_ASSIST__?: unknown}).__RF_LAST_REGION_ASSIST__
+    clearEditFrame()
+    setSession(undefined)
+    setDrag(null)
+    setCursor({x: -1, y: -1})
+    setInvalid(false)
+    setAssistCandidate(null)
+    setAssistRequestPending(false)
+    pointerDownCandidateRef.current = null
+    assistCandidateLevelRef.current = 0
+    lastAssistPointRef.current = null
+  }
+
+  const cancelSelection = async () => {
+    clearRegionSelectionRuntimeState()
+    await cancelRegionSelector()
+    if (!window.navigator.userAgent.includes('Wails')) {
+      window.close()
+    }
+  }
+
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key === 'Escape') {
         event.preventDefault()
-        void (isEditingRegion ? (isScreenshotRegionEdit ? cancelRegionSelector() : cancelSelectedRegion()) : cancelRegionSelector())
+        if (isEditingRegion) {
+          clearEditFrame()
+          void (isScreenshotRegionEdit ? cancelRegionSelector() : cancelSelectedRegion())
+          return
+        }
+        void cancelSelection()
       }
     }
     window.addEventListener('keydown', onKeyDown)
     return () => window.removeEventListener('keydown', onKeyDown)
-  }, [isEditingRegion])
+  }, [isEditingRegion, isScreenshotRegionEdit])
 
-  const cancelSelection = async () => {
-    await cancelRegionSelector()
-    if (!window.navigator.userAgent.includes('Wails')) {
-      window.close()
+  const cancelPendingHoverAssist = () => {
+    assistRequestSeqRef.current += 1
+    setAssistRequestPending(false)
+    if (assistTimerRef.current !== null) {
+      window.clearTimeout(assistTimerRef.current)
+      assistTimerRef.current = null
     }
   }
 
@@ -4286,11 +4369,133 @@ function RegionOverlayWindow() {
         selection: rect,
         candidates: sessionCandidates,
       })
+      ;(window as Window & {__RF_LAST_REGION_ASSIST__?: unknown}).__RF_LAST_REGION_ASSIST__ = result
       return result.best?.bounds ?? rect
     } catch (error) {
       console.info('Region assist failed; using manual selection:', error)
       return rect
     }
+  }
+
+  const requestHoverAssistCandidateForSession = (
+    activeSession: RegionSelectionSession | undefined,
+    point: {x: number; y: number},
+    immediate = false,
+    allowEditing = false,
+  ) => {
+    if (!activeSession || isRecordingRegion || (isEditingRegion && !allowEditing)) {
+      setAssistRequestPending(false)
+      return
+    }
+    const activeCandidates = activeSession.candidates ?? []
+    const requestSeq = assistRequestSeqRef.current + 1
+    assistRequestSeqRef.current = requestSeq
+    const lastPoint = lastAssistPointRef.current
+    if (!lastPoint || pointerDistance(lastPoint.x, lastPoint.y, point.x, point.y) > 10) {
+      assistCandidateLevelRef.current = 0
+    }
+    lastAssistPointRef.current = point
+    setAssistRequestPending(true)
+    const run = () => {
+      assistTimerRef.current = null
+      const level = assistCandidateLevelRef.current
+      void assistRegionSelection({
+        sessionId: activeSession.id,
+        purpose: activeSession.purpose,
+        pointerX: point.x,
+        pointerY: point.y,
+        candidateLevel: level,
+        candidates: activeCandidates,
+      }).then((result) => {
+        if (assistRequestSeqRef.current !== requestSeq) return
+        ;(window as Window & {__RF_LAST_REGION_ASSIST__?: unknown}).__RF_LAST_REGION_ASSIST__ = result
+        setAssistCandidate(result.best ?? bestLocalRegionCandidateForPoint(activeCandidates, point))
+        setAssistRequestPending(false)
+      }).catch((error) => {
+        if (assistRequestSeqRef.current !== requestSeq) return
+        console.info('Region hover assist failed; using local candidates:', error)
+        setAssistCandidate(bestLocalRegionCandidateForPoint(activeCandidates, point))
+        setAssistRequestPending(false)
+      })
+    }
+    if (assistTimerRef.current !== null) {
+      window.clearTimeout(assistTimerRef.current)
+      assistTimerRef.current = null
+    }
+    if (immediate) {
+      run()
+      return
+    }
+    assistTimerRef.current = window.setTimeout(run, 70)
+  }
+
+  const requestHoverAssistCandidate = (point: {x: number; y: number}, immediate = false) => {
+    requestHoverAssistCandidateForSession(session, point, immediate)
+  }
+
+  useEffect(() => {
+    if (!session?.initialPointer || isEditingRegion || isRecordingRegion || lastAssistPointRef.current) return
+    const point = clampedClientPoint(session.initialPointer.x, session.initialPointer.y)
+    setCursor(point)
+    setAssistCandidate(bestLocalRegionCandidateForPoint(session.candidates ?? [], point))
+    requestHoverAssistCandidateForSession(session, point, true)
+  }, [session?.id, isEditingRegion, isRecordingRegion])
+
+  const returnToAutoSelection = (point: {x: number; y: number}, activeSession = session, allowEditing = false) => {
+    cancelPendingHoverAssist()
+    const activeCandidates = activeSession?.candidates ?? []
+    pointerDownCandidateRef.current = null
+    setDrag(null)
+    setInvalid(false)
+    assistCandidateLevelRef.current = 0
+    setCursor(point)
+    setAssistCandidate(bestLocalRegionCandidateForPoint(activeCandidates, point))
+    requestHoverAssistCandidateForSession(activeSession, point, true, allowEditing)
+  }
+
+  const showSelectionSessionForPurpose = (purpose: RegionFrameState['purpose'] | undefined) => {
+    if (purpose === 'screenshot') return showScreenshotRegionSelector()
+    if (purpose === 'scrolling-screenshot') return startScrollingScreenshot()
+    if (purpose === 'annotation') return showAnnotationRegionSelector()
+    return showRegionSelector()
+  }
+
+  const returnEditingRegionToAutoSelection = (point: {x: number; y: number}) => {
+    const purpose = editFrame?.purpose
+    clearEditFrame()
+    cancelPendingHoverAssist()
+    pointerDownCandidateRef.current = null
+    setDrag(null)
+    setInvalid(false)
+    assistCandidateLevelRef.current = 0
+    lastAssistPointRef.current = null
+    setAssistCandidate(null)
+    delete (window as Window & {__RF_LAST_REGION_ASSIST__?: unknown}).__RF_LAST_REGION_ASSIST__
+    void showSelectionSessionForPurpose(purpose).then((nextSession) => {
+      setSession(nextSession)
+      returnToAutoSelection(point, nextSession, true)
+    }).catch((error) => {
+      console.error('Failed to return region editor to auto selection:', error)
+      setInvalid(true)
+      window.setTimeout(() => setInvalid(false), 360)
+    })
+  }
+
+  const cancelRegionFromPointer = (point: {x: number; y: number}) => {
+    if (isRecordingRegion) return
+    if (isEditingRegion) {
+      returnEditingRegionToAutoSelection(point)
+      return
+    }
+    if (drag) {
+      returnToAutoSelection(point)
+      return
+    }
+    cancelPendingHoverAssist()
+    pointerDownCandidateRef.current = null
+    setAssistCandidate(null)
+    delete (window as Window & {__RF_LAST_REGION_ASSIST__?: unknown}).__RF_LAST_REGION_ASSIST__
+    void cancelSelection()
   }
 
   const shellMode = isRecordingRegion ? 'recording' : isEditingRegion ? 'editing' : 'selecting'
@@ -4309,17 +4514,54 @@ function RegionOverlayWindow() {
         if (drag) {
           const nextDrag = {...drag, currentX: point.x, currentY: point.y}
           setDrag(nextDrag)
-          setAssistCandidate(bestLocalRegionCandidate(sessionCandidates, normalizedClientRect(nextDrag.startX, nextDrag.startY, nextDrag.currentX, nextDrag.currentY)))
+          const nextDistance = pointerDistance(nextDrag.startX, nextDrag.startY, nextDrag.currentX, nextDrag.currentY)
+          if (nextDistance > regionManualDragThreshold) {
+            setAssistCandidate(bestLocalRegionCandidate(sessionCandidates, normalizedClientRect(nextDrag.startX, nextDrag.startY, nextDrag.currentX, nextDrag.currentY)))
+          }
         } else {
           setAssistCandidate(bestLocalRegionCandidateForPoint(sessionCandidates, point))
+          requestHoverAssistCandidate(point)
         }
       }}
+      onWheel={(event) => {
+        if (isEditingRegion || isRecordingRegion || drag) return
+        event.preventDefault()
+        const point = cursor.x >= 0 ? cursor : clampedClientPoint(event.clientX, event.clientY)
+        const direction = event.deltaY > 0 ? -1 : 1
+        assistCandidateLevelRef.current = Math.max(0, assistCandidateLevelRef.current + direction)
+        requestHoverAssistCandidate(point, true)
+      }}
+      onMouseDownCapture={(event) => {
+        if (isRecordingRegion || event.button !== 2) return
+        event.preventDefault()
+        event.stopPropagation()
+        if (handledRightPointerRef.current) return
+        handledRightPointerRef.current = true
+        window.setTimeout(() => {
+          handledRightPointerRef.current = false
+        }, 240)
+        cancelRegionFromPointer(clampedClientPoint(event.clientX, event.clientY))
+      }}
       onPointerDown={(event) => {
-        if (isEditingRegion || isRecordingRegion) return
+        if (isRecordingRegion) return
+        if (event.button === 2) {
+          event.preventDefault()
+          event.stopPropagation()
+          handledRightPointerRef.current = true
+          window.setTimeout(() => {
+            handledRightPointerRef.current = false
+          }, 240)
+          cancelRegionFromPointer(clampedClientPoint(event.clientX, event.clientY))
+          return
+        }
+        if (isEditingRegion) return
         if (event.button !== 0) return
+        cancelPendingHoverAssist()
         event.currentTarget.setPointerCapture(event.pointerId)
         const point = clampedClientPoint(event.clientX, event.clientY)
-        const candidate = bestLocalRegionCandidateForPoint(sessionCandidates, point)
+        const candidate = assistCandidate && rectContainsPoint(assistCandidate.bounds, point)
+          ? assistCandidate
+          : bestLocalRegionCandidateForPoint(sessionCandidates, point)
         pointerDownCandidateRef.current = candidate
         setAssistCandidate(candidate)
         setDrag({startX: point.x, startY: point.y, currentX: point.x, currentY: point.y})
@@ -4337,25 +4579,47 @@ function RegionOverlayWindow() {
         }
         const point = clampedClientPoint(event.clientX, event.clientY)
         const rect = normalizedClientRect(drag.startX, drag.startY, point.x, point.y)
-        const clickCandidate = pointerDownCandidateRef.current && pointerDistance(drag.startX, drag.startY, point.x, point.y) <= 5
+        const distance = pointerDistance(drag.startX, drag.startY, point.x, point.y)
+        const clickCandidate = pointerDownCandidateRef.current && distance <= regionManualDragThreshold
           ? pointerDownCandidateRef.current
           : null
         pointerDownCandidateRef.current = null
         setDrag(null)
         setAssistCandidate(null)
+        setAssistRequestPending(false)
+        assistCandidateLevelRef.current = 0
         if (clickCandidate) {
           void completeSelection(clickCandidate.bounds)
           return
         }
+        if (distance <= regionManualDragThreshold) {
+          returnToAutoSelection(point)
+          return
+        }
         void assistedSelection(rect, point).then((nextRect) => completeSelection(nextRect))
+      }}
+      onContextMenu={(event) => {
+        event.preventDefault()
+        event.stopPropagation()
+        if (handledRightPointerRef.current) {
+          handledRightPointerRef.current = false
+          return
+        }
+        cancelRegionFromPointer(clampedClientPoint(event.clientX, event.clientY))
       }}
       onPointerLeave={(event) => {
         if (isEditingRegion || isRecordingRegion) return
-        setCursor(clampedClientPoint(event.clientX, event.clientY))
+        setCursor({x: -1, y: -1})
+        cancelPendingHoverAssist()
+        pointerDownCandidateRef.current = null
+        assistCandidateLevelRef.current = 0
+        lastAssistPointRef.current = null
+        setAssistCandidate(null)
+        delete (window as Window & {__RF_LAST_REGION_ASSIST__?: unknown}).__RF_LAST_REGION_ASSIST__
       }}
     >
       <div className="region-overlay-scrim" />
-      {!isEditingRegion && !isRecordingRegion && cursor.x >= 0 && (
+      {shouldShowCrosshair && (
         <>
           <div className="region-crosshair horizontal" style={{top: cursor.y}} />
           <div className="region-crosshair vertical" style={{left: cursor.x}} />
@@ -4477,7 +4741,7 @@ function bestLocalRegionCandidateForPoint(candidates: RegionSmartCandidate[], po
   for (const candidate of candidates) {
     if (!rectContainsPoint(candidate.bounds, point)) continue
     const area = Math.max(1, candidate.bounds.width * candidate.bounds.height)
-    const score = (candidate.score ?? 0) + 1000000 / area
+    const score = (candidate.score ?? 0) + localRegionKindWeight(candidate.kind) + 1000000 / area
     if (score > bestScore) {
       best = candidate
       bestScore = score
@@ -4490,7 +4754,7 @@ function bestLocalRegionCandidate(candidates: RegionSmartCandidate[], selection:
   let best: RegionSmartCandidate | null = null
   let bestScore = -1
   for (const candidate of candidates) {
-    const score = localRegionCandidateScore(candidate.bounds, selection)
+    const score = localRegionCandidateScore(candidate.bounds, selection) + localRegionKindWeight(candidate.kind)
     if (score > bestScore) {
       best = candidate
       bestScore = score
@@ -4518,8 +4782,20 @@ function localRegionCandidateScore(candidate: RegionSelectionSession['bounds'], 
   return overlap * 0.54 + closeEdges * 0.34 + areaRatio * 0.12
 }
 
+function localRegionKindWeight(kind: RegionSmartCandidate['kind']) {
+  if (kind === 'element') return 0.36
+  if (kind === 'edge') return 0.16
+  if (kind === 'window') return 0.08
+  return 0
+}
+
 function rectContainsPoint(rect: RegionSelectionSession['bounds'], point: {x: number; y: number}) {
-  return point.x >= rect.x && point.x <= rect.x + rect.width && point.y >= rect.y && point.y <= rect.y + rect.height
+  return rect.width > 0 &&
+    rect.height > 0 &&
+    point.x >= rect.x &&
+    point.x < rect.x + rect.width &&
+    point.y >= rect.y &&
+    point.y < rect.y + rect.height
 }
 
 function pointerDistance(startX: number, startY: number, currentX: number, currentY: number) {
@@ -4531,6 +4807,7 @@ function regionCandidateLabel(candidate: RegionSmartCandidate) {
   if (label) return label
   if (candidate.kind === 'window') return 'Window'
   if (candidate.kind === 'screen') return 'Screen'
+  if (candidate.kind === 'element') return 'Element'
   if (candidate.kind === 'edge') return 'Edge'
   return 'Target'
 }

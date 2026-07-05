@@ -2595,7 +2595,7 @@ body.rf-annotation-overlay-window {
   border: 1px dashed rgba(255, 255, 255, 0.78);
   border-radius: 8px;
   background: transparent;
-  box-shadow: 0 0 0 1px rgba(15, 23, 42, 0.42), 0 0 18px rgba(56, 189, 248, 0.32);
+  box-shadow: 0 0 0 9999px rgba(8, 12, 18, 0.38), 0 0 0 1px rgba(15, 23, 42, 0.42), 0 0 18px rgba(56, 189, 248, 0.32);
 }
 
 .region-smart-candidate span {
@@ -2621,9 +2621,15 @@ body.rf-annotation-overlay-window {
   border-color: rgba(56, 189, 248, 0.88);
 }
 
+.region-smart-candidate.element {
+  border-color: rgba(255, 71, 71, 0.95);
+  border-style: solid;
+  box-shadow: 0 0 0 9999px rgba(8, 12, 18, 0.38), 0 0 0 1px rgba(15, 23, 42, 0.36), 0 0 20px rgba(255, 71, 71, 0.34);
+}
+
 .region-smart-candidate.edge {
   border-color: rgba(255, 71, 71, 0.95);
-  box-shadow: 0 0 0 1px rgba(15, 23, 42, 0.42), 0 0 18px rgba(255, 71, 71, 0.28);
+  box-shadow: 0 0 0 9999px rgba(8, 12, 18, 0.38), 0 0 0 1px rgba(15, 23, 42, 0.42), 0 0 18px rgba(255, 71, 71, 0.28);
 }
 
 .region-selection-rect.invalid {

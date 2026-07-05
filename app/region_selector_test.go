@@ -1,6 +1,7 @@
 package main
 
 import (
+	"image"
 	"runtime"
 	"testing"
 
@@ -90,5 +91,31 @@ func TestRegionOverlayBoundsUseVirtualDesktop(t *testing.T) {
 	}
 	if bounds.X != -1440 || bounds.Y != 0 || bounds.Width != 4000 || bounds.Height != 1440 {
 		t.Fatalf("regionOverlayBounds() = %#v, want virtual desktop bounds", bounds)
+	}
+}
+
+func TestRegionInitialPointerFromPointRequiresPointInsideOverlay(t *testing.T) {
+	session := RegionSelectionSession{
+		Bounds: RegionRect{X: -200, Y: 90, Width: 800, Height: 500},
+	}
+
+	inside := regionInitialPointerFromPoint(session, image.Point{X: 0, Y: 0}, true)
+	if inside == nil || inside.X != 0 || inside.Y != 0 {
+		t.Fatalf("inside initial pointer = %#v, want 0,0", inside)
+	}
+
+	bottomRightInside := regionInitialPointerFromPoint(session, image.Point{X: 799, Y: 499}, true)
+	if bottomRightInside == nil || bottomRightInside.X != 799 || bottomRightInside.Y != 499 {
+		t.Fatalf("bottom-right inside pointer = %#v, want 799,499", bottomRightInside)
+	}
+
+	if got := regionInitialPointerFromPoint(session, image.Point{X: 800, Y: 499}, true); got != nil {
+		t.Fatalf("right-edge pointer = %#v, want nil because right edge is outside", got)
+	}
+	if got := regionInitialPointerFromPoint(session, image.Point{X: 799, Y: 500}, true); got != nil {
+		t.Fatalf("bottom-edge pointer = %#v, want nil because bottom edge is outside", got)
+	}
+	if got := regionInitialPointerFromPoint(session, image.Point{X: 120, Y: 160}, false); got != nil {
+		t.Fatalf("unavailable cursor pointer = %#v, want nil", got)
 	}
 }

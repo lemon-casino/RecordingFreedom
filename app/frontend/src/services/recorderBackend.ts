@@ -410,22 +410,31 @@ export type RegionSelectionPurpose = 'capture' | 'annotation' | 'screenshot' | '
 
 export type RegionSmartCandidate = {
   id: string
-  kind: 'screen' | 'window' | 'edge' | string
+  kind: 'screen' | 'window' | 'element' | 'edge' | string
   label?: string
   bounds: {x: number; y: number; width: number; height: number}
   sourceId?: string
   score?: number
 }
 
+export type RegionDisplayBounds = {
+  id?: string
+  bounds: {x: number; y: number; width: number; height: number}
+  captureBounds: {x: number; y: number; width: number; height: number}
+  scaleFactor?: number
+}
+
 export type RegionSelectionSession = {
   id: string
   bounds: {x: number; y: number; width: number; height: number}
   captureBounds?: {x: number; y: number; width: number; height: number}
+  displayBounds?: RegionDisplayBounds[]
   minimumWidth: number
   minimumHeight: number
   displayCount: number
   purpose?: RegionSelectionPurpose
   candidates?: RegionSmartCandidate[]
+  initialPointer?: {x: number; y: number}
 }
 
 export type RegionAssistRequest = {
@@ -434,12 +443,14 @@ export type RegionAssistRequest = {
   pointerX?: number
   pointerY?: number
   selection?: RegionSelectionSession['bounds']
+  candidateLevel?: number
   candidates?: RegionSmartCandidate[]
 }
 
 export type RegionAssistResult = {
   candidates: RegionSmartCandidate[]
   best?: RegionSmartCandidate
+  source?: 'element' | 'image-hover' | 'selection' | 'static'
 }
 
 export type RegionSelectionResult = {
@@ -1419,18 +1430,15 @@ export async function showAnnotationOverlay(): Promise<AnnotationOverlayState> {
 
 export async function showAnnotationRegionSelector(): Promise<RegionSelectionSession> {
   try {
-    return fromBoundRegionSelectionSession(await RecordingFreedomService.ShowAnnotationRegionSelector())
+    return finalizeRegionSelectionSession(
+      fromBoundRegionSelectionSession(await RecordingFreedomService.ShowAnnotationRegionSelector()),
+      'annotation',
+      `browser-annotation-region-${Date.now()}`,
+    )
   } catch (error) {
     if (isWailsDesktopRuntime()) throw error
     console.info('Using browser annotation region selector fallback:', error)
-    return {
-      id: `browser-annotation-region-${Date.now()}`,
-      bounds: {x: 0, y: 0, width: window.innerWidth, height: window.innerHeight},
-      minimumWidth: 64,
-      minimumHeight: 64,
-      displayCount: 1,
-      purpose: 'annotation',
-    }
+    return emitBrowserRegionSession(browserRegionSelectionSession('annotation', `browser-annotation-region-${Date.now()}`))
   }
 }
 
@@ -1446,19 +1454,15 @@ export async function completeAnnotationRegionSelection(request: RegionSelection
 
 export async function showScreenshotRegionSelector(): Promise<RegionSelectionSession> {
   try {
-    return fromBoundRegionSelectionSession(await RecordingFreedomService.ShowScreenshotRegionSelector())
+    return finalizeRegionSelectionSession(
+      fromBoundRegionSelectionSession(await RecordingFreedomService.ShowScreenshotRegionSelector()),
+      'screenshot',
+      `browser-screenshot-${Date.now()}`,
+    )
   } catch (error) {
     if (isWailsDesktopRuntime()) throw error
     console.info('Using browser screenshot region selector fallback:', error)
-    return {
-      id: `browser-screenshot-${Date.now()}`,
-      bounds: {x: 0, y: 0, width: window.innerWidth, height: window.innerHeight},
-      captureBounds: {x: 0, y: 0, width: window.innerWidth, height: window.innerHeight},
-      minimumWidth: 64,
-      minimumHeight: 64,
-      displayCount: 1,
-      purpose: 'screenshot',
-    }
+    return emitBrowserRegionSession(browserRegionSelectionSession('screenshot', `browser-screenshot-${Date.now()}`))
   }
 }
 
@@ -1988,25 +1992,20 @@ export async function consumeScreenshotWhiteboardContext(): Promise<ScreenshotWh
   }
 }
 
-export async function startScrollingScreenshot(): Promise<void> {
+export async function startScrollingScreenshot(): Promise<RegionSelectionSession> {
   try {
-    await RecordingFreedomService.StartScrollingScreenshot()
+    return finalizeRegionSelectionSession(
+      fromBoundRegionSelectionSession(await RecordingFreedomService.StartScrollingScreenshot()),
+      'scrolling-screenshot',
+      `browser-scrolling-screenshot-${Date.now()}`,
+    )
   } catch (error) {
     if (isWailsDesktopRuntime()) throw error
     console.info('Using browser scrolling screenshot fallback:', error)
-    const session: RegionSelectionSession = {
-      id: `browser-scrolling-screenshot-${Date.now()}`,
-      bounds: {x: 0, y: 0, width: window.innerWidth, height: window.innerHeight},
-      captureBounds: {x: 0, y: 0, width: window.innerWidth, height: window.innerHeight},
-      minimumWidth: 64,
-      minimumHeight: 64,
-      displayCount: 1,
-      purpose: 'scrolling-screenshot',
-    }
-    ;(window as Window & {__RF_REGION_SESSION__?: RegionSelectionSession}).__RF_REGION_SESSION__ = session
-    window.dispatchEvent(new CustomEvent('rf-region-session', {detail: session}))
+    const session = emitBrowserRegionSession(browserRegionSelectionSession('scrolling-screenshot', `browser-scrolling-screenshot-${Date.now()}`))
     const popup = window.open('/#/region-overlay', 'recordingfreedom-scrolling-screenshot', 'width=1280,height=720')
     popup?.focus()
+    return session
   }
 }
 
@@ -2024,16 +2023,14 @@ export async function patchWhiteboardSettings(patch: WhiteboardSettingsPatch): P
 
 export async function showRegionSelector(): Promise<RegionSelectionSession> {
   try {
-    return fromBoundRegionSelectionSession(await RecordingFreedomService.ShowRegionSelector())
+    return finalizeRegionSelectionSession(
+      fromBoundRegionSelectionSession(await RecordingFreedomService.ShowRegionSelector()),
+      'capture',
+      `browser-region-${Date.now()}`,
+    )
   } catch (error) {
     console.info('Using browser region selector fallback:', error)
-    return {
-      id: `browser-region-${Date.now()}`,
-      bounds: {x: 0, y: 0, width: window.innerWidth, height: window.innerHeight},
-      minimumWidth: 64,
-      minimumHeight: 64,
-      displayCount: 1,
-    }
+    return emitBrowserRegionSession(browserRegionSelectionSession('capture', `browser-region-${Date.now()}`))
   }
 }
 
@@ -2057,7 +2054,9 @@ export async function completeRegionSelection(request: RegionSelectionSession['b
       capability: 'native-backend-queued',
       unavailableReason: 'Desktop region overlay is only available in the Wails runtime.',
     }
-    return {source, geometry: request, cancelled: false}
+    const result = {source, geometry: request, cancelled: false}
+    ;(window as Window & {__RF_LAST_REGION_SELECTION__?: RegionSelectionResult}).__RF_LAST_REGION_SELECTION__ = result
+    return result
   }
 }
 
@@ -2076,6 +2075,10 @@ export async function cancelRegionSelector(): Promise<RegionSelectionResult> {
     return fromBoundRegionSelectionResult(await RecordingFreedomService.CancelRegionSelection())
   } catch (error) {
     console.info('Using browser region selection cancel fallback:', error)
+    ;(window as Window & {__RF_LAST_REGION_CANCEL__?: {cancelled: boolean; at: string}}).__RF_LAST_REGION_CANCEL__ = {
+      cancelled: true,
+      at: new Date().toISOString(),
+    }
     return {cancelled: true}
   }
 }
@@ -2087,6 +2090,42 @@ export async function updateSelectedRegion(request: RegionSelectionSession['boun
     console.info('Using browser selected region update fallback:', error)
     return {geometry: request, cancelled: false}
   }
+}
+
+function browserRegionSelectionSession(purpose: NonNullable<RegionSelectionSession['purpose']>, id: string): RegionSelectionSession {
+  const previous = (window as Window & {__RF_REGION_SESSION__?: RegionSelectionSession}).__RF_REGION_SESSION__
+  const bounds = {x: 0, y: 0, width: window.innerWidth, height: window.innerHeight}
+  return {
+    id,
+    bounds,
+    captureBounds: bounds,
+    minimumWidth: purpose === 'screenshot' ? 12 : 64,
+    minimumHeight: purpose === 'screenshot' ? 12 : 64,
+    displayCount: 1,
+    purpose,
+    candidates: previous?.candidates ? [...previous.candidates] : undefined,
+  }
+}
+
+function finalizeRegionSelectionSession(
+  session: RegionSelectionSession,
+  purpose: NonNullable<RegionSelectionSession['purpose']>,
+  browserFallbackId: string,
+): RegionSelectionSession {
+  if (isWailsDesktopRuntime()) return session
+  const previous = (window as Window & {__RF_REGION_SESSION__?: RegionSelectionSession}).__RF_REGION_SESSION__
+  const hasUsableBounds = session.bounds.width > 0 && session.bounds.height > 0
+  const next = hasUsableBounds ? {...session, purpose: session.purpose ?? purpose} : browserRegionSelectionSession(purpose, browserFallbackId)
+  if ((!next.candidates || next.candidates.length === 0) && previous?.candidates?.length) {
+    next.candidates = [...previous.candidates]
+  }
+  return emitBrowserRegionSession(next)
+}
+
+function emitBrowserRegionSession(session: RegionSelectionSession): RegionSelectionSession {
+  ;(window as Window & {__RF_REGION_SESSION__?: RegionSelectionSession}).__RF_REGION_SESSION__ = session
+  window.dispatchEvent(new CustomEvent('rf-region-session', {detail: session}))
+  return session
 }
 
 function emitBrowserRegionFrame(bounds: RegionSelectionSession['bounds'], purpose: NonNullable<RegionSelectionSession['purpose']>) {
@@ -2511,6 +2550,7 @@ function fromBoundSource(source: BoundCaptureSource): CaptureSource {
 }
 
 function fromBoundRegionSelectionSession(session: BoundRegionSelectionSession): RegionSelectionSession {
+  const initialPointer = (session as BoundRegionSelectionSession & {initialPointer?: {x: number; y: number} | null}).initialPointer
   return {
     id: session.id,
     bounds: {
@@ -2525,11 +2565,18 @@ function fromBoundRegionSelectionSession(session: BoundRegionSelectionSession): 
       width: session.captureBounds.width,
       height: session.captureBounds.height,
     } : undefined,
+    displayBounds: (session.displayBounds ?? []).map((display) => ({
+      id: display.id,
+      bounds: fromBoundRegionRect(display.bounds),
+      captureBounds: fromBoundRegionRect(display.captureBounds),
+      scaleFactor: display.scaleFactor,
+    })),
     minimumWidth: session.minimumWidth,
     minimumHeight: session.minimumHeight,
     displayCount: session.displayCount,
     purpose: session.purpose === 'annotation' || session.purpose === 'screenshot' || session.purpose === 'scrolling-screenshot' ? session.purpose : 'capture',
     candidates: (session.candidates ?? []).map(fromBoundRegionSmartCandidate),
+    initialPointer: initialPointer ? {x: initialPointer.x, y: initialPointer.y} : undefined,
   }
 }
 
@@ -2548,6 +2595,7 @@ function fromBoundRegionAssistResult(result: BoundRegionAssistResult): RegionAss
   return {
     candidates: (result.candidates ?? []).map(fromBoundRegionSmartCandidate),
     best: result.best ? fromBoundRegionSmartCandidate(result.best) : undefined,
+    source: normalizeRegionAssistSource(result.source),
   }
 }
 
@@ -3124,9 +3172,11 @@ function browserRegionAssist(request: RegionAssistRequest): RegionAssistResult {
   const candidates = request.candidates ?? []
   let best: RegionSmartCandidate | undefined
   let bestScore = -1
+  let source: RegionAssistResult['source'] = 'static'
   if (request.selection) {
+    source = 'selection'
     for (const candidate of candidates) {
-      const score = browserCandidateSelectionScore(candidate.bounds, request.selection)
+      const score = browserCandidateSelectionScore(candidate.bounds, request.selection) + browserRegionKindWeight(candidate.kind)
       if (score > bestScore) {
         best = {...candidate, score}
         bestScore = score
@@ -3135,17 +3185,53 @@ function browserRegionAssist(request: RegionAssistRequest): RegionAssistResult {
     if (bestScore < 0.5) best = undefined
   } else {
     const point = {x: request.pointerX ?? -1, y: request.pointerY ?? -1}
-    for (const candidate of candidates) {
-      if (!browserRectContainsPoint(candidate.bounds, point)) continue
-      const area = Math.max(1, candidate.bounds.width * candidate.bounds.height)
-      const score = (candidate.score ?? 0) + 1000000 / area
-      if (score > bestScore) {
-        best = {...candidate, score}
-        bestScore = score
+    const containing = candidates
+      .filter((candidate) => browserRectContainsPoint(candidate.bounds, point))
+      .sort((left, right) => {
+        const kindRank = browserRegionKindWeight(right.kind) - browserRegionKindWeight(left.kind)
+        if (kindRank !== 0) return kindRank
+        return (left.bounds.width * left.bounds.height) - (right.bounds.width * right.bounds.height)
+      })
+    const level = Math.max(0, Math.min(containing.length - 1, Math.round(request.candidateLevel ?? 0)))
+    const leveled = containing[level]
+    if (leveled) {
+      const area = Math.max(1, leveled.bounds.width * leveled.bounds.height)
+      best = {...leveled, score: (leveled.score ?? 0) + browserRegionKindWeight(leveled.kind) + 1000000 / area}
+      source = browserRegionAssistSourceForKind(leveled.kind)
+    } else {
+      for (const candidate of candidates) {
+        if (!browserRectContainsPoint(candidate.bounds, point)) continue
+        const area = Math.max(1, candidate.bounds.width * candidate.bounds.height)
+        const score = (candidate.score ?? 0) + browserRegionKindWeight(candidate.kind) + 1000000 / area
+        if (score > bestScore) {
+          best = {...candidate, score}
+          bestScore = score
+        }
       }
+      source = browserRegionAssistSourceForKind(best?.kind)
     }
   }
-  return {candidates, best}
+  return {candidates, best, source}
+}
+
+function browserRegionAssistSourceForKind(kind: RegionSmartCandidate['kind'] | undefined): RegionAssistResult['source'] {
+  if (kind === 'element') return 'element'
+  if (kind === 'edge') return 'image-hover'
+  return 'static'
+}
+
+function normalizeRegionAssistSource(source: unknown): RegionAssistResult['source'] {
+  if (source === 'element' || source === 'image-hover' || source === 'selection' || source === 'static') {
+    return source
+  }
+  return undefined
+}
+
+function browserRegionKindWeight(kind: RegionSmartCandidate['kind']) {
+  if (kind === 'element') return 0.36
+  if (kind === 'edge') return 0.16
+  if (kind === 'window') return 0.08
+  return 0
 }
 
 function browserCandidateSelectionScore(candidate: RegionSelectionSession['bounds'], selection: RegionSelectionSession['bounds']) {
@@ -3168,7 +3254,12 @@ function browserCandidateSelectionScore(candidate: RegionSelectionSession['bound
 }
 
 function browserRectContainsPoint(rect: RegionSelectionSession['bounds'], point: {x: number; y: number}) {
-  return point.x >= rect.x && point.x <= rect.x + rect.width && point.y >= rect.y && point.y <= rect.y + rect.height
+  return rect.width > 0 &&
+    rect.height > 0 &&
+    point.x >= rect.x &&
+    point.x < rect.x + rect.width &&
+    point.y >= rect.y &&
+    point.y < rect.y + rect.height
 }
 
 function fromBrowserScreenshotPinState(value: unknown): ScreenshotPinState {
@@ -3369,6 +3460,7 @@ function toBoundRegionAssistRequest(request: RegionAssistRequest): BoundRegionAs
     pointerX: Math.round(request.pointerX ?? 0),
     pointerY: Math.round(request.pointerY ?? 0),
     selection: request.selection ? toBoundRegionSelectionRequest(request.selection) : undefined,
+    candidateLevel: Math.max(0, Math.round(request.candidateLevel ?? 0)),
   }
 }
 
