@@ -2,6 +2,7 @@ import {expect, test, type Page} from '@playwright/test'
 
 const browserSettingsKey = 'recordingfreedom.settings.v1'
 const browserScreenshotHistoryKey = 'recordingfreedom.screenshots.history.v1'
+const browserScreenshotPinStateKey = 'recordingfreedom.screenshots.pin.v1'
 
 test('capsule whiteboard opens board before recording and annotation during video recording', async ({page}) => {
   await openRecorderShell(page)
@@ -90,6 +91,63 @@ test('screenshot history exposes folder and delete actions', async ({page}) => {
   await page.getByRole('button', {name: 'Delete screenshot'}).click()
   await expect(page.getByText('No screenshot history')).toBeVisible()
   await expect.poll(async () => page.evaluate((key) => JSON.parse(window.localStorage.getItem(key) || '[]').length, browserScreenshotHistoryKey)).toBe(0)
+})
+
+test('screenshot history does not show stale pinned state before the user pins a screenshot', async ({page}) => {
+  await openRecorderShell(page, {
+    screenshotHistory: [{
+      id: 'stale-pin-shot',
+      path: 'browser-preview/data/screenshots/stale-pin-shot.png',
+      thumbnailPath: 'browser-preview/data/screenshots/thumbnails/stale-pin-shot.png',
+      createdAt: '2026-07-04T12:00:00Z',
+      width: 420,
+      height: 260,
+      mode: 'region',
+      pinned: true,
+      fixed: false,
+    }],
+  })
+
+  await page.getByRole('button', {name: 'Screenshot / board'}).click()
+  await expect(page.getByText('Pinned')).toHaveCount(0)
+})
+
+test('screenshot history pin action opens a real pinned image window state', async ({page}) => {
+  await openRecorderShell(page, {
+    screenshotHistory: [{
+      id: 'pin-shot',
+      path: 'browser-preview/data/screenshots/pin-shot.png',
+      thumbnailPath: 'browser-preview/data/screenshots/thumbnails/pin-shot.png',
+      createdAt: '2026-07-04T12:00:00Z',
+      width: 420,
+      height: 260,
+      mode: 'region',
+      pinned: false,
+      fixed: false,
+    }],
+  })
+
+  await page.getByRole('button', {name: 'Screenshot / board'}).click()
+  await page.getByRole('button', {name: 'Pin image'}).click()
+
+  await expect.poll(async () => page.evaluate((key) => {
+    const state = JSON.parse(window.localStorage.getItem(key) || '{}')
+    return {
+      visible: state.visible === true,
+      itemId: state.item?.id ?? '',
+      hasImage: typeof state.dataUrl === 'string' && state.dataUrl.startsWith('data:image/'),
+    }
+  }, browserScreenshotPinStateKey)).toEqual({
+    visible: true,
+    itemId: 'pin-shot',
+    hasImage: true,
+  })
+
+  const pinPage = await page.context().newPage()
+  await pinPage.goto('/#/screenshot-pin')
+  await expect(pinPage.locator('.screenshot-pin-shell.empty')).toHaveCount(0)
+  await expect(pinPage.locator('.screenshot-pin-shell img')).toHaveAttribute('src', /data:image\//)
+  await pinPage.close()
 })
 
 test('region screenshot reuses the annotation overlay before saving', async ({page}) => {

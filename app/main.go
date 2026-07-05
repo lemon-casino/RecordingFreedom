@@ -31,6 +31,7 @@ func init() {
 	application.RegisterEvent[ShortcutTriggeredEvent]("shortcut.triggered")
 	application.RegisterEvent[ScreenshotCapturedEvent]("screenshot.captured")
 	application.RegisterEvent[ScreenshotPinEvent]("screenshot.pin")
+	application.RegisterEvent[ScreenshotWhiteboardContext]("screenshot.whiteboard")
 }
 
 func main() {

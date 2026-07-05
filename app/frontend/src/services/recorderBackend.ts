@@ -279,6 +279,7 @@ const browserScreenshotAnnotationKey = 'recordingfreedom.screenshots.annotation.
 const browserWhiteboardVisibilityEvent = 'rf-whiteboard-visibility'
 const browserScreenshotCapturedEvent = 'rf-screenshot-captured'
 const browserScreenshotPinEvent = 'rf-screenshot-pin'
+const browserScreenshotWhiteboardEvent = 'rf-screenshot-whiteboard'
 const browserCapsuleDockSideEvent = 'rf-capsule-dock-side'
 const settingsSchemaVersion = 2
 const legacyPipMinimumScale = 0.016
@@ -293,9 +294,8 @@ const capsuleWindowSideWidth = 96
 const capsuleWindowSideHeight = 560
 const capsuleWindowSideCompactHeight = 360
 const capsuleWindowSideExpandedWidth = 520
-const capsuleSideSnapThreshold = 140
-const capsuleSideCenterSnapThreshold = 96
-const capsuleEdgeSnapThreshold = 48
+const capsuleSideSnapThreshold = 32
+const capsuleEdgeSnapThreshold = 32
 export type CapsuleWindowExpandDirection = 'down' | 'up'
 export type CapsuleWindowDockSide = 'none' | 'left' | 'right' | 'top' | 'bottom'
 
@@ -661,24 +661,40 @@ function resolveCapsuleDockTarget(
   workAreas: CapsuleWorkArea[],
 ): CapsuleDockTarget {
   if (!workAreas.length) return {side: 'none', workArea: null}
-  const vertical = workAreas
-    .flatMap((area) => [
-      capsuleDockCandidate('left', position, size, area),
-      capsuleDockCandidate('right', position, size, area),
-    ])
+  const activeWorkArea = capsuleWorkAreaForVisualRectFromAreas(position, size, workAreas)
+  if (!activeWorkArea) return {side: 'none', workArea: null}
+  const vertical = (['left', 'right'] as const)
+    .filter((side) => isExternalWorkAreaEdge(side, activeWorkArea, workAreas))
+    .map((side) => capsuleDockCandidate(side, position, size, activeWorkArea))
     .filter((candidate): candidate is CapsuleDockCandidate => candidate !== null)
   vertical.sort(compareCapsuleDockCandidates)
   if (vertical[0]) return {side: vertical[0].side, workArea: vertical[0].workArea}
 
-  const horizontal = workAreas
-    .flatMap((area) => [
-      capsuleDockCandidate('top', position, size, area),
-      capsuleDockCandidate('bottom', position, size, area),
-    ])
+  const horizontal = (['top', 'bottom'] as const)
+    .filter((side) => isExternalWorkAreaEdge(side, activeWorkArea, workAreas))
+    .map((side) => capsuleDockCandidate(side, position, size, activeWorkArea))
     .filter((candidate): candidate is CapsuleDockCandidate => candidate !== null)
   horizontal.sort(compareCapsuleDockCandidates)
   if (horizontal[0]) return {side: horizontal[0].side, workArea: horizontal[0].workArea}
-  return {side: 'none', workArea: capsuleWorkAreaForPositionFromAreas(position, size, workAreas)}
+  return {side: 'none', workArea: activeWorkArea}
+}
+
+export function __resolveCapsuleDockTargetForTest(input: {
+  position: {x: number; y: number}
+  size: {width: number; height: number}
+  workAreas: CapsuleWorkArea[]
+}) {
+  const target = resolveCapsuleDockTarget(input.position, input.size, input.workAreas)
+  return {
+    side: target.side,
+    workArea: target.workArea ? {...target.workArea} : null,
+  }
+}
+
+if (import.meta.env.DEV && typeof window !== 'undefined') {
+  ;(window as Window & {
+    __RF_TEST_RESOLVE_CAPSULE_DOCK_TARGET__?: typeof __resolveCapsuleDockTargetForTest
+  }).__RF_TEST_RESOLVE_CAPSULE_DOCK_TARGET__ = __resolveCapsuleDockTargetForTest
 }
 
 type CapsuleWorkArea = {
@@ -726,6 +742,28 @@ function capsuleWorkAreaForPositionFromAreas(
   const centerX = position.x + size.width / 2
   const centerY = position.y + size.height / 2
   return candidates.find((area) => pointInsideWorkArea(centerX, centerY, area)) ?? nearestWorkArea(centerX, centerY, candidates)
+}
+
+function capsuleWorkAreaForVisualRectFromAreas(
+  position: {x: number; y: number},
+  size: {width: number; height: number},
+  candidates: CapsuleWorkArea[],
+): CapsuleWorkArea | null {
+  if (!candidates.length) return null
+  const right = position.x + size.width
+  const bottom = position.y + size.height
+  const intersections = candidates
+    .map((area) => {
+      const areaRight = area.x + area.width
+      const areaBottom = area.y + area.height
+      return {
+        area,
+        areaPixels: overlapLength(position.x, right, area.x, areaRight) * overlapLength(position.y, bottom, area.y, areaBottom),
+      }
+    })
+    .sort((a, b) => b.areaPixels - a.areaPixels)
+  if (intersections[0]?.areaPixels > 0) return intersections[0].area
+  return capsuleWorkAreaForPositionFromAreas(position, size, candidates)
 }
 
 function normalizeCapsuleWorkArea(rect: {X: number; Y: number; Width: number; Height: number} | undefined): CapsuleWorkArea | null {
@@ -789,23 +827,49 @@ function capsuleDockCandidate(
       : side === 'top'
         ? Math.abs(position.y - edgePosition)
         : Math.abs(bottom - edgePosition)
-  const centerDistance = sideIsVertical
-    ? Math.abs(centerX - edgePosition)
-    : Math.abs(centerY - edgePosition)
   const active = sideIsVertical
-    ? edgeDistance <= capsuleSideSnapThreshold || centerDistance <= capsuleSideCenterSnapThreshold
+    ? edgeDistance <= capsuleSideSnapThreshold
     : edgeDistance <= capsuleEdgeSnapThreshold
   if (!active) return null
 
   return {
     side,
     workArea,
-    distance: sideIsVertical ? Math.min(edgeDistance, centerDistance + 24) : edgeDistance,
+    distance: edgeDistance,
     overlapRatio,
     originInside: pointInsideWorkAreaOpenEnd(position.x, centerY, workArea),
     centerInside: pointInsideWorkAreaOpenEnd(centerX, centerY, workArea),
     screenDistance: distanceToWorkArea(centerX, centerY, workArea),
   }
+}
+
+function isExternalWorkAreaEdge(
+  side: Exclude<CapsuleWindowDockSide, 'none'>,
+  workArea: CapsuleWorkArea,
+  workAreas: CapsuleWorkArea[],
+) {
+  const edgeTolerance = 2
+  const areaRight = workArea.x + workArea.width
+  const areaBottom = workArea.y + workArea.height
+  return !workAreas.some((other) => {
+    if (other === workArea) return false
+    const otherRight = other.x + other.width
+    const otherBottom = other.y + other.height
+    if (side === 'left') {
+      return Math.abs(otherRight - workArea.x) <= edgeTolerance &&
+        overlapLength(workArea.y, areaBottom, other.y, otherBottom) > edgeTolerance
+    }
+    if (side === 'right') {
+      return Math.abs(other.x - areaRight) <= edgeTolerance &&
+        overlapLength(workArea.y, areaBottom, other.y, otherBottom) > edgeTolerance
+    }
+    if (side === 'top') {
+      return Math.abs(otherBottom - workArea.y) <= edgeTolerance &&
+        overlapLength(workArea.x, areaRight, other.x, otherRight) > edgeTolerance
+    }
+    return Math.abs(other.y - areaBottom) <= edgeTolerance &&
+      overlapLength(workArea.x, areaRight, other.x, otherRight) > edgeTolerance
+  })
 }
 
 function compareCapsuleDockCandidates(a: CapsuleDockCandidate, b: CapsuleDockCandidate) {
@@ -1171,6 +1235,25 @@ export function subscribeScreenshotPin(handler: (state: ScreenshotPinState) => v
   return () => {
     disposeDesktop()
     window.removeEventListener(browserScreenshotPinEvent, onBrowserEvent)
+  }
+}
+
+export function subscribeScreenshotWhiteboardContext(handler: (context: ScreenshotWhiteboardContext) => void): () => void {
+  let disposeDesktop = () => {}
+  try {
+    disposeDesktop = Events.On('screenshot.whiteboard', (event) => {
+      handler(fromBoundScreenshotWhiteboardContext(event.data as BoundScreenshotWhiteboardContext))
+    })
+  } catch (error) {
+    console.info('Desktop screenshot whiteboard events unavailable:', error)
+  }
+  const onBrowserEvent = (event: Event) => {
+    handler(fromBrowserScreenshotWhiteboardContext((event as CustomEvent<ScreenshotWhiteboardContext>).detail))
+  }
+  window.addEventListener(browserScreenshotWhiteboardEvent, onBrowserEvent)
+  return () => {
+    disposeDesktop()
+    window.removeEventListener(browserScreenshotWhiteboardEvent, onBrowserEvent)
   }
 }
 
@@ -1584,6 +1667,16 @@ export async function hideWhiteboardWindow(): Promise<void> {
 }
 
 export async function loadWhiteboardScene(): Promise<WhiteboardScene> {
+  if (!isWailsDesktopRuntime()) {
+    const sceneJson = window.localStorage?.getItem(browserWhiteboardSceneKey) ?? ''
+    return {
+      available: sceneJson.trim() !== '',
+      scenePath: 'browser-preview/data/whiteboards/board-current.excalidraw',
+      sceneJson,
+      bytes: sceneJson.length,
+      contentType: 'application/vnd.excalidraw+json',
+    }
+  }
   try {
     return fromBoundWhiteboardScene(await RecordingFreedomService.LoadWhiteboardScene())
   } catch (error) {
@@ -1601,6 +1694,17 @@ export async function loadWhiteboardScene(): Promise<WhiteboardScene> {
 }
 
 export async function saveWhiteboardScene(sceneJson: string): Promise<WhiteboardScene> {
+  if (!isWailsDesktopRuntime()) {
+    window.localStorage?.setItem(browserWhiteboardSceneKey, sceneJson)
+    return {
+      available: true,
+      scenePath: 'browser-preview/data/whiteboards/board-current.excalidraw',
+      sceneJson,
+      bytes: sceneJson.length,
+      updatedAt: new Date().toISOString(),
+      contentType: 'application/vnd.excalidraw+json',
+    }
+  }
   try {
     return fromBoundWhiteboardScene(await RecordingFreedomService.SaveWhiteboardScene({sceneJson} as BoundWhiteboardSceneRequest))
   } catch (error) {
@@ -1689,7 +1793,7 @@ export async function patchScreenshotItem(id: string, patch: {pinned?: boolean; 
     const next = loadBrowserScreenshotHistory().map((item) => item.id === id
       ? {
         ...item,
-        pinned: patch.fixed === true ? true : patch.pinned ?? item.pinned,
+        pinned: false,
         fixed: patch.pinned === false ? false : patch.fixed ?? item.fixed,
       }
       : item)
@@ -1723,8 +1827,7 @@ export async function showPinnedScreenshot(id: string): Promise<ScreenshotPinSta
   } catch (error) {
     if (isWailsDesktopRuntime()) throw error
     console.info('Using browser screenshot pin fallback:', error)
-    let items = await patchScreenshotItem(id, {pinned: true})
-    const item = items.find((entry) => entry.id === id)
+    const item = loadBrowserScreenshotHistory().find((entry) => entry.id === id)
     const state = fromBrowserScreenshotPinState({
       visible: Boolean(item),
       item,
@@ -1750,6 +1853,9 @@ export async function hidePinnedScreenshot(): Promise<void> {
 }
 
 export async function loadPinnedScreenshot(): Promise<ScreenshotPinState> {
+  if (!isWailsDesktopRuntime()) {
+    return fromBrowserScreenshotPinState(safeJSON(window.localStorage?.getItem(browserScreenshotPinStateKey)))
+  }
   try {
     return fromBoundScreenshotPinState(await RecordingFreedomService.LoadPinnedScreenshot())
   } catch (error) {
@@ -1760,6 +1866,20 @@ export async function loadPinnedScreenshot(): Promise<ScreenshotPinState> {
 }
 
 export async function openScreenshotInWhiteboard(id: string): Promise<ScreenshotWhiteboardContext> {
+  if (!isWailsDesktopRuntime()) {
+    const item = loadBrowserScreenshotHistory().find((entry) => entry.id === id)
+    const context: ScreenshotWhiteboardContext = {
+      available: Boolean(item),
+      item,
+      dataUrl: browserScreenshotDataUrl(item),
+    }
+    window.localStorage?.setItem(browserScreenshotWhiteboardKey, JSON.stringify(context))
+    window.dispatchEvent(new CustomEvent(browserScreenshotWhiteboardEvent, {detail: context}))
+    const popup = window.open('/#/whiteboard', 'recordingfreedom-whiteboard', 'width=1120,height=760')
+    popup?.focus()
+    emitBrowserWhiteboardVisibility({visible: true, mode: 'whiteboard'})
+    return context
+  }
   try {
     return fromBoundScreenshotWhiteboardContext(await RecordingFreedomService.OpenScreenshotInWhiteboard(id))
   } catch (error) {
@@ -1772,6 +1892,7 @@ export async function openScreenshotInWhiteboard(id: string): Promise<Screenshot
       dataUrl: browserScreenshotDataUrl(item),
     }
     window.localStorage?.setItem(browserScreenshotWhiteboardKey, JSON.stringify(context))
+    window.dispatchEvent(new CustomEvent(browserScreenshotWhiteboardEvent, {detail: context}))
     const popup = window.open('/#/whiteboard', 'recordingfreedom-whiteboard', 'width=1120,height=760')
     popup?.focus()
     emitBrowserWhiteboardVisibility({visible: true, mode: 'whiteboard'})
@@ -1780,6 +1901,11 @@ export async function openScreenshotInWhiteboard(id: string): Promise<Screenshot
 }
 
 export async function consumeScreenshotWhiteboardContext(): Promise<ScreenshotWhiteboardContext> {
+  if (!isWailsDesktopRuntime()) {
+    const context = fromBrowserScreenshotWhiteboardContext(safeJSON(window.localStorage?.getItem(browserScreenshotWhiteboardKey)))
+    window.localStorage?.removeItem(browserScreenshotWhiteboardKey)
+    return context
+  }
   try {
     return fromBoundScreenshotWhiteboardContext(await RecordingFreedomService.ConsumeScreenshotWhiteboardContext())
   } catch (error) {
@@ -2425,7 +2551,7 @@ function fromBoundScreenshotItem(item: BoundScreenshotItem): ScreenshotItem {
     height: item.height,
     mode: item.mode || 'region',
     region: item.region ? fromBoundRegionRect(item.region) : undefined,
-    pinned: item.pinned === true,
+    pinned: false,
     fixed: item.fixed === true,
   }
 }
@@ -2869,7 +2995,7 @@ function fromBrowserScreenshotItem(value: unknown): ScreenshotItem | null {
     height: typeof record.height === 'number' ? record.height : 720,
     mode: typeof record.mode === 'string' ? record.mode : 'region',
     region: record.region,
-    pinned: record.pinned === true,
+    pinned: false,
     fixed: record.fixed === true,
   }
 }

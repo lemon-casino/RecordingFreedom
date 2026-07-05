@@ -24,6 +24,7 @@ declare module "@wailsio/runtime" {
             "recording.status": recording$0.StatusEvent;
             "screenshot.captured": main$0.ScreenshotCapturedEvent;
             "screenshot.pin": main$0.ScreenshotPinEvent;
+            "screenshot.whiteboard": main$0.ScreenshotWhiteboardContext;
             "settings.changed": settings$0.Settings;
             "shortcut.triggered": main$0.ShortcutTriggeredEvent;
             "whiteboard.visibility": main$0.WhiteboardVisibilityEvent;

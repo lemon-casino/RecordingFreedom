@@ -439,7 +439,12 @@ function App() {
   const capsuleWindowLayoutChangingRef = useRef(false)
   const capsuleWindowLayoutTokenRef = useRef(0)
   const capsuleDragCandidateRef = useRef(false)
+  const capsuleDragObservedMoveRef = useRef(false)
+  const capsuleDragStartPointRef = useRef<{x: number; y: number} | null>(null)
+  const capsuleDragPendingUntilRef = useRef(0)
+  const capsuleLastDragStabilizedAtRef = useRef(0)
   const capsuleProgrammaticMoveRef = useRef(false)
+  const capsuleIgnoreMoveEventsUntilRef = useRef(0)
   const capsuleDockSideRef = useRef<CapsuleWindowDockSide>('none')
   const floatingPointerInsideAtRef = useRef(0)
   const floatingPointerInsideRef = useRef(false)
@@ -1289,6 +1294,7 @@ function App() {
     capsuleWindowLayoutTokenRef.current = token
     capsuleWindowLayoutChangingRef.current = true
     capsuleProgrammaticMoveRef.current = true
+    capsuleIgnoreMoveEventsUntilRef.current = Date.now() + 700
     let disposed = false
     let forceTimer = 0
     let secondForceTimer = 0
@@ -1423,14 +1429,19 @@ function App() {
       forceTimer = 0
     }
     const stabilize = (reason: string) => {
+      const now = Date.now()
+      if (reason !== 'pointer-end' && now < capsuleIgnoreMoveEventsUntilRef.current) return
       if (capsuleProgrammaticMoveRef.current && reason !== 'pointer-end') return
+      if (now - capsuleLastDragStabilizedAtRef.current < 220) return
+      capsuleLastDragStabilizedAtRef.current = now
       clearTimers()
-      const settleDelay = reason === 'window-did-move' ? 240 : 90
+      const settleDelay = 90
       settleTimer = window.setTimeout(() => {
         if (disposed) return
         capsuleProgrammaticMoveRef.current = true
+        capsuleIgnoreMoveEventsUntilRef.current = Date.now() + 700
         void logClientEvent('capsule-window', 'stabilize', {reason, expanded: capsuleExpanded, compact: capsuleWindowCompact})
-        const snapBeforeLayout = !capsuleExpanded && (reason === 'pointer-end' || reason === 'window-end-move' || reason === 'window-did-move')
+        const snapBeforeLayout = !capsuleExpanded
         const snapTask = snapBeforeLayout
           ? snapCapsuleWindowToEdge(capsuleWindowCompact)
           : Promise.resolve(capsuleDockSideRef.current)
@@ -1461,16 +1472,49 @@ function App() {
       return Boolean(target.closest('.capsule')) && !Boolean(target.closest('button, select, input, textarea, label, [role="button"], [role="option"], .select-menu-list'))
     }
     const onPointerDown = (event: PointerEvent) => {
-      capsuleDragCandidateRef.current = isCapsuleDragTarget(event)
+      const dragCandidate = isCapsuleDragTarget(event)
+      capsuleDragCandidateRef.current = dragCandidate
+      capsuleDragObservedMoveRef.current = false
+      capsuleDragStartPointRef.current = dragCandidate ? {x: event.clientX, y: event.clientY} : null
+      capsuleDragPendingUntilRef.current = 0
+    }
+    const onPointerMove = (event: PointerEvent) => {
+      if (!capsuleDragCandidateRef.current || capsuleDragObservedMoveRef.current) return
+      const startPoint = capsuleDragStartPointRef.current
+      if (!startPoint) return
+      if (Math.hypot(event.clientX - startPoint.x, event.clientY - startPoint.y) >= 4) {
+        capsuleDragObservedMoveRef.current = true
+      }
     }
     const onPointerEnd = () => {
       if (!capsuleDragCandidateRef.current) return
+      const shouldStabilize = capsuleDragObservedMoveRef.current
       capsuleDragCandidateRef.current = false
-      stabilize('pointer-end')
+      capsuleDragObservedMoveRef.current = false
+      capsuleDragStartPointRef.current = null
+      if (shouldStabilize) {
+        capsuleDragPendingUntilRef.current = 0
+        stabilize('pointer-end')
+        return
+      }
+      capsuleDragPendingUntilRef.current = Date.now() + 420
     }
 
-    const unsubscribeMoveEnded = subscribeCapsuleWindowMoveEnded((reason) => stabilize(reason))
+    const unsubscribeMoveEnded = subscribeCapsuleWindowMoveEnded((reason) => {
+      const dragPending = Date.now() <= capsuleDragPendingUntilRef.current
+      if (reason === 'window-did-move') {
+        if (capsuleDragCandidateRef.current || dragPending) capsuleDragObservedMoveRef.current = true
+        return
+      }
+      if (!capsuleDragCandidateRef.current && !capsuleDragObservedMoveRef.current) return
+      capsuleDragCandidateRef.current = false
+      capsuleDragObservedMoveRef.current = false
+      capsuleDragStartPointRef.current = null
+      capsuleDragPendingUntilRef.current = 0
+      stabilize(reason)
+    })
     document.addEventListener('pointerdown', onPointerDown, true)
+    document.addEventListener('pointermove', onPointerMove, true)
     document.addEventListener('pointerup', onPointerEnd, true)
     document.addEventListener('pointercancel', onPointerEnd, true)
 
@@ -1479,9 +1523,13 @@ function App() {
       clearTimers()
       unsubscribeMoveEnded()
       document.removeEventListener('pointerdown', onPointerDown, true)
+      document.removeEventListener('pointermove', onPointerMove, true)
       document.removeEventListener('pointerup', onPointerEnd, true)
       document.removeEventListener('pointercancel', onPointerEnd, true)
       capsuleDragCandidateRef.current = false
+      capsuleDragObservedMoveRef.current = false
+      capsuleDragStartPointRef.current = null
+      capsuleDragPendingUntilRef.current = 0
     }
   }, [capsuleExpanded, capsuleExpandedHeight, capsuleWindowCompact, isSettingsWindow])
 
@@ -4761,7 +4809,6 @@ function screenshotMeta(item: ScreenshotItem, copy: RecorderCopy) {
       ? copy.screenshot.full
       : copy.screenshot.region
   const flags = [
-    item.pinned ? copy.screenshot.pinned : '',
     item.fixed ? copy.screenshot.fixed : '',
   ].filter(Boolean)
   return [mode, size, ...flags].join(' · ')

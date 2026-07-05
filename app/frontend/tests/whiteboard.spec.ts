@@ -1,6 +1,8 @@
 import {expect, test, type Page} from '@playwright/test'
 
 const browserSettingsKey = 'recordingfreedom.settings.v1'
+const browserWhiteboardSceneKey = 'recordingfreedom.whiteboard.scene.v1'
+const browserScreenshotWhiteboardKey = 'recordingfreedom.screenshots.whiteboard.v1'
 
 type LocaleCode = 'zh-CN' | 'en'
 type ThemeCode = 'night-teal' | 'mountain-green'
@@ -64,8 +66,33 @@ test.describe('whiteboard capsule localization and themes', () => {
   }
 })
 
-async function openWhiteboardWithSettings(page: Page, locale: LocaleCode, theme: ThemeCode) {
-  await page.addInitScript(({settingsKey, localeValue, themeValue}) => {
+test('whiteboard imports a screenshot context on initial load', async ({page}) => {
+  await openWhiteboardWithSettings(page, 'en', 'mountain-green', screenshotWhiteboardContext('initial-shot'))
+
+  await expect(page.locator('.whiteboard-shell')).toBeVisible()
+  await expect.poll(async () => readSavedWhiteboardScene(page, 'initial-shot')).toEqual({
+    hasImageElement: true,
+    hasImageFile: true,
+  })
+})
+
+test('whiteboard imports a screenshot context while the window is already open', async ({page}) => {
+  await openWhiteboardWithSettings(page, 'en', 'mountain-green')
+  await expect(page.locator('.whiteboard-shell')).toBeVisible()
+
+  await page.evaluate((context) => {
+    ;(window as Window & {__RF_SCREENSHOT_WHITEBOARD__?: unknown}).__RF_SCREENSHOT_WHITEBOARD__ = context
+    window.dispatchEvent(new CustomEvent('rf-screenshot-whiteboard', {detail: context}))
+  }, screenshotWhiteboardContext('live-shot'))
+
+  await expect.poll(async () => readSavedWhiteboardScene(page, 'live-shot')).toEqual({
+    hasImageElement: true,
+    hasImageFile: true,
+  })
+})
+
+async function openWhiteboardWithSettings(page: Page, locale: LocaleCode, theme: ThemeCode, screenshotContext?: unknown) {
+  await page.addInitScript(({settingsKey, screenshotWhiteboardKey, localeValue, themeValue, context}) => {
     window.localStorage.setItem(settingsKey, JSON.stringify({
       schemaVersion: 1,
       locale: localeValue,
@@ -112,8 +139,43 @@ async function openWhiteboardWithSettings(page: Page, locale: LocaleCode, theme:
         theme: themeValue,
       },
     }))
-  }, {settingsKey: browserSettingsKey, localeValue: locale, themeValue: theme})
+    if (context) {
+      window.localStorage.setItem(screenshotWhiteboardKey, JSON.stringify(context))
+      ;(window as Window & {__RF_SCREENSHOT_WHITEBOARD__?: unknown}).__RF_SCREENSHOT_WHITEBOARD__ = context
+    }
+  }, {settingsKey: browserSettingsKey, screenshotWhiteboardKey: browserScreenshotWhiteboardKey, localeValue: locale, themeValue: theme, context: screenshotContext})
   await page.goto('/#/whiteboard')
+}
+
+function screenshotWhiteboardContext(id: string) {
+  return {
+    available: true,
+    item: {
+      id,
+      path: `browser-preview/data/screenshots/${id}.png`,
+      thumbnailPath: `browser-preview/data/screenshots/thumbnails/${id}.png`,
+      createdAt: '2026-07-04T12:00:00Z',
+      width: 640,
+      height: 360,
+      mode: 'region',
+      pinned: false,
+      fixed: false,
+    },
+    dataUrl: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/p9sAAAAASUVORK5CYII=',
+  }
+}
+
+async function readSavedWhiteboardScene(page: Page, screenshotId: string) {
+  return page.evaluate(({sceneKey, id}) => {
+    const raw = window.localStorage.getItem(sceneKey) || ''
+    if (!raw) return {hasImageElement: false, hasImageFile: false}
+    const scene = JSON.parse(raw)
+    const fileId = `rf-screenshot-${id}`
+    return {
+      hasImageElement: Array.isArray(scene.elements) && scene.elements.some((element: {type?: string; fileId?: string}) => element.type === 'image' && element.fileId === fileId),
+      hasImageFile: Boolean(scene.files?.[fileId]?.dataURL),
+    }
+  }, {sceneKey: browserWhiteboardSceneKey, id: screenshotId})
 }
 
 async function expectNoHorizontalOverflow(page: Page) {

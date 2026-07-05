@@ -107,6 +107,7 @@ type ScreenshotCapturedEvent struct {
 type ScreenshotPinEvent struct {
 	Visible bool           `json:"visible"`
 	Item    ScreenshotItem `json:"item,omitempty"`
+	DataURL string         `json:"dataUrl,omitempty"`
 	Fixed   bool           `json:"fixed"`
 }
 
@@ -467,7 +468,6 @@ func (s *RecordingFreedomService) PatchScreenshotItem(req ScreenshotItemPatchReq
 			continue
 		}
 		if req.Pinned != nil {
-			items[index].Pinned = *req.Pinned
 			changed = true
 			if !*req.Pinned {
 				items[index].Fixed = false
@@ -475,11 +475,9 @@ func (s *RecordingFreedomService) PatchScreenshotItem(req ScreenshotItemPatchReq
 		}
 		if req.Fixed != nil {
 			items[index].Fixed = *req.Fixed
-			if *req.Fixed {
-				items[index].Pinned = true
-			}
 			changed = true
 		}
+		items[index].Pinned = false
 		break
 	}
 	if !changed {
@@ -592,17 +590,6 @@ func (s *RecordingFreedomService) ShowPinnedScreenshot(id string) (ScreenshotPin
 	if !imageResult.Available {
 		return ScreenshotPinState{}, fmt.Errorf("screenshot %q image is unavailable", item.ID)
 	}
-	pinned := true
-	history, err := s.PatchScreenshotItem(ScreenshotItemPatchRequest{ID: item.ID, Pinned: &pinned})
-	if err != nil {
-		return ScreenshotPinState{}, err
-	}
-	for _, candidate := range history.Items {
-		if candidate.ID == item.ID {
-			item = candidate
-			break
-		}
-	}
 	state := ScreenshotPinState{
 		Visible: true,
 		Item:    item,
@@ -663,6 +650,8 @@ func (s *RecordingFreedomService) OpenScreenshotInWhiteboard(id string) (Screens
 	if err := s.ShowWhiteboardWindow(); err != nil {
 		return ScreenshotWhiteboardContext{}, err
 	}
+	s.broadcastScreenshotWhiteboardContext(context)
+	s.emitScreenshotWhiteboardContext(context)
 	return context, nil
 }
 
@@ -1187,6 +1176,7 @@ func normalizeScreenshotHistory(items []ScreenshotItem) []ScreenshotItem {
 		if item.Mode == "" {
 			item.Mode = "region"
 		}
+		item.Pinned = false
 		seen[item.ID] = true
 		normalized = append(normalized, item)
 	}
@@ -1393,6 +1383,20 @@ func (s *RecordingFreedomService) broadcastScreenshotPinState(state ScreenshotPi
 	))
 }
 
+func (s *RecordingFreedomService) broadcastScreenshotWhiteboardContext(context ScreenshotWhiteboardContext) {
+	if s.whiteboardWindow == nil {
+		return
+	}
+	payload, err := json.Marshal(context)
+	if err != nil {
+		return
+	}
+	s.whiteboardWindow.ExecJS(fmt.Sprintf(
+		"window.__RF_SCREENSHOT_WHITEBOARD__=%s;window.dispatchEvent(new CustomEvent('rf-screenshot-whiteboard',{detail:window.__RF_SCREENSHOT_WHITEBOARD__}));",
+		string(payload),
+	))
+}
+
 func (s *RecordingFreedomService) emitScreenshotCaptured(item ScreenshotItem) {
 	if s == nil || s.app == nil {
 		return
@@ -1407,6 +1411,14 @@ func (s *RecordingFreedomService) emitScreenshotPin(state ScreenshotPinState) {
 	s.app.Event.Emit("screenshot.pin", ScreenshotPinEvent{
 		Visible: state.Visible,
 		Item:    state.Item,
+		DataURL: state.DataURL,
 		Fixed:   state.Fixed,
 	})
+}
+
+func (s *RecordingFreedomService) emitScreenshotWhiteboardContext(context ScreenshotWhiteboardContext) {
+	if s == nil || s.app == nil {
+		return
+	}
+	s.app.Event.Emit("screenshot.whiteboard", context)
 }

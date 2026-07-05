@@ -325,6 +325,7 @@ export interface ScreenshotItemPatchRequest {
 export interface ScreenshotPinEvent {
     "visible": boolean;
     "item"?: ScreenshotItem;
+    "dataUrl"?: string;
     "fixed": boolean;
 }
 

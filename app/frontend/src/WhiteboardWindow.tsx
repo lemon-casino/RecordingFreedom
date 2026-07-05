@@ -22,9 +22,10 @@ import type {ExcalidrawImperativeAPI} from '@excalidraw/excalidraw/types'
 import '@excalidraw/excalidraw/index.css'
 import {copyByLocale} from './i18n'
 import {defaultSettings, normalizeLocale, normalizeTheme, type AppSettings, type LocaleCode, type ThemeCode, type WhiteboardStrokeWidth, type WhiteboardTool} from './services/mockBackend'
-import {consumeScreenshotWhiteboardContext, hideWhiteboardWindow, loadSettings, loadWhiteboardScene, patchWhiteboardSettings, saveWhiteboardExport, saveWhiteboardScene, subscribeSettingsChanged, type ScreenshotWhiteboardContext} from './services/recorderBackend'
+import {consumeScreenshotWhiteboardContext, hideWhiteboardWindow, loadSettings, loadWhiteboardScene, patchWhiteboardSettings, saveWhiteboardExport, saveWhiteboardScene, subscribeScreenshotWhiteboardContext, subscribeSettingsChanged, type ScreenshotWhiteboardContext} from './services/recorderBackend'
 
 type SaveState = 'ready' | 'dirty' | 'saving' | 'saved' | 'failed'
+type WhiteboardWindowGlobal = Window & {__RF_SCREENSHOT_WHITEBOARD__?: ScreenshotWhiteboardContext}
 
 const whiteboardColors = ['#ef4444', '#f59e0b', '#22c55e', '#38bdf8', '#a78bfa', '#f8fafc', '#111827']
 const whiteboardTools: Array<{tool: WhiteboardTool; icon: typeof PenLine; labelKey: keyof AppSettings['whiteboard'] | string}> = [
@@ -54,7 +55,11 @@ function WhiteboardWindow() {
   const [statusText, setStatusText] = useState('')
   const [clearArmed, setClearArmed] = useState(false)
   const apiRef = useRef<ExcalidrawImperativeAPI | null>(null)
+  const settingsRef = useRef<AppSettings>(defaultSettings)
+  const pendingImportedSceneRef = useRef<ReturnType<typeof screenshotScene> | null>(null)
   const lastSceneRef = useRef('')
+  const lastScreenshotImportKeyRef = useRef('')
+  const screenshotImportGuardUntilRef = useRef(0)
   const saveTimerRef = useRef<number | null>(null)
   const clearTimerRef = useRef<number | null>(null)
   const copy = copyByLocale[locale]
@@ -80,11 +85,28 @@ function WhiteboardWindow() {
       .then(([settings, scene, screenshot]) => {
         if (cancelled) return
         applySettings(settings)
-        const parsed = screenshot.available && screenshot.dataUrl
+        const screenshotImport = screenshot.available && screenshot.dataUrl
           ? screenshotScene(settings, screenshot)
+          : null
+        if (screenshotImport) {
+          lastScreenshotImportKeyRef.current = screenshotContextKey(screenshot)
+          pendingImportedSceneRef.current = screenshotImport
+          screenshotImportGuardUntilRef.current = Date.now() + 2500
+        }
+        const parsed = screenshotImport
+          ? screenshotImport
           : scene.available && scene.sceneJson ? safeParseScene(scene.sceneJson) : null
         setInitialData(parsed ?? defaultScene(settings))
         if (!screenshot.available && scene.sceneJson) lastSceneRef.current = scene.sceneJson
+        if (screenshotImport) {
+          const sceneJson = importedSceneJSON(screenshotImport)
+          lastSceneRef.current = sceneJson
+          void saveWhiteboardScene(sceneJson)
+            .then((saved) => {
+              if (!cancelled) setStatusText(saved.updatedAt ? `${copy.whiteboard.saved} · ${saved.scenePath}` : copy.whiteboard.saved)
+            })
+            .catch((error) => console.error('Failed to save imported screenshot scene:', error))
+        }
         setStatusText(screenshot.available ? copy.whiteboard.unsaved : scene.available ? copy.whiteboard.ready : copy.whiteboard.unsaved)
       })
       .catch((error) => {
@@ -104,6 +126,7 @@ function WhiteboardWindow() {
   }, [])
 
   const applySettings = (settings: AppSettings) => {
+    settingsRef.current = settings
     setLocale(normalizeLocale(settings.locale))
     setTheme(normalizeTheme(settings.window.theme))
     setActiveToolState(settings.whiteboard.lastTool)
@@ -174,8 +197,41 @@ function WhiteboardWindow() {
     }
   }
 
+  const importScreenshotContext = useCallback((screenshot: ScreenshotWhiteboardContext) => {
+    if (!screenshot.available || !screenshot.dataUrl) return
+    const importKey = screenshotContextKey(screenshot)
+    if (lastScreenshotImportKeyRef.current === importKey) return
+    lastScreenshotImportKeyRef.current = importKey
+    const scene = screenshotScene(settingsRef.current, screenshot)
+    screenshotImportGuardUntilRef.current = Date.now() + 2500
+    setInitialData(scene)
+    setSaveState('dirty')
+    setStatusText(copy.whiteboard.unsaved)
+    const api = apiRef.current
+    if (!api) {
+      pendingImportedSceneRef.current = scene
+      scheduleSave(importedSceneJSON(scene))
+      return
+    }
+    try {
+      applyImportedSceneToApi(api, scene)
+      persistApiSceneSoon(api, scheduleSave)
+    } catch (error) {
+      console.error('Failed to import screenshot into whiteboard:', error)
+    }
+  }, [copy.whiteboard.unsaved, scheduleSave])
+
+  useEffect(() => {
+    const whiteboardWindow = window as WhiteboardWindowGlobal
+    if (whiteboardWindow.__RF_SCREENSHOT_WHITEBOARD__) {
+      importScreenshotContext(whiteboardWindow.__RF_SCREENSHOT_WHITEBOARD__)
+    }
+    return subscribeScreenshotWhiteboardContext(importScreenshotContext)
+  }, [importScreenshotContext])
+
   const onSceneChange = useCallback((elements: readonly unknown[], appState: unknown, files: unknown) => {
     try {
+      if (Date.now() < screenshotImportGuardUntilRef.current && !sceneHasImageElement(elements)) return
       const sceneJson = (serializeAsJSON as any)(elements, appState, files, 'local')
       scheduleSave(sceneJson)
     } catch (error) {
@@ -396,6 +452,12 @@ function WhiteboardWindow() {
               window.setTimeout(() => {
                 setActiveTool(activeTool, false)
                 applyStyle(strokeColor, strokeWidth, opacity)
+                if (pendingImportedSceneRef.current) {
+                  const scene = pendingImportedSceneRef.current
+                  pendingImportedSceneRef.current = null
+                  applyImportedSceneToApi(api, scene)
+                  persistApiSceneSoon(api, scheduleSave)
+                }
               }, 0)
             }
           }}
@@ -492,6 +554,56 @@ function screenshotScene(settings: AppSettings, context: ScreenshotWhiteboardCon
       },
     },
   }
+}
+
+function screenshotContextKey(context: ScreenshotWhiteboardContext) {
+  const item = context.item
+  return [
+    item?.id ?? '',
+    item?.path ?? '',
+    item?.width ?? 0,
+    item?.height ?? 0,
+    context.dataUrl?.length ?? 0,
+  ].join(':')
+}
+
+function importedSceneJSON(scene: ReturnType<typeof screenshotScene>) {
+  return JSON.stringify({
+    type: 'excalidraw',
+    version: 2,
+    source: 'recordingfreedom',
+    elements: scene.elements,
+    appState: scene.appState,
+    files: scene.files,
+  })
+}
+
+function sceneHasImageElement(elements: readonly unknown[]) {
+  return elements.some((element) => {
+    if (!element || typeof element !== 'object') return false
+    return (element as {type?: string; isDeleted?: boolean}).type === 'image' &&
+      (element as {isDeleted?: boolean}).isDeleted !== true
+  })
+}
+
+function applyImportedSceneToApi(api: ExcalidrawImperativeAPI, scene: ReturnType<typeof screenshotScene>) {
+  const files = Object.values(scene.files)
+  if (files.length > 0) api.addFiles(files as any)
+  api.updateScene({
+    elements: scene.elements as any,
+    appState: scene.appState as any,
+  } as any)
+}
+
+function persistApiSceneSoon(api: ExcalidrawImperativeAPI, persist: (sceneJson: string) => void) {
+  window.setTimeout(() => {
+    try {
+      const sceneJson = (serializeAsJSON as any)(api.getSceneElements(), api.getAppState(), api.getFiles(), 'local')
+      persist(sceneJson)
+    } catch (error) {
+      console.error('Failed to serialize imported screenshot:', error)
+    }
+  }, 0)
 }
 
 function normalizeOpacity(value: unknown) {

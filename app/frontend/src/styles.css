@@ -254,7 +254,7 @@ input:disabled,
   place-items: start center;
   padding: 8px 18px 0;
   background: transparent;
-  --wails-draggable: drag;
+  --wails-draggable: no-drag;
 }
 
 .rf-shell.drop-up {
@@ -282,7 +282,7 @@ input:disabled,
   justify-items: center;
   gap: 10px;
   width: min(var(--capsule-stage-width, 724px), 100%);
-  --wails-draggable: drag;
+  --wails-draggable: no-drag;
   transition: width 220ms ease;
 }
 
@@ -464,6 +464,24 @@ input:disabled,
   height: 18px;
   border-radius: 4px;
   background: currentColor;
+}
+
+.capsule button:not(.grabber),
+.capsule input,
+.capsule select,
+.capsule textarea,
+.capsule label,
+.capsule [role="button"],
+.capsule [role="option"],
+.popover,
+.popover *,
+.settings-sheet,
+.settings-sheet *,
+.close-confirm-panel,
+.close-confirm-panel *,
+.select-menu,
+.select-menu * {
+  --wails-draggable: no-drag;
 }
 
 .source-pill {
