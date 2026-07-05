@@ -36,6 +36,8 @@ RecordingFreedom 是一个全新的录制软件重构项目，目标技术栈为
    记录截图、截图历史、钉图/固定、截图进入画板，以及滚动截图的原生自动化验收路径。
 16. [15-smart-screenshot-region-assist.md](15-smart-screenshot-region-assist.md)
    记录 snow-shot 智能窗口识别分析、RecordingFreedom 智能候选合同、边缘吸附、焦点窗口截图和当前限制。
+17. [16-floating-panel-window-plan.md](16-floating-panel-window-plan.md)
+   记录胶囊列表多窗口浮层方案，目标是让未展开时只占胶囊大小，列表/下拉独立占用实际区域。
 
 ## 当前硬性决策
 
@@ -50,6 +52,7 @@ RecordingFreedom 是一个全新的录制软件重构项目，目标技术栈为
 - 初版 preview 后的未完成任务以 `08-unfinished-task-plan-audio-first.md` 为执行清单，优先推进真实系统声音、麦克风采集和 RNNoise 降噪。
 - 画板能力采用 Excalidraw React 组件作为画布核心，但由 RecordingFreedom 自己负责胶囊 UI、透明 overlay、点击穿透、录制包写入和导出合成。
 - 录制标注 overlay 不能只靠 `annotation-export-smoke` 宣称完成；真实平台完成状态必须按 `12-annotation-overlay-platform-smoke.md` 保存 evidence、来源矩阵、元素级标注事件、绘制/穿透 hit-region 诊断、1 分钟/5 分钟 `.rfrec`、`annotations/overlay-diagnostics.jsonl` 和真实导出视频，并通过矩阵验收。
+- 胶囊内所有会展开列表或面板的入口，后续应迁移到 `16-floating-panel-window-plan.md` 定义的 floating panel / floating select 合同；不要再通过扩大胶囊主窗口来承载大型 `.popover` 或 `.select-menu-list`。
 
 ## 外部技术依据
 
