@@ -14,6 +14,8 @@ test('capsule whiteboard opens board before recording and annotation during vide
   await toolsButton.click()
   await expect(page.getByRole('dialog', {name: 'board menu'})).toBeVisible()
   await expect(page.getByRole('button', {name: /Region screenshot/})).toBeVisible()
+  await expect(page.getByRole('button', {name: /Window screenshot/})).toHaveCount(0)
+  await expect(page.getByRole('button', {name: /Focused window/})).toHaveCount(0)
   await page.getByRole('button', {name: /Board/}).click()
   await expectWhiteboardLaunch(page, 'whiteboard', '/#/whiteboard')
   await expect(toolsButton).toHaveAttribute('aria-pressed', 'true')
@@ -189,6 +191,51 @@ test('region screenshot reuses the annotation overlay before saving', async ({pa
     targetType: 'screenshot-region',
   })
   await expect.poll(async () => page.evaluate((key) => JSON.parse(window.localStorage.getItem(key) || '[]').length, browserScreenshotHistoryKey)).toBe(0)
+})
+
+test('region screenshot recognizes hover candidates and selects them by click', async ({page}) => {
+  await page.addInitScript(({settingsKey, settings}) => {
+    window.localStorage.setItem(settingsKey, JSON.stringify(settings))
+    ;(window as Window & {__RF_REGION_SESSION__?: unknown}).__RF_REGION_SESSION__ = {
+      id: 'screenshot-region-hover-test',
+      bounds: {x: 0, y: 0, width: 900, height: 620},
+      captureBounds: {x: 0, y: 0, width: 900, height: 620},
+      minimumWidth: 64,
+      minimumHeight: 64,
+      displayCount: 1,
+      purpose: 'screenshot',
+      candidates: [{
+        id: 'window:test-browser',
+        kind: 'window',
+        label: 'Browser content',
+        bounds: {x: 180, y: 110, width: 280, height: 180},
+        sourceId: 'window:test-browser',
+        score: 0.9,
+      }],
+    }
+  }, {settingsKey: browserSettingsKey, settings: baseBrowserSettings('en', false, false)})
+  await page.goto('/#/region-overlay')
+
+  await page.mouse.move(260, 180)
+  await expect(page.locator('.region-smart-candidate.window')).toBeVisible()
+  await expect(page.locator('.region-smart-candidate.window')).toContainText('Browser content')
+
+  await page.mouse.click(260, 180)
+
+  await expect.poll(async () => page.evaluate(() => {
+    const overlay = (window as Window & {
+      __RF_ANNOTATION_OVERLAY__?: {mode?: string; target?: {type?: string; geometry?: {x: number; y: number; width: number; height: number}}}
+    }).__RF_ANNOTATION_OVERLAY__
+    return {
+      mode: overlay?.mode ?? '',
+      targetType: overlay?.target?.type ?? '',
+      geometry: overlay?.target?.geometry ?? null,
+    }
+  })).toEqual({
+    mode: 'screenshot',
+    targetType: 'screenshot-region',
+    geometry: {x: 180, y: 110, width: 280, height: 180},
+  })
 })
 
 async function openRecorderShell(page: Page, options: {locale?: 'zh-CN' | 'en'; microphone?: boolean; systemAudio?: boolean; screenshotHistory?: unknown[]} = {}) {

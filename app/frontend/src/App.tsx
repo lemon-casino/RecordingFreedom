@@ -3055,20 +3055,6 @@ function App() {
                       <small>{copy.screenshot.fullDetail}</small>
                     </span>
                   </button>
-                  <button type="button" className="menu-row" onClick={() => captureScreenshotMode('window')}>
-                    <AppWindow size={18} />
-                    <span>
-                      <strong>{copy.screenshot.window}</strong>
-                      <small>{copy.screenshot.windowDetail}</small>
-                    </span>
-                  </button>
-                  <button type="button" className="menu-row" onClick={() => captureScreenshotMode('focused-window')}>
-                    <MousePointer2 size={18} />
-                    <span>
-                      <strong>{copy.screenshot.focusedWindow}</strong>
-                      <small>{copy.screenshot.focusedWindowDetail}</small>
-                    </span>
-                  </button>
                   <button type="button" className="menu-row" onClick={beginScrollingScreenshot}>
                     <ScrollText size={18} />
                     <span>
@@ -4176,6 +4162,7 @@ function RegionOverlayWindow() {
   const [invalid, setInvalid] = useState(false)
   const [assistCandidate, setAssistCandidate] = useState<RegionSmartCandidate | null>(null)
   const shellRef = useRef<HTMLElement | null>(null)
+  const pointerDownCandidateRef = useRef<RegionSmartCandidate | null>(null)
   const [overlayLocale, setOverlayLocale] = useState<LocaleCode>(navigator.language.toLowerCase().startsWith('zh') ? 'zh-CN' : 'en')
   const [overlayTheme, setOverlayTheme] = useState<ThemeCode>('night-teal')
   const copy = copyByLocale[overlayLocale]
@@ -4332,8 +4319,10 @@ function RegionOverlayWindow() {
         if (event.button !== 0) return
         event.currentTarget.setPointerCapture(event.pointerId)
         const point = clampedClientPoint(event.clientX, event.clientY)
+        const candidate = bestLocalRegionCandidateForPoint(sessionCandidates, point)
+        pointerDownCandidateRef.current = candidate
+        setAssistCandidate(candidate)
         setDrag({startX: point.x, startY: point.y, currentX: point.x, currentY: point.y})
-        setAssistCandidate(null)
         setInvalid(false)
       }}
       onPointerUp={(event) => {
@@ -4348,8 +4337,16 @@ function RegionOverlayWindow() {
         }
         const point = clampedClientPoint(event.clientX, event.clientY)
         const rect = normalizedClientRect(drag.startX, drag.startY, point.x, point.y)
+        const clickCandidate = pointerDownCandidateRef.current && pointerDistance(drag.startX, drag.startY, point.x, point.y) <= 5
+          ? pointerDownCandidateRef.current
+          : null
+        pointerDownCandidateRef.current = null
         setDrag(null)
         setAssistCandidate(null)
+        if (clickCandidate) {
+          void completeSelection(clickCandidate.bounds)
+          return
+        }
         void assistedSelection(rect, point).then((nextRect) => completeSelection(nextRect))
       }}
       onPointerLeave={(event) => {
@@ -4373,7 +4370,9 @@ function RegionOverlayWindow() {
             width: visibleAssistCandidate.bounds.width,
             height: visibleAssistCandidate.bounds.height,
           }}
-        />
+        >
+          <span>{regionCandidateLabel(visibleAssistCandidate)}</span>
+        </div>
       )}
       {!isEditingRegion && !isRecordingRegion && selectedRect && (
         <div
@@ -4521,6 +4520,19 @@ function localRegionCandidateScore(candidate: RegionSelectionSession['bounds'], 
 
 function rectContainsPoint(rect: RegionSelectionSession['bounds'], point: {x: number; y: number}) {
   return point.x >= rect.x && point.x <= rect.x + rect.width && point.y >= rect.y && point.y <= rect.y + rect.height
+}
+
+function pointerDistance(startX: number, startY: number, currentX: number, currentY: number) {
+  return Math.hypot(currentX - startX, currentY - startY)
+}
+
+function regionCandidateLabel(candidate: RegionSmartCandidate) {
+  const label = candidate.label?.trim()
+  if (label) return label
+  if (candidate.kind === 'window') return 'Window'
+  if (candidate.kind === 'screen') return 'Screen'
+  if (candidate.kind === 'edge') return 'Edge'
+  return 'Target'
 }
 
 function SwitchRow({label, checked, disabled = false, onChange}: {label: string; checked: boolean; disabled?: boolean; onChange: (value: boolean) => void}) {

@@ -2762,7 +2762,7 @@ function browserAnnotationOverlayState(
     target: {
       type: mode === 'screenshot' ? 'screenshot-region' : 'screen',
       id: mode === 'screenshot' ? 'browser-screenshot-region' : 'browser-preview',
-      geometry: {x: bounds?.x ?? 0, y: bounds?.y ?? 0, width, height},
+      geometry: {x: bounds?.x ?? 0, y: bounds?.y ?? 0, width: bounds?.width ?? width, height: bounds?.height ?? height},
     },
     captureExcluded: false,
   }
