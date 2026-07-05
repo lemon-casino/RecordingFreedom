@@ -57,7 +57,7 @@ function AnnotationOverlayWindow() {
   const [dirty, setDirty] = useState(false)
   const [saving, setSaving] = useState(false)
   const apiRef = useRef<ExcalidrawImperativeAPI | null>(null)
-  const lastSceneRef = useRef('')
+  const lastSavedSceneRef = useRef('')
   const saveTimerRef = useRef<number | null>(null)
   const elementSignatureRef = useRef<Map<string, string>>(new Map())
   const pendingElementEventsRef = useRef<Map<string, AnnotationElementEvent>>(new Map())
@@ -153,6 +153,12 @@ function AnnotationOverlayWindow() {
   useEffect(() => {
     let cancelled = false
     setInitialData(null)
+    setDirty(false)
+    setSaving(false)
+    if (saveTimerRef.current !== null) {
+      window.clearTimeout(saveTimerRef.current)
+      saveTimerRef.current = null
+    }
     const sceneTask = isScreenshotMode ? loadScreenshotAnnotationCapture() : loadAnnotationCapture()
     void Promise.all([loadSettings(), sceneTask])
       .then(([settings, scene]) => {
@@ -164,7 +170,7 @@ function AnnotationOverlayWindow() {
         const nextInitialData = parsed ?? defaultAnnotationScene(settings)
         resetAnnotationElementTracking(nextInitialData)
         setInitialData(nextInitialData)
-        lastSceneRef.current = 'sceneJson' in scene ? scene.sceneJson ?? '' : ''
+        lastSavedSceneRef.current = 'sceneJson' in scene ? scene.sceneJson ?? '' : ''
       })
       .catch((error) => {
         console.info('Using annotation overlay load fallback:', error)
@@ -172,7 +178,7 @@ function AnnotationOverlayWindow() {
           const nextInitialData = defaultAnnotationScene(defaultSettings)
           resetAnnotationElementTracking(nextInitialData)
           setInitialData(nextInitialData)
-          lastSceneRef.current = ''
+          lastSavedSceneRef.current = ''
         }
       })
     return () => {
@@ -282,8 +288,15 @@ function AnnotationOverlayWindow() {
   }
 
   const scheduleSave = useCallback((sceneJson: string, hasElements: boolean) => {
-    if (!hasElements && !lastSceneRef.current) return
-    lastSceneRef.current = sceneJson
+    if (!hasElements && !lastSavedSceneRef.current) return
+    if (sceneJson === lastSavedSceneRef.current) {
+      if (saveTimerRef.current !== null) {
+        window.clearTimeout(saveTimerRef.current)
+        saveTimerRef.current = null
+      }
+      setDirty(false)
+      return
+    }
     setDirty(true)
     if (isScreenshotMode) return
     if (saveTimerRef.current !== null) window.clearTimeout(saveTimerRef.current)
@@ -295,10 +308,15 @@ function AnnotationOverlayWindow() {
   const saveCurrentAnnotation = async () => {
     const api = apiRef.current
     if (!api) return
-    setSaving(true)
+    if (saveTimerRef.current !== null) {
+      window.clearTimeout(saveTimerRef.current)
+      saveTimerRef.current = null
+    }
     try {
       const sceneElements = api.getSceneElements()
       const sceneJson = (serializeAsJSON as any)(sceneElements, api.getAppState(), api.getFiles(), 'local')
+      if (!dirty && sceneJson === lastSavedSceneRef.current && pendingElementEventsRef.current.size === 0) return
+      setSaving(true)
       const canvasSize = annotationSnapshotCanvasSize(overlayState)
       const blob = await exportToBlob({
         elements: annotationSnapshotExportElements(sceneElements, canvasSize.width, canvasSize.height),
@@ -321,10 +339,11 @@ function AnnotationOverlayWindow() {
         await saveAnnotationCapture({sceneJson, snapshotDataUrl, eventsJsonl})
       }
       pendingElementEventsRef.current.clear()
-      lastSceneRef.current = sceneJson
+      lastSavedSceneRef.current = sceneJson
       setDirty(false)
     } catch (error) {
       console.error('Failed to save annotation capture:', error)
+      setDirty(true)
     } finally {
       setSaving(false)
     }
@@ -336,7 +355,7 @@ function AnnotationOverlayWindow() {
       saveTimerRef.current = null
     }
     pendingElementEventsRef.current.clear()
-    lastSceneRef.current = ''
+    lastSavedSceneRef.current = ''
     setDirty(false)
     const scene = defaultAnnotationScene({
       ...defaultSettings,
@@ -390,6 +409,14 @@ function AnnotationOverlayWindow() {
     )
   }
 
+  const saveStatusLabel = saving
+    ? copy.whiteboard.saving
+    : dirty
+      ? copy.whiteboard.unsaved
+      : lastSavedSceneRef.current
+        ? copy.whiteboard.saved
+        : copy.whiteboard.ready
+
   return (
     <main className={`annotation-overlay-shell ${canvasReceivesInput ? 'is-drawing' : 'is-pass-through'}`} data-theme={theme}>
       <section ref={capsuleRef} className="annotation-capsule" aria-label={copy.whiteboard.title}>
@@ -416,7 +443,7 @@ function AnnotationOverlayWindow() {
         </button>
         <button className="annotation-save-status" type="button" aria-label={copy.whiteboard.save} title={copy.whiteboard.save} onClick={() => void saveCurrentAnnotation()}>
           <Save size={16} />
-          <span>{saving ? copy.whiteboard.saved : dirty ? copy.whiteboard.unsaved : copy.whiteboard.ready}</span>
+          <span>{saveStatusLabel}</span>
         </button>
         <button type="button" aria-label={copy.whiteboard.close} title={copy.whiteboard.close} onClick={() => void (isScreenshotMode ? hideScreenshotAnnotationOverlay() : hideAnnotationOverlay())}>
           <X size={17} />

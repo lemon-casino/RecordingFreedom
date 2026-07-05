@@ -223,6 +223,7 @@ export type RecorderCopy = {
     open: string
     close: string
     save: string
+    saving: string
     saved: string
     saveFailed: string
     loading: string
@@ -563,6 +564,7 @@ const zhCN: RecorderCopy = {
     open: '画板',
     close: '关闭画板',
     save: '保存',
+    saving: '保存中',
     saved: '已保存',
     saveFailed: '保存失败',
     loading: '正在载入画板',
@@ -1034,6 +1036,7 @@ const en: RecorderCopy = {
     open: 'Board',
     close: 'Close whiteboard',
     save: 'Save',
+    saving: 'Saving',
     saved: 'Saved',
     saveFailed: 'Save failed',
     loading: 'Loading whiteboard',

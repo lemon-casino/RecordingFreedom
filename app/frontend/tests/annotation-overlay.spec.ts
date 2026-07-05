@@ -58,11 +58,15 @@ test('screenshot annotation overlay saves into screenshot history on explicit sa
 
   await expect(page.locator('.annotation-overlay-shell')).toBeVisible()
   await expect(page.locator('.annotation-capsule-title')).toHaveText('Region screenshot')
+  await expect(page.locator('.annotation-save-status')).toContainText('Unsaved')
   await expect.poll(async () => page.evaluate((key) => JSON.parse(window.localStorage.getItem(key) || '[]').length, browserScreenshotHistoryKey)).toBe(0)
 
   await page.getByRole('button', {name: 'Save'}).click()
 
   await expect.poll(async () => page.evaluate((key) => JSON.parse(window.localStorage.getItem(key) || '[]').length, browserScreenshotHistoryKey)).toBe(1)
+  await expect(page.locator('.annotation-save-status')).toContainText('Saved')
+  await page.waitForTimeout(350)
+  await expect(page.locator('.annotation-save-status')).toContainText('Saved')
 })
 
 async function openAnnotationOverlay(page: Page) {

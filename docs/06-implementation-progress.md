@@ -2,6 +2,22 @@
 
 更新时间：2026-07-05
 
+## 本轮已完成并纳入 v0.1.11
+
+- 区域截图和录制中画板共用的标注 overlay 保存状态已修复：点击保存并写入截图历史或录制标注包后，胶囊保存按钮会稳定显示“已保存 / Saved”，不会被 Excalidraw 后续重复 `onChange` 重新标回“未保存 / Unsaved”。
+- 标注 overlay 保存状态机新增“最后已保存场景”基准：只有当前场景 JSON 和最后成功保存的场景不同，才进入未保存状态；保存成功后同一场景的重复变更事件会被忽略。
+- 保存动作新增明确的“保存中 / Saving”文案，保存失败时保持 dirty 状态，方便用户再次点击保存。
+- `annotation-overlay.spec.ts` 已覆盖区域截图保存后截图历史新增、保存状态从 `Unsaved` 变为 `Saved`，并在短暂等待后仍保持 `Saved`。
+
+本轮发布前验证：
+
+```text
+npm run build
+npm run test:e2e -- annotation-overlay.spec.ts --workers=1
+npm run test:e2e -- --workers=1
+git diff --check
+```
+
 ## 本轮已完成并纳入 v0.1.10
 
 - 截图历史与钉图状态解耦：历史列表不再把旧的 `pinned=true` 当成“已钉图”展示；钉图窗口状态由独立 pin state 管理，历史项只保留截图本身和 `fixed` 固定状态，避免截图历史一打开就显示已钉图。
