@@ -98,6 +98,29 @@ Whiteboard and history behavior:
 - Image-edge snapping and panel detection are intentionally conservative. They prefer no precise match over a fake precise match on flat content.
 - Full release validation still requires a real macOS run with Accessibility permission and visible Finder/browser controls under the cursor.
 
+## Acceptance Status
+
+Validated release:
+
+- Version: `v0.1.15`
+- Commit: `a740d3fe33d7b5545c1b44c7864ce7384f79040c`
+- Release workflow: <https://github.com/lemon-casino/RecordingFreedom/actions/runs/28736682322>
+- User acceptance date: `2026-07-05`
+- User acceptance result: the user reported `已经没有问题了` after downloading and testing the new build.
+
+Accepted scope:
+
+- snow-shot-style dynamic hover recognition is the baseline behavior for region selection.
+- Right-click cancel works during recognition, including while hover assist is pending.
+- Candidate level cycling keeps small controls, panels/sidebars, windows, and screens reachable from the same pointer target.
+- The shared selector path is accepted for region screenshot, scrolling screenshot target selection, recording annotation / screenshot annotation region selection, and custom region recording.
+- Future changes to screenshot, whiteboard, annotation overlay, or custom region recording must preserve this behavior unless a new user-approved design replaces it.
+
+Follow-up rule:
+
+- Treat future reports in this area as regressions or new feature requests, not as unfinished work in the `v0.1.15` smart-region baseline.
+- macOS Accessibility permission remains a runtime prerequisite for native AX element recognition. Without that permission, fallback image/window candidates are expected.
+
 ## Verification
 
 Required checks for this slice:

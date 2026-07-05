@@ -6,6 +6,7 @@ Current state:
 
 - Wails v3 React + TypeScript + Vite project scaffold is in place.
 - The capsule recorder UI, tray entry, independent settings window, global Simplified Chinese / English language switching, screen indicator, and region selector are implemented.
+- Smart region recognition for screenshots, scrolling screenshots, annotation regions, and custom recording regions was accepted by the user in `v0.1.15`; keep `AssistRegionSelection()` and the shared selector path as the regression baseline.
 - Go backend services provide app data discovery, `.rfrec` package creation, preflight checks, recovery scanning, storage health, Windows WASAPI audio capture, RNNoise dynamic native module coverage, and desktop dependency diagnostics under app-managed `data/video`.
 - Native video code paths are now wired for macOS ScreenCaptureKit and Windows FFmpeg desktop capture. Windows short smoke covers screen/all-screens/region/window plus system-audio/microphone mux into `screen.mp4`; Windows camera sidecar now uses FFmpeg DirectShow and writes `webcam.mp4`, but still needs real-camera smoke and long-recording validation.
 - Linux PipeWire capture, macOS/Linux camera sidecar, PIP export, signed Windows installers, macOS notarization, and Linux packages remain queued. Windows preview releases include an unsigned NSIS setup installer and a portable zip.
