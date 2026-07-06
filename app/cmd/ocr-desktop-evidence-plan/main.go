@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/json"
+	"errors"
 	"flag"
 	"fmt"
 	"image"
@@ -64,6 +65,9 @@ func main() {
 
 func run(opts options) (planReport, error) {
 	report := ocrevidence.NewChecklistReport(time.Now().UTC(), "", "", nil)
+	if opts.check && strings.TrimSpace(opts.visualDir) != "" && strings.TrimSpace(opts.dataRoot) == "" {
+		return planReport{}, errors.New("-data-root is required when -check is used with -visual-dir; use the same RecordingFreedom data root passed to ocr-desktop-evidence-session start/end")
+	}
 	if strings.TrimSpace(opts.visualDir) != "" {
 		visualDir, err := filepath.Abs(opts.visualDir)
 		if err != nil {

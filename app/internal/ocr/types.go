@@ -36,9 +36,20 @@ const (
 )
 
 type ModelFile struct {
-	Name   string `json:"name"`
-	SHA256 string `json:"sha256,omitempty"`
-	Bytes  int64  `json:"bytes,omitempty"`
+	Name        string               `json:"name"`
+	SourcePath  string               `json:"sourcePath,omitempty"`
+	DownloadURL string               `json:"downloadUrl,omitempty"`
+	SHA256      string               `json:"sha256,omitempty"`
+	Bytes       int64                `json:"bytes,omitempty"`
+	Generate    *GeneratedFileSource `json:"generate,omitempty"`
+}
+
+const GeneratedPaddleOCRCharacterDictKeys = "paddleocr-character-dict-keys"
+
+type GeneratedFileSource struct {
+	Type         string `json:"type"`
+	SourceBytes  int64  `json:"sourceBytes"`
+	SourceSHA256 string `json:"sourceSha256"`
 }
 
 type ModelSmoke struct {

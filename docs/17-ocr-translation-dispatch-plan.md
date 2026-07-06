@@ -1494,7 +1494,7 @@ OCR smoke 标准：
 - 用户可以回退 stable。
 - 新模型必须通过真实 smoke 后才能进入可选列表。
 
-状态：部分落地。R9 已完成本地模型管理、可验证下载器、release catalog 刷新链路、PP-OCRv6 candidate 本地模型包 smoke 和命令行生命周期 smoke：设置页和 floating settings 中新增 `OCR 模型` 区块，会通过同一个 `GetOcrStatus` 读取后端真实状态，展示 stable/latest/quality 三个 registry 模型、安装/校验/active 状态、缺失文件或校验失败原因、worker 路径和 runtime 路径。用户可以输入本地模型包 `.zip` 或解压目录路径并调用 `InstallOcrModelPackage` 导入；导入后重新读取后端状态，不在前端伪造安装成功。已安装且 verified 的非 active 模型必须先进入内联确认态，用户点击 `Confirm switch` 后才调用 `SetActiveOcrModel`；后端仍先验证 installed/verified，成功后才保存 active state，失败时前端重新读取真实状态并保留原 active model。已安装的非 active 模型可以调用 `RemoveOcrModel` 删除。应用内下载器只接受 registry 中带 `package.url/package.bytes/package.sha256` 的 RecordingFreedom verified package；没有完整 package metadata 时 UI 明确显示不可下载，不展示假下载。已新增 `RefreshOcrModelCatalog`：默认从 `https://github.com/lemon-casino/RecordingFreedom/releases/latest/download/ocr-model-catalog.json` 拉取目录，只接受 HTTPS 或测试用 loopback HTTP，只允许已知 model id，必须包含完整 package URL、bytes、SHA256 和必需文件清单；通过校验后写入 `data/models/ocr/registry.json` 并合并到运行时 registry。release workflow 已通过 `-catalog-output` 和 `-release-base-url` 从真实生成的 stable zip 派生 `ocr-model-catalog.json`，release-config-check 已固定该门禁。PP-OCRv6 latest/quality 仍保持 `releaseStatus: candidate`，虽然本机 Windows x64 已完成包哈希、worker smoke、截图/滚动/白板 smoke 和“安装不自动激活 -> 确认切换 -> 真实识别 -> 删除 active -> 回退 stable”命令行生命周期 evidence，但还不能进入用户可安装的 release catalog。浏览器/e2e 环境仍只用于 UI 链路验证，不会把模型导入、下载或目录刷新模拟成桌面成功。已新增前端 e2e `settings exposes local OCR model package management`、`settings downloads a verified OCR model package without auto-switching active model`、`settings refreshes the verified OCR model catalog before exposing downloads`、`settings confirms before switching the active OCR model` 和 `settings keeps the current OCR model when a confirmed switch fails`。仍未完成：PP-OCRv6 latest/quality 的 release-ready catalog、跨平台 worker smoke matrix、真实用户截图样例质量回验；下一次 release 发布后用真实桌面刷新 latest catalog、下载/取消/重试/安装/删除/切换 active 的回验；真实 Wails 设置页模型包导入、切换 active、删除和回退 stable 的桌面回验；latest/quality 真实识别失败后的用户可见回退 stable 流程。
+状态：部分落地。R9 已完成本地模型管理、可验证下载器、release catalog 刷新链路、PP-OCRv6 candidate 本地模型包 smoke 和命令行生命周期 smoke：设置页和 floating settings 中新增 `OCR 模型` 区块，会通过同一个 `GetOcrStatus` 读取后端真实状态，展示 stable/latest/quality 三个 registry 模型、安装/校验/active 状态、缺失文件或校验失败原因、worker 路径和 runtime 路径。用户可以输入本地模型包 `.zip` 或解压目录路径并调用 `InstallOcrModelPackage` 导入；导入后重新读取后端状态，不在前端伪造安装成功。已安装且 verified 的非 active 模型必须先进入内联确认态，用户点击 `Confirm switch` 后才调用 `SetActiveOcrModel`；后端仍先验证 installed/verified，成功后才保存 active state，失败时前端重新读取真实状态并保留原 active model。已安装的非 active 模型可以调用 `RemoveOcrModel` 删除。应用内下载器现在支持两类可验证来源：优先下载 registry 中带 `package.url/package.bytes/package.sha256` 的 RecordingFreedom verified package；如果没有 release package，但默认 registry 中每个必需文件都有固定官方 `downloadUrl/bytes/sha256`，则允许手动按官方源逐文件下载、逐文件校验，并对 PaddleOCR `inference.yml` 生成 `keys.txt` 后再次校验生成文件 bytes/SHA256。PP-OCRv6 latest/quality 因 `textlineOrientation.mode=none` 不再误报缺少 `cls.onnx`，但仍保持 `releaseStatus: candidate`，这代表它们可按固定官方源手动下载验收，不代表已进入 RecordingFreedom release-ready catalog。已新增 `RefreshOcrModelCatalog`：默认从 `https://github.com/lemon-casino/RecordingFreedom/releases/latest/download/ocr-model-catalog.json` 拉取目录，只接受 HTTPS 或测试用 loopback HTTP，只允许已知 model id，必须包含完整 package URL、bytes、SHA256 和必需文件清单；通过校验后写入 `data/models/ocr/registry.json` 并合并到运行时 registry。release workflow 已通过 `-catalog-output` 和 `-release-base-url` 从真实生成的 stable zip 派生 `ocr-model-catalog.json`，release-config-check 已固定该门禁。PP-OCRv6 latest/quality 仍保持 `releaseStatus: candidate`，虽然本机 Windows x64 已完成包哈希、worker smoke、截图/滚动/白板 smoke 和“安装不自动激活 -> 确认切换 -> 真实识别 -> 删除 active -> 回退 stable”命令行生命周期 evidence，但还不能进入 release-ready catalog。浏览器/e2e 环境仍只用于 UI 链路验证，不会把模型导入、下载或目录刷新模拟成桌面成功。已新增前端 e2e `settings exposes local OCR model package management`、`settings downloads a verified OCR model package without auto-switching active model`、`settings refreshes the verified OCR model catalog before exposing downloads`、`settings confirms before switching the active OCR model` 和 `settings keeps the current OCR model when a confirmed switch fails`；已新增后端单测固定 default registry 与 `third_party/ocr-models/manifest.json` 同步、PP-OCRv6 no-orientation 不要求 `cls.onnx`、官方逐文件下载生成 `keys.txt`、生成结果校验失败不安装。仍未完成：PP-OCRv6 latest/quality 的 release-ready catalog、跨平台 worker smoke matrix、真实用户截图样例质量回验；下一次 release 发布后用真实桌面刷新 latest catalog、下载/取消/重试/安装/删除/切换 active 的回验；真实 Wails 设置页模型包导入、切换 active、删除和回退 stable 的桌面回验；latest/quality 真实识别失败后的用户可见回退 stable 流程。
 
 ### G15 发布和防回归
 
@@ -1526,7 +1526,7 @@ OCR smoke 标准：
 - worker smoke。
 - 相关 e2e 覆盖 `ocr|screenshot|whiteboard`。
 
-状态：部分落地。已落地 worker/runtime 构建、stable 模型包 artifact、发布 staging、release-config-check 基础、stable 模型包 smoke 基础和跨平台 worker stable smoke workflow gate。R10 已进一步加固 `release-config-check`：实际仓库检查现在为 `ok=true`，并会防止 OCR 结果浮层/钉图 e2e、画板 OCR e2e、OCR 模型管理 e2e、翻译 provider/cache 单测、滚动长图 tile 单测、平台 worker capabilities/smoke 命令和桌面矩阵 smoke workflow 被删除或失效；同时修正 release notes 中 OCR release-gated 文案检查的大小写匹配。已新增 `app/internal/ocrevidence` 共享真实桌面 source kind 与视觉证据合同，`ocr-desktop-evidence-check`、`ocr-desktop-evidence-export` 和 `ocr-desktop-evidence-plan` 均复用同一合同，防止普通窗口/焦点窗口、白板整图/白板选区等验收口径漂移。已新增 `app/cmd/ocr-desktop-evidence-check`，把真实 Wails 桌面 OCR evidence 包格式固定下来：必须包含 README、平台信息、app log、OCR job 事件、所有截图/钉图/画板 source kind 的真实 result、视觉截图和可选翻译结果。已新增 `app/cmd/ocr-desktop-evidence-export`，用于从真实 data root、真实视觉截图目录和平台信息导出 checker-ready evidence 包；该工具要求 `-visual-dir`，不会合成假视觉证据。已新增 `app/cmd/ocr-desktop-evidence-plan`，可输出 `visual-capture-checklist.md/json` 并通过 `-check` 预检真实视觉截图目录，缺少任何必需桌面场景时提前失败；该工具只检查和列清单，不生成假图片。已新增 `scripts/export-ocr-desktop-evidence.ps1` 和 `scripts/export-ocr-desktop-evidence.sh`，用于 Windows/macOS/Linux 实机运行后先执行 checklist/precheck，再导出 evidence 并立即调用 checker 验收。checker/exporter/plan 已纳入 CI/Release desktop smoke tools 构建、Windows/macOS/Linux 发布包 staging 和三端 verifier；源码树导出脚本和发布后下载回验脚本已纳入 `release-config-check`，防止真实桌面验收流程只停留在源码里或退回到只复制文件不验收。checker/exporter/plan/scripts 只证明“真实桌面 evidence 的导出、预检与验收口径、发布工具链已固定”，不能替代真实 Wails 桌面运行证据。仍未完成：下一次 Actions 产出 Windows/macOS/Linux 各架构真实 worker smoke evidence、真实桌面 OCR 入口录屏/e2e、真实 provider 桌面回验和发布产物下载后的完整性回验。
+状态：部分落地。已落地 worker/runtime 构建、stable 模型包 artifact、发布 staging、release-config-check 基础、stable 模型包 smoke 基础和跨平台 worker stable smoke workflow gate。R10 已进一步加固 `release-config-check`：实际仓库检查现在为 `ok=true`，并会防止 OCR 结果浮层/钉图 e2e、画板 OCR e2e、OCR 模型管理 e2e、翻译 provider/cache 单测、滚动长图 tile 单测、平台 worker capabilities/smoke 命令和桌面矩阵 smoke workflow 被删除或失效；同时修正 release notes 中 OCR release-gated 文案检查的大小写匹配。已新增 `app/internal/ocrevidence` 共享真实桌面 source kind 与视觉证据合同，`ocr-desktop-evidence-check`、`ocr-desktop-evidence-export` 和 `ocr-desktop-evidence-plan` 均复用同一合同，防止白板整图/白板选区等验收口径漂移；窗口/焦点窗口 sourceKind 只做兼容保留，不进入当前桌面 evidence 必验合同。已新增 `app/cmd/ocr-desktop-evidence-check`，把真实 Wails 桌面 OCR evidence 包格式固定下来：必须包含 README、平台信息、app log、OCR job 事件、用户可见截图/钉图/画板 source kind 的真实 result、视觉截图和可选翻译结果。已新增 `app/cmd/ocr-desktop-evidence-export`，用于从真实 data root、真实视觉截图目录和平台信息导出 checker-ready evidence 包；该工具要求显式 `-data-root` 和 `-visual-dir`，不会猜默认数据目录，也不会合成假视觉证据。已新增 `app/cmd/ocr-desktop-evidence-plan`，可输出 `visual-capture-checklist.md/json` 并通过 `-check` 预检真实视觉截图目录，缺少任何必需桌面场景时提前失败；该工具只检查和列清单，不生成假图片。已新增 `scripts/export-ocr-desktop-evidence.ps1` 和 `scripts/export-ocr-desktop-evidence.sh`，用于 Windows/macOS/Linux 实机运行后先执行 checklist/precheck，再导出 evidence 并立即调用 checker 验收。checker/exporter/plan 已纳入 CI/Release desktop smoke tools 构建、Windows/macOS/Linux 发布包 staging 和三端 verifier；源码树导出脚本和发布后下载回验脚本已纳入 `release-config-check`，防止真实桌面验收流程只停留在源码里或退回到只复制文件不验收。checker/exporter/plan/scripts 只证明“真实桌面 evidence 的导出、预检与验收口径、发布工具链已固定”，不能替代真实 Wails 桌面运行证据。仍未完成：下一次 Actions 产出 Windows/macOS/Linux 各架构真实 worker smoke evidence、真实桌面 OCR 入口录屏/e2e、真实 provider 桌面回验和发布产物下载后的完整性回验。
 
 ## 当前已落地颗粒
 
@@ -1806,7 +1806,7 @@ OCR smoke 标准：
 尚未完成：
 
 - G8 截图入口真实模型端到端 UI/e2e 尚未完成：
-  - 区域截图、全屏截图、窗口截图、焦点窗口截图、滚动截图都要用真实 stable 模型跑通一次。
+  - 区域截图、全屏截图、滚动截图都要用真实 stable 模型跑通一次；窗口截图/焦点窗口截图只保留后端兼容 sourceKind，不再作为用户工具入口验收项。
   - 历史图上的 block 坐标需要用截图预览叠层验证，不能只看 `plainText`。
   - 无滚动目标必须按普通区域截图识别，不保存假长图。
 - G9 OCR 结果浮层仍需真实桌面视觉回验：
@@ -1849,7 +1849,7 @@ OCR smoke 标准：
 
 | 顺序 | 归属 | 目标 | 必须交付 | 验收证据 |
 | --- | --- | --- | --- | --- |
-| R1 | G7/G8 | 截图入口真实模型回验 | 区域、全屏、窗口、焦点窗口、滚动最终图都能提交 stable OCR；失败只写 OCR sidecar，不影响截图保存 | 真实 stable worker smoke；至少一组桌面截图历史结果截图；同图二次识别命中缓存日志 |
+| R1 | G7/G8 | 截图入口真实模型回验 | 区域、全屏、滚动最终图都能提交 stable OCR；窗口/焦点窗口 sourceKind 只做兼容回归；失败只写 OCR sidecar，不影响截图保存 | 真实 stable worker smoke；至少一组桌面截图历史结果截图；同图二次识别命中缓存日志 |
 | R2 | G9 | OCR 结果浮层桌面回验 | `ocr-result` floating panel 展示真实图片、真实 block、复制全文/单块、hover 高亮；关闭不影响主胶囊尺寸 | 前端 e2e 或桌面录屏；`ReadOcrResultImage` 单测已覆盖 imagePath/fallback/越界拒绝 |
 | R3 | G10 | 钉图/固定图片 OCR 回验 | 钉图窗口触发识别、显示/隐藏 block、高亮随 resize/缩放保持对齐，关闭重开后状态恢复 | 桌面视觉/e2e；钉图识别入队和 sidecar 单测 |
 | R4 | G11 | 画板选中图片 OCR 收尾 | 选中图片导出 OCR 在桌面真实可用；sourceKind 为 `whiteboard-selection`；结果打开时使用选中图片自己的 `imagePath` | 前端构建已通过；仍需桌面/e2e 证明选中图片、结果图片、block 坐标一致 |
@@ -1895,7 +1895,7 @@ OCR smoke 标准：
 - 已新增前端 e2e `floating OCR result panel renders real worker smoke evidence coordinates`：浏览器 fallback 支持注入 `__RF_OCR_RESULTS__` / `__RF_OCR_IMAGES__`，测试把真实 worker smoke evidence 的 `900x280`、`ppocrv5-mobile-zh-en`、两个 block 及其浮点坐标注入 `ocr-result` floating panel，并断言 SVG `viewBox=0 0 900 280`、两个 polygon 的 `points` 精确等于 worker 输出坐标。这样可以证明结果浮层 UI 消费真实 `OcrResult` 坐标，而不是只使用浏览器固定 mock block。
 - 已新增前端 e2e `screenshot history ready item opens OCR result floating panel with real worker evidence`：在胶囊主界面预置 ready 截图历史项、真实 worker smoke result 和图片，使用 `__RF_FORCE_FLOATING_PANEL_WINDOWS__` 只在 e2e 中模拟桌面多窗口浮层分支；测试从“Screenshot / board”打开历史列表，点击 ready 项的 `View OCR result`，断言 `__RF_FLOATING_PANEL__` 被设置为 `kind=ocr-result/contextId=<resultId>/380x420`，再打开 `/#/floating-panel` 验证同一真实坐标 result 被渲染。该测试覆盖“从胶囊历史项进入 OCR 浮层”的调用链，但仍不能替代真实 Wails 桌面录屏证据。
 - 已通过 `cd app && go test ./...`。
-- 仍未完成：真实桌面捕获入口还需要在 UI/e2e 中选择区域、全屏、窗口、焦点窗口和滚动目标并回验；历史图 block 坐标叠层仍需视觉/e2e 证据。
+- 仍未完成：真实桌面捕获入口还需要在 UI/e2e 中选择区域、全屏和滚动目标并回验；历史图 block 坐标叠层仍需视觉/e2e 证据。
 
 当前 R2 进度：
 
@@ -2382,7 +2382,7 @@ OCR smoke 标准：
   - `verify-windows-portable.ps1` 已补 `Can-ExecuteWindowsTarget`，在 ubuntu 等非 Windows/非兼容宿主只执行 ZIP 结构和 PE 元数据校验，不会错误执行 Windows OCR worker；真正的 worker `--capabilities` 仍保留给目标 Windows 宿主。
   - `verify-windows-portable.ps1`、`verify-macos-app-zip.sh` 和 `verify-linux-portable.sh` 现在都会在兼容宿主上继续执行 stable OCR 模型 smoke；`release-config-check` 已固定 `Verify published release downloads`、`verify-release-artifacts.ps1`、`release-download-verification`、`RecordingFreedom-release-download-verification` 和三端 stable OCR smoke 参数，防止发布流程退回“只上传不下载复验”或“只看 OCR 文件存在”。
   - `verify-release-artifacts.ps1` 现在支持可选真实 OCR desktop evidence 回验参数：`-OcrDesktopEvidenceVisualDir`、`-OcrDesktopEvidenceToolsDir`、`-OcrDesktopEvidenceDataRoot`、`-OcrDesktopEvidenceOutputDir`、`-OcrDesktopEvidenceMustContain` 和 `-OcrDesktopEvidenceRequireTranslation`。
-  - 只有显式提供真实 `OcrDesktopEvidenceVisualDir` 时才执行 OCR desktop evidence 回验；脚本会使用发布包/安装包 tools 目录中的 `ocr-desktop-evidence-export/check/plan` 调用 `export-ocr-desktop-evidence.ps1` 或 `.sh`，先生成 `visual-capture-checklist.md/json` 并预检真实视觉截图目录，再生成 evidence 包和 `check-report.json`，并把结果写入 `release-artifact-verification.json` 的 `ocr-desktop-evidence` 条目。
+  - 只有显式提供真实 `OcrDesktopEvidenceVisualDir` 时才执行 OCR desktop evidence 回验；此时也必须显式提供 `OcrDesktopEvidenceDataRoot`，脚本会使用发布包/安装包 tools 目录中的 `ocr-desktop-evidence-export/check/plan` 调用 `export-ocr-desktop-evidence.ps1` 或 `.sh`，先生成 `visual-capture-checklist.md/json` 并预检真实视觉截图目录和同一 data root 的运行链路，再生成 evidence 包和 `check-report.json`，并把结果写入 `release-artifact-verification.json` 的 `ocr-desktop-evidence` 条目。
   - 在 Windows 兼容宿主上，如果没有显式传 `OcrDesktopEvidenceToolsDir`，脚本会从已下载并校验 SHA256 的 Windows portable zip 自动解出 `tools/ocr-desktop-evidence-export.exe`、`tools/ocr-desktop-evidence-check.exe` 和 `tools/ocr-desktop-evidence-plan.exe` 到 `release-out/.../ocr-desktop-evidence-tools/windows-<arch>`，再用这些发布包工具执行 OCR desktop evidence checklist/precheck、导出和验收。
   - 在 macOS 兼容宿主上，如果没有显式传 `OcrDesktopEvidenceToolsDir`，脚本会从已下载并校验 SHA256 的 macOS app zip 自动解出 `RecordingFreedom.app/Contents/MacOS/tools/ocr-desktop-evidence-export`、`ocr-desktop-evidence-check` 和 `ocr-desktop-evidence-plan` 到 `release-out/.../ocr-desktop-evidence-tools/macos-<arch>`，再用 app bundle 内工具执行同一 evidence checklist/precheck、导出和验收。
   - 在 Linux 兼容宿主上，如果没有显式传 `OcrDesktopEvidenceToolsDir`，脚本会从已下载并校验 SHA256 的 Linux portable tar.gz 自动解出 `tools/ocr-desktop-evidence-export`、`ocr-desktop-evidence-check` 和 `ocr-desktop-evidence-plan` 到 `release-out/.../ocr-desktop-evidence-tools/linux-<arch>`，再用 portable 包内工具执行同一 evidence checklist/precheck、导出和验收。
@@ -2390,7 +2390,7 @@ OCR smoke 标准：
   - 这条接线用于“下载后的发布包 + 真实 Wails 桌面运行数据 + 真实视觉截图”回验，不会在缺少真实桌面数据时伪装完成。
 - 已新增真实 Wails 桌面 OCR evidence 验收检查器：
   - `app/cmd/ocr-desktop-evidence-check` 固定真实桌面验收包格式，要求 `README.md`、`platform.txt`、`app-log.jsonl`、`ocr-job-events.jsonl`、`results/*.json`、`visual/*`，并可通过 `-require-translation` 要求 `translations/*.json`。
-  - 检查器要求 `region-screenshot`、`full-screenshot`、`window-screenshot`、`focused-window-screenshot`、`scrolling-screenshot`、`pinned-screenshot`、`whiteboard`、`whiteboard-selection` 全部有 queued/ready 事件和真实 OCR result。
+  - 检查器要求当前用户可见入口 `region-screenshot`、`full-screenshot`、`scrolling-screenshot`、`pinned-screenshot`、`whiteboard`、`whiteboard-selection` 全部有 queued/ready 事件和真实 OCR result；`window-screenshot` / `focused-window-screenshot` 仅作为后端兼容 sourceKind 和旧历史读取保留，不再作为 A 批桌面 evidence 必验项。
   - result 校验会检查 `imagePath` 必须留在 evidence 目录内、图片尺寸与 result 一致、OCR block 坐标不能越界，并支持 `-must-contain RecordingFreedom`、`-must-contain 文字识别` 这类关键文本要求。
   - `release-config-check` 已固定该命令和 `TestRunAcceptsCompleteDesktopOCREvidence`、`TestRunRejectsMissingDesktopOCRSourceKind`、`TestRunRejectsOutOfBoundsOCRBlock`，防止真实桌面 evidence 验收退回浏览器 fallback 或假结果。
   - 注意：该颗粒只是把真实桌面 OCR evidence 的验收标准和检查器落地；仍需要下一次真实 Wails 桌面运行产出 evidence 包并由该 checker 验收。
@@ -2400,19 +2400,19 @@ OCR smoke 标准：
   - `verify-windows-portable.ps1`、`verify-macos-app-zip.sh`、`verify-linux-portable.sh` 会检查这三个工具存在并校验目标架构；`run-windows-portable-smoke.ps1` 也会要求 portable tools 目录里存在这三个工具。
   - `release-config-check` 已固定 CI/Release 构建、三端 staging、三端 verifier、发布后下载回验自动解包和 Windows portable smoke runner 里的 `ocr-desktop-evidence-export` / `ocr-desktop-evidence-check` / `ocr-desktop-evidence-plan`，防止发布包缺少真实桌面 evidence checklist、导出和验收工具。
 - 已新增真实 Wails 桌面 OCR evidence 导出工具：
-  - `app/cmd/ocr-desktop-evidence-export` 会从真实 RecordingFreedom data root 导出 checker-ready evidence 包，复制 app log、`data/ocr/evidence/ocr-job-events.jsonl`、每个必需 `sourceKind` 的最新 OCR result、对应原图到 evidence-relative `images/`、真实桌面视觉截图到 `visual/`、平台信息到 `platform.txt`，并写出 `README.md` 和 `export-report.json`。
+  - `app/cmd/ocr-desktop-evidence-export` 会从显式传入的真实 RecordingFreedom data root 导出 checker-ready evidence 包；缺少 `-data-root` 会直接失败，不再回退到猜测的默认 app data root。它会复制 app log、`data/ocr/evidence/ocr-job-events.jsonl`、每个必需 `sourceKind` 的最新 OCR result、对应原图到 evidence-relative `images/`、真实桌面视觉截图到 `visual/`、平台信息到 `platform.txt`，并写出 `README.md` 和 `export-report.json`。
   - 导出工具要求 `-visual-dir` 指向真实桌面截图目录；缺少视觉目录会失败，不会合成假图。OCR result 的 `imagePath` 必须留在 data root 内，导出时才会复制到 evidence 包，防止任意路径逃逸。
   - `-include-translations` 默认会复制已有 `data/ocr/translations/*.json`；没有翻译结果时不会冒充翻译验收完成。
-  - 已新增 `TestRunExportsDesktopOCREvidenceFromDataRoot` 和 `TestRunRejectsMissingVisualEvidenceDirectory`，并由 `release-config-check` 固定 exporter 源码、测试、CI/Release 构建和三端打包/验证门禁。
+  - 已新增 `TestRunExportsDesktopOCREvidenceFromDataRoot`、`TestRunRejectsMissingVisualEvidenceDirectory` 和 `TestRunRejectsMissingDataRoot`，并由 `release-config-check` 固定 exporter 源码、测试、CI/Release 构建和三端打包/验证门禁。
 - 已新增真实 Wails 桌面 OCR evidence checklist/precheck 工具：
-  - `app/internal/ocrevidence` 统一声明必需 `sourceKind` 与必需视觉场景，checker、exporter 和 plan 都复用该合同；普通窗口截图不能被 `focused-window` 文件名冒充，白板整图不能被 `whiteboard-selection` 冒充。
+  - `app/internal/ocrevidence` 统一声明必需 `sourceKind` 与必需视觉场景，checker、exporter 和 plan 都复用该合同；白板整图不能被 `whiteboard-selection` 冒充，窗口/焦点窗口 sourceKind 只做兼容保留，不进入当前必验合同。
   - `app/cmd/ocr-desktop-evidence-plan` 可输出 JSON 或 Markdown checklist；传入 `-visual-dir` 时会扫描真实桌面截图目录，传入 `-out-dir` 时会写出 `visual-capture-checklist.md` 和 `visual-capture-checklist.json`，传入 `-check` 时缺任一必需视觉场景会非零退出。
   - plan 工具只读取文件名并生成清单/预检结果，不生成、不复制、不合成任何假视觉图片。
   - 已新增 `TestRunWritesChecklistAndAcceptsCompleteVisualDir`、`TestRunReportsMissingVisualRequirements`、`TestMarkdownChecklistIncludesRecommendedFilenames` 和 `app/internal/ocrevidence` 合同测试，防止视觉证据清单和 checker/exporter 验收口径漂移。
 - 已新增真实 Wails 桌面 OCR evidence 一键导出/验收脚本：
   - Windows 使用 `scripts/export-ocr-desktop-evidence.ps1 -VisualDir <真实桌面截图目录>`；macOS/Linux 使用 `scripts/export-ocr-desktop-evidence.sh --visual-dir <真实桌面截图目录>`。
-  - 两个脚本都会先调用 `ocr-desktop-evidence-plan -out-dir <evidenceDir> -check` 生成 `visual-capture-checklist.md/json` 并预检真实视觉截图目录，再调用 `ocr-desktop-evidence-export`，随后立即调用 `ocr-desktop-evidence-check`；如果缺少真实 `visual-dir`、任一必需视觉场景、平台信息、app log、OCR job events、必需 source kind result 或图片坐标不合法，会直接失败。
-  - 脚本支持 `-RequireTranslation` / `--require-translation`、`-MustContain` / `--must-contain`、自定义 `DataRoot`、`EvidenceDir`、`PlatformFile`、版本、commit、artifact 和 known failures。
+  - 两个脚本都会先调用 `ocr-desktop-evidence-plan -out-dir <evidenceDir> -data-root <DataRoot> -check` 生成 `visual-capture-checklist.md/json` 并预检真实视觉截图目录和同一 data root 运行链路，再调用 `ocr-desktop-evidence-export -data-root <DataRoot>`，随后立即调用 `ocr-desktop-evidence-check`；如果缺少真实 `visual-dir`、`data-root`、任一必需视觉场景、平台信息、app log、OCR job events、必需 source kind result 或图片坐标不合法，会直接失败。
+  - 脚本支持 `-RequireTranslation` / `--require-translation`、`-MustContain` / `--must-contain`、显式 `DataRoot`、`EvidenceDir`、`PlatformFile`、版本、commit、artifact 和 known failures。
   - Windows 脚本可用 `System.Windows.Forms.Screen` 自动写 `platform.txt` 的 display count/resolution；macOS/Linux 脚本优先用 `system_profiler SPDisplaysDataType` 或 `xrandr --current` 自动写平台显示信息，无法推断分辨率时要求显式传入平台信息。
   - 两个平台脚本现在都会把 `ocr-desktop-evidence-check` 的 JSON 输出保存到 evidence 包内的 `check-report.json`，同时继续打印到终端；checker 失败时也会保留报告路径，方便 Actions artifact 或人工验收直接复核失败原因。
   - macOS/Linux 脚本已把 `visual-dir`、`evidence-dir`、`data-root` 和 `platform-file` 归一成绝对路径，避免脚本进入 `app/` 目录后相对路径指向错误。
@@ -2441,13 +2441,13 @@ OCR smoke 标准：
   - `ocr-desktop-evidence-export` 复制真实桌面视觉截图时会写入 `visual/visual-manifest.json`，每个视觉文件都记录 evidence-relative path、bytes、SHA256、width 和 height。
   - 导出时会忽略 `.DS_Store`、`Thumbs.db` 和旧 `visual-manifest.json` 这类元数据文件，但其他非图片文件会被判定为失败，不能混入 evidence 包。
   - `ocr-desktop-evidence-check` 现在要求 `visual-manifest.json` 存在，并重新读取文件大小、反算 SHA256、解码图片尺寸、检查重复 path 和必需视觉场景文件名。
-- `ocr-desktop-evidence-export` 现在也会在导出阶段校验必需视觉场景：区域截图、全屏截图、普通窗口截图、焦点窗口截图、滚动截图、OCR result floating panel、截图历史 ready、钉图 OCR 高亮、白板 OCR、白板选区 OCR、录制中 annotation OCR 安全；缺任一项时不会写出 `ok=true` 的 evidence 包。
+- `ocr-desktop-evidence-export` 现在也会在导出阶段校验必需视觉场景：区域截图、全屏截图、滚动截图、OCR result floating panel、截图历史 ready、钉图 OCR 高亮、白板 OCR、白板选区 OCR、录制中 annotation OCR 安全；缺任一项时不会写出 `ok=true` 的 evidence 包。
 - `export-report.json` 现在写入 `visualRequirements`，记录每个必需视觉场景匹配到的真实图片路径、关键 terms 和排除 terms；`ocr-desktop-evidence-check` 会根据 `visual-manifest.json` 重新匹配并反校验该字段，防止只靠图片数量或宽泛文件名通过验收。
 - 已新增 `TestRunRejectsTamperedVisualManifest` 与 `TestRunRejectsNonImageVisualEvidence`，防止视觉证据退回到“只看文件名存在”或导出不可解码图片。
 - 已把视觉证据从“文件名 + 可解码”继续收紧为“文件名 + 可解码 + 最小桌面尺寸”：`app/internal/ocrevidence` 的每个 `VisualRequirement` 都包含 `minWidth/minHeight`，`ocr-desktop-evidence-plan` 预检会读取真实 PNG/JPEG 尺寸，`ocr-desktop-evidence-export` 会把尺寸写入最终 `visual-capture-checklist.json`，`ocr-desktop-evidence-check` 会按同一合同反校验 `visual-manifest.json`、checklist 和 `export-report.json`，防止 80x40 这类小占位图或随手裁剪图冒充真实 Wails 桌面窗口。
 - 已新增 `TestVisualDimensionFailuresRejectsTinyPlaceholderImages`、`TestRunReportsTooSmallVisualRequirement`、`TestRunRejectsNonImageVisualPrecheck`、`TestRunRejectsTooSmallVisualEvidence` 和 `TestRunRejectsTooSmallVisualRequirement`，并由 `release-config-check` 固定 `VisualFileDimension`、`minWidth/minHeight`、`existingVisualDimensions` 和 `visualDimensionFailures` 不可回退。
 - 已把真实桌面 evidence 的预检从“只看视觉截图目录”扩展为“视觉截图 + data-root 运行链路”：`app/internal/ocrevidence` 新增 `AuditDataRoot` / `DataRootPrecheckReport`，`ocr-desktop-evidence-plan` 新增 `-data-root` 参数，可在导出前检查 `logs/recordingfreedom-*.log`、`data/ocr/evidence/ocr-job-events.jsonl` 和 `data/ocr/results/*.json` 是否覆盖每个必需 `sourceKind` 的 queue/open/read/client render/job ready/result image，并单独检查录制中 annotation 的 `save-capture packageDir` 与后台 OCR `sourceId` 是否匹配。
-- `scripts/export-ocr-desktop-evidence.ps1` 与 `.sh` 已在用户传入 `DataRoot` / `--data-root` 时把该目录传给 plan 预检；如果真实桌面运行缺少某个入口的前端 render、job ready、result image 或 annotation 关联，第一步 `visual-capture-checklist.md/json` 就会显示缺口并在 `-check` 下失败，不必等最终 checker 才发现。
+- `scripts/export-ocr-desktop-evidence.ps1` 与 `.sh` 已强制要求用户传入 `DataRoot` / `--data-root`，并把该目录同时传给 plan 预检和 exporter；底层 `ocr-desktop-evidence-export` 也会拒绝缺少 `-data-root`，发布后下载回验在提供 `OcrDesktopEvidenceVisualDir` 时同样要求 `OcrDesktopEvidenceDataRoot`。如果真实桌面运行缺少某个入口的前端 render、job ready、result image 或 annotation 关联，第一步 `visual-capture-checklist.md/json` 就会显示缺口并在 `-check` 下失败，不必等最终 checker 才发现。
 - data-root 预检已新增 run window 合同：每个必需 `sourceKind` 的 `OcrResult.createdAt` 必须落在同一真实验收时间窗口内，默认最大跨度为 6 小时；匹配到的 app-log 事件必须带 `timestamp`，并落在该结果窗口前后 2 小时容差内，防止把不同历史运行的日志、结果和前端渲染记录拼成一包假完整 evidence。
 - `ocr-desktop-evidence-export` 现在会把 data-root 预检结果作为 `data-root-precheck.json` 写进最终 evidence 包，并把同一份 `DataRootPrecheckReport` 嵌入 `visual-capture-checklist.json/md`；`ocr-desktop-evidence-check` 已把 `data-root-precheck.json` 作为必需文件校验，要求 `checkComplete=true`、必需 source 数量完整、run window 存在、无 missing requirements，并要求 `export-report.json` 显式指向 `data-root-precheck.json`。最终 evidence 包不再只保存视觉 checklist，运行链路预检结果也会随包保留。
 - `ocr-desktop-evidence-export` 已把最终 evidence 包里的 `app-log.jsonl` 收敛到 `data-root-precheck.json` 的 `appEventStart -> appEventEnd` 窗口内，只导出本次真实验收 run window 相关日志；历史 app log 即使含有同 sourceKind/sourceId/resultId 的旧事件也不会进入最终包。`ocr-desktop-evidence-check` 新增 `app-log run window` 检查，要求导出的每一条 app-log 都带 `timestamp` 且处在同一窗口内，防止最终包被历史日志污染或误匹配。
@@ -2469,7 +2469,7 @@ OCR smoke 标准：
   - 已新增 `TestRunRejectsKnownFailures`，并由 `release-config-check` 固定 `validateKnownFailuresAreClear` 与 `known failures must be none`，防止带阻塞项的 evidence 包被误判为 ready。
 - 已通过 `cd app && go test ./cmd/ocr-desktop-evidence-export ./cmd/ocr-desktop-evidence-check ./cmd/release-config-check -count=1`，覆盖真实桌面 OCR evidence exporter、checker 和 release gate fixture。
 - 已通过 `cd app && go test ./cmd/ocr-desktop-evidence-export ./cmd/ocr-desktop-evidence-check ./cmd/release-config-check -count=1`，覆盖 `visual/visual-manifest.json` 导出、篡改拒绝、非图片视觉证据拒绝和 release gate fixture。
-- 已通过 `cd app && go test ./cmd/ocr-desktop-evidence-export ./cmd/ocr-desktop-evidence-check ./cmd/release-config-check -count=1`，覆盖 `visualRequirements` 导出与 checker 反校验、必需视觉场景缺失拒绝、普通窗口与焦点窗口不互相冒充、白板整图与白板选区不互相冒充、录制中 annotation OCR 视觉证据不可缺失。
+- 已通过 `cd app && go test ./cmd/ocr-desktop-evidence-export ./cmd/ocr-desktop-evidence-check ./cmd/release-config-check -count=1`，覆盖 `visualRequirements` 导出与 checker 反校验、必需视觉场景缺失拒绝、用户隐藏的窗口/焦点窗口入口不进入必验合同、白板整图与白板选区不互相冒充、录制中 annotation OCR 视觉证据不可缺失。
 - 已通过 `cd app && go run ./cmd/release-config-check`，真实仓库报告 `ok=true`，新增视觉 manifest 加固门禁均为 `ready`。
 - 已通过 `cd app && go test ./cmd/ocr-desktop-evidence-check ./cmd/release-config-check -count=1`，覆盖 `export-report.json` 与实际 evidence 包内容不一致时的失败路径。
 - 已通过 `cd app && go test ./cmd/ocr-desktop-evidence-export ./cmd/ocr-desktop-evidence-check ./cmd/release-config-check -count=1`，覆盖 exporter 生成的 report 与 checker 新增反校验合同兼容。
@@ -2545,7 +2545,7 @@ OCR smoke 标准：
 
 | 顺序 | 批次 | 包含的用户能力 | 已有基础 | 剩余功能/问题 | 下一次集中动作 | 通过后才能宣称 |
 | --- | --- | --- | --- | --- | --- | --- |
-| 1 | A. 真实桌面 OCR 入口闭环 | 区域/全屏/窗口/焦点窗口/滚动截图、截图历史、钉图、画板、录制中画板 OCR | OCR 队列、worker、result、evidence contract、export/check 工具已接线 | 缺真实 Wails 桌面 evidence；OCR result 浮层、polygon、高亮、画板选区、录制中 annotation 还未形成一包验收证据 | 一次性跑完所有入口的真实桌面采集，导出 evidence 包并用 checker 通过 | “OCR 入口进入桌面验收” |
+| 1 | A. 真实桌面 OCR 入口闭环 | 区域/全屏/滚动截图、截图历史、钉图、画板、录制中画板 OCR | OCR 队列、worker、result、evidence contract、export/check 工具已接线；窗口/焦点窗口 sourceKind 仅兼容保留 | 缺真实 Wails 桌面 evidence；OCR result 浮层、polygon、高亮、画板选区、录制中 annotation 还未形成一包验收证据 | 一次性跑完所有用户可见入口的真实桌面采集，导出 evidence 包并用 checker 通过 | “OCR 入口进入桌面验收” |
 | 2 | B. 翻译 provider 与隐私闭环 | OCR 结果翻译、复制、缓存、provider 配置、隐私保护 | local/external provider smoke 和 release gate 基础已接线 | 真实 DeepL/OpenAI-compatible、三端 secret store、日志脱敏和 UI 调用证据不足 | 一次性验证 provider、secret store、缓存、强制请求、失败提示、日志无 key/原文 | “翻译进入桌面验收” |
 | 3 | C. 模型通道与质量闭环 | stable/latest/quality 模型、下载、切换、删除、回退 | stable 默认方向、模型包/下载/worker smoke 门禁已具备 | PP-OCRv6 latest/quality 仍是 candidate；真实截图样例质量、跨平台 smoke 和失败回退证据不足 | 一次性完成 latest/quality 模型包 manifest、SHA256、smoke、真实样例、回退和设置页桌面证据 | “模型通道可给用户切换” |
 | 4 | D. 发布与长期防回归闭环 | Windows/macOS/Linux 发布包、worker/runtime/model/tool 回验 | release-config-check、verifier、evidence scripts 已加固 | 下一次 Actions 真实产物、下载后完整回验和全平台 smoke JSON 还没有形成最终证据 | 发布后下载产物，跑完整 verifier，保存 `release-artifact-verification.json` 和各平台 smoke evidence | “全平台 OCR/翻译发布可验收” |
@@ -2597,7 +2597,7 @@ OCR smoke 标准：
 
 范围：
 
-- 区域截图、全屏截图、窗口截图、焦点窗口截图、滚动截图。
+- 区域截图、全屏截图、滚动截图；窗口截图/焦点窗口截图不再是用户工具入口，只做 sourceKind 兼容保留。
 - 截图历史里的手动识别、自动识别、重试、打开结果、复制文字。
 - 录制前画板、录制中 annotation-overlay、画板整图、画板选中图片 OCR。
 - 钉图窗口的识别、高亮、复制、打开结果、关闭重开恢复。
@@ -2611,14 +2611,14 @@ OCR smoke 标准：
 
 验收输出：
 
-- 一份真实桌面 OCR evidence 包，至少覆盖 `region-screenshot`、`full-screenshot`、`window-screenshot`、`focused-window-screenshot`、`scrolling-screenshot`、`pinned-screenshot`、`whiteboard`、`whiteboard-selection` 和录制中 annotation OCR。
+- 一份真实桌面 OCR evidence 包，至少覆盖用户可见的 `region-screenshot`、`full-screenshot`、`scrolling-screenshot`、`pinned-screenshot`、`whiteboard`、`whiteboard-selection` 和录制中 annotation OCR。
 - evidence 包必须通过 `ocr-desktop-evidence-plan`、`ocr-desktop-evidence-export`、`ocr-desktop-evidence-check`。
 - 桌面录屏或截图必须能看到真实图片、真实 OCR block、真实坐标叠层，而不是浏览器 fallback。
 
 本轮 A 批次基础设施收口：
 
 - A1 真实桌面 runbook 已落地：`docs/19-ocr-desktop-evidence-runbook.md` 固定了 session start/end、逐入口操作顺序、视觉证据命名、导出和 checker 命令；该文档只代表 A1 完成，不代表 A2 真实桌面 evidence 已采集。
-- `app/internal/ocrevidence` 新增 `RequiredCaptureSteps`，把区域、全屏、窗口、焦点窗口、滚动截图、截图历史 ready、OCR result 浮层、钉图、白板、白板选中图片和录制中 annotation OCR 拆成机器可读 capture runbook。
+- `app/internal/ocrevidence` 新增 `RequiredCaptureSteps`，把区域、全屏、滚动截图、截图历史 ready、OCR result 浮层、钉图、白板、白板选中图片和录制中 annotation OCR 拆成机器可读 capture runbook。
 - `ocr-desktop-evidence-plan` 的 JSON 和 Markdown 输出现在包含 `evidenceSessionRunbook` / `Session boundary runbook` 和 `captureSteps` / `Capture runbook`，每一步都有 action、recommended visual file、required log events 和 acceptance criteria；真实桌面采集不再只靠视觉文件名清单，也不能漏掉 session 边界。
 - `ocr-desktop-evidence-check` 已从“只要求出现一次 open-result/read-result-image/client render”收紧为“每个必需 sourceKind 都必须有 `queue-request`、`open-result`、`read-result-image`、`client.ocr-result/preview-loaded` 和 `client.ocr-result/rendered`”，防止只打开一个 OCR 结果浮层却让整包通过。
 - `recording-annotation` 已从普通 `whiteboard` 验收里单独拆出来：checker 现在要求 `annotation-overlay/show packageDir`、`annotation-overlay/save-capture packageDir bytes`，并要求 `ocr/queue-request sourceKind=whiteboard priority=background` 的 `sourceId` 与保存的 `packageDir` 匹配，防止普通白板 OCR 冒充录制中 annotation OCR 安全验收。
@@ -2627,7 +2627,10 @@ OCR smoke 标准：
 - `ocr-desktop-evidence-export` 现在会在最终 evidence 包根目录重新写入 `visual-capture-checklist.md/json`，避免脚本先生成 checklist 后又被 exporter 清空目录删掉；`ocr-desktop-evidence-check` 已要求这两个 checklist 文件存在、`checkComplete=true`，并包含 capture runbook 与 evidence chain 要求。
 - `ocr-desktop-evidence-export` 已新增 exporter -> checker 组合回归：测试夹具会生成完整 app-log/job-events/result/visual/checklist 链路，导出 evidence 包后立即用 `ocr-desktop-evidence-check` 和 `-must-contain RecordingFreedom/文字识别` 验收，防止 exporter 与 checker 各自通过但真实 evidence 包合起来失败。
 - 已新增/更新单测锁定 runbook 与逐 sourceKind 日志验收；这仍然只是 A 批次 evidence 合同收紧，不能替代真实 Wails 桌面 evidence 包。
-- A2 真实桌面采集前置缺口已补：截图/画板工具面板现在显式提供 `窗口截图` 和 `焦点窗口截图` 两个入口，分别调用 `captureScreenshotMode('window')` 与 `captureScreenshotMode('focused-window')`；对应 e2e 会验证点击后截图历史 mode 为 `window` / `focused-window`，`release-config-check` 也固定 UI 和测试不能回退。这个修复只解决真实采集覆盖 `window-screenshot` / `focused-window-screenshot` 的入口缺口，仍未产生真实 Wails 桌面 evidence 包。
+- A2 真实桌面采集口径已按用户最新要求调整：截图/画板工具面板只保留区域、全屏、滚动截图和画板入口，`窗口截图` 与 `焦点窗口截图` 已从工具菜单删除；对应 e2e 与 `release-config-check` 固定这两个按钮不得再出现在工具菜单中。后端 `window-screenshot` / `focused-window-screenshot` sourceKind 和旧历史显示仍兼容保留，但已从 `app/internal/ocrevidence` 的必需 source、capture step 和 visual requirement 中移除，不能再通过胶囊工具菜单或 A 批桌面 evidence 合同暴露为必验入口。
+- Windows OCR 命令窗口闪烁修复已落地：`queryWorkerCapabilities` 和 `runWorkerRecognize` 两条 OCR worker 启动路径都调用平台级 `configureBackgroundCommand`；Windows 下设置 `HideWindow` 与 `CREATE_NO_WINDOW`，macOS/Linux 为空实现。`release-config-check` 已固定该防回归门禁，避免打开设置或执行识别时再次弹出一闪而过的命令窗口。
+- A2 evidence 导出链路已强制要求显式 `DataRoot`：Windows/macOS/Linux 脚本、底层 `ocr-desktop-evidence-export` 和发布后下载回验都会拒绝缺少或不存在的 data root，并把同一个解析后的目录同时传给 plan/export；`release-config-check` 已固定该门禁，避免只用视觉截图目录或猜测默认数据目录导出一个缺少真实 app-log/job-events/results/session 链路的假 evidence 包。
+- `ocr-desktop-evidence-plan -check` 已同步收紧：只要传入 `-visual-dir` 进入验收检查，就必须同时传入同一次真实桌面 session 使用的 `-data-root`；直接运行 plan 工具也不能再只凭完整截图目录返回可验收结果。新增 `TestRunCheckRejectsVisualDirWithoutDataRoot` 与 release gate 针脚固定该行为。
 
 ### B. 翻译 provider 与隐私闭环
 

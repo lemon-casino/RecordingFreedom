@@ -146,6 +146,13 @@ $resolvedVisualDir = Resolve-FullPath $VisualDir
 if (-not (Test-Path -LiteralPath $resolvedVisualDir -PathType Container)) {
     throw "Visual evidence directory does not exist: $resolvedVisualDir"
 }
+if ([string]::IsNullOrWhiteSpace($DataRoot)) {
+    throw "DataRoot is required. Use the same RecordingFreedom data root that was passed to ocr-desktop-evidence-session start/end for this real desktop run."
+}
+$resolvedDataRoot = Resolve-FullPath $DataRoot
+if (-not (Test-Path -LiteralPath $resolvedDataRoot -PathType Container)) {
+    throw "RecordingFreedom data root does not exist: $resolvedDataRoot"
+}
 
 if ([string]::IsNullOrWhiteSpace($EvidenceDir)) {
     $stamp = Get-Date -Format "yyyyMMdd-HHmmss"
@@ -172,11 +179,9 @@ try {
     $planArgs = @(
         "-visual-dir", $resolvedVisualDir,
         "-out-dir", $EvidenceDir,
+        "-data-root", $resolvedDataRoot,
         "-check"
     )
-    if (-not [string]::IsNullOrWhiteSpace($DataRoot)) {
-        $planArgs += @("-data-root", (Resolve-FullPath $DataRoot))
-    }
     Write-Host "OCR desktop visual capture checklist will be written as visual-capture-checklist.md/json in $EvidenceDir"
     if ($usePackagedTools) {
         & $planTool @planArgs
@@ -199,11 +204,9 @@ try {
         "-version", $Version,
         "-commit", $resolvedCommit,
         "-artifact", $Artifact,
-        "-known-failures", $KnownFailures
+        "-known-failures", $KnownFailures,
+        "-data-root", $resolvedDataRoot
     )
-    if (-not [string]::IsNullOrWhiteSpace($DataRoot)) {
-        $exportArgs += @("-data-root", (Resolve-FullPath $DataRoot))
-    }
     if ($SkipTranslations) {
         $exportArgs += "-include-translations=false"
     }

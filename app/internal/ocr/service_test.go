@@ -48,6 +48,45 @@ func TestStatusDefaultsToNoModel(t *testing.T) {
 	}
 }
 
+func TestDefaultModelRegistryMatchesThirdPartyManifest(t *testing.T) {
+	repoManifestPath := findRepoFileForTest(t, filepath.Join("third_party", "ocr-models", "manifest.json"))
+	repoManifest, err := os.ReadFile(repoManifestPath)
+	if err != nil {
+		t.Fatalf("ReadFile(%s) error = %v", repoManifestPath, err)
+	}
+	if string(repoManifest) != string(defaultModelRegistryJSON) {
+		t.Fatalf("embedded OCR default registry is out of sync with %s", repoManifestPath)
+	}
+}
+
+func TestDefaultModelRegistryExposesPPocrV6SourceDownloadWithoutCls(t *testing.T) {
+	service := NewService(appdata.NewService(t.TempDir()))
+	models, err := service.ListModels()
+	if err != nil {
+		t.Fatalf("ListModels() error = %v", err)
+	}
+	info := findModelInfo(models, "ppocrv6-mobile-zh-en")
+	if info == nil {
+		t.Fatal("ppocrv6-mobile-zh-en was not found in default registry")
+	}
+	if !info.DownloadAvailable || info.DownloadBytes <= 0 {
+		t.Fatalf("v6 model download info = %#v, want pinned source download available", info)
+	}
+	if containsString(info.MissingFiles, "cls.onnx") {
+		t.Fatalf("v6 missing files = %#v, want no cls.onnx when textline orientation is disabled", info.MissingFiles)
+	}
+	model, ok := service.findModel("ppocrv6-mobile-zh-en")
+	if !ok {
+		t.Fatal("findModel(v6) failed")
+	}
+	if ModelTextlineOrientationMode(model) != TextlineOrientationNone {
+		t.Fatalf("v6 orientation mode = %q, want none", ModelTextlineOrientationMode(model))
+	}
+	if containsString(RequiredModelFileNames(model), "cls.onnx") {
+		t.Fatalf("v6 required files = %#v, want no cls.onnx", RequiredModelFileNames(model))
+	}
+}
+
 func TestNewServiceWithOptionsAppliesRuntimeOverrides(t *testing.T) {
 	root := t.TempDir()
 	service := NewServiceWithOptions(appdata.NewService(root), ServiceOptions{
@@ -309,6 +348,103 @@ func TestStartModelDownloadInstallsVerifiedPackageAndDoesNotActivate(t *testing.
 	}
 }
 
+func TestStartModelDownloadInstallsPinnedSourceFilesAndGeneratedKeys(t *testing.T) {
+	root := t.TempDir()
+	service := NewService(appdata.NewService(root))
+	modelID := "ppocrv6-mobile-zh-en"
+	det := []byte("det-v6-source")
+	rec := []byte("rec-v6-source")
+	inferenceYAML := []byte("PostProcess:\n  character_dict:\n    - A\n    - 中\n")
+	generatedKeys := []byte("A\n中\n")
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/det.onnx":
+			_, _ = w.Write(det)
+		case "/rec.onnx":
+			_, _ = w.Write(rec)
+		case "/inference.yml":
+			_, _ = w.Write(inferenceYAML)
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer server.Close()
+	service.modelRegistryOverride = []ModelManifest{sourceDownloadTestModel(modelID, server.URL, det, rec, inferenceYAML, generatedKeys)}
+
+	snapshot, err := service.StartModelDownload(modelID)
+	if err != nil {
+		t.Fatalf("StartModelDownload(source files) error = %v", err)
+	}
+	wantTotal := int64(len(det) + len(rec) + len(inferenceYAML))
+	if snapshot.TotalBytes != wantTotal {
+		t.Fatalf("initial total bytes = %d, want %d", snapshot.TotalBytes, wantTotal)
+	}
+	installed := waitModelDownloadStatus(t, service, modelID, ModelDownloadInstalled)
+	if installed.Model == nil || installed.Model.ID != modelID || !installed.Model.Installed || !installed.Model.Verified {
+		t.Fatalf("installed source model = %#v, want verified %s", installed.Model, modelID)
+	}
+	modelDir := filepath.Join(root, "data", modelRootDir, ocrModelDir, modelID)
+	keys, err := os.ReadFile(filepath.Join(modelDir, "keys.txt"))
+	if err != nil {
+		t.Fatalf("ReadFile(keys.txt) error = %v", err)
+	}
+	if string(keys) != string(generatedKeys) {
+		t.Fatalf("generated keys = %q, want %q", keys, generatedKeys)
+	}
+	if _, err := os.Stat(filepath.Join(modelDir, "cls.onnx")); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("cls.onnx stat error = %v, want not installed for no-orientation model", err)
+	}
+	manifest, err := readModelManifest(filepath.Join(modelDir, "manifest.json"))
+	if err != nil {
+		t.Fatalf("read installed manifest error = %v", err)
+	}
+	if ModelTextlineOrientationMode(manifest) != TextlineOrientationNone || modelSmokeDeclared(manifest.Smoke) {
+		t.Fatalf("installed source manifest orientation/smoke = %q/%#v, want no-orientation without fake smoke assets", ModelTextlineOrientationMode(manifest), manifest.Smoke)
+	}
+	state, err := service.LoadState()
+	if err != nil {
+		t.Fatalf("LoadState() error = %v", err)
+	}
+	if state.ActiveModelID != defaultActiveModelID() {
+		t.Fatalf("active model = %q, want unchanged default", state.ActiveModelID)
+	}
+}
+
+func TestStartModelDownloadRejectsGeneratedKeysMismatchWithoutInstall(t *testing.T) {
+	root := t.TempDir()
+	service := NewService(appdata.NewService(root))
+	modelID := "ppocrv6-mobile-zh-en"
+	det := []byte("det-v6-source")
+	rec := []byte("rec-v6-source")
+	inferenceYAML := []byte("PostProcess:\n  character_dict:\n    - A\n")
+	generatedKeys := []byte("wrong\n")
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/det.onnx":
+			_, _ = w.Write(det)
+		case "/rec.onnx":
+			_, _ = w.Write(rec)
+		case "/inference.yml":
+			_, _ = w.Write(inferenceYAML)
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer server.Close()
+	service.modelRegistryOverride = []ModelManifest{sourceDownloadTestModel(modelID, server.URL, det, rec, inferenceYAML, generatedKeys)}
+
+	if _, err := service.StartModelDownload(modelID); err != nil {
+		t.Fatalf("StartModelDownload(source mismatch) error = %v", err)
+	}
+	failed := waitModelDownloadStatus(t, service, modelID, ModelDownloadFailed)
+	if !strings.Contains(failed.Error, "generated OCR model file keys.txt") {
+		t.Fatalf("failed error = %q, want generated keys validation error", failed.Error)
+	}
+	if _, err := os.Stat(filepath.Join(root, "data", modelRootDir, ocrModelDir, modelID)); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("generated mismatch installed model dir unexpectedly; stat err = %v", err)
+	}
+}
+
 func TestStartModelDownloadRejectsChecksumMismatchWithoutInstall(t *testing.T) {
 	root := t.TempDir()
 	service := NewService(appdata.NewService(root))
@@ -557,7 +693,7 @@ func TestParseModelCatalogAllowsMissingClsWhenTextlineOrientationDisabled(t *tes
 }
 
 func TestParseModelCatalogRejectsMissingClsByDefault(t *testing.T) {
-	catalogBytes := []byte(`{"schemaVersion":1,"models":[{"schemaVersion":1,"id":"ppocrv6-mobile-zh-en","name":"PP-OCRv6 Mobile Chinese/English","channel":"latest","engine":"onnxruntime","language":["zh","en"],"version":"test","package":{"url":"https://example.invalid/ppocrv6.zip","sha256":"` + strings.Repeat("a", 64) + `","bytes":1},"files":[{"name":"det.onnx"},{"name":"rec.onnx"},{"name":"keys.txt"}]}]}`)
+	catalogBytes := []byte(`{"schemaVersion":1,"models":[{"schemaVersion":1,"id":"ppocrv5-mobile-zh-en","name":"PP-OCRv5 Mobile Chinese/English","channel":"stable","engine":"onnxruntime","language":["zh","en"],"version":"test","package":{"url":"https://example.invalid/ppocrv5.zip","sha256":"` + strings.Repeat("a", 64) + `","bytes":1},"files":[{"name":"det.onnx"},{"name":"rec.onnx"},{"name":"keys.txt"}]}]}`)
 	if _, err := parseModelCatalog(catalogBytes); err == nil || !strings.Contains(err.Error(), "missing required file cls.onnx") {
 		t.Fatalf("parseModelCatalog(default missing cls) error = %v, want cls required", err)
 	}
@@ -1523,6 +1659,52 @@ func downloadableTestModel(modelID string, packageURL string, packageBytes []byt
 	}
 }
 
+func sourceDownloadTestModel(modelID string, baseURL string, det []byte, rec []byte, inferenceYAML []byte, generatedKeys []byte) ModelManifest {
+	detSHA := sha256.Sum256(det)
+	recSHA := sha256.Sum256(rec)
+	sourceSHA := sha256.Sum256(inferenceYAML)
+	keysSHA := sha256.Sum256(generatedKeys)
+	return ModelManifest{
+		SchemaVersion: 1,
+		ID:            modelID,
+		Name:          "Source Download Test OCR Model",
+		Channel:       "latest",
+		Engine:        "onnxruntime",
+		Language:      []string{"zh", "en"},
+		Version:       "test-source-download",
+		Source: ModelSource{
+			URL:     "https://example.invalid/" + modelID,
+			License: "Apache-2.0",
+		},
+		TextlineOrientation: &ModelTextlineOrientation{Mode: TextlineOrientationNone},
+		Files: []ModelFile{
+			{
+				Name:        "det.onnx",
+				DownloadURL: baseURL + "/det.onnx",
+				Bytes:       int64(len(det)),
+				SHA256:      hex.EncodeToString(detSHA[:]),
+			},
+			{
+				Name:        "rec.onnx",
+				DownloadURL: baseURL + "/rec.onnx",
+				Bytes:       int64(len(rec)),
+				SHA256:      hex.EncodeToString(recSHA[:]),
+			},
+			{
+				Name:        "keys.txt",
+				DownloadURL: baseURL + "/inference.yml",
+				Bytes:       int64(len(generatedKeys)),
+				SHA256:      hex.EncodeToString(keysSHA[:]),
+				Generate: &GeneratedFileSource{
+					Type:         GeneratedPaddleOCRCharacterDictKeys,
+					SourceBytes:  int64(len(inferenceYAML)),
+					SourceSHA256: hex.EncodeToString(sourceSHA[:]),
+				},
+			},
+		},
+	}
+}
+
 func waitModelDownloadStatus(t *testing.T, service *Service, modelID string, status string) ModelDownloadSnapshot {
 	t.Helper()
 	deadline := time.After(5 * time.Second)
@@ -1578,6 +1760,34 @@ func findModelInfo(models []ModelInfo, modelID string) *ModelInfo {
 		}
 	}
 	return nil
+}
+
+func containsString(values []string, want string) bool {
+	for _, value := range values {
+		if value == want {
+			return true
+		}
+	}
+	return false
+}
+
+func findRepoFileForTest(t *testing.T, relative string) string {
+	t.Helper()
+	wd, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("Getwd() error = %v", err)
+	}
+	for {
+		candidate := filepath.Join(wd, relative)
+		if _, err := os.Stat(candidate); err == nil {
+			return candidate
+		}
+		parent := filepath.Dir(wd)
+		if parent == wd {
+			t.Fatalf("could not find repository file %s from %s", relative, wd)
+		}
+		wd = parent
+	}
 }
 
 func writeModelPackageZipWithBadSHA(t *testing.T, path string, topDir string, modelID string, files map[string]string, badSHA string) {

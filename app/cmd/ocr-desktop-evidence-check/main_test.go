@@ -475,19 +475,7 @@ func TestRunRejectsTooSmallVisualRequirement(t *testing.T) {
 	root := createDesktopOCREvidence(t, nil)
 	visualPath := filepath.Join(root, "visual", "ocr-result-floating-panel.png")
 	writePNG(t, visualPath, 120, 80)
-	writeVisualManifest(t, filepath.Join(root, "visual"), []string{
-		"region-screenshot-capture.png",
-		"full-screen-capture.png",
-		"window-screenshot-capture.png",
-		"focused-window-screenshot-capture.png",
-		"scrolling-screenshot-capture.png",
-		"ocr-result-floating-panel.png",
-		"screenshot-history-ready.png",
-		"pinned-screenshot-ocr-highlight.png",
-		"whiteboard-ocr.png",
-		"whiteboard-selection-ocr.png",
-		"recording-annotation-ocr-safety.png",
-	})
+	writeVisualManifest(t, filepath.Join(root, "visual"), fixtureVisualNames())
 
 	report, err := run(options{evidenceDir: root})
 	if err != nil {
@@ -634,8 +622,6 @@ artifact: GitHub Actions release artifact
 known failures: none
 region-screenshot
 full-screenshot
-window-screenshot
-focused-window-screenshot
 scrolling-screenshot
 pinned-screenshot
 whiteboard
@@ -705,19 +691,7 @@ whiteboard-selection
 	}
 	writeTextFile(t, filepath.Join(root, "ocr-job-events.jsonl"), jobEvents.String())
 
-	visualNames := []string{
-		"region-screenshot-capture.png",
-		"full-screen-capture.png",
-		"window-screenshot-capture.png",
-		"focused-window-screenshot-capture.png",
-		"scrolling-screenshot-capture.png",
-		"ocr-result-floating-panel.png",
-		"screenshot-history-ready.png",
-		"pinned-screenshot-ocr-highlight.png",
-		"whiteboard-ocr.png",
-		"whiteboard-selection-ocr.png",
-		"recording-annotation-ocr-safety.png",
-	}
+	visualNames := fixtureVisualNames()
 	for _, name := range visualNames {
 		writePNG(t, filepath.Join(root, "visual", name), 800, 520)
 	}
@@ -760,6 +734,14 @@ whiteboard-selection
 		TranslationFiles:   1,
 	})
 	return root
+}
+
+func fixtureVisualNames() []string {
+	names := make([]string, 0, len(ocrevidence.RequiredVisualEvidence))
+	for _, requirement := range ocrevidence.RequiredVisualEvidence {
+		names = append(names, requirement.RecommendedFile)
+	}
+	return names
 }
 
 func makeFixtureDataRootPrecheck(root string, sourceExports []sourceExport, appLogLines int, jobEventLines int, omit map[ocr.SourceKind]bool) ocrevidence.DataRootPrecheckReport {

@@ -387,6 +387,13 @@ function Invoke-OcrDesktopEvidenceExport {
         throw "OCR desktop evidence tools directory does not exist: $toolsPath"
     }
     $evidencePath = Resolve-FullPath $EvidenceDir
+    if ([string]::IsNullOrWhiteSpace($DataRoot)) {
+        throw "OCR desktop evidence DataRoot is required when OCR desktop evidence verification is requested. Use the same data root that was passed to ocr-desktop-evidence-session start/end."
+    }
+    $dataRootPath = Resolve-FullPath $DataRoot
+    if (-not (Test-Path -LiteralPath $dataRootPath -PathType Container)) {
+        throw "OCR desktop evidence data root does not exist: $dataRootPath"
+    }
     $windowsExportTool = Join-Path $toolsPath "ocr-desktop-evidence-export.exe"
     $windowsCheckTool = Join-Path $toolsPath "ocr-desktop-evidence-check.exe"
     $windowsPlanTool = Join-Path $toolsPath "ocr-desktop-evidence-plan.exe"
@@ -400,11 +407,9 @@ function Invoke-OcrDesktopEvidenceExport {
         $args = @{
             VisualDir = $visualPath
             EvidenceDir = $evidencePath
+            DataRoot = $dataRootPath
             ToolsDir = $toolsPath
             Artifact = $Artifact
-        }
-        if (-not [string]::IsNullOrWhiteSpace($DataRoot)) {
-            $args["DataRoot"] = (Resolve-FullPath $DataRoot)
         }
         if ($RequireTranslation) {
             $args["RequireTranslation"] = $true
@@ -418,12 +423,10 @@ function Invoke-OcrDesktopEvidenceExport {
         $args = @(
             "--visual-dir", $visualPath,
             "--evidence-dir", $evidencePath,
+            "--data-root", $dataRootPath,
             "--tools-dir", $toolsPath,
             "--artifact", $Artifact
         )
-        if (-not [string]::IsNullOrWhiteSpace($DataRoot)) {
-            $args += @("--data-root", (Resolve-FullPath $DataRoot))
-        }
         if ($RequireTranslation) {
             $args += "--require-translation"
         }

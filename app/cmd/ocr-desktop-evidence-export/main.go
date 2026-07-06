@@ -20,7 +20,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/lemon-casino/RecordingFreedom/app/internal/appdata"
 	"github.com/lemon-casino/RecordingFreedom/app/internal/ocr"
 	"github.com/lemon-casino/RecordingFreedom/app/internal/ocrevidence"
 )
@@ -91,7 +90,7 @@ type jobEvidenceEvent struct {
 
 func main() {
 	var opts options
-	flag.StringVar(&opts.dataRoot, "data-root", "", "RecordingFreedom data root; defaults to configured app data root")
+	flag.StringVar(&opts.dataRoot, "data-root", "", "RecordingFreedom data root from the same real desktop evidence session")
 	flag.StringVar(&opts.evidenceDir, "evidence-dir", "", "output OCR desktop evidence directory")
 	flag.StringVar(&opts.visualDir, "visual-dir", "", "directory containing real desktop visual evidence screenshots")
 	flag.StringVar(&opts.platformFile, "platform-file", "", "platform.txt captured during the real desktop run")
@@ -232,11 +231,10 @@ func run(opts options) (exportReport, error) {
 
 func resolveDataRoot(value string) (string, error) {
 	value = strings.TrimSpace(value)
-	if value != "" {
-		return filepath.Abs(value)
+	if value == "" {
+		return "", errors.New("-data-root is required; use the same RecordingFreedom data root passed to ocr-desktop-evidence-session start/end")
 	}
-	service := appdata.NewService("")
-	return service.RootDir()
+	return filepath.Abs(value)
 }
 
 func writeREADME(evidenceDir string, opts options) error {

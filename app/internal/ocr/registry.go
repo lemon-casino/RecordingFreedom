@@ -3,6 +3,7 @@ package ocr
 import (
 	"context"
 	"crypto/sha256"
+	_ "embed"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
@@ -18,6 +19,9 @@ import (
 
 	"github.com/lemon-casino/RecordingFreedom/app/internal/appdata"
 )
+
+//go:embed default_model_registry.json
+var defaultModelRegistryJSON []byte
 
 const (
 	stateSchemaVersion = 1
@@ -305,8 +309,8 @@ func (s *Service) modelInfo(manifest ModelManifest, activeModelID string) (Model
 		Version:           display.Version,
 		SourceURL:         display.Source.URL,
 		License:           display.Source.License,
-		DownloadAvailable: strings.TrimSpace(display.Package.URL) != "" && display.Package.Bytes > 0 && len(strings.TrimSpace(display.Package.SHA256)) == 64,
-		DownloadBytes:     display.Package.Bytes,
+		DownloadAvailable: modelPackageDownloadAvailable(display.Package) || modelSourceDownloadAvailable(display),
+		DownloadBytes:     modelDownloadBytes(display),
 		Active:            manifest.ID == activeModelID,
 		ModelDir:          dir,
 	}
@@ -663,42 +667,86 @@ func defaultActiveModelID() string {
 }
 
 func defaultModelRegistry() []ModelManifest {
-	files := []ModelFile{
-		{Name: "det.onnx"},
-		{Name: "cls.onnx"},
-		{Name: "rec.onnx"},
-		{Name: "keys.txt"},
+	return cloneModelManifests(mustDefaultModelRegistry())
+}
+
+var (
+	defaultModelRegistryOnce  sync.Once
+	defaultModelRegistryCache []ModelManifest
+	defaultModelRegistryErr   error
+)
+
+type defaultModelRegistryFile struct {
+	SchemaVersion int                      `json:"schemaVersion"`
+	Models        map[string]ModelManifest `json:"models"`
+}
+
+func mustDefaultModelRegistry() []ModelManifest {
+	defaultModelRegistryOnce.Do(func() {
+		var registry defaultModelRegistryFile
+		if err := json.Unmarshal(defaultModelRegistryJSON, &registry); err != nil {
+			defaultModelRegistryErr = err
+			return
+		}
+		if registry.SchemaVersion != 1 {
+			defaultModelRegistryErr = fmt.Errorf("unsupported embedded OCR model registry schema %d", registry.SchemaVersion)
+			return
+		}
+		if len(registry.Models) == 0 {
+			defaultModelRegistryErr = errors.New("embedded OCR model registry is empty")
+			return
+		}
+		ids := make([]string, 0, len(registry.Models))
+		for id := range registry.Models {
+			ids = append(ids, id)
+		}
+		sort.Strings(ids)
+		defaultModelRegistryCache = make([]ModelManifest, 0, len(ids))
+		for _, id := range ids {
+			model := registry.Models[id]
+			if strings.TrimSpace(model.ID) == "" {
+				model.ID = id
+			}
+			if model.ID != id {
+				defaultModelRegistryErr = fmt.Errorf("embedded OCR model registry key %q does not match id %q", id, model.ID)
+				return
+			}
+			if err := ValidateTextlineOrientationMode(model); err != nil {
+				defaultModelRegistryErr = fmt.Errorf("embedded OCR model %q is invalid: %w", model.ID, err)
+				return
+			}
+			defaultModelRegistryCache = append(defaultModelRegistryCache, model)
+		}
+	})
+	if defaultModelRegistryErr != nil {
+		panic(defaultModelRegistryErr)
 	}
-	return []ModelManifest{
-		{
-			SchemaVersion: 1,
-			ID:            "ppocrv5-mobile-zh-en",
-			Name:          "PP-OCRv5 Mobile Chinese/English",
-			Channel:       "stable",
-			Engine:        "onnxruntime",
-			Language:      []string{"zh", "en"},
-			Version:       "stable",
-			Files:         files,
-		},
-		{
-			SchemaVersion: 1,
-			ID:            "ppocrv6-mobile-zh-en",
-			Name:          "PP-OCRv6 Mobile Chinese/English",
-			Channel:       "latest",
-			Engine:        "onnxruntime",
-			Language:      []string{"zh", "en"},
-			Version:       "latest",
-			Files:         files,
-		},
-		{
-			SchemaVersion: 1,
-			ID:            "ppocrv6-medium-zh-en",
-			Name:          "PP-OCRv6 Medium Chinese/English",
-			Channel:       "quality",
-			Engine:        "onnxruntime",
-			Language:      []string{"zh", "en"},
-			Version:       "latest",
-			Files:         files,
-		},
+	return defaultModelRegistryCache
+}
+
+func cloneModelManifests(models []ModelManifest) []ModelManifest {
+	result := make([]ModelManifest, len(models))
+	for index, model := range models {
+		result[index] = cloneModelManifest(model)
 	}
+	return result
+}
+
+func cloneModelManifest(model ModelManifest) ModelManifest {
+	clone := model
+	clone.Language = append([]string(nil), model.Language...)
+	clone.Files = make([]ModelFile, len(model.Files))
+	for index, file := range model.Files {
+		clone.Files[index] = file
+		if file.Generate != nil {
+			generated := *file.Generate
+			clone.Files[index].Generate = &generated
+		}
+	}
+	if model.TextlineOrientation != nil {
+		orientation := *model.TextlineOrientation
+		clone.TextlineOrientation = &orientation
+	}
+	clone.Smoke.MustContain = append([]string(nil), model.Smoke.MustContain...)
+	return clone
 }

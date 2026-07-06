@@ -767,9 +767,13 @@ func defaultOpenPath(path string) error {
 		command = "xdg-open"
 		args = []string{absoluteTarget}
 	}
-	if err := exec.Command(command, args...).Start(); err != nil {
+	cmd := exec.Command(command, args...)
+	configureBackgroundCommand(cmd)
+	if err := cmd.Start(); err != nil {
 		if runtime.GOOS == "windows" {
-			return exec.Command("rundll32.exe", "url.dll,FileProtocolHandler", absoluteTarget).Start()
+			fallback := exec.Command("rundll32.exe", "url.dll,FileProtocolHandler", absoluteTarget)
+			configureBackgroundCommand(fallback)
+			return fallback.Start()
 		}
 		return err
 	}

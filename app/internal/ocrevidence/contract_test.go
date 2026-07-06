@@ -3,24 +3,32 @@ package ocrevidence
 import (
 	"strings"
 	"testing"
+
+	"github.com/lemon-casino/RecordingFreedom/app/internal/ocr"
 )
 
-func TestMatchVisualRequirementsRequiresDistinctWindowAndFocusedWindow(t *testing.T) {
-	files := []string{
-		"region-screenshot-capture.png",
-		"full-screen-capture.png",
-		"focused-window-screenshot-capture.png",
-		"scrolling-screenshot-capture.png",
-		"ocr-result-floating-panel.png",
-		"screenshot-history-ready.png",
-		"pinned-screenshot-ocr-highlight.png",
-		"whiteboard-ocr.png",
-		"whiteboard-selection-ocr.png",
-		"recording-annotation-ocr-safety.png",
+func TestDesktopEvidenceRequirementsExcludeHiddenWindowCaptureEntries(t *testing.T) {
+	hiddenKinds := map[ocr.SourceKind]bool{
+		ocr.SourceWindowScreenshot:        true,
+		ocr.SourceFocusedWindowScreenshot: true,
 	}
-	_, err := MatchVisualRequirements(files)
-	if err == nil || !strings.Contains(err.Error(), "window screenshot capture") {
-		t.Fatalf("MatchVisualRequirements() error = %v, want ordinary window requirement missing", err)
+	for _, kind := range RequiredSourceKinds {
+		if hiddenKinds[kind] {
+			t.Fatalf("%s is still a required desktop evidence source kind", kind)
+		}
+	}
+	for _, step := range RequiredCaptureSteps {
+		if hiddenKinds[ocr.SourceKind(step.SourceKind)] {
+			t.Fatalf("%s is still a required capture step: %#v", step.SourceKind, step)
+		}
+		if strings.Contains(step.RecommendedVisualFile, "window-screenshot") || strings.Contains(step.RecommendedVisualFile, "focused-window") {
+			t.Fatalf("hidden window visual file is still required by capture step: %#v", step)
+		}
+	}
+	for _, requirement := range RequiredVisualEvidence {
+		if strings.Contains(requirement.Name, "window screenshot") || strings.Contains(requirement.RecommendedFile, "window-screenshot") || strings.Contains(requirement.RecommendedFile, "focused-window") {
+			t.Fatalf("hidden window visual evidence is still required: %#v", requirement)
+		}
 	}
 }
 
@@ -71,21 +79,21 @@ func TestVisualDimensionFailuresRejectsTinyPlaceholderImages(t *testing.T) {
 }
 
 func TestVisualFileMatchesRequirementHonorsExclusions(t *testing.T) {
-	var windowRequirement VisualRequirement
+	var whiteboardRequirement VisualRequirement
 	for _, requirement := range RequiredVisualEvidence {
-		if requirement.Name == "window screenshot capture" {
-			windowRequirement = requirement
+		if requirement.Name == "whiteboard OCR" {
+			whiteboardRequirement = requirement
 			break
 		}
 	}
-	if windowRequirement.Name == "" {
-		t.Fatal("window screenshot requirement not found")
+	if whiteboardRequirement.Name == "" {
+		t.Fatal("whiteboard requirement not found")
 	}
-	if VisualFileMatchesRequirement("focused-window-screenshot-capture.png", windowRequirement) {
-		t.Fatal("window screenshot requirement should exclude focused-window")
+	if VisualFileMatchesRequirement("whiteboard-selection-ocr.png", whiteboardRequirement) {
+		t.Fatal("whiteboard OCR requirement should exclude whiteboard-selection")
 	}
-	if !VisualFileMatchesRequirement("window-screenshot-capture.png", windowRequirement) {
-		t.Fatal("ordinary window visual should satisfy ordinary window screenshot requirement")
+	if !VisualFileMatchesRequirement("whiteboard-ocr.png", whiteboardRequirement) {
+		t.Fatal("whiteboard visual should satisfy whiteboard OCR requirement")
 	}
 }
 

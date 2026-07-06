@@ -96,6 +96,7 @@ func (s *Service) queryWorkerCapabilities() (WorkerCapabilities, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), defaultCapabilitiesTimeout)
 	defer cancel()
 	cmd := exec.CommandContext(ctx, workerPath, args...)
+	configureBackgroundCommand(cmd)
 	cmd.Env = append(os.Environ(), s.workerEnv...)
 	var stdout bytes.Buffer
 	var stderr bytes.Buffer
@@ -141,6 +142,7 @@ func (s *Service) runWorkerRecognize(req RecognizeRequest, imageSHA256 string, m
 	defer cancel()
 
 	cmd := exec.CommandContext(ctx, workerPath, s.workerArgs...)
+	configureBackgroundCommand(cmd)
 	cmd.Env = append(os.Environ(), s.workerEnv...)
 	var stderr bytes.Buffer
 	cmd.Stderr = &stderr

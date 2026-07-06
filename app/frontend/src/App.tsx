@@ -3416,20 +3416,6 @@ function App() {
                       <small>{copy.screenshot.fullDetail}</small>
                     </span>
                   </button>
-                  <button type="button" className="menu-row" onClick={() => captureScreenshotMode('window')}>
-                    <AppWindow size={18} />
-                    <span>
-                      <strong>{copy.screenshot.window}</strong>
-                      <small>{copy.screenshot.windowDetail}</small>
-                    </span>
-                  </button>
-                  <button type="button" className="menu-row" onClick={() => captureScreenshotMode('focused-window')}>
-                    <MousePointer2 size={18} />
-                    <span>
-                      <strong>{copy.screenshot.focusedWindow}</strong>
-                      <small>{copy.screenshot.focusedWindowDetail}</small>
-                    </span>
-                  </button>
                   <button type="button" className="menu-row" onClick={beginScrollingScreenshot}>
                     <ScrollText size={18} />
                     <span>
@@ -4387,14 +4373,6 @@ function FloatingPanelWindow() {
             <button type="button" className="menu-row" onClick={() => captureScreenshotMode('full')}>
               <Maximize2 size={18} />
               <span><strong>{copy.screenshot.full}</strong><small>{copy.screenshot.fullDetail}</small></span>
-            </button>
-            <button type="button" className="menu-row" onClick={() => captureScreenshotMode('window')}>
-              <AppWindow size={18} />
-              <span><strong>{copy.screenshot.window}</strong><small>{copy.screenshot.windowDetail}</small></span>
-            </button>
-            <button type="button" className="menu-row" onClick={() => captureScreenshotMode('focused-window')}>
-              <MousePointer2 size={18} />
-              <span><strong>{copy.screenshot.focusedWindow}</strong><small>{copy.screenshot.focusedWindowDetail}</small></span>
             </button>
             <button type="button" className="menu-row" onClick={beginScrollingScreenshot}>
               <ScrollText size={18} />

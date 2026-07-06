@@ -15,8 +15,8 @@ test('capsule whiteboard opens board before recording and annotation during vide
   await toolsButton.click()
   await expect(page.getByRole('dialog', {name: 'board menu'})).toBeVisible()
   await expect(page.getByRole('button', {name: /Region screenshot/})).toBeVisible()
-  await expect(page.getByRole('button', {name: /Window screenshot/})).toBeVisible()
-  await expect(page.getByRole('button', {name: /Focused window/})).toBeVisible()
+  await expect(page.getByRole('button', {name: /Window screenshot/})).toHaveCount(0)
+  await expect(page.getByRole('button', {name: /Focused window/})).toHaveCount(0)
   await page.getByRole('button', {name: /Board/}).click()
   await expectWhiteboardLaunch(page, 'whiteboard', '/#/whiteboard')
   await expect(toolsButton).toHaveAttribute('aria-pressed', 'true')
@@ -46,22 +46,15 @@ test('capsule whiteboard opens board before recording and annotation during vide
   await expect(whiteboardButton).toHaveAttribute('aria-pressed', 'true')
 })
 
-test('screenshot tools expose window and focused-window capture modes for OCR evidence', async ({page}) => {
+test('screenshot tools hide window and focused-window capture modes', async ({page}) => {
   await openRecorderShell(page)
 
   await page.getByRole('button', {name: 'Screenshot / board'}).click()
-  await page.getByRole('button', {name: /Window screenshot/}).click()
-  await expect.poll(async () => page.evaluate((key) => {
-    const history = JSON.parse(window.localStorage.getItem(key) || '[]')
-    return history[0]?.mode ?? ''
-  }, browserScreenshotHistoryKey)).toBe('window')
-
-  await page.getByRole('button', {name: 'Screenshot / board'}).click()
-  await page.getByRole('button', {name: /Focused window/}).click()
-  await expect.poll(async () => page.evaluate((key) => {
-    const history = JSON.parse(window.localStorage.getItem(key) || '[]')
-    return history[0]?.mode ?? ''
-  }, browserScreenshotHistoryKey)).toBe('focused-window')
+  await expect(page.getByRole('button', {name: /Region screenshot/})).toBeVisible()
+  await expect(page.getByRole('button', {name: /Full screenshot/})).toBeVisible()
+  await expect(page.getByRole('button', {name: /Scrolling screenshot/})).toBeVisible()
+  await expect(page.getByRole('button', {name: /Window screenshot/})).toHaveCount(0)
+  await expect(page.getByRole('button', {name: /Focused window/})).toHaveCount(0)
 })
 
 test('capsule whiteboard remains available as a board during audio recording', async ({page}) => {

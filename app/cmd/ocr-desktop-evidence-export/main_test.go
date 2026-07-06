@@ -217,6 +217,23 @@ func TestRunRejectsMissingVisualEvidenceDirectory(t *testing.T) {
 	}
 }
 
+func TestRunRejectsMissingDataRoot(t *testing.T) {
+	root := t.TempDir()
+	visualDir := filepath.Join(root, "visual-source")
+	createVisualEvidence(t, visualDir)
+
+	_, err := run(options{
+		evidenceDir:       filepath.Join(root, "evidence"),
+		visualDir:         visualDir,
+		displayCount:      "1",
+		displayResolution: "1920x1080",
+		displayScale:      "100%",
+	})
+	if err == nil || !strings.Contains(err.Error(), "-data-root is required") {
+		t.Fatalf("run() error = %v, want missing data-root failure", err)
+	}
+}
+
 func createDesktopDataRoot(t *testing.T, root string) {
 	t.Helper()
 	createdAt := time.Date(2026, 7, 6, 8, 0, 0, 0, time.UTC)
@@ -307,21 +324,8 @@ func exportAppLogLine(timestamp time.Time, component string, event string, field
 
 func createVisualEvidence(t *testing.T, dir string) {
 	t.Helper()
-	names := []string{
-		"region-screenshot-capture.png",
-		"full-screen-capture.png",
-		"window-screenshot-capture.png",
-		"focused-window-screenshot-capture.png",
-		"scrolling-screenshot-capture.png",
-		"ocr-result-floating-panel.png",
-		"screenshot-history-ready.png",
-		"pinned-screenshot-ocr-highlight.png",
-		"whiteboard-ocr.png",
-		"whiteboard-selection-ocr.png",
-		"recording-annotation-ocr-safety.png",
-	}
-	for _, name := range names {
-		writePNGTest(t, filepath.Join(dir, name), 800, 520)
+	for _, requirement := range ocrevidence.RequiredVisualEvidence {
+		writePNGTest(t, filepath.Join(dir, requirement.RecommendedFile), 800, 520)
 	}
 }
 

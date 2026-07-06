@@ -7,7 +7,7 @@ Usage: export-ocr-desktop-evidence.sh --visual-dir DIR [options]
 
 Options:
   --evidence-dir DIR          Output evidence directory. Defaults to release-out/ocr-desktop-evidence/<timestamp>.
-  --data-root DIR             RecordingFreedom data root. Defaults to the appdata service root.
+  --data-root DIR             RecordingFreedom data root from the same real desktop session. Required.
   --platform-file FILE        platform.txt captured during the real desktop run.
   --version VALUE             Version under test. Defaults to manual.
   --commit VALUE              Commit under test. Defaults to git rev-parse --short HEAD or unknown.
@@ -82,6 +82,16 @@ if [ ! -d "${visual_dir}" ]; then
   echo "Visual evidence directory does not exist: ${visual_dir}" >&2
   exit 1
 fi
+if [ -z "${data_root}" ]; then
+  echo "--data-root is required. Use the same RecordingFreedom data root that was passed to ocr-desktop-evidence-session start/end for this real desktop run." >&2
+  usage
+  exit 2
+fi
+data_root="$(abs_path "${data_root}")"
+if [ ! -d "${data_root}" ]; then
+  echo "RecordingFreedom data root does not exist: ${data_root}" >&2
+  exit 1
+fi
 use_packaged_tools=0
 export_tool=""
 check_tool=""
@@ -129,9 +139,6 @@ if [ -z "${evidence_dir}" ]; then
   evidence_dir="${repo_root}/release-out/ocr-desktop-evidence/$(date +%Y%m%d-%H%M%S)"
 else
   evidence_dir="$(abs_path "${evidence_dir}")"
-fi
-if [ -n "${data_root}" ]; then
-  data_root="$(abs_path "${data_root}")"
 fi
 if [ -z "${commit}" ]; then
   if command -v git >/dev/null 2>&1; then
@@ -219,10 +226,8 @@ export_args=(
   "-commit" "${commit}"
   "-artifact" "${artifact}"
   "-known-failures" "${known_failures}"
+  "-data-root" "${data_root}"
 )
-if [ -n "${data_root}" ]; then
-  export_args+=("-data-root" "${data_root}")
-fi
 if [ "${skip_translations}" -eq 1 ]; then
   export_args+=("-include-translations=false")
 fi
@@ -240,11 +245,9 @@ check_report="${evidence_dir}/check-report.json"
 plan_args=(
   "-visual-dir" "${visual_dir}"
   "-out-dir" "${evidence_dir}"
+  "-data-root" "${data_root}"
   "-check"
 )
-if [ -n "${data_root}" ]; then
-  plan_args+=("-data-root" "${data_root}")
-fi
 echo "OCR desktop visual capture checklist will be written as visual-capture-checklist.md/json in ${evidence_dir}"
 
 if [ "${use_packaged_tools}" -eq 1 ]; then

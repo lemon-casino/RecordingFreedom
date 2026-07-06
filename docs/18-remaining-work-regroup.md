@@ -40,7 +40,7 @@
 
 范围：
 
-- 区域截图、全屏截图、窗口截图、焦点窗口截图、滚动截图。
+- 区域截图、全屏截图、滚动截图；`窗口截图` 和 `焦点窗口截图` 已从用户工具菜单删除，只作为后端 sourceKind 兼容旧历史，不再作为 A 批桌面 evidence 必验入口。
 - 截图历史里的手动识别、自动识别、重试、打开结果、复制文字。
 - 钉图窗口里的识别、高亮、复制、打开结果、关闭重开恢复。
 - 录制前画板、录制中 annotation-overlay、画板整图、画板选中图片 OCR。
@@ -58,6 +58,9 @@
 - 2026-07-06 已把最终 evidence 包的 `ocr-job-events.jsonl` 收敛到当前 source/result 链路，只保留每个必需 source 的 queued 和 ready 事件；checker 会拒绝无关 source、错误 resultId 或非 queued/ready 的 job event，避免历史 OCR job 污染验收包。
 - 2026-07-06 已新增真实桌面 evidence session 边界：`ocr-desktop-evidence-session` 可写入 `session-start/session-end`，`data-root-precheck.json`、`visual-capture-checklist` 和 `ocr-desktop-evidence-check` 都必须验证同一个 session id 与同一时间窗口，避免把历史 OCR 结果、历史日志和新截图拼成假 evidence。
 - 2026-07-06 已把 session 工具纳入 CI/Release、Windows portable、macOS app、Linux portable、三端 verifier、发布后下载回验和导出脚本工具目录模式；这只是 A 批次验收边界完成，不代表真实桌面 OCR 入口已经验收完成。
+- 2026-07-06 已把 A2 导出脚本收紧为必须显式传入同一个 `DataRoot`：脚本会拒绝缺少或不存在的数据根目录，并把该目录同时传给 plan/export，防止只凭视觉目录导出缺 app-log/job-events/results/session 链路的假 evidence 包。
+- 2026-07-06 已把底层 `ocr-desktop-evidence-export` 和发布后下载回验也收紧为必须显式传入同一个 `DataRoot`：不再允许工具自行猜默认 app data root，防止绕过脚本时误用旧数据目录。
+- 2026-07-06 已把 `ocr-desktop-evidence-plan -check -visual-dir` 也收紧为必须显式传入同一个 `DataRoot`：采集前仍可只生成 checklist，但最终预检不能只看视觉截图目录，必须同时检查真实 app-log/job-events/results/session 链路。
 
 剩余问题：
 
@@ -73,14 +76,14 @@
 | --- | --- | --- | --- |
 | A0. Evidence 边界基础设施 | 已接线，需一次 `git diff --check` 收口 | session-start/session-end、data-root precheck、checker、exporter、release gate、三端工具 staging | 相关 Go 单测、脚本静态解析、release-config-check 已通过，且文档记录清楚“不等于桌面验收完成” |
 | A1. 真实桌面 runbook | 已落地，等待 A2 真实执行 | 规定用户/测试者如何启动 session、逐项操作 OCR 入口、结束 session、导出 evidence | `19-ocr-desktop-evidence-runbook.md` 已落地，`ocr-desktop-evidence-plan` 生成的 checklist 已包含 session boundary runbook |
-| A2. 一包到底桌面采集 | 未完成，采集入口缺口已补 | 用真实 Wails 桌面覆盖所有截图、历史、钉图、画板、录制中 annotation OCR 入口 | 同一 session 内产生 app-log、job-events、results、visual、checklist；截图/画板面板已提供窗口截图和焦点窗口截图入口 |
+| A2. 一包到底桌面采集 | 未完成，工具入口口径已调整 | 用真实 Wails 桌面覆盖用户可见截图、历史、钉图、画板、录制中 annotation OCR 入口 | 同一 session 内产生 app-log、job-events、results、visual、checklist；截图/画板面板已删除窗口截图和焦点窗口截图入口，后端 sourceKind 暂只做兼容保留 |
 | A3. Checker 通过 | 未完成 | 用发布包内 `ocr-desktop-evidence-check` 验收 A2 包 | checker 输出 ok，known failures 必须为 none |
 | A4. A 批文档冻结 | 未完成 | 更新 `17-ocr-translation-dispatch-plan.md` 与本文档 | 只声明“OCR 入口进入桌面验收”，不越级声明翻译、模型和全平台发布完成 |
 
 本批验收输出：
 
 - 一份真实桌面 OCR evidence 包。
-- 必须覆盖 `region-screenshot`、`full-screenshot`、`window-screenshot`、`focused-window-screenshot`、`scrolling-screenshot`、`pinned-screenshot`、`whiteboard`、`whiteboard-selection` 和录制中 annotation OCR。
+- 必须覆盖用户可见的 `region-screenshot`、`full-screenshot`、`scrolling-screenshot`、`pinned-screenshot`、`whiteboard`、`whiteboard-selection` 和录制中 annotation OCR；`window-screenshot` / `focused-window-screenshot` 只做兼容保留，不进入 A 批必验列表。
 - evidence 包必须通过 `ocr-desktop-evidence-plan`、`ocr-desktop-evidence-export`、`ocr-desktop-evidence-check`。
 - 视觉证据必须能看到真实图片、真实 OCR block、真实坐标叠层。
 
@@ -221,7 +224,7 @@
 A2 当前进展：
 
 - 已核对 OCR queue、open-result、read-result-image、client render 和 annotation save-capture 证据链。
-- 已补齐截图/画板面板中的 `窗口截图` 与 `焦点窗口截图` 可点击入口，避免真实采集无法覆盖 `window-screenshot` / `focused-window-screenshot`。
+- 已按用户最新要求删除截图/画板工具面板中的 `窗口截图` 与 `焦点窗口截图` 可点击入口；`window-screenshot` / `focused-window-screenshot` 仅作为后端兼容 sourceKind 和旧历史读取保留，不进入当前桌面 evidence 必验合同，后续不再从工具菜单恢复。
 - 已用前端 e2e 和 release-config-check 固定上述入口不再回退。
 - 尚未完成真实 Wails 桌面一包到底采集、导出和 checker 通过。
 

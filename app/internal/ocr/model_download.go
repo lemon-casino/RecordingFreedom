@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -30,7 +31,9 @@ func (s *Service) StartModelDownload(modelID string) (ModelDownloadSnapshot, err
 		return ModelDownloadSnapshot{}, fmt.Errorf("unknown OCR model %q", modelID)
 	}
 	if !modelPackageDownloadAvailable(model.Package) {
-		return ModelDownloadSnapshot{}, fmt.Errorf("OCR model %q does not have a verified RecordingFreedom package download", modelID)
+		if !modelSourceDownloadAvailable(model) {
+			return ModelDownloadSnapshot{}, fmt.Errorf("OCR model %q does not have a verified RecordingFreedom package or pinned source file download", modelID)
+		}
 	}
 	root, err := s.modelRoot()
 	if err != nil {
@@ -52,7 +55,7 @@ func (s *Service) StartModelDownload(modelID string) (ModelDownloadSnapshot, err
 		ID:         fmt.Sprintf("ocr-model-download-%s-%d", modelID, now.UnixNano()),
 		ModelID:    modelID,
 		Status:     ModelDownloadQueued,
-		TotalBytes: model.Package.Bytes,
+		TotalBytes: modelDownloadBytes(model),
 		StartedAt:  now,
 		UpdatedAt:  now,
 	}
@@ -108,29 +111,44 @@ func (s *Service) ModelDownloadEvents() <-chan ModelDownloadEvent {
 func (s *Service) runModelDownload(ctx context.Context, root string, model ModelManifest) {
 	modelID := model.ID
 	zipPath := ""
+	sourceDir := ""
 	defer func() {
 		if zipPath != "" {
 			_ = os.Remove(zipPath)
+		}
+		if sourceDir != "" {
+			_ = os.RemoveAll(sourceDir)
 		}
 		s.modelDownloadMu.Lock()
 		delete(s.modelDownloadCancels, modelID)
 		s.modelDownloadMu.Unlock()
 	}()
 
-	zipPath = filepath.Join(root, fmt.Sprintf("%s%s-%d.zip", modelDownloadStagingPrefix, modelID, s.now().UnixNano()))
 	if err := s.setModelDownloadStatus(modelID, ModelDownloadRunning, "", nil); err != nil {
 		return
 	}
-	if err := s.downloadModelPackageZip(ctx, model, zipPath); err != nil {
+	var info ModelInfo
+	var err error
+	if modelPackageDownloadAvailable(model.Package) {
+		zipPath = filepath.Join(root, fmt.Sprintf("%s%s-%d.zip", modelDownloadStagingPrefix, modelID, s.now().UnixNano()))
+		if err := s.downloadModelPackageZip(ctx, model, zipPath); err != nil {
+			if errors.Is(err, context.Canceled) {
+				_ = s.setModelDownloadStatus(modelID, ModelDownloadCancelled, "", nil)
+				return
+			}
+			_ = s.setModelDownloadStatus(modelID, ModelDownloadFailed, err.Error(), nil)
+			return
+		}
+		info, err = s.InstallModelPackage(zipPath)
+	} else {
+		sourceDir = filepath.Join(root, fmt.Sprintf("%s%s-%d", modelDownloadStagingPrefix, modelID, s.now().UnixNano()))
+		info, err = s.downloadAndInstallModelSourceFiles(ctx, model, sourceDir)
+	}
+	if err != nil {
 		if errors.Is(err, context.Canceled) {
 			_ = s.setModelDownloadStatus(modelID, ModelDownloadCancelled, "", nil)
 			return
 		}
-		_ = s.setModelDownloadStatus(modelID, ModelDownloadFailed, err.Error(), nil)
-		return
-	}
-	info, err := s.InstallModelPackage(zipPath)
-	if err != nil {
 		_ = s.setModelDownloadStatus(modelID, ModelDownloadFailed, err.Error(), nil)
 		return
 	}
@@ -205,6 +223,159 @@ func (s *Service) downloadModelPackageZip(ctx context.Context, model ModelManife
 	return nil
 }
 
+func (s *Service) downloadAndInstallModelSourceFiles(ctx context.Context, model ModelManifest, stagingDir string) (ModelInfo, error) {
+	if err := os.MkdirAll(stagingDir, 0o755); err != nil {
+		return ModelInfo{}, err
+	}
+	downloaded := int64(0)
+	for _, file := range model.Files {
+		if !isRequiredModelFile(model, file.Name) {
+			continue
+		}
+		if file.Generate != nil {
+			n, err := s.downloadGenerateAndVerifyModelFile(ctx, stagingDir, model.ID, file, downloaded, modelDownloadBytes(model))
+			downloaded += n
+			if err != nil {
+				return ModelInfo{}, err
+			}
+			continue
+		}
+		n, err := s.downloadAndVerifyModelFile(ctx, stagingDir, model.ID, file, file.Bytes, file.SHA256, downloaded, modelDownloadBytes(model))
+		downloaded += n
+		if err != nil {
+			return ModelInfo{}, err
+		}
+	}
+	installManifest := cloneModelManifest(model)
+	installManifest.Package = ModelPackageSource{}
+	installManifest.Smoke = ModelSmoke{}
+	data, err := json.MarshalIndent(installManifest, "", "  ")
+	if err != nil {
+		return ModelInfo{}, err
+	}
+	if err := os.WriteFile(filepath.Join(stagingDir, "manifest.json"), append(data, '\n'), 0o644); err != nil {
+		return ModelInfo{}, err
+	}
+	return s.InstallModelPackage(stagingDir)
+}
+
+func (s *Service) downloadGenerateAndVerifyModelFile(ctx context.Context, stagingDir string, modelID string, file ModelFile, downloadedBefore int64, total int64) (int64, error) {
+	if file.Generate == nil {
+		return 0, errors.New("generated OCR model file source is required")
+	}
+	if file.Generate.Type != GeneratedPaddleOCRCharacterDictKeys {
+		return 0, fmt.Errorf("unsupported generated OCR model file type %q", file.Generate.Type)
+	}
+	sourceName := file.Name + ".source"
+	source := file
+	source.Name = sourceName
+	source.Bytes = file.Generate.SourceBytes
+	source.SHA256 = file.Generate.SourceSHA256
+	source.Generate = nil
+	n, err := s.downloadAndVerifyModelFile(ctx, stagingDir, modelID, source, source.Bytes, source.SHA256, downloadedBefore, total)
+	if err != nil {
+		return n, err
+	}
+	sourceData, err := os.ReadFile(filepath.Join(stagingDir, sourceName))
+	if err != nil {
+		return n, err
+	}
+	generated, err := generatePaddleOCRCharacterDictKeys(sourceData)
+	if err != nil {
+		return n, err
+	}
+	if int64(len(generated)) != file.Bytes {
+		return n, fmt.Errorf("generated OCR model file %s bytes = %d, want %d", file.Name, len(generated), file.Bytes)
+	}
+	actual := sha256.Sum256(generated)
+	if !strings.EqualFold(hex.EncodeToString(actual[:]), file.SHA256) {
+		return n, fmt.Errorf("generated OCR model file %s sha256 = %s, want %s", file.Name, hex.EncodeToString(actual[:]), file.SHA256)
+	}
+	if err := os.WriteFile(filepath.Join(stagingDir, file.Name), generated, 0o644); err != nil {
+		return n, err
+	}
+	_ = os.Remove(filepath.Join(stagingDir, sourceName))
+	return n, nil
+}
+
+func (s *Service) downloadAndVerifyModelFile(ctx context.Context, stagingDir string, modelID string, file ModelFile, expectedBytes int64, expectedSHA256 string, downloadedBefore int64, total int64) (int64, error) {
+	if !safeModelPackageRelativePath(file.Name) || strings.ContainsAny(file.Name, `/\`) {
+		return 0, fmt.Errorf("unsafe OCR model file name %q", file.Name)
+	}
+	if strings.TrimSpace(file.DownloadURL) == "" {
+		return 0, fmt.Errorf("OCR model file %s does not declare downloadUrl", file.Name)
+	}
+	if expectedBytes <= 0 || len(strings.TrimSpace(expectedSHA256)) != 64 {
+		return 0, fmt.Errorf("OCR model file %s does not declare verified bytes and sha256", file.Name)
+	}
+	target := filepath.Join(stagingDir, file.Name)
+	request, err := http.NewRequestWithContext(ctx, http.MethodGet, file.DownloadURL, nil)
+	if err != nil {
+		return 0, err
+	}
+	request.Header.Set("User-Agent", "RecordingFreedom-ocr-model-downloader/1")
+	client := &http.Client{Timeout: 15 * time.Minute}
+	response, err := client.Do(request)
+	if err != nil {
+		if ctx.Err() != nil {
+			return 0, ctx.Err()
+		}
+		return 0, err
+	}
+	defer response.Body.Close()
+	if response.StatusCode < 200 || response.StatusCode >= 300 {
+		return 0, fmt.Errorf("download %s failed with HTTP %s", file.DownloadURL, response.Status)
+	}
+	if err := os.MkdirAll(filepath.Dir(target), 0o755); err != nil {
+		return 0, err
+	}
+	out, err := os.Create(target)
+	if err != nil {
+		return 0, err
+	}
+	hash := sha256.New()
+	buffer := make([]byte, 128*1024)
+	var written int64
+	for {
+		if err := ctx.Err(); err != nil {
+			_ = out.Close()
+			return written, err
+		}
+		n, readErr := response.Body.Read(buffer)
+		if n > 0 {
+			chunk := buffer[:n]
+			if _, err := out.Write(chunk); err != nil {
+				_ = out.Close()
+				return written, err
+			}
+			if _, err := hash.Write(chunk); err != nil {
+				_ = out.Close()
+				return written, err
+			}
+			written += int64(n)
+			s.updateModelDownloadProgress(modelID, downloadedBefore+written, total)
+		}
+		if readErr != nil {
+			if errors.Is(readErr, io.EOF) {
+				break
+			}
+			_ = out.Close()
+			return written, readErr
+		}
+	}
+	if err := out.Close(); err != nil {
+		return written, err
+	}
+	if written != expectedBytes {
+		return written, fmt.Errorf("downloaded OCR model file %s bytes = %d, want %d", file.Name, written, expectedBytes)
+	}
+	actual := hex.EncodeToString(hash.Sum(nil))
+	if !strings.EqualFold(actual, expectedSHA256) {
+		return written, fmt.Errorf("downloaded OCR model file %s sha256 = %s, want %s", file.Name, actual, expectedSHA256)
+	}
+	return written, nil
+}
+
 func (s *Service) updateModelDownloadProgress(modelID string, downloaded int64, total int64) {
 	s.modelDownloadMu.Lock()
 	state := s.modelDownloads[modelID]
@@ -256,6 +427,60 @@ func (s *Service) emitModelDownload(snapshot ModelDownloadSnapshot) {
 
 func modelPackageDownloadAvailable(source ModelPackageSource) bool {
 	return strings.TrimSpace(source.URL) != "" && source.Bytes > 0 && len(strings.TrimSpace(source.SHA256)) == 64
+}
+
+func modelSourceDownloadAvailable(model ModelManifest) bool {
+	required := make(map[string]bool)
+	for _, name := range RequiredModelFileNames(model) {
+		required[name] = false
+	}
+	for _, file := range model.Files {
+		if _, ok := required[file.Name]; !ok {
+			continue
+		}
+		if strings.TrimSpace(file.DownloadURL) == "" || file.Bytes <= 0 || len(strings.TrimSpace(file.SHA256)) != 64 {
+			return false
+		}
+		if file.Generate != nil {
+			if file.Generate.Type != GeneratedPaddleOCRCharacterDictKeys || file.Generate.SourceBytes <= 0 || len(strings.TrimSpace(file.Generate.SourceSHA256)) != 64 {
+				return false
+			}
+		}
+		required[file.Name] = true
+	}
+	for _, found := range required {
+		if !found {
+			return false
+		}
+	}
+	return len(required) > 0
+}
+
+func modelDownloadBytes(model ModelManifest) int64 {
+	if modelPackageDownloadAvailable(model.Package) {
+		return model.Package.Bytes
+	}
+	var total int64
+	for _, file := range model.Files {
+		if !isRequiredModelFile(model, file.Name) {
+			continue
+		}
+		if file.Generate != nil && file.Generate.SourceBytes > 0 {
+			total += file.Generate.SourceBytes
+			continue
+		}
+		total += file.Bytes
+	}
+	return total
+}
+
+func isRequiredModelFile(model ModelManifest, name string) bool {
+	for _, required := range RequiredModelFileNames(model) {
+		if name == required {
+			return true
+		}
+	}
+	return false
 }
 
 func modelDownloadPercent(downloaded int64, total int64) float64 {

@@ -132,6 +132,19 @@ func TestRunReportsIncompleteDataRootPrecheck(t *testing.T) {
 	}
 }
 
+func TestRunCheckRejectsVisualDirWithoutDataRoot(t *testing.T) {
+	root := t.TempDir()
+	visualDir := filepath.Join(root, "visual")
+	for _, requirement := range ocrevidence.RequiredVisualEvidence {
+		writePlanPNG(t, filepath.Join(visualDir, requirement.RecommendedFile), 800, 520)
+	}
+
+	_, err := run(options{visualDir: visualDir, check: true})
+	if err == nil || !strings.Contains(err.Error(), "-data-root is required") {
+		t.Fatalf("run() error = %v, want required data-root for checked visual precheck", err)
+	}
+}
+
 func TestRunRejectsNonImageVisualPrecheck(t *testing.T) {
 	root := t.TempDir()
 	visualDir := filepath.Join(root, "visual")

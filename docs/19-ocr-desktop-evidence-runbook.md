@@ -11,7 +11,7 @@
 必须证明：
 
 - OCR 来源是真实桌面图片，不是浏览器 fallback、小图、假图或 mock 文本。
-- `region-screenshot`、`full-screenshot`、`window-screenshot`、`focused-window-screenshot`、`scrolling-screenshot`、`pinned-screenshot`、`whiteboard`、`whiteboard-selection` 全部有真实 result。
+- 用户可见入口 `region-screenshot`、`full-screenshot`、`scrolling-screenshot`、`pinned-screenshot`、`whiteboard`、`whiteboard-selection` 全部有真实 result；`window-screenshot` 和 `focused-window-screenshot` 仅作为后端兼容 sourceKind，不再作为本轮工具菜单和桌面 evidence 必采项。
 - 录制中 annotation OCR 与录制、绘制、鼠标、写盘并行，不阻塞录制。
 - OCR result 浮层显示真实预览图、真实 block polygon、高亮、复制入口。
 - session-start/session-end 包住同一次真实桌面操作，不能用历史日志拼包。
@@ -56,7 +56,7 @@ Linux 的 `DATA_ROOT` 按实际发行包数据目录调整；关键是 app、ses
 2. 确认 OCR stable 模型可用。
 3. 准备一个可识别目标窗口，窗口内必须能看到 `RecordingFreedom` 和 `文字识别` 这类稳定文本。
 4. 清空或新建本次 `VisualDir`，避免混入旧截图。
-5. 打开截图/画板工具面板，确认能看到 `区域截图`、`全屏截图`、`窗口截图`、`焦点窗口截图`、`滚动截图` 和 `画板`。
+5. 打开截图/画板工具面板，确认能看到 `区域截图`、`全屏截图`、`滚动截图` 和 `画板`；按当前产品口径，`窗口截图` 和 `焦点窗口截图` 不应出现在工具菜单中。
 6. 先生成 checklist，确认本次需要采集哪些文件。
 
 Windows:
@@ -100,31 +100,25 @@ printf '%s\n' "${SESSION_ID}"
 2. 全屏截图 OCR
    执行全屏或全部屏幕截图，触发 OCR 并打开结果。保存为 `full-screen-capture.png`。
 
-3. 指定窗口截图 OCR
-   使用明确的窗口选择流程，不要复用焦点窗口截图。保存为 `window-screenshot-capture.png`。
-
-4. 焦点窗口截图 OCR
-   先切换焦点到目标窗口，再执行焦点窗口截图。保存为 `focused-window-screenshot-capture.png`。
-
-5. 滚动截图 OCR
+3. 滚动截图 OCR
    对可滚动目标执行滚动截图；目标无法滚动时必须走明确 no-scroll fallback，不能保存假长图。保存为 `scrolling-screenshot-capture.png`。
 
-6. 截图历史 ready 状态
+4. 截图历史 ready 状态
    打开截图历史，等待 OCR 项变为 ready，确认结果、复制、钉图、翻译入口可见。保存为 `screenshot-history-ready.png`。
 
-7. OCR result 浮层
+5. OCR result 浮层
    打开任意真实 OCR result 浮层，确认预览图和 polygon 已渲染。保存为 `ocr-result-floating-panel.png`。
 
-8. 钉图 OCR
+6. 钉图 OCR
    将真实截图钉图，触发钉图 OCR，打开高亮，缩放或调整钉图窗口后确认 polygon 仍对齐。保存为 `pinned-screenshot-ocr-highlight.png`。
 
-9. 画板整图 OCR
+7. 画板整图 OCR
    打开画板，放入带文字的真实图片或绘制内容，导出画板快照并触发 OCR，打开结果。保存为 `whiteboard-ocr.png`。
 
-10. 画板选中图片 OCR
+8. 画板选中图片 OCR
     选中画板内的图片元素，仅对该图片元素导出并识别。结果预览必须是选中图片，不是整张画板。保存为 `whiteboard-selection-ocr.png`。
 
-11. 录制中 annotation OCR 安全性
+9. 录制中 annotation OCR 安全性
     开始真实录制，打开录制中 annotation overlay，保存 annotation 快照到录制包，排队后台 OCR，在录制仍然运行时打开/观察 OCR 状态和结果。保存为 `recording-annotation-ocr-safety.png`。
 
 ## 结束 Session
@@ -142,6 +136,8 @@ macOS/Linux:
 ```
 
 ## 导出并检查
+
+导出脚本、底层 exporter、`ocr-desktop-evidence-plan -check` 和发布后下载回验都会强制要求 `DataRoot`，并且 plan/export/check 必须使用 session start/end 同一个 `DataRoot`。如果缺少 `DataRoot` 或目录不存在，流程会直接失败；不能只用视觉截图目录或猜测的默认数据目录导出 evidence。采集前生成 checklist 可以不带 `-check`，最终预检和导出必须带 `DataRoot`。
 
 Windows:
 
