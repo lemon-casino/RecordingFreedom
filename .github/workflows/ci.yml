@@ -167,9 +167,10 @@ jobs:
         run: go run ./cmd/ocr-model-package -model all -output ../release-out/ocr-models -force
 
       - name: Build OCR worker for smoke
+        working-directory: ${{ env.APP_DIR }}
         run: |
-          mkdir -p "${APP_DIR}/bin"
-          CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -trimpath -ldflags "-w -s" -o "${APP_DIR}/bin/rf-ocr-worker-smoke" "./${APP_DIR}/cmd/ocr-worker"
+          mkdir -p bin
+          CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -trimpath -ldflags "-w -s" -o "bin/rf-ocr-worker-smoke" "./cmd/ocr-worker"
 
       - name: Run stable OCR model package smoke
         shell: bash
