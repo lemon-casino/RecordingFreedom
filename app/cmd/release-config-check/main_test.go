@@ -253,6 +253,31 @@ func TestRunRejectsMissingWhiteboardReleaseNotes(t *testing.T) {
 	}
 }
 
+func TestEvaluateCheckRejectsForbiddenText(t *testing.T) {
+	root := t.TempDir()
+	writeWorkflow(t, root, "app/internal/secrets/keychain_darwin.go", strings.Join([]string{
+		"SecItemCopyMatching",
+		"SecItemAdd",
+		"SecItemUpdate",
+		"SecItemDelete",
+		"SecKeychainFindGenericPassword",
+	}, "\n"))
+	result := evaluateCheck(root, configCheck{
+		File: "app/internal/secrets/keychain_darwin.go",
+		Name: "forbidden text sample",
+		Needles: []string{
+			"SecItemCopyMatching",
+			"SecItemAdd",
+			"SecItemUpdate",
+			"SecItemDelete",
+		},
+		Forbidden: []string{"SecKeychain"},
+	})
+	if result.Status != "blocked" || !strings.Contains(result.Message, "SecKeychain") {
+		t.Fatalf("evaluateCheck() = %#v, want forbidden SecKeychain block", result)
+	}
+}
+
 func writeWorkflow(t *testing.T, root string, name string, content string) {
 	t.Helper()
 	path := filepath.Join(root, filepath.FromSlash(name))
@@ -478,7 +503,7 @@ func workflowFixture(name string) string {
 		builder.WriteString("-Repository \"${GITHUB_REPOSITORY}\"\n")
 		builder.WriteString("-TagName \"${TAG_NAME}\"\n")
 		builder.WriteString("-Targets all\n")
-		builder.WriteString("-Architectures x64,arm64\n")
+		builder.WriteString("-Architectures x64 arm64\n")
 		builder.WriteString("release-download-verification\n")
 		builder.WriteString("Upload release download verification evidence\n")
 		builder.WriteString("RecordingFreedom-release-download-verification\n")
@@ -598,6 +623,8 @@ func workflowFixture(name string) string {
 		builder.WriteString("Start-Sleep -Seconds 5\n")
 		builder.WriteString("$OutFile.part\n")
 		builder.WriteString("Retrying in ${delaySeconds}s\n")
+		builder.WriteString("Normalize-Architectures\n")
+		builder.WriteString("Unsupported release artifact architecture\n")
 		builder.WriteString("ToArray()\n")
 		builder.WriteString("RecordingFreedom-windows-$arch-*-portable.zip\n")
 		builder.WriteString("RecordingFreedom-windows-$arch-*-setup.exe\n")
@@ -1447,6 +1474,7 @@ func workflowFixture(name string) string {
 		builder.WriteString("Translation provider is not configured\n")
 		builder.WriteString("Translation copied\n")
 		builder.WriteString(".ocr-preview-frame polygon\n")
+		builder.WriteString(".ocr-position-text-button\n")
 		builder.WriteString("__RF_FORCE_FLOATING_PANEL_WINDOWS__\n")
 		builder.WriteString("viewBox', '0 0 900 280'\n")
 		builder.WriteString("View OCR result\n")
@@ -1689,10 +1717,10 @@ func workflowFixture(name string) string {
 	}
 	if strings.Contains(name, "app/internal/secrets/keychain_darwin.go") {
 		builder.WriteString("#cgo LDFLAGS: -framework Security -framework CoreFoundation\n")
-		builder.WriteString("SecKeychainAddGenericPassword\n")
-		builder.WriteString("SecKeychainFindGenericPassword\n")
-		builder.WriteString("SecKeychainItemModifyAttributesAndData\n")
-		builder.WriteString("SecKeychainItemDelete\n")
+		builder.WriteString("SecItemCopyMatching\n")
+		builder.WriteString("SecItemAdd\n")
+		builder.WriteString("SecItemUpdate\n")
+		builder.WriteString("SecItemDelete\n")
 		builder.WriteString("macos-keychain\n")
 	}
 	if strings.Contains(name, "app/internal/secrets/secretservice_linux.go") {

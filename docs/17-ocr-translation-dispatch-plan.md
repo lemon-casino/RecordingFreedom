@@ -2721,6 +2721,14 @@ OCR smoke 标准：
 - 暂停发布“已完成 OCR/翻译”结论。
 - 只允许先做归拢后的基础设施收口、真实桌面 evidence 批量采集和发布包证据闭环。
 
+### 2026-07-06 收口记录
+
+- OCR 原位可复制文本已落地：`ocr-result` 浮层在预览图的 OCR block 坐标上渲染可点击文本按钮，点击即可复制对应识别文本；钉图 OCR 高亮也使用同一套原位文本按钮，并按 `object-fit: contain` 的真实图片显示区域重新计算坐标，窗口 resize 后不漂移。对应前端 e2e 已固定 `.ocr-position-text-button`，防止后续退回“只显示框线和列表”。
+- macOS OCR 翻译 secret store 已从废弃 `SecKeychain*` API 迁移到 `SecItemCopyMatching` / `SecItemAdd` / `SecItemUpdate` / `SecItemDelete`，保留 keychain 不可用时的本地 0600 fallback。`release-config-check` 已加入 forbidden gate，禁止 `SecKeychain` 旧符号重新进入 `keychain_darwin.go`。
+- v0.1.30 发布失败根因已确认并修复：`Verify published release downloads` 中 `-Architectures x64,arm64` 被 PowerShell 当作单个参数，触发 ValidateSet 失败。release workflow 已改为 `-Architectures x64 arm64`，`verify-release-artifacts.ps1` 也新增 `Normalize-Architectures`，兼容逗号格式并统一校验 x64/arm64。
+- 已验证项：`go test ./...`、`go test -tags gtk3 ./...`、`cd app/frontend && npm run build`、`cd app/frontend && npm run test:e2e`、`cd app && go run ./cmd/release-config-check`、`git diff --check`、以及 `verify-release-artifacts.ps1 -Targets ocr-models -Architectures x64,arm64` 均通过。
+- 未扩大结论：上述内容只代表 OCR UI 原位复制、macOS Keychain warning 修复、发布复验参数修复已经收口；真实 Wails 桌面 OCR evidence、真实 provider/secret store 桌面回验、PP-OCRv6 release-ready catalog 和全平台发布产物下载后完整回验仍按本计划继续验收。
+
 ## 验收清单
 
 功能验收：

@@ -11,9 +11,10 @@ import (
 )
 
 type configCheck struct {
-	File    string   `json:"file"`
-	Name    string   `json:"name"`
-	Needles []string `json:"needles"`
+	File      string   `json:"file"`
+	Name      string   `json:"name"`
+	Needles   []string `json:"needles"`
+	Forbidden []string `json:"forbidden,omitempty"`
 }
 
 type checkResult struct {
@@ -125,6 +126,7 @@ var releaseConfigChecks = []configCheck{
 			"Translation provider is not configured",
 			"Translation copied",
 			".ocr-preview-frame polygon",
+			".ocr-position-text-button",
 			"__RF_FORCE_FLOATING_PANEL_WINDOWS__",
 			"viewBox', '0 0 900 280'",
 			"View OCR result",
@@ -1066,11 +1068,14 @@ var releaseConfigChecks = []configCheck{
 		Name: "macOS OCR translation secrets use native Keychain",
 		Needles: []string{
 			"#cgo LDFLAGS: -framework Security -framework CoreFoundation",
-			"SecKeychainAddGenericPassword",
-			"SecKeychainFindGenericPassword",
-			"SecKeychainItemModifyAttributesAndData",
-			"SecKeychainItemDelete",
+			"SecItemCopyMatching",
+			"SecItemAdd",
+			"SecItemUpdate",
+			"SecItemDelete",
 			"macos-keychain",
+		},
+		Forbidden: []string{
+			"SecKeychain",
 		},
 	},
 	{
@@ -1425,7 +1430,7 @@ var releaseConfigChecks = []configCheck{
 			"-Repository \"${GITHUB_REPOSITORY}\"",
 			"-TagName \"${TAG_NAME}\"",
 			"-Targets all",
-			"-Architectures x64,arm64",
+			"-Architectures x64 arm64",
 			"release-download-verification",
 			"Upload release download verification evidence",
 			"RecordingFreedom-release-download-verification",
@@ -2002,6 +2007,8 @@ var releaseConfigChecks = []configCheck{
 			"Start-Sleep -Seconds 5",
 			"$OutFile.part",
 			"Retrying in ${delaySeconds}s",
+			"Normalize-Architectures",
+			"Unsupported release artifact architecture",
 			"ToArray()",
 			"RecordingFreedom-windows-$arch-*-portable.zip",
 			"RecordingFreedom-windows-$arch-*-setup.exe",
@@ -2140,6 +2147,20 @@ func evaluateCheck(root string, check configCheck) checkResult {
 			Name:    check.Name,
 			Status:  "blocked",
 			Message: "missing required release gate text: " + strings.Join(missing, " | "),
+		}
+	}
+	forbidden := make([]string, 0)
+	for _, needle := range check.Forbidden {
+		if strings.Contains(content, needle) {
+			forbidden = append(forbidden, needle)
+		}
+	}
+	if len(forbidden) > 0 {
+		return checkResult{
+			File:    check.File,
+			Name:    check.Name,
+			Status:  "blocked",
+			Message: "forbidden release gate text remains: " + strings.Join(forbidden, " | "),
 		}
 	}
 	return checkResult{File: check.File, Name: check.Name, Status: "ready"}

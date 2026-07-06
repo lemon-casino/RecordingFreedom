@@ -4,7 +4,6 @@ param(
     [string]$TagName = "",
     [ValidateSet("all", "windows", "macos", "linux", "ocr-models")]
     [string[]]$Targets = @("all"),
-    [ValidateSet("x64", "arm64")]
     [string[]]$Architectures = @("x64", "arm64"),
     [string]$DownloadDir = "",
     [switch]$ChecksumOnly,
@@ -22,6 +21,37 @@ param(
 
 $ErrorActionPreference = "Stop"
 $ProgressPreference = "SilentlyContinue"
+
+function Normalize-Architectures {
+    param([string[]]$Values)
+    $normalized = New-Object System.Collections.Generic.List[string]
+    foreach ($value in $Values) {
+        foreach ($part in ([string]$value -split ",")) {
+            $arch = $part.Trim().ToLowerInvariant()
+            if ([string]::IsNullOrWhiteSpace($arch)) {
+                continue
+            }
+            switch ($arch) {
+                "x64" { $arch = "x64" }
+                "amd64" { $arch = "x64" }
+                "arm64" { $arch = "arm64" }
+                "aarch64" { $arch = "arm64" }
+                default {
+                    throw "Unsupported release artifact architecture: $part. Expected x64 or arm64."
+                }
+            }
+            if (-not $normalized.Contains($arch)) {
+                $normalized.Add($arch)
+            }
+        }
+    }
+    if ($normalized.Count -eq 0) {
+        throw "At least one release artifact architecture is required."
+    }
+    return [string[]]$normalized.ToArray()
+}
+
+$Architectures = Normalize-Architectures -Values $Architectures
 
 function Resolve-FullPath {
     param([Parameter(Mandatory = $true)][string]$Path)

@@ -35,7 +35,7 @@ import {
   Pin,
   Unlock,
 } from 'lucide-react'
-import {Suspense, lazy, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type PointerEvent as ReactPointerEvent, type ReactNode} from 'react'
+import {Suspense, lazy, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type PointerEvent as ReactPointerEvent, type ReactNode, type RefObject} from 'react'
 import {copyByLocale, type RecorderCopy, type RecoveryMessageKey, type SourceSelectionMessageKey, type StatusMessageKey, type StorageMessageKey} from './i18n'
 import {
   cameraDevices,
@@ -4628,7 +4628,7 @@ function OcrResultPanel({
     }
   }, [previewDataUrl, result])
 
-  const copyBlockText = (block: OcrBlock) => {
+  const copyBlockText = (block: OcrBlock, blockId = block.id) => {
     const text = block.text.trim()
     if (!text) return
     void writeClipboardText(text)
@@ -4637,10 +4637,10 @@ function OcrResultPanel({
           resultId: result?.id ?? '',
           sourceKind: result?.sourceKind ?? '',
           sourceId: result?.sourceId ?? '',
-          blockId: block.id,
+          blockId,
         })
-        setCopiedBlockId(block.id)
-        window.setTimeout(() => setCopiedBlockId((current) => current === block.id ? '' : current), 1200)
+        setCopiedBlockId(blockId)
+        window.setTimeout(() => setCopiedBlockId((current) => current === blockId ? '' : current), 1200)
       })
       .catch(() => undefined)
   }
@@ -4716,14 +4716,25 @@ function OcrResultPanel({
             <div className="ocr-preview-frame">
               <img src={previewDataUrl} alt={copy.screenshot.ocrResult} draggable={false} />
               <svg viewBox={`0 0 ${Math.max(1, result.width)} ${Math.max(1, result.height)}`} preserveAspectRatio="none" aria-hidden="true">
-                {result.blocks.map((block) => (
-                  <polygon
-                    key={block.id}
-                    points={ocrBlockPolygonPoints(block)}
-                    className={block.id === hoveredBlockId ? 'active' : ''}
-                  />
-                ))}
+                {result.blocks.map((block, index) => {
+                  const blockId = ocrBlockStableId(block, index)
+                  return (
+                    <polygon
+                      key={blockId}
+                      points={ocrBlockPolygonPoints(block)}
+                      className={blockId === hoveredBlockId ? 'active' : ''}
+                    />
+                  )
+                })}
               </svg>
+              <OcrPositionTextLayer
+                copy={copy}
+                result={result}
+                hoveredBlockId={hoveredBlockId}
+                copiedBlockId={copiedBlockId}
+                onHover={setHoveredBlockId}
+                onCopy={copyBlockText}
+              />
             </div>
           )}
           {!previewDataUrl && previewError && <div className="ocr-preview-note">{previewError}</div>}
@@ -4756,27 +4767,88 @@ function OcrResultPanel({
             </div>
           )}
           <div className="ocr-block-list" aria-label={copy.screenshot.ocrBlocks(result.blocks.length)}>
-            {result.blocks.map((block) => (
-              <button
-                type="button"
-                className={`ocr-block-row ${block.id === hoveredBlockId ? 'active' : ''}`}
-                key={block.id || `${block.lineIndex}-${block.text}`}
-                onPointerEnter={() => setHoveredBlockId(block.id)}
-                onPointerLeave={() => setHoveredBlockId('')}
-                onFocus={() => setHoveredBlockId(block.id)}
-                onBlur={() => setHoveredBlockId('')}
-                onClick={() => copyBlockText(block)}
-                title={copiedBlockId === block.id ? copy.screenshot.copiedText : copy.screenshot.copyText}
-              >
-                <span>{block.text || copy.screenshot.ocrNoText}</span>
-                <b>{copiedBlockId === block.id ? copy.screenshot.copiedText : `${Math.round((block.confidence || 0) * 100)}%`}</b>
-              </button>
-            ))}
+            {result.blocks.map((block, index) => {
+              const blockId = ocrBlockStableId(block, index)
+              return (
+                <button
+                  type="button"
+                  className={`ocr-block-row ${blockId === hoveredBlockId ? 'active' : ''}`}
+                  key={blockId}
+                  onPointerEnter={() => setHoveredBlockId(blockId)}
+                  onPointerLeave={() => setHoveredBlockId('')}
+                  onFocus={() => setHoveredBlockId(blockId)}
+                  onBlur={() => setHoveredBlockId('')}
+                  onClick={() => copyBlockText(block, blockId)}
+                  title={copiedBlockId === blockId ? copy.screenshot.copiedText : copy.screenshot.copyText}
+                >
+                  <span>{block.text || copy.screenshot.ocrNoText}</span>
+                  <b>{copiedBlockId === blockId ? copy.screenshot.copiedText : `${Math.round((block.confidence || 0) * 100)}%`}</b>
+                </button>
+              )
+            })}
           </div>
         </>
       )}
       {!loading && !error && !result && <div className="source-empty"><FileText size={18} /><span>{copy.screenshot.ocrNoText}</span></div>}
     </section>
+  )
+}
+
+function OcrPositionTextLayer({
+  copy,
+  result,
+  hoveredBlockId,
+  copiedBlockId,
+  onHover,
+  onCopy,
+  className = '',
+  style,
+}: {
+  copy: RecorderCopy
+  result: OcrResult
+  hoveredBlockId: string
+  copiedBlockId: string
+  onHover: (blockId: string) => void
+  onCopy: (block: OcrBlock, blockId: string) => void
+  className?: string
+  style?: CSSProperties
+}) {
+  const blockButtons = result.blocks.map((block, index) => {
+    const blockId = ocrBlockStableId(block, index)
+    const bounds = ocrBlockBoundsPercent(block, result.width, result.height)
+    if (!bounds) return null
+    const copied = copiedBlockId === blockId
+    const label = block.text.trim() || copy.screenshot.ocrNoText
+    const buttonStyle = {
+      left: `${bounds.left}%`,
+      top: `${bounds.top}%`,
+      width: `${bounds.width}%`,
+    } satisfies CSSProperties
+    return (
+      <button
+        type="button"
+        key={blockId}
+        className={`ocr-position-text-button ${blockId === hoveredBlockId ? 'active' : ''} ${copied ? 'copied' : ''}`.trim()}
+        style={buttonStyle}
+        aria-label={`${copy.screenshot.copyText}: ${label}`}
+        title={copied ? copy.screenshot.copiedText : label}
+        data-ocr-block-id={blockId}
+        onPointerEnter={() => onHover(blockId)}
+        onPointerLeave={() => onHover('')}
+        onFocus={() => onHover(blockId)}
+        onBlur={() => onHover('')}
+        onClick={() => onCopy(block, blockId)}
+      >
+        <span>{copied ? copy.screenshot.copiedText : label}</span>
+      </button>
+    )
+  }).filter(Boolean)
+
+  if (blockButtons.length === 0) return null
+  return (
+    <div className={`ocr-position-text-layer ${className}`.trim()} style={style} aria-label={copy.screenshot.ocrBlocks(result.blocks.length)}>
+      {blockButtons}
+    </div>
   )
 }
 
@@ -4918,6 +4990,26 @@ function ocrBlockStableId(block: OcrBlock, index: number) {
   return `block-${index}-${block.lineIndex}-${boxKey}-${block.text}`
 }
 
+function ocrBlockBoundsPercent(block: OcrBlock, resultWidth: number, resultHeight: number) {
+  if (!Number.isFinite(resultWidth) || !Number.isFinite(resultHeight) || resultWidth <= 0 || resultHeight <= 0 || block.box.length === 0) {
+    return null
+  }
+  const xs = block.box.map((point) => point.x).filter(Number.isFinite)
+  const ys = block.box.map((point) => point.y).filter(Number.isFinite)
+  if (xs.length === 0 || ys.length === 0) return null
+  const minX = clampNumber(Math.min(...xs), 0, resultWidth)
+  const maxX = clampNumber(Math.max(...xs), 0, resultWidth)
+  const minY = clampNumber(Math.min(...ys), 0, resultHeight)
+  const maxY = clampNumber(Math.max(...ys), 0, resultHeight)
+  if (maxX <= minX || maxY <= minY) return null
+  return {
+    left: (minX / resultWidth) * 100,
+    top: (minY / resultHeight) * 100,
+    width: Math.max(4, ((maxX - minX) / resultWidth) * 100),
+    height: Math.max(8, ((maxY - minY) / resultHeight) * 100),
+  }
+}
+
 async function copyOcrResultText(result: OcrResult, copy: RecorderCopy) {
   const text = result.plainText.trim()
   if (!text) return copy.screenshot.copyTextEmpty
@@ -4947,6 +5039,61 @@ async function translateAndCopyOcrResultText(resultId: string, translation: AppS
 
 function ocrTranslationPlainText(result: OcrTranslationResult | null) {
   return result?.blocks.map((block) => block.translated.trim()).filter(Boolean).join('\n').trim() ?? ''
+}
+
+function useContainedImageLayerStyle(containerRef: RefObject<HTMLElement | null>, imageWidth: number, imageHeight: number) {
+  const [style, setStyle] = useState<CSSProperties>({
+    left: 0,
+    top: 0,
+    width: '100%',
+    height: '100%',
+  })
+
+  useLayoutEffect(() => {
+    const element = containerRef.current
+    if (!element) return
+    const safeWidth = Number.isFinite(imageWidth) && imageWidth > 0 ? imageWidth : 1
+    const safeHeight = Number.isFinite(imageHeight) && imageHeight > 0 ? imageHeight : 1
+    const update = () => {
+      const rect = element.getBoundingClientRect()
+      if (rect.width <= 0 || rect.height <= 0) return
+      const imageRatio = safeWidth / safeHeight
+      const containerRatio = rect.width / rect.height
+      let width = rect.width
+      let height = rect.height
+      let left = 0
+      let top = 0
+      if (containerRatio > imageRatio) {
+        width = rect.height * imageRatio
+        left = (rect.width - width) / 2
+      } else {
+        height = rect.width / imageRatio
+        top = (rect.height - height) / 2
+      }
+      const next: CSSProperties = {
+        left: `${left}px`,
+        top: `${top}px`,
+        width: `${width}px`,
+        height: `${height}px`,
+      }
+      setStyle((current) => {
+        if (current.left === next.left && current.top === next.top && current.width === next.width && current.height === next.height) {
+          return current
+        }
+        return next
+      })
+    }
+    update()
+    const observer = typeof ResizeObserver !== 'undefined' ? new ResizeObserver(update) : null
+    observer?.observe(element)
+    window.addEventListener('resize', update)
+    return () => {
+      observer?.disconnect()
+      window.removeEventListener('resize', update)
+    }
+  }, [containerRef, imageHeight, imageWidth])
+
+  return style
 }
 
 async function writeClipboardText(text: string) {
@@ -5016,6 +5163,12 @@ function ScreenshotPinWindow() {
   const ocrBusy = item ? screenshotOcrBusy(item) : false
   const ocrReady = item?.ocrStatus === 'ready' && Boolean(item.ocrResultId) && Boolean(ocrResult)
   const ocrStatusText = item ? screenshotOcrStatusText(item, copy) : ''
+  const pinCanvasRef = useRef<HTMLDivElement | null>(null)
+  const pinImageLayerStyle = useContainedImageLayerStyle(
+    pinCanvasRef,
+    ocrResult?.width || item?.width || 1,
+    ocrResult?.height || item?.height || 1,
+  )
 
   useEffect(() => {
     document.body.classList.add('rf-screenshot-pin-window')
@@ -5212,7 +5365,7 @@ function ScreenshotPinWindow() {
           </button>
         </div>
       </section>
-      <div className="screenshot-pin-canvas">
+      <div className="screenshot-pin-canvas" ref={pinCanvasRef}>
         <img src={pinState.dataUrl} alt={copy.screenshot.pinned} draggable={false} />
         {highlightOcr && ocrResult && ocrReady && ocrResult.blocks.length > 0 && (
           <svg viewBox={`0 0 ${Math.max(1, ocrResult.width)} ${Math.max(1, ocrResult.height)}`} preserveAspectRatio="xMidYMid meet" aria-label={copy.screenshot.ocrBlocks(ocrResult.blocks.length)}>
@@ -5240,6 +5393,18 @@ function ScreenshotPinWindow() {
               )
             })}
           </svg>
+        )}
+        {highlightOcr && ocrResult && ocrReady && ocrResult.blocks.length > 0 && (
+          <OcrPositionTextLayer
+            copy={copy}
+            result={ocrResult}
+            hoveredBlockId={hoveredBlockId}
+            copiedBlockId={copiedBlockId}
+            onHover={setHoveredBlockId}
+            onCopy={copyPinnedBlockText}
+            className="pin"
+            style={pinImageLayerStyle}
+          />
         )}
       </div>
     </main>

@@ -8,17 +8,47 @@ package secrets
 #include <CoreFoundation/CoreFoundation.h>
 #include <stdlib.h>
 
-static void rf_release_keychain_item(SecKeychainItemRef item) {
-	if (item != NULL) {
-		CFRelease((CFTypeRef)item);
+static CFStringRef rf_secitem_string(UInt32 length, const char *value) {
+	return CFStringCreateWithBytes(kCFAllocatorDefault, (const UInt8 *)value, (CFIndex)length, kCFStringEncodingUTF8, 0);
+}
+
+static CFMutableDictionaryRef rf_secitem_query(
+	UInt32 serviceLength,
+	const char *serviceName,
+	UInt32 accountLength,
+	const char *accountName
+) {
+	CFStringRef service = rf_secitem_string(serviceLength, serviceName);
+	CFStringRef account = rf_secitem_string(accountLength, accountName);
+	if (service == NULL || account == NULL) {
+		if (service != NULL) {
+			CFRelease(service);
+		}
+		if (account != NULL) {
+			CFRelease(account);
+		}
+		return NULL;
 	}
+	CFMutableDictionaryRef query = CFDictionaryCreateMutable(
+		kCFAllocatorDefault,
+		0,
+		&kCFTypeDictionaryKeyCallBacks,
+		&kCFTypeDictionaryValueCallBacks
+	);
+	if (query == NULL) {
+		CFRelease(service);
+		CFRelease(account);
+		return NULL;
+	}
+	CFDictionarySetValue(query, kSecClass, kSecClassGenericPassword);
+	CFDictionarySetValue(query, kSecAttrService, service);
+	CFDictionarySetValue(query, kSecAttrAccount, account);
+	CFRelease(service);
+	CFRelease(account);
+	return query;
 }
 
-static OSStatus rf_keychain_update_secret(SecKeychainItemRef item, UInt32 secretLength, const void *secretData) {
-	return SecKeychainItemModifyAttributesAndData(item, NULL, secretLength, secretData);
-}
-
-static OSStatus rf_keychain_add_secret(
+static OSStatus rf_secitem_add_secret(
 	UInt32 serviceLength,
 	const char *serviceName,
 	UInt32 accountLength,
@@ -26,59 +56,114 @@ static OSStatus rf_keychain_add_secret(
 	UInt32 secretLength,
 	const void *secretData
 ) {
-	return SecKeychainAddGenericPassword(
-		NULL,
-		serviceLength,
-		serviceName,
-		accountLength,
-		accountName,
-		secretLength,
-		secretData,
-		NULL
-	);
+	CFMutableDictionaryRef item = rf_secitem_query(serviceLength, serviceName, accountLength, accountName);
+	if (item == NULL) {
+		return errSecParam;
+	}
+	CFDataRef data = CFDataCreate(kCFAllocatorDefault, (const UInt8 *)secretData, (CFIndex)secretLength);
+	if (data == NULL) {
+		CFRelease(item);
+		return errSecParam;
+	}
+	CFDictionarySetValue(item, kSecValueData, data);
+	OSStatus status = SecItemAdd(item, NULL);
+	CFRelease(data);
+	CFRelease(item);
+	return status;
 }
 
-static OSStatus rf_keychain_load_secret(
+static OSStatus rf_secitem_update_secret(
 	UInt32 serviceLength,
 	const char *serviceName,
 	UInt32 accountLength,
 	const char *accountName,
-	UInt32 *passwordLength,
-	void **passwordData
+	UInt32 secretLength,
+	const void *secretData
 ) {
-	return SecKeychainFindGenericPassword(
-		NULL,
-		serviceLength,
-		serviceName,
-		accountLength,
-		accountName,
-		passwordLength,
-		passwordData,
-		NULL
+	CFMutableDictionaryRef query = rf_secitem_query(serviceLength, serviceName, accountLength, accountName);
+	if (query == NULL) {
+		return errSecParam;
+	}
+	CFMutableDictionaryRef attrs = CFDictionaryCreateMutable(
+		kCFAllocatorDefault,
+		0,
+		&kCFTypeDictionaryKeyCallBacks,
+		&kCFTypeDictionaryValueCallBacks
 	);
+	if (attrs == NULL) {
+		CFRelease(query);
+		return errSecParam;
+	}
+	CFDataRef data = CFDataCreate(kCFAllocatorDefault, (const UInt8 *)secretData, (CFIndex)secretLength);
+	if (data == NULL) {
+		CFRelease(attrs);
+		CFRelease(query);
+		return errSecParam;
+	}
+	CFDictionarySetValue(attrs, kSecValueData, data);
+	OSStatus status = SecItemUpdate(query, attrs);
+	CFRelease(data);
+	CFRelease(attrs);
+	CFRelease(query);
+	return status;
 }
 
-static OSStatus rf_keychain_find_item(
+static OSStatus rf_secitem_load_secret(
 	UInt32 serviceLength,
 	const char *serviceName,
 	UInt32 accountLength,
 	const char *accountName,
-	SecKeychainItemRef *item
+	CFDataRef *secretData
 ) {
-	return SecKeychainFindGenericPassword(
-		NULL,
-		serviceLength,
-		serviceName,
-		accountLength,
-		accountName,
-		NULL,
-		NULL,
-		item
-	);
+	CFMutableDictionaryRef query = rf_secitem_query(serviceLength, serviceName, accountLength, accountName);
+	if (query == NULL) {
+		return errSecParam;
+	}
+	CFDictionarySetValue(query, kSecReturnData, kCFBooleanTrue);
+	CFDictionarySetValue(query, kSecMatchLimit, kSecMatchLimitOne);
+	CFTypeRef result = NULL;
+	OSStatus status = SecItemCopyMatching(query, &result);
+	CFRelease(query);
+	if (status != errSecSuccess) {
+		return status;
+	}
+	if (result == NULL || CFGetTypeID(result) != CFDataGetTypeID()) {
+		if (result != NULL) {
+			CFRelease(result);
+		}
+		return errSecInternalComponent;
+	}
+	*secretData = (CFDataRef)result;
+	return errSecSuccess;
 }
 
-static OSStatus rf_keychain_free_content(void *passwordData) {
-	return SecKeychainItemFreeContent(NULL, passwordData);
+static OSStatus rf_secitem_delete_secret(
+	UInt32 serviceLength,
+	const char *serviceName,
+	UInt32 accountLength,
+	const char *accountName
+) {
+	CFMutableDictionaryRef query = rf_secitem_query(serviceLength, serviceName, accountLength, accountName);
+	if (query == NULL) {
+		return errSecParam;
+	}
+	OSStatus status = SecItemDelete(query);
+	CFRelease(query);
+	return status;
+}
+
+static CFIndex rf_cfdata_length(CFDataRef data) {
+	return CFDataGetLength(data);
+}
+
+static const UInt8 *rf_cfdata_bytes(CFDataRef data) {
+	return CFDataGetBytePtr(data);
+}
+
+static void rf_release_cf(CFTypeRef item) {
+	if (item != NULL) {
+		CFRelease(item);
+	}
 }
 */
 import "C"
@@ -114,41 +199,7 @@ func backendName() string {
 }
 
 func backendSave(s *Store, name string, secret string) error {
-	account := safeName(name)
-	item, found, err := findKeychainItem(account)
-	if err != nil {
-		if isKeychainUnavailable(err) {
-			return diskSave(s, name, secret)
-		}
-		return err
-	}
-	secretC := C.CString(secret)
-	defer C.free(unsafe.Pointer(secretC))
-	if found {
-		defer C.rf_release_keychain_item(item)
-		status := C.rf_keychain_update_secret(item, C.UInt32(len(secret)), unsafe.Pointer(secretC))
-		if status != C.errSecSuccess {
-			err := keychainError("update secret", status)
-			if isKeychainUnavailable(err) {
-				return diskSave(s, name, secret)
-			}
-			return err
-		}
-		_ = diskDelete(s, name)
-		return nil
-	}
-	serviceC := C.CString(keychainServiceName)
-	accountC := C.CString(account)
-	defer C.free(unsafe.Pointer(serviceC))
-	defer C.free(unsafe.Pointer(accountC))
-	status := C.rf_keychain_add_secret(
-		C.UInt32(len(keychainServiceName)),
-		serviceC,
-		C.UInt32(len(account)),
-		accountC,
-		C.UInt32(len(secret)),
-		unsafe.Pointer(secretC),
-	)
+	status := saveKeychainSecret(safeName(name), secret)
 	if status != C.errSecSuccess {
 		err := keychainError("save secret", status)
 		if isKeychainUnavailable(err) {
@@ -166,15 +217,14 @@ func backendLoad(s *Store, name string) (string, bool, error) {
 	accountC := C.CString(account)
 	defer C.free(unsafe.Pointer(serviceC))
 	defer C.free(unsafe.Pointer(accountC))
-	var passwordLength C.UInt32
-	var passwordData unsafe.Pointer
-	status := C.rf_keychain_load_secret(
+
+	var secretData C.CFDataRef
+	status := C.rf_secitem_load_secret(
 		C.UInt32(len(keychainServiceName)),
 		serviceC,
 		C.UInt32(len(account)),
 		accountC,
-		&passwordLength,
-		&passwordData,
+		&secretData,
 	)
 	if status == C.errSecItemNotFound {
 		return diskLoad(s, name)
@@ -186,24 +236,29 @@ func backendLoad(s *Store, name string) (string, bool, error) {
 		}
 		return "", false, err
 	}
-	defer C.rf_keychain_free_content(passwordData)
-	secret := strings.TrimSpace(string(C.GoBytes(passwordData, C.int(passwordLength))))
+	defer C.rf_release_cf(C.CFTypeRef(secretData))
+
+	length := C.rf_cfdata_length(secretData)
+	if length <= 0 {
+		return "", false, nil
+	}
+	secret := strings.TrimSpace(string(C.GoBytes(unsafe.Pointer(C.rf_cfdata_bytes(secretData)), C.int(length))))
 	return secret, secret != "", nil
 }
 
 func backendDelete(s *Store, name string) error {
-	item, found, err := findKeychainItem(safeName(name))
-	if err != nil {
-		if isKeychainUnavailable(err) {
-			return diskDelete(s, name)
-		}
-		return err
-	}
-	if !found {
-		return diskDelete(s, name)
-	}
-	defer C.rf_release_keychain_item(item)
-	status := C.SecKeychainItemDelete(item)
+	account := safeName(name)
+	serviceC := C.CString(keychainServiceName)
+	accountC := C.CString(account)
+	defer C.free(unsafe.Pointer(serviceC))
+	defer C.free(unsafe.Pointer(accountC))
+
+	status := C.rf_secitem_delete_secret(
+		C.UInt32(len(keychainServiceName)),
+		serviceC,
+		C.UInt32(len(account)),
+		accountC,
+	)
 	if status == C.errSecItemNotFound {
 		return diskDelete(s, name)
 	}
@@ -217,26 +272,52 @@ func backendDelete(s *Store, name string) error {
 	return diskDelete(s, name)
 }
 
-func findKeychainItem(account string) (C.SecKeychainItemRef, bool, error) {
-	serviceC := C.CString(keychainServiceName)
-	accountC := C.CString(account)
-	defer C.free(unsafe.Pointer(serviceC))
-	defer C.free(unsafe.Pointer(accountC))
-	var item C.SecKeychainItemRef
-	status := C.rf_keychain_find_item(
+func saveKeychainSecret(account string, secret string) C.OSStatus {
+	status := updateKeychainSecret(account, secret)
+	if status == C.errSecItemNotFound {
+		status = addKeychainSecret(account, secret)
+		if status == C.errSecDuplicateItem {
+			status = updateKeychainSecret(account, secret)
+		}
+	}
+	return status
+}
+
+func updateKeychainSecret(account string, secret string) C.OSStatus {
+	serviceC, accountC, secretC, cleanup := keychainCStringArgs(account, secret)
+	defer cleanup()
+	return C.rf_secitem_update_secret(
 		C.UInt32(len(keychainServiceName)),
 		serviceC,
 		C.UInt32(len(account)),
 		accountC,
-		&item,
+		C.UInt32(len(secret)),
+		unsafe.Pointer(secretC),
 	)
-	if status == C.errSecItemNotFound {
-		return item, false, nil
+}
+
+func addKeychainSecret(account string, secret string) C.OSStatus {
+	serviceC, accountC, secretC, cleanup := keychainCStringArgs(account, secret)
+	defer cleanup()
+	return C.rf_secitem_add_secret(
+		C.UInt32(len(keychainServiceName)),
+		serviceC,
+		C.UInt32(len(account)),
+		accountC,
+		C.UInt32(len(secret)),
+		unsafe.Pointer(secretC),
+	)
+}
+
+func keychainCStringArgs(account string, secret string) (*C.char, *C.char, *C.char, func()) {
+	serviceC := C.CString(keychainServiceName)
+	accountC := C.CString(account)
+	secretC := C.CString(secret)
+	return serviceC, accountC, secretC, func() {
+		C.free(unsafe.Pointer(serviceC))
+		C.free(unsafe.Pointer(accountC))
+		C.free(unsafe.Pointer(secretC))
 	}
-	if status != C.errSecSuccess {
-		return item, false, keychainError("find secret", status)
-	}
-	return item, true, nil
 }
 
 type keychainStatusError struct {

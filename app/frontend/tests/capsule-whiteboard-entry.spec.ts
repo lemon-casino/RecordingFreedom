@@ -212,12 +212,15 @@ test('floating OCR result panel shows screenshot image blocks and translation gu
   await expect(panel.locator('.ocr-result-text')).toContainText('文字识别')
   await expect(panel.locator('.ocr-preview-frame img')).toHaveAttribute('src', /^data:image\/svg\+xml;base64,/)
   await expect(panel.locator('.ocr-preview-frame polygon')).toHaveCount(2)
+  await expect(panel.locator('.ocr-preview-frame .ocr-position-text-button')).toHaveCount(2)
+  await expect(panel.locator('.ocr-preview-frame .ocr-position-text-button').first()).toContainText('RecordingFreedom')
   await expect(panel.locator('.ocr-block-row')).toHaveCount(2)
 
   const firstBlock = panel.locator('.ocr-block-row').filter({hasText: 'RecordingFreedom'})
   await firstBlock.hover()
   await expect(firstBlock).toHaveClass(/active/)
   await expect(panel.locator('.ocr-preview-frame polygon.active')).toHaveCount(1)
+  await expect(panel.locator('.ocr-preview-frame .ocr-position-text-button.active')).toHaveCount(1)
 
   await panel.getByRole('button', {name: 'Translate text'}).click()
   await expect(panel.locator('.ocr-translation-note')).toContainText('Translation provider is not configured')
@@ -327,6 +330,8 @@ test('floating OCR result panel renders real worker smoke evidence coordinates',
   await expect(panel.locator('.ocr-preview-frame img')).toHaveAttribute('src', /^data:image\/svg\+xml;base64,/)
   await expect(panel.locator('.ocr-preview-frame svg')).toHaveAttribute('viewBox', '0 0 900 280')
   await expect(panel.locator('.ocr-preview-frame polygon')).toHaveCount(2)
+  await expect(panel.locator('.ocr-preview-frame .ocr-position-text-button')).toHaveCount(2)
+  await expect(panel.locator('.ocr-preview-frame .ocr-position-text-button').nth(1)).toContainText('文字识别')
   await expect(panel.locator('.ocr-preview-frame polygon').first()).toHaveAttribute(
     'points',
     '30.133928571428573,32.083333333333336 669.9776785714286,32.083333333333336 669.9776785714286,109.86111111111113 30.133928571428573,109.86111111111113',
@@ -550,11 +555,13 @@ test('pinned screenshot window restores OCR highlight and result floating panel 
   await expect(overlay).toBeVisible()
   await expect(overlay).toHaveAttribute('viewBox', '0 0 640 360')
   await expect(overlay.locator('polygon')).toHaveCount(2)
+  await expect(pinPage.locator('.screenshot-pin-canvas .ocr-position-text-button')).toHaveCount(2)
 
   const firstPolygon = overlay.locator('polygon').first()
-  await firstPolygon.hover()
+  const firstPositionText = pinPage.locator('.screenshot-pin-canvas .ocr-position-text-button').filter({hasText: 'RecordingFreedom'}).first()
+  await firstPositionText.hover()
   await expect(firstPolygon).toHaveClass(/active/)
-  await firstPolygon.click()
+  await firstPositionText.click()
   await expect(pinPage.locator('.screenshot-pin-title')).toContainText('Text copied')
 
   await pinPage.getByRole('button', {name: 'Translate text'}).click()
@@ -720,6 +727,8 @@ test('pinned screenshot window renders real worker smoke evidence after resize',
   const overlay = pinPage.locator('.screenshot-pin-canvas svg')
   await expect(overlay).toHaveAttribute('viewBox', '0 0 900 280')
   await expect(overlay.locator('polygon')).toHaveCount(2)
+  await expect(pinPage.locator('.screenshot-pin-canvas .ocr-position-text-button')).toHaveCount(2)
+  await expect(pinPage.locator('.screenshot-pin-canvas .ocr-position-text-button').first()).toContainText('RecordingFreedom')
   await expect(overlay.locator('polygon').first()).toHaveAttribute(
     'points',
     '30.133928571428573,32.083333333333336 669.9776785714286,32.083333333333336 669.9776785714286,109.86111111111113 30.133928571428573,109.86111111111113',
@@ -733,6 +742,7 @@ test('pinned screenshot window renders real worker smoke evidence after resize',
   expect(afterResize!.width).toBeGreaterThan(beforeResize!.width)
   await expect(overlay).toHaveAttribute('viewBox', '0 0 900 280')
   await expect(overlay.locator('polygon')).toHaveCount(2)
+  await expect(pinPage.locator('.screenshot-pin-canvas .ocr-position-text-button')).toHaveCount(2)
   await pinPage.close()
 })
 
