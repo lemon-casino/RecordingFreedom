@@ -100,6 +100,8 @@ Section
         File "${ARG_RECORDINGFREEDOM_TOOLS_DIR}\rnnoise.dll"
         File "${ARG_RECORDINGFREEDOM_TOOLS_DIR}\THIRD_PARTY_FFMPEG.txt"
         File "${ARG_RECORDINGFREEDOM_TOOLS_DIR}\THIRD_PARTY_NOTICES.txt"
+        File /r "${ARG_RECORDINGFREEDOM_TOOLS_DIR}\ocr-worker"
+        File /r "${ARG_RECORDINGFREEDOM_TOOLS_DIR}\onnxruntime"
         SetOutPath $INSTDIR
     !endif
 

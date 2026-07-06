@@ -26,7 +26,7 @@ https://github.com/lemon-casino/RecordingFreedom.git
 
 当前已落地 jobs：
 
-- `validate`：安装 Go、Node、Linux Wails 依赖、Wails v3 CLI 和 Playwright Chromium，生成 bindings，校验 `frontend/bindings` 无未提交差异，运行前端 build、前端 `test:e2e`、`go test ./...`、构建 Linux RNNoise 动态模块、运行 `go test -tags rnnoise_dynamic ./internal/audio/rnnoise ./internal/recording`、`go run ./cmd/preview-smoke`、`go run ./cmd/release-config-check`，并用 `CGO_ENABLED=1 go run -tags "gtk3 rnnoise_dynamic" ./cmd/desktop-doctor -require-rnnoise` 阻断不能加载 RNNoise 原生模块的构建。前端 e2e 覆盖普通画板、主胶囊画板入口双态规则和录制标注 overlay 命中区域，防止画板入口在录制紧凑态被隐藏或误切模式；`release-config-check` 同时检查 `12-annotation-overlay-platform-smoke.md` 和 `13-rnnoise-dynamic-module.md` 对应的发布门禁，避免把导出合成 smoke 或缺模块 RNNoise 误写成已完成。
+- `validate`：安装 Go、Node、Linux Wails 依赖、Wails v3 CLI 和 Playwright Chromium，生成 bindings，校验 `frontend/bindings` 无未提交差异，运行前端 build、前端 `test:e2e`、`go test ./...`、构建 Linux RNNoise 动态模块、运行 `go test -tags rnnoise_dynamic ./internal/audio/rnnoise ./internal/recording`、`go run ./cmd/preview-smoke`、`go run -tags gtk3 ./cmd/ocr-translation-smoke`、`go run ./cmd/ocr-secret-store-smoke`、`go run ./cmd/release-config-check`，并用 `CGO_ENABLED=1 go run -tags "gtk3 rnnoise_dynamic" ./cmd/desktop-doctor -require-rnnoise` 阻断不能加载 RNNoise 原生模块的构建。前端 e2e 覆盖普通画板、主胶囊画板入口双态规则和录制标注 overlay 命中区域，防止画板入口在录制紧凑态被隐藏或误切模式；`ocr-translation-smoke` 会用本地 OpenAI-compatible provider 验证 OCR 翻译 settings 不保存明文 API key、secret store 读取、provider 请求和缓存命中；`ocr-secret-store-smoke` 会验证真实 secret store 保存/读取/删除、删除后不可读和 data root 无明文 secret；`release-config-check` 同时检查 `12-annotation-overlay-platform-smoke.md` 和 `13-rnnoise-dynamic-module.md` 对应的发布门禁，避免把导出合成 smoke 或缺模块 RNNoise 误写成已完成。
 - `desktop-build`：使用矩阵构建 Windows x64/arm64、macOS x64/arm64 和 Linux x64/arm64。Windows runner 通过 `msys2/setup-msys2@v2` 按架构准备 MINGW64/CLANGARM64 C 工具链，先从仓库内 RNNoise C 源编译 `tools/rnnoise.dll`，再用 `CGO_ENABLED=0 + rnnoise_dynamic` 构建主程序；macOS/Linux runner 下载经 SHA256 固定的对应架构 FFmpeg/FFprobe，并先编译 `librnnoise.dylib` / `librnnoise.so`。所有桌面架构都会运行动态 RNNoise DSP smoke、`desktop-doctor -require-rnnoise`，并构建 desktop-doctor/video-smoke/audio-smoke/annotation-export-smoke/annotation-overlay-evidence-check 诊断工具。
 
 ## 当前 Release 工作流
@@ -37,8 +37,12 @@ RNNoise native DSP 当前作为动态原生模块进入所有桌面架构。Wind
 
 发布前门禁：
 
-- `Release Gate`：生成 bindings 并校验无差异，运行前端 build、前端 `test:e2e`、`go test ./...`、RNNoise 动态模块构建和 DSP + recording runtime 定向测试、`go run ./cmd/preview-smoke`，并运行带 `rnnoise_dynamic` 的 `desktop-doctor -require-rnnoise`。从当前 release 开始，发布 artifact 默认启用 RNNoise 动态原生模块，不能再发布“按钮存在但二进制没有真降噪”的验收包；画板入口也必须满足未录制打开普通画板、视频录制/暂停中打开录制标注、音频录制中仍打开普通画板的双态验收。
+- `Release Gate`：生成 bindings 并校验无差异，运行前端 build、前端 `test:e2e`、`go test ./...`、RNNoise 动态模块构建和 DSP + recording runtime 定向测试、`go run ./cmd/preview-smoke`、`go run -tags gtk3 ./cmd/ocr-translation-smoke`、`go run ./cmd/ocr-secret-store-smoke`，并运行带 `rnnoise_dynamic` 的 `desktop-doctor -require-rnnoise`。从当前 release 开始，发布 artifact 默认启用 RNNoise 动态原生模块，不能再发布“按钮存在但二进制没有真降噪”的验收包；画板入口也必须满足未录制打开普通画板、视频录制/暂停中打开录制标注、音频录制中仍打开普通画板的双态验收；OCR 翻译 smoke 必须生成 `translation-smoke.json`，证明 settings/secret store/provider/cache 调度没有退回假按钮或明文 key；OCR secret store smoke 必须生成 `secret-store-smoke.json`，证明 secret store 保存/读取/删除和无明文落盘。
 - 三个平台 build 只有在 `Release Gate` 通过后才会启动；任一平台 artifact 校验失败都会阻断 GitHub Release 发布。
+- OCR 模型包发布使用 `go run ./cmd/ocr-model-package -model all`。该命令只会打包 `third_party/ocr-models/manifest.json` 中具备完整 download URL、bytes、SHA256、smoke 声明并且 `releaseStatus` 为空或 `ready` 的模型；当前 release catalog 只有 stable 进入发布产物。PP-OCRv6 latest/quality 已作为 `releaseStatus: candidate` 写入 manifest 以固定官方 SHA 和 no-orientation 草案，并已通过本地 no-orientation worker smoke；但在跨平台 worker smoke、真实用户截图样例质量回验和桌面下载/切换/回退验收完成前不会进入 `ocr-model-catalog.json`。
+- PP-OCRv6 candidate 只能通过 `go run ./cmd/ocr-model-package -include-candidates` 或 `scripts/run-local-ocr-smoke.ps1 -IncludeCandidates` 进行本地 smoke；该开关不能和 `-catalog-output` 同时使用，release workflow 不允许用它生成 `ocr-model-catalog.json`。
+- PP-OCRv6 latest/quality 的上游来源由 `go run ./cmd/ocr-model-source-audit` 独立审计并生成 `ppocrv6-source-audit.json`；该审计当前用于固定官方源、license、commit、字符表、`generatedKeys` 的 `keys.txt` bytes/SHA256 和未满足的 no-orientation manifest/smoke、worker smoke 阻塞项，需要准备 manifest 级证据时可显式传 `-hash-files` 输出官方文件 bytes/SHA256，不会把未验证模型发布为可安装 catalog。
+- 模型包生成器已支持从已固定 bytes/SHA256 的 PaddleOCR `inference.yml` 解析 `character_dict` 并生成包内 `keys.txt`；模型 manifest 已支持 `textlineOrientation.mode=none`，此时 catalog、安装校验和 worker 允许不包含 `cls.onnx`。该能力只是 PP-OCRv6 manifest 的前置合同，latest/quality 仍必须固定真实哈希并通过 no-orientation worker smoke 后才能发布。
 
 平台 runner：
 
@@ -90,11 +94,12 @@ GitHub Actions 会自动运行 `release.yml`，通过后生成 GitHub prerelease
 - 无 GUI preview smoke 是否能完成设置持久化、storage health、预检、mock 开始/暂停/继续/结束、manifest ready 校验和恢复扫描。
 - Windows、macOS、Linux 是否都能完成 Wails 构建，并且发布产物包含对应平台的主程序、FFmpeg/FFprobe 和第三方 notices。
 - 发布二进制是否通过 `desktop-doctor -require-rnnoise`，确认 RNNoise 动态模块已能被 artifact 加载并绑定。
-- Windows portable zip 是否通过 `scripts/verify-windows-portable.ps1`：包含 `recordingfreedom.exe`、`tools/ffmpeg.exe`、`tools/ffprobe.exe`、`tools/rnnoise.dll`、`tools/THIRD_PARTY_FFMPEG.txt`、`tools/THIRD_PARTY_NOTICES.txt`、`tools/desktop-doctor.exe`、`tools/video-smoke.exe`、`tools/audio-smoke.exe`、`tools/annotation-export-smoke.exe`、`tools/annotation-overlay-evidence-check.exe` 和 `tools/run-windows-portable-smoke.ps1`，并能在 Windows runner 上执行 FFmpeg/FFprobe；校验脚本还会解析 portable 内的 smoke runner，检查它覆盖 doctor、video-smoke、audio-smoke、annotation-export-smoke、annotation-overlay-evidence-check、FFmpeg 环境变量、区域/窗口 annotation target 绑定、系统声音/麦克风/RNNoise 关键入口，并确认 RNNoise BSD-style license 与 Excalidraw MIT 许可证声明已进入 artifact。
+- Windows portable zip 是否通过 `scripts/verify-windows-portable.ps1`：包含 `recordingfreedom.exe`、`tools/ffmpeg.exe`、`tools/ffprobe.exe`、`tools/rnnoise.dll`、`tools/THIRD_PARTY_FFMPEG.txt`、`tools/THIRD_PARTY_NOTICES.txt`、`tools/desktop-doctor.exe`、`tools/video-smoke.exe`、`tools/audio-smoke.exe`、`tools/annotation-export-smoke.exe`、`tools/annotation-overlay-evidence-check.exe`、`tools/ocr-secret-store-smoke.exe` 和 `tools/run-windows-portable-smoke.ps1`，并能在 Windows runner 上执行 FFmpeg/FFprobe；校验脚本还会解析 portable 内的 smoke runner，检查它覆盖 doctor、video-smoke、audio-smoke、annotation-export-smoke、annotation-overlay-evidence-check、secret-store-smoke、FFmpeg 环境变量、区域/窗口 annotation target 绑定、系统声音/麦克风/RNNoise 关键入口，并确认 RNNoise BSD-style license 与 Excalidraw MIT 许可证声明已进入 artifact。
 - 已发布的 Windows preview asset 可用 `scripts/verify-windows-preview-release.ps1` 下载复验：脚本会从 GitHub Release 下载 Windows portable zip 和 `SHA256SUMS-windows-x64*.txt`，校验 SHA256，再调用 `scripts/verify-windows-portable.ps1` 检查 portable zip 内容、x64 PE 头、`recordingfreedom.exe` GUI subsystem、FFmpeg/FFprobe 依赖。
+- 已发布的完整 release asset 会在 `publish` job 上传后自动调用 `scripts/verify-release-artifacts.ps1` 下载复验；也可手动运行该脚本。脚本会下载 Windows/macOS/Linux x64/arm64 桌面产物、OCR 模型包、`ocr-model-catalog.json` 和 `SHA256SUMS-*`，校验 SHA256，复用平台验证脚本检查产物内容，并输出 `release-artifact-verification.json` 作为下载级 evidence。Actions 会把该报告作为 `RecordingFreedom-release-download-verification` artifact 上传。OCR 模型包 artifact 由 `-model all` 生成，当前只包含已验证 stable；latest/quality 不允许在 manifest 不完整时发布。
 - Windows artifact 是否保持 GUI subsystem 和隐藏 FFmpeg/DirectShow 子进程命令窗口的配置，避免启动软件或开始录制时弹出控制台窗口。
 - macOS `.app.zip` 是否通过 `scripts/verify-macos-app-zip.sh`：必须包含 `RecordingFreedom.app/Contents/MacOS/recordingfreedom`、`Contents/MacOS/tools/ffmpeg`、`Contents/MacOS/tools/ffprobe`、`Contents/MacOS/tools/librnnoise.dylib`、权限 Info.plist 和 notices。
-- Linux portable `.tar.gz` 是否通过 `scripts/verify-linux-portable.sh`：必须包含 `recordingfreedom`、`tools/ffmpeg`、`tools/ffprobe`、`tools/librnnoise.so`、诊断工具、desktop 文件和 notices。
+- Linux portable `.tar.gz` 是否通过 `scripts/verify-linux-portable.sh`：必须包含 `recordingfreedom`、`tools/ffmpeg`、`tools/ffprobe`、`tools/librnnoise.so`、`tools/ocr-secret-store-smoke`、诊断工具、desktop 文件和 notices。
 
 当前已验证的 preview 是 `v0.1.0-preview.15`。该 tag 的 Release workflow 已通过 Release Gate、Windows x64、macOS arm64、Linux x64 和 Publish GitHub Release，Actions run 为 `https://github.com/lemon-casino/RecordingFreedom/actions/runs/28502127468`，发布到 `https://github.com/lemon-casino/RecordingFreedom/releases/tag/v0.1.0-preview.15`。产物包含 `RecordingFreedom-windows-x64-v0.1.0-preview.15-portable.zip`、`RecordingFreedom-macos-arm64-v0.1.0-preview.15`、`RecordingFreedom-linux-x64-v0.1.0-preview.15` 和三个平台 SHA256SUMS。`scripts/verify-windows-preview-release.ps1 -TagName v0.1.0-preview.15` 已完成真实 GitHub Release 下载复验：Windows portable zip SHA256 为 `99E1EB5C425B925F0F0269EE364C95A4F0CB7278EEE73C8E6D5A31196A8CD7DD`，`recordingfreedom.exe` 是 x64 GUI PE，FFmpeg/FFprobe 是 x64 PE 且 `-version` 可执行，`tools/desktop-doctor.exe`、`tools/video-smoke.exe` 和 `tools/audio-smoke.exe` 均为 x64 console PE，`tools/run-windows-portable-smoke.ps1` 已打入 zip。当前 `main` 的下一次 portable 校验还会解析 runner 并检查关键 smoke 命令内容。`v0.1.0-preview.7` 和 `v0.1.0-preview.8` 保留为失败记录：前者暴露 Linux Wails build tag 拼接问题，后者暴露 Windows FFmpeg bootstrap 下载链路问题；两个问题均已在 `preview.9` 前修复。`v0.1.0-preview.11` 在 `preview.10` 基础上修复 Windows 默认麦克风保留真实 WASAPI endpoint、录制中锁定来源/音频/摄像头配置，以及区域录制选区持久边框。`v0.1.0-preview.13` 修复胶囊透明背景灰底、屏幕编号标识尺寸/居中，并把区域框选后的编辑态改为透明 overlay。`v0.1.0-preview.14` 把区域录制开始后的持久边框也改为鼠标穿透透明 overlay，避免四个窄条 WebView 窗口露出浅色背景和关闭按钮，同时清理 macOS CoreAudio deprecated property element annotation。`v0.1.0-preview.15` 把 Windows clean-machine 验收工具和 runner 纳入 portable zip，并把 release/CI 门禁扩展到这些工具。
 
@@ -106,7 +111,15 @@ Windows preview asset 下载复验命令：
 .\scripts\verify-windows-preview-release.ps1 -TagName v0.1.0-preview.15
 ```
 
-不传 `-TagName` 时会自动选择最近一个包含 Windows x64 portable zip 的已发布 release。这个脚本只证明发布 asset 完整、哈希匹配、portable zip 内容正确、Windows exe 是 x64 GUI 子系统且 FFmpeg/FFprobe 可执行；它不替代 clean-machine 真实录制 smoke。Windows portable zip 解压后，在目标 Windows 桌面执行：
+完整 release 资产下载复验命令；release workflow 上传资产后会自动执行同等回验并上传 `RecordingFreedom-release-download-verification` evidence：
+
+```powershell
+.\scripts\verify-release-artifacts.ps1 -TagName v0.1.0-preview.15 -Targets all -Architectures x64,arm64
+```
+
+在 Windows 上默认会完整验证 Windows portable；Windows 安装包需要额外传 `-RunWindowsInstallers` 才会静默安装到临时目录并复验安装内容。macOS `.app.zip` 和 Linux portable 的内容级验证需要在对应平台或可运行 bash/平台工具的环境执行；如需把不可执行的平台内容校验视为失败，传 `-RequireContentVerification`。无论在哪个平台执行，脚本都会先校验下载资产与 `SHA256SUMS-*` 是否一致，并写出 `release-artifact-verification.json`。
+
+旧的 Windows preview 脚本不传 `-TagName` 时会自动选择最近一个包含 Windows x64 portable zip 的已发布 release。它只证明发布 asset 完整、哈希匹配、portable zip 内容正确、Windows exe 是 x64 GUI 子系统且 FFmpeg/FFprobe 可执行；它不替代 clean-machine 真实录制 smoke。Windows portable zip 解压后，在目标 Windows 桌面执行：
 
 ```powershell
 .\tools\run-windows-portable-smoke.ps1
@@ -175,6 +188,8 @@ Linux 初期为 experimental：
 - 同目录生成 `SHA256SUMS-*.txt`。
 - Wails build 在平台 runner 上完成。
 - Release Gate 已运行 `go run ./cmd/preview-smoke`，验证当前可验收能力确实能创建 ready mock `.rfrec` 包到 `data/video`。
+- Release Gate 已运行 `go run -tags gtk3 ./cmd/ocr-translation-smoke`，验证 OCR 翻译调度可以从 secret store 读取 key、调用 OpenAI-compatible `/chat/completions` provider、写入 `data/ocr/translations/`，并在 provider 关闭后命中缓存；该 smoke 使用本地 provider，不替代真实 DeepL/OpenAI-compatible 桌面回验。
+- Release Gate 和三平台 build matrix 已运行 `go run ./cmd/ocr-secret-store-smoke`，验证真实 secret store 保存、读取、删除和 data root 无明文 secret；CI build matrix 会上传 `recordingfreedom-ocr-secret-store-smoke-${{ matrix.name }}` artifact，保存每个平台的 `secret-store-smoke.json`；Windows 会记录 DPAPI，macOS 会记录 Keychain，Linux 在无 Secret Service/DBus 的 runner 上会记录 local-file fallback，不能把 fallback 证据冒充为 GNOME/KDE Secret Service 实机。
 - Release Gate 和三平台 build job 已运行带 `rnnoise_dynamic` 的 `desktop-doctor -require-rnnoise`，把 app data、`data/video`、backend、能力矩阵、RNNoise 和平台 FFmpeg 依赖状态写入日志。Windows build job 会先运行 `scripts/ensure-windows-ffmpeg.ps1` 和 `scripts/build-rnnoise-windows.ps1`，再用 `desktop-doctor -require-video -require-rnnoise` 阻断缺 FFmpeg 或缺 RNNoise 的 artifact；macOS/Linux 会先运行 `scripts/ensure-unix-ffmpeg.sh` 和 `scripts/build-rnnoise-unix.sh`，再分别校验 `.app.zip` 和 portable `.tar.gz`。
 - Release Gate 已运行 RNNoise dynamic DSP + recording runtime 定向测试，验证动态模块能处理 48kHz/480-sample frame，且 `recording.NativeBackendRuntime` 在 `rnnoise_dynamic` 标签下可以编译测试。
 - Release Gate 已运行 `cmd/release-config-check`，防止 CI/release workflow 意外移除 RNNoise、Windows FFmpeg、Windows portable zip 验证或 release notes 中的能力边界。
@@ -187,9 +202,9 @@ Linux 初期为 experimental：
 - RNNoise dynamic native module 已进入目标 preview/release toolchain 的源码编译、打包校验和 doctor 门禁；正式发布前仍需补目标桌面的 `audio-smoke -rnnoise` 实录听感与诊断验证。
 - FFmpeg 或系统编码依赖策略检查；PIP 导出和当前三平台摄像头 sidecar 均依赖 FFmpeg，可用性必须进入 capability、doctor 和 release notes。
 - Windows portable zip 解压后 `recordingfreedom.exe` 能从同级 `tools/ffmpeg.exe` 解析依赖。
-- Release workflow 在上传 artifact 前运行 `scripts/verify-windows-portable.ps1`，缺少 exe、FFmpeg、FFprobe、RNNoise DLL、FFmpeg 第三方说明或 RNNoise/Excalidraw notices 会直接失败；该脚本还会解压 portable zip，按矩阵架构检查 `recordingfreedom.exe` 是 x64 或 ARM64 GUI PE，并确认 FFmpeg/FFprobe/RNNoise DLL 与诊断工具架构一致，在 Windows host 上继续执行 FFmpeg/FFprobe `-version`。
-- Release workflow 在上传 macOS artifact 前运行 `scripts/verify-macos-app-zip.sh`，缺少 `.app`、`Contents/MacOS/recordingfreedom`、`Contents/MacOS/tools/ffmpeg`、`Contents/MacOS/tools/ffprobe`、`Contents/MacOS/tools/librnnoise.dylib`、Info.plist 或 notices 会直接失败。
-- Release workflow 在上传 Linux artifact 前运行 `scripts/verify-linux-portable.sh`，缺少主程序、FFmpeg/FFprobe、RNNoise `.so`、诊断工具、desktop 文件或 notices 会直接失败，并检查主程序、FFmpeg、FFprobe 和 RNNoise `.so` 是矩阵指定的 x64 或 ARM64 ELF。
+- Release workflow 在上传 artifact 前运行 `scripts/verify-windows-portable.ps1`，缺少 exe、FFmpeg、FFprobe、RNNoise DLL、`tools/ocr-secret-store-smoke.exe`、FFmpeg 第三方说明或 RNNoise/Excalidraw notices 会直接失败；该脚本还会解压 portable zip，按矩阵架构检查 `recordingfreedom.exe` 是 x64 或 ARM64 GUI PE，并确认 FFmpeg/FFprobe/RNNoise DLL 与诊断工具架构一致，在 Windows host 上继续执行 FFmpeg/FFprobe `-version`。
+- Release workflow 在上传 macOS artifact 前运行 `scripts/verify-macos-app-zip.sh`，缺少 `.app`、`Contents/MacOS/recordingfreedom`、`Contents/MacOS/tools/ffmpeg`、`Contents/MacOS/tools/ffprobe`、`Contents/MacOS/tools/librnnoise.dylib`、`Contents/MacOS/tools/ocr-secret-store-smoke`、Info.plist 或 notices 会直接失败。
+- Release workflow 在上传 Linux artifact 前运行 `scripts/verify-linux-portable.sh`，缺少主程序、FFmpeg/FFprobe、RNNoise `.so`、`tools/ocr-secret-store-smoke`、诊断工具、desktop 文件或 notices 会直接失败，并检查主程序、FFmpeg、FFprobe、RNNoise `.so` 和诊断工具是矩阵指定的 x64 或 ARM64 ELF。
 - Release 发布后可运行 `scripts/verify-windows-preview-release.ps1` 对 GitHub Release asset 做下载级复验，覆盖 SHA256SUMS 和 portable zip 结构。
 - 正式安装包环境中的 GUI/进程级 smoke test。
 - signed/notarized/package 后的 mock `.rfrec/manifest.json` 创建 smoke test。

@@ -18,10 +18,12 @@ import (
 	"github.com/lemon-casino/RecordingFreedom/app/internal/devices"
 	"github.com/lemon-casino/RecordingFreedom/app/internal/exporter"
 	"github.com/lemon-casino/RecordingFreedom/app/internal/exportplan"
+	"github.com/lemon-casino/RecordingFreedom/app/internal/ocr"
 	"github.com/lemon-casino/RecordingFreedom/app/internal/pip"
 	"github.com/lemon-casino/RecordingFreedom/app/internal/preflight"
 	"github.com/lemon-casino/RecordingFreedom/app/internal/recording"
 	"github.com/lemon-casino/RecordingFreedom/app/internal/recpackage"
+	secretstore "github.com/lemon-casino/RecordingFreedom/app/internal/secrets"
 	"github.com/lemon-casino/RecordingFreedom/app/internal/settings"
 	"github.com/wailsapp/wails/v3/pkg/application"
 )
@@ -104,64 +106,69 @@ type RecordingFreedomService struct {
 	preflight *preflight.Service
 	recorder  *recording.Service
 	settings  *settings.Service
+	secrets   *secretstore.Store
+	ocr       *ocr.Service
 
-	app                    *application.App
-	capsuleWindow          *application.WebviewWindow
-	settingsWindow         *application.WebviewWindow
-	whiteboardWindow       *application.WebviewWindow
-	annotationOverlay      *application.WebviewWindow
-	annotationRenderer     *application.WebviewWindow
-	regionOverlay          *application.WebviewWindow
-	screenIndicator        *application.WebviewWindow
-	pipOverlay             *application.WebviewWindow
-	screenshotPinWindow    *application.WebviewWindow
-	floatingPanelWindow    *application.WebviewWindow
-	floatingSelectWindow   *application.WebviewWindow
-	trayLocale             func(settings.Locale)
-	capsuleHitRegions      capsuleWindowHitRegions
-	annotationHitRegions   capsuleWindowHitRegions
-	floatingPanelRegions   capsuleWindowHitRegions
-	floatingSelectRegions  capsuleWindowHitRegions
-	floatingMu             sync.Mutex
-	floatingPanelState     FloatingPanelState
-	floatingSelectState    FloatingSelectState
-	floatingOutsideClickMu sync.Mutex
-	floatingOutsideClickOn bool
-	sourceMu               sync.Mutex
-	sourceState            SourceControlState
-	settingsMu             sync.Mutex
-	whiteboardMu           sync.Mutex
-	whiteboardVisible      bool
-	annotationMu           sync.Mutex
-	annotationToken        uint64
-	annotationSessionID    string
-	annotationRegionDIP    application.Rect
-	annotationRenderMu     sync.Mutex
-	annotationRenderBatch  *annotationRenderBatch
-	regionMu               sync.Mutex
-	regionSession          *RegionSelectionSession
-	regionElementCacheMu   sync.Mutex
-	regionElementCache     regionElementCandidateCache
-	regionSnapshotMu       sync.Mutex
-	regionSnapshotCache    regionAssistSnapshotCache
-	regionAssistLogMu      sync.Mutex
-	regionAssistLogKey     string
-	regionAssistLogAt      time.Time
-	selectedRegionDIP      application.Rect
-	screenshotRegionDIP    application.Rect
-	pipOverlayMu           sync.Mutex
-	pipOverlayToken        uint64
-	micLevelMu             sync.Mutex
-	micLevelSource         audioLevelCaptureSource
-	micLevelDevice         string
-	micLevelToken          uint64
-	logMu                  sync.Mutex
-	shortcutMu             sync.Mutex
-	registeredShortcuts    map[settings.ShortcutAction]string
-	screenshotMu           sync.Mutex
-	screenshotPinState     ScreenshotPinState
-	whiteboardScreenshot   ScreenshotWhiteboardContext
-	screenshotAnnotation   ScreenshotWhiteboardContext
+	app                      *application.App
+	capsuleWindow            *application.WebviewWindow
+	settingsWindow           *application.WebviewWindow
+	whiteboardWindow         *application.WebviewWindow
+	annotationOverlay        *application.WebviewWindow
+	annotationRenderer       *application.WebviewWindow
+	regionOverlay            *application.WebviewWindow
+	screenIndicator          *application.WebviewWindow
+	pipOverlay               *application.WebviewWindow
+	screenshotPinWindow      *application.WebviewWindow
+	floatingPanelWindow      *application.WebviewWindow
+	floatingSelectWindow     *application.WebviewWindow
+	trayLocale               func(settings.Locale)
+	capsuleHitRegions        capsuleWindowHitRegions
+	annotationHitRegions     capsuleWindowHitRegions
+	floatingPanelRegions     capsuleWindowHitRegions
+	floatingSelectRegions    capsuleWindowHitRegions
+	floatingMu               sync.Mutex
+	floatingPanelState       FloatingPanelState
+	floatingSelectState      FloatingSelectState
+	floatingOutsideClickMu   sync.Mutex
+	floatingOutsideClickOn   bool
+	sourceMu                 sync.Mutex
+	sourceState              SourceControlState
+	settingsMu               sync.Mutex
+	whiteboardMu             sync.Mutex
+	whiteboardVisible        bool
+	annotationMu             sync.Mutex
+	annotationToken          uint64
+	annotationSessionID      string
+	annotationRegionDIP      application.Rect
+	annotationRenderMu       sync.Mutex
+	annotationRenderBatch    *annotationRenderBatch
+	regionMu                 sync.Mutex
+	regionSession            *RegionSelectionSession
+	regionElementCacheMu     sync.Mutex
+	regionElementCache       regionElementCandidateCache
+	regionSnapshotMu         sync.Mutex
+	regionSnapshotCache      regionAssistSnapshotCache
+	regionAssistLogMu        sync.Mutex
+	regionAssistLogKey       string
+	regionAssistLogAt        time.Time
+	selectedRegionDIP        application.Rect
+	screenshotRegionDIP      application.Rect
+	pipOverlayMu             sync.Mutex
+	pipOverlayToken          uint64
+	micLevelMu               sync.Mutex
+	micLevelSource           audioLevelCaptureSource
+	micLevelDevice           string
+	micLevelToken            uint64
+	logMu                    sync.Mutex
+	shortcutMu               sync.Mutex
+	registeredShortcuts      map[settings.ShortcutAction]string
+	screenshotMu             sync.Mutex
+	screenshotPinState       ScreenshotPinState
+	whiteboardScreenshot     ScreenshotWhiteboardContext
+	screenshotAnnotation     ScreenshotWhiteboardContext
+	ocrCancelledSources      map[string]map[string]struct{}
+	ocrPumpOnce              sync.Once
+	ocrModelDownloadPumpOnce sync.Once
 }
 
 func NewRecordingFreedomService() *RecordingFreedomService {
@@ -173,11 +180,15 @@ func NewRecordingFreedomService() *RecordingFreedomService {
 		preflight: preflight.NewService(),
 		recorder:  recording.NewService(data),
 		settings:  settings.NewService(data),
+		secrets:   secretstore.NewStore(data),
+		ocr:       ocr.NewService(data),
 	}
 }
 
 func (s *RecordingFreedomService) setApp(app *application.App) {
 	s.app = app
+	s.startOCRJobEventPump()
+	s.startOCRModelDownloadEventPump()
 }
 
 func (s *RecordingFreedomService) setCapsuleWindow(window *application.WebviewWindow) {
@@ -515,7 +526,7 @@ func (s *RecordingFreedomService) Bootstrap() (BootstrapState, error) {
 	if err != nil {
 		return BootstrapState{}, err
 	}
-	currentSettings, err := s.settings.Load()
+	currentSettings, err := s.loadSettingsForClient()
 	if err != nil {
 		return BootstrapState{}, err
 	}
@@ -721,7 +732,7 @@ func (s *RecordingFreedomService) GetSettings() (settings.Settings, error) {
 	if err != nil {
 		return settings.Settings{}, err
 	}
-	currentSettings, err := s.settings.Load()
+	currentSettings, err := s.loadSettingsForClient()
 	if err != nil {
 		return settings.Settings{}, err
 	}
@@ -775,11 +786,12 @@ func (s *RecordingFreedomService) SaveSettings(next settings.Settings) (settings
 	if err != nil {
 		return settings.Settings{}, err
 	}
-	if currentSettings, err := s.settings.Load(); err == nil {
+	if currentSettings, err := s.loadSettingsForMutation(); err == nil {
 		next.Recording = currentSettings.Recording
 		next.Audio = currentSettings.Audio
 		next.Camera = currentSettings.Camera
 		next.Whiteboard = currentSettings.Whiteboard
+		next.OCR = currentSettings.OCR
 		next.Window.Theme = currentSettings.Window.Theme
 		next.Window.StartAtLogin = currentSettings.Window.StartAtLogin
 		next.Shortcuts = currentSettings.Shortcuts
@@ -815,7 +827,7 @@ func (s *RecordingFreedomService) patchCameraStateLocked(patch CameraStatePatchR
 	if s.settings == nil {
 		return settings.Settings{}, errors.New("settings service is not initialized")
 	}
-	currentSettings, err := s.settings.Load()
+	currentSettings, err := s.loadSettingsForMutation()
 	if err != nil {
 		return settings.Settings{}, err
 	}
@@ -858,7 +870,7 @@ func applyCameraStatePatch(current settings.CameraSettings, patch CameraStatePat
 func (s *RecordingFreedomService) PatchAudioState(patch AudioStatePatchRequest) (AudioState, error) {
 	s.settingsMu.Lock()
 	defer s.settingsMu.Unlock()
-	currentSettings, err := s.settings.Load()
+	currentSettings, err := s.loadSettingsForMutation()
 	if err != nil {
 		return AudioState{}, err
 	}
@@ -883,7 +895,7 @@ func (s *RecordingFreedomService) SetDataRoot(rootDir string) (appdata.Info, err
 	}
 	s.settingsMu.Lock()
 	defer s.settingsMu.Unlock()
-	currentSettings, err := s.settings.Load()
+	currentSettings, err := s.loadSettingsForMutation()
 	if err != nil {
 		return appdata.Info{}, err
 	}

@@ -7,6 +7,7 @@ import (
 	"runtime"
 	"strings"
 
+	"github.com/lemon-casino/RecordingFreedom/app/internal/ocr"
 	"github.com/lemon-casino/RecordingFreedom/app/internal/recording"
 	"github.com/lemon-casino/RecordingFreedom/app/internal/settings"
 	"github.com/wailsapp/wails/v3/pkg/application"
@@ -32,12 +33,22 @@ func init() {
 	application.RegisterEvent[AudioLevelEvent]("audio.level")
 	application.RegisterEvent[ShortcutTriggeredEvent]("shortcut.triggered")
 	application.RegisterEvent[ScreenshotCapturedEvent]("screenshot.captured")
+	application.RegisterEvent[ScreenshotHistoryResult]("screenshot.history.changed")
 	application.RegisterEvent[ScreenshotPinEvent]("screenshot.pin")
 	application.RegisterEvent[ScreenshotWhiteboardContext]("screenshot.whiteboard")
 	application.RegisterEvent[FloatingPanelState]("floating.panel.changed")
 	application.RegisterEvent[FloatingSelectState]("floating.select.changed")
 	application.RegisterEvent[FloatingSelectChosenEvent]("floating.select.chosen")
 	application.RegisterEvent[SourceControlState]("source.state.changed")
+	application.RegisterEvent[ocr.Status]("ocr.status.changed")
+	application.RegisterEvent[OcrModelEvent]("ocr.model.installed")
+	application.RegisterEvent[OcrModelEvent]("ocr.model.failed")
+	application.RegisterEvent[ocr.ModelDownloadEvent]("ocr.model.download.changed")
+	application.RegisterEvent[OcrJobEvent]("ocr.job.queued")
+	application.RegisterEvent[OcrJobEvent]("ocr.job.started")
+	application.RegisterEvent[OcrJobEvent]("ocr.job.finished")
+	application.RegisterEvent[OcrJobEvent]("ocr.job.failed")
+	application.RegisterEvent[OcrJobEvent]("ocr.job.cancelled")
 }
 
 func main() {

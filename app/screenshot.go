@@ -68,6 +68,12 @@ type ScreenshotItem struct {
 	Region        *RegionRect `json:"region,omitempty"`
 	Pinned        bool        `json:"pinned"`
 	Fixed         bool        `json:"fixed"`
+	OCRStatus     string      `json:"ocrStatus"`
+	OCRResultID   string      `json:"ocrResultId,omitempty"`
+	OCRModelID    string      `json:"ocrModelId,omitempty"`
+	OCRLanguage   string      `json:"ocrLanguage,omitempty"`
+	OCRUpdatedAt  string      `json:"ocrUpdatedAt,omitempty"`
+	OCRError      string      `json:"ocrError,omitempty"`
 }
 
 type ScreenshotItemPatchRequest struct {
@@ -483,6 +489,7 @@ func (s *RecordingFreedomService) PatchScreenshotItem(req ScreenshotItemPatchReq
 	if err := s.saveScreenshotHistory(items); err != nil {
 		return ScreenshotHistoryResult{}, err
 	}
+	s.emitScreenshotHistoryChanged(items)
 	return ScreenshotHistoryResult{Items: items}, nil
 }
 
@@ -558,6 +565,7 @@ func (s *RecordingFreedomService) DeleteScreenshotItem(id string) (ScreenshotHis
 	if err := s.saveScreenshotHistory(remaining); err != nil {
 		return ScreenshotHistoryResult{}, err
 	}
+	s.emitScreenshotHistoryChanged(remaining)
 	s.screenshotMu.Lock()
 	clearWhiteboardContext := s.whiteboardScreenshot.Item.ID == id
 	pinnedDeleted := s.screenshotPinState.Visible && s.screenshotPinState.Item.ID == id
@@ -830,7 +838,11 @@ func (s *RecordingFreedomService) captureScreenshot(rect image.Rectangle, mode s
 }
 
 func (s *RecordingFreedomService) captureScrollingScreenshot(rect image.Rectangle, region *RegionRect) (ScreenshotItem, error) {
-	img, frames, scrolled, err := captureScrollingScreenshotImage(rect, desktopscreenshot.CaptureRect, scrollDownAtRect, time.Sleep)
+	return s.captureScrollingScreenshotWith(rect, region, desktopscreenshot.CaptureRect, scrollDownAtRect, time.Sleep)
+}
+
+func (s *RecordingFreedomService) captureScrollingScreenshotWith(rect image.Rectangle, region *RegionRect, capture screenshotCaptureFunc, scroll screenshotScrollFunc, sleep screenshotSleepFunc) (ScreenshotItem, error) {
+	img, frames, scrolled, err := captureScrollingScreenshotImage(rect, capture, scroll, sleep)
 	if err != nil {
 		return ScreenshotItem{}, err
 	}
@@ -1074,6 +1086,7 @@ func (s *RecordingFreedomService) saveScreenshotImage(img image.Image, mode stri
 		Height:        img.Bounds().Dy(),
 		Mode:          mode,
 		Region:        region,
+		OCRStatus:     "none",
 	}
 	items, err := s.loadScreenshotHistory()
 	if err != nil {
@@ -1086,6 +1099,7 @@ func (s *RecordingFreedomService) saveScreenshotImage(img image.Image, mode stri
 	if err := s.saveScreenshotHistory(items); err != nil {
 		return ScreenshotItem{}, err
 	}
+	s.emitScreenshotHistoryChanged(items)
 	s.logEvent("screenshot", "capture", map[string]string{
 		"id":     item.ID,
 		"path":   item.Path,
@@ -1093,6 +1107,7 @@ func (s *RecordingFreedomService) saveScreenshotImage(img image.Image, mode stri
 		"height": fmt.Sprint(item.Height),
 		"mode":   item.Mode,
 	})
+	s.queueScreenshotOCRAfterSave(item)
 	return item, nil
 }
 
@@ -1224,6 +1239,13 @@ func normalizeScreenshotHistory(items []ScreenshotItem) []ScreenshotItem {
 			item.Mode = "region"
 		}
 		item.Pinned = false
+		item.OCRStatus = normalizeScreenshotOCRStatus(item.OCRStatus)
+		if item.OCRStatus == "none" {
+			item.OCRResultID = ""
+			item.OCRModelID = ""
+			item.OCRUpdatedAt = ""
+			item.OCRError = ""
+		}
 		seen[item.ID] = true
 		normalized = append(normalized, item)
 	}
@@ -1231,6 +1253,16 @@ func normalizeScreenshotHistory(items []ScreenshotItem) []ScreenshotItem {
 		return normalized[left].CreatedAt > normalized[right].CreatedAt
 	})
 	return normalized
+}
+
+func normalizeScreenshotOCRStatus(status string) string {
+	normalized := strings.ToLower(strings.TrimSpace(status))
+	switch normalized {
+	case "queued", "running", "ready", "failed":
+		return normalized
+	default:
+		return "none"
+	}
 }
 
 func managedScreenshotPath(s *RecordingFreedomService, path string) (string, error) {
@@ -1473,6 +1505,13 @@ func (s *RecordingFreedomService) emitScreenshotCaptured(item ScreenshotItem) {
 		return
 	}
 	s.app.Event.Emit("screenshot.captured", ScreenshotCapturedEvent{Item: item})
+}
+
+func (s *RecordingFreedomService) emitScreenshotHistoryChanged(items []ScreenshotItem) {
+	if s == nil || s.app == nil {
+		return
+	}
+	s.app.Event.Emit("screenshot.history.changed", ScreenshotHistoryResult{Items: normalizeScreenshotHistory(items)})
 }
 
 func (s *RecordingFreedomService) emitScreenshotPin(state ScreenshotPinState) {

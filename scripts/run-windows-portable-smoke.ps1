@@ -147,6 +147,12 @@ $audioSmokePath = Require-File (Join-Path $toolsDir "audio-smoke.exe")
 $pipSmokePath = Require-File (Join-Path $toolsDir "pip-export-smoke.exe")
 $annotationSmokePath = Require-File (Join-Path $toolsDir "annotation-export-smoke.exe")
 $annotationEvidenceCheckPath = Require-File (Join-Path $toolsDir "annotation-overlay-evidence-check.exe")
+$ocrDesktopEvidenceExportPath = Require-File (Join-Path $toolsDir "ocr-desktop-evidence-export.exe")
+$ocrDesktopEvidenceCheckPath = Require-File (Join-Path $toolsDir "ocr-desktop-evidence-check.exe")
+$ocrDesktopEvidencePlanPath = Require-File (Join-Path $toolsDir "ocr-desktop-evidence-plan.exe")
+$ocrDesktopEvidenceSessionPath = Require-File (Join-Path $toolsDir "ocr-desktop-evidence-session.exe")
+$translationSmokePath = Require-File (Join-Path $toolsDir "ocr-translation-smoke.exe")
+$secretStoreSmokePath = Require-File (Join-Path $toolsDir "ocr-secret-store-smoke.exe")
 
 if ($DataDir.Trim() -eq "") {
     $DataDir = Join-Path $portableRoot "data-smoke"
@@ -159,6 +165,8 @@ New-Item -ItemType Directory -Force -Path $reportDir | Out-Null
 $env:RECORDINGFREEDOM_FFMPEG_PATH = $ffmpegPath
 
 $steps = New-Object System.Collections.Generic.List[object]
+$steps.Add((New-Step "secret-store-smoke" $secretStoreSmokePath @("-data-dir", $DataDir, "-evidence-dir", (Join-Path $DataDir "secret-store-smoke"))))
+$steps.Add((New-Step "translation-smoke" $translationSmokePath @("-data-dir", $DataDir, "-evidence-dir", (Join-Path $DataDir "translation-smoke"))))
 $doctorArgs = @("-data-dir", $DataDir, "-require-video")
 if (-not $SkipRNNoise) {
     $doctorArgs += "-require-rnnoise"

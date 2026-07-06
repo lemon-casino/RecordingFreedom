@@ -16,6 +16,9 @@ import * as capture$0 from "./internal/capture/models.js";
 import * as devices$0 from "./internal/devices/models.js";
 // eslint-disable-next-line @typescript-eslint/ban-ts-comment
 // @ts-ignore: Unused imports
+import * as ocr$0 from "./internal/ocr/models.js";
+// eslint-disable-next-line @typescript-eslint/ban-ts-comment
+// @ts-ignore: Unused imports
 import * as preflight$0 from "./internal/preflight/models.js";
 // eslint-disable-next-line @typescript-eslint/ban-ts-comment
 // @ts-ignore: Unused imports
@@ -45,6 +48,14 @@ export function BeginScreenshotRegionEdit(req: $models.RegionSelectionRequest): 
 
 export function Bootstrap(): $CancellablePromise<$models.BootstrapState> {
     return $Call.ByID(3811015052);
+}
+
+export function CancelOcrJob(jobID: string): $CancellablePromise<void> {
+    return $Call.ByID(458331071, jobID);
+}
+
+export function CancelOcrModelDownload(modelID: string): $CancellablePromise<ocr$0.ModelDownloadSnapshot> {
+    return $Call.ByID(2386760165, modelID);
 }
 
 export function CancelRegionSelection(): $CancellablePromise<$models.RegionSelectionResult> {
@@ -111,6 +122,14 @@ export function GetFloatingSelectState(): $CancellablePromise<$models.FloatingSe
     return $Call.ByID(1840094509);
 }
 
+export function GetOcrModelDownloads(): $CancellablePromise<ocr$0.ModelDownloadSnapshot[] | null> {
+    return $Call.ByID(3611938984);
+}
+
+export function GetOcrStatus(): $CancellablePromise<ocr$0.Status> {
+    return $Call.ByID(4074169356);
+}
+
 export function GetSettings(): $CancellablePromise<settings$0.Settings> {
     return $Call.ByID(1085525119);
 }
@@ -159,8 +178,20 @@ export function HideWhiteboardWindow(): $CancellablePromise<void> {
     return $Call.ByID(3405865905);
 }
 
+export function InstallOcrModel(modelID: string): $CancellablePromise<ocr$0.ModelInfo> {
+    return $Call.ByID(2360908316, modelID);
+}
+
+export function InstallOcrModelPackage(packagePath: string): $CancellablePromise<ocr$0.ModelInfo> {
+    return $Call.ByID(4202627444, packagePath);
+}
+
 export function ListMediaDevices(): $CancellablePromise<devices$0.MediaInventory> {
     return $Call.ByID(2412119741);
+}
+
+export function ListOcrModels(): $CancellablePromise<ocr$0.ModelInfo[] | null> {
+    return $Call.ByID(1079088196);
 }
 
 export function ListScreenshots(): $CancellablePromise<$models.ScreenshotHistoryResult> {
@@ -189,6 +220,10 @@ export function LoadWhiteboardScene(): $CancellablePromise<$models.WhiteboardSce
 
 export function LogClientEvent(event: $models.ClientLogEvent): $CancellablePromise<void> {
     return $Call.ByID(1000984385, event);
+}
+
+export function OpenOcrResult(resultID: string): $CancellablePromise<ocr$0.Result> {
+    return $Call.ByID(3139522127, resultID);
 }
 
 export function OpenRecordingPackage(packageDir: string): $CancellablePromise<recpackage$0.RecoverySummary> {
@@ -255,8 +290,28 @@ export function PreviewExportRecordingPackage(req: $models.ExportRecordingReques
     return $Call.ByID(960079289, req);
 }
 
+export function QueueRecognizeImage(req: ocr$0.RecognizeRequest): $CancellablePromise<ocr$0.JobSnapshot> {
+    return $Call.ByID(2925750228, req);
+}
+
+export function QueueRecognizePinnedScreenshot(itemID: string): $CancellablePromise<ocr$0.JobSnapshot> {
+    return $Call.ByID(3638546349, itemID);
+}
+
+export function QueueRecognizeScreenshot(itemID: string): $CancellablePromise<ocr$0.JobSnapshot> {
+    return $Call.ByID(2131828611, itemID);
+}
+
+export function QueueRecognizeWhiteboard(req: ocr$0.WhiteboardRequest): $CancellablePromise<ocr$0.JobSnapshot> {
+    return $Call.ByID(1242088152, req);
+}
+
 export function ReadAnnotationPreviewImage(req: $models.AnnotationPreviewImageRequest): $CancellablePromise<$models.AnnotationPreviewImageResult> {
     return $Call.ByID(2093045446, req);
+}
+
+export function ReadOcrResultImage(resultID: string): $CancellablePromise<$models.ScreenshotImageResult> {
+    return $Call.ByID(2650835212, resultID);
 }
 
 export function ReadPIPPreviewImage(req: $models.PIPPreviewImageRequest): $CancellablePromise<$models.PIPPreviewImageResult> {
@@ -267,8 +322,32 @@ export function ReadScreenshotImage(req: $models.ScreenshotImageRequest): $Cance
     return $Call.ByID(2843762551, req);
 }
 
+export function RecognizeImage(req: ocr$0.RecognizeRequest): $CancellablePromise<ocr$0.Result> {
+    return $Call.ByID(2438966391, req);
+}
+
+export function RecognizePinnedScreenshot(itemID: string): $CancellablePromise<ocr$0.Result> {
+    return $Call.ByID(977143144, itemID);
+}
+
+export function RecognizeScreenshot(itemID: string): $CancellablePromise<ocr$0.Result> {
+    return $Call.ByID(128728966, itemID);
+}
+
+export function RecognizeWhiteboard(req: ocr$0.WhiteboardRequest): $CancellablePromise<ocr$0.Result> {
+    return $Call.ByID(2285097725, req);
+}
+
 export function RecoverRecordingPackage(packageDir: string): $CancellablePromise<recpackage$0.RecoverySummary> {
     return $Call.ByID(919661591, packageDir);
+}
+
+export function RefreshOcrModelCatalog(catalogURL: string): $CancellablePromise<ocr$0.Status> {
+    return $Call.ByID(4213606563, catalogURL);
+}
+
+export function RemoveOcrModel(modelID: string): $CancellablePromise<ocr$0.Status> {
+    return $Call.ByID(1119029327, modelID);
 }
 
 export function ReselectAnnotationRegion(): $CancellablePromise<$models.RegionSelectionSession> {
@@ -309,6 +388,10 @@ export function SaveWhiteboardSnapshot(req: $models.WhiteboardSnapshotRequest): 
 
 export function ScanRecordingPackages(): $CancellablePromise<recpackage$0.RecoverySummary[] | null> {
     return $Call.ByID(1742539791);
+}
+
+export function SetActiveOcrModel(modelID: string): $CancellablePromise<ocr$0.Status> {
+    return $Call.ByID(1654942853, modelID);
 }
 
 export function SetAnnotationOverlayHitRegions(req: $models.CapsuleWindowHitRegionsRequest): $CancellablePromise<void> {
@@ -391,6 +474,10 @@ export function StartMockRecording(req: recording$0.StartRequest): $CancellableP
     return $Call.ByID(989661299, req);
 }
 
+export function StartOcrModelDownload(modelID: string): $CancellablePromise<ocr$0.ModelDownloadSnapshot> {
+    return $Call.ByID(2104828855, modelID);
+}
+
 export function StartRecording(req: recording$0.StartRequest): $CancellablePromise<recording$0.Session> {
     return $Call.ByID(171835981, req);
 }
@@ -409,6 +496,10 @@ export function StopRecording(): $CancellablePromise<recording$0.Session> {
 
 export function ToggleWhiteboardWindow(): $CancellablePromise<void> {
     return $Call.ByID(1949585145);
+}
+
+export function TranslateOcr(req: ocr$0.TranslateRequest): $CancellablePromise<ocr$0.TranslationResult> {
+    return $Call.ByID(435935108, req);
 }
 
 export function UpdateFloatingPanel(req: $models.FloatingPanelRequest): $CancellablePromise<$models.FloatingPanelState> {

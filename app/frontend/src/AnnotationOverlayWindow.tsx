@@ -2,6 +2,7 @@ import {
   ArrowUpRight,
   Circle,
   Eraser,
+  FileText,
   Minus,
   MousePointer2,
   PenLine,
@@ -17,8 +18,9 @@ import {Excalidraw, exportToBlob, serializeAsJSON} from '@excalidraw/excalidraw'
 import type {ExcalidrawImperativeAPI} from '@excalidraw/excalidraw/types'
 import '@excalidraw/excalidraw/index.css'
 import {copyByLocale} from './i18n'
-import {defaultSettings, normalizeLocale, normalizeTheme, type AppSettings, type LocaleCode, type ThemeCode, type WhiteboardTool} from './services/mockBackend'
-import {hideAnnotationOverlay, hideScreenshotAnnotationOverlay, loadAnnotationCapture, loadScreenshotAnnotationCapture, loadSettings, patchWhiteboardSettings, reselectAnnotationRegion, reselectScreenshotAnnotationRegion, saveAnnotationCapture, saveScreenshotAnnotationCapture, setAnnotationOverlayHitRegions, subscribeSettingsChanged, type AnnotationOverlayState, type CapsuleWindowHitRegion, type ScreenshotWhiteboardContext} from './services/recorderBackend'
+import {defaultSettings, normalizeLocale, normalizeTheme, type AppSettings, type LocaleCode, type ScreenshotItem, type ThemeCode, type WhiteboardTool} from './services/mockBackend'
+import {hideAnnotationOverlay, hideScreenshotAnnotationOverlay, loadAnnotationCapture, loadScreenshotAnnotationCapture, loadSettings, openOcrResult, patchWhiteboardSettings, queueRecognizeScreenshot, queueRecognizeWhiteboard, reselectAnnotationRegion, reselectScreenshotAnnotationRegion, saveAnnotationCapture, saveScreenshotAnnotationCapture, setAnnotationOverlayHitRegions, showFloatingPanel, subscribeOcrJobEvents, subscribeSettingsChanged, type AnnotationCapture, type AnnotationOverlayState, type CapsuleWindowHitRegion, type OcrJobUpdate, type OcrResult, type ScreenshotWhiteboardContext} from './services/recorderBackend'
+import {resolveFloatingPanelPlacement} from './components/floating/floatingPosition'
 
 const annotationTools: Array<{tool: WhiteboardTool; icon: typeof PenLine; label: 'select' | 'pen' | 'arrow' | 'line' | 'rectangle' | 'ellipse' | 'text' | 'eraser'}> = [
   {tool: 'selection', icon: MousePointer2, label: 'select'},
@@ -32,6 +34,7 @@ const annotationTools: Array<{tool: WhiteboardTool; icon: typeof PenLine; label:
 ]
 
 const maxPendingAnnotationElementEvents = 512
+const annotationOcrPanelSize = {width: 380, height: 420, maxHeight: 420, minWidth: 340}
 
 type AnnotationElementEvent = {
   type: 'element-created' | 'element-updated' | 'element-deleted'
@@ -45,6 +48,10 @@ type AnnotationElementEvent = {
   element?: unknown
 }
 
+type AnnotationSaveOutcome =
+  | {kind: 'annotation'; capture: AnnotationCapture}
+  | {kind: 'screenshot'; item: ScreenshotItem}
+
 function AnnotationOverlayWindow() {
   const [overlayState, setOverlayState] = useState<AnnotationOverlayState | null>(() => (window as any).__RF_ANNOTATION_OVERLAY__ ?? null)
   const [locale, setLocale] = useState<LocaleCode>('zh-CN')
@@ -56,6 +63,10 @@ function AnnotationOverlayWindow() {
   const [opacity, setOpacity] = useState(100)
   const [dirty, setDirty] = useState(false)
   const [saving, setSaving] = useState(false)
+  const [ocrBusy, setOcrBusy] = useState(false)
+  const [ocrResultId, setOcrResultId] = useState('')
+  const [ocrResult, setOcrResult] = useState<OcrResult | null>(null)
+  const [ocrMessage, setOcrMessage] = useState('')
   const apiRef = useRef<ExcalidrawImperativeAPI | null>(null)
   const lastSavedSceneRef = useRef('')
   const lastSavedContentSignatureRef = useRef('')
@@ -63,6 +74,8 @@ function AnnotationOverlayWindow() {
   const elementSignatureRef = useRef<Map<string, string>>(new Map())
   const pendingElementEventsRef = useRef<Map<string, AnnotationElementEvent>>(new Map())
   const clientSequenceRef = useRef(0)
+  const ocrSourceRef = useRef<{sourceKind: string; sourceId: string} | null>(null)
+  const floatingPanelTokenRef = useRef(0)
   const capsuleRef = useRef<HTMLElement | null>(null)
   const canvasRef = useRef<HTMLElement | null>(null)
   const copy = copyByLocale[locale]
@@ -150,6 +163,42 @@ function AnnotationOverlayWindow() {
     const unsubscribe = subscribeSettingsChanged(applySettings)
     return () => unsubscribe()
   }, [])
+
+  useEffect(() => {
+    const unsubscribe = subscribeOcrJobEvents((event) => {
+      const source = ocrSourceRef.current
+      if (!source || !annotationOcrEventMatches(event, source)) return
+      if (event.status === 'queued') {
+        setOcrBusy(true)
+        setOcrMessage(copy.whiteboard.ocrQueued)
+      } else if (event.status === 'running') {
+        setOcrBusy(true)
+        setOcrMessage(copy.whiteboard.ocrStatusRunning)
+      } else if (event.status === 'ready') {
+        setOcrBusy(false)
+        setOcrMessage(copy.whiteboard.ocrStatusReady)
+        if (event.result) {
+          setOcrResultId(event.result.id)
+          setOcrResult(event.result)
+        }
+      } else if (event.status === 'failed') {
+        setOcrBusy(false)
+        setOcrMessage(event.error || copy.whiteboard.ocrStatusFailed)
+      } else if (event.status === 'cancelled') {
+        setOcrBusy(false)
+        setOcrMessage(copy.whiteboard.ready)
+      }
+    })
+    return () => unsubscribe()
+  }, [copy])
+
+  useEffect(() => {
+    ocrSourceRef.current = null
+    setOcrBusy(false)
+    setOcrResultId('')
+    setOcrResult(null)
+    setOcrMessage('')
+  }, [overlayKey])
 
   useEffect(() => {
     let cancelled = false
@@ -309,9 +358,9 @@ function AnnotationOverlayWindow() {
     }, 700)
   }, [isScreenshotMode])
 
-  const saveCurrentAnnotation = async () => {
+  const saveCurrentAnnotation = async (options: {force?: boolean} = {}): Promise<AnnotationSaveOutcome | null> => {
     const api = apiRef.current
-    if (!api) return
+    if (!api) return null
     if (saveTimerRef.current !== null) {
       window.clearTimeout(saveTimerRef.current)
       saveTimerRef.current = null
@@ -321,7 +370,7 @@ function AnnotationOverlayWindow() {
       const files = api.getFiles()
       const sceneJson = (serializeAsJSON as any)(sceneElements, api.getAppState(), files, 'local')
       const contentSignature = annotationContentSignature(sceneElements, files)
-      if (!dirty && contentSignature === lastSavedContentSignatureRef.current && pendingElementEventsRef.current.size === 0) return
+      if (!options.force && !dirty && contentSignature === lastSavedContentSignatureRef.current && pendingElementEventsRef.current.size === 0) return null
       setSaving(true)
       const canvasSize = annotationSnapshotCanvasSize(overlayState)
       const blob = await exportToBlob({
@@ -339,10 +388,13 @@ function AnnotationOverlayWindow() {
       } as any)
       const snapshotDataUrl = await blobToDataURL(blob)
       const eventsJsonl = pendingAnnotationEventsJSONL()
+      let outcome: AnnotationSaveOutcome
       if (isScreenshotMode) {
-        await saveScreenshotAnnotationCapture({sceneJson, snapshotDataUrl, eventsJsonl})
+        const item = await saveScreenshotAnnotationCapture({sceneJson, snapshotDataUrl, eventsJsonl})
+        outcome = {kind: 'screenshot', item}
       } else {
-        await saveAnnotationCapture({sceneJson, snapshotDataUrl, eventsJsonl})
+        const capture = await saveAnnotationCapture({sceneJson, snapshotDataUrl, eventsJsonl})
+        outcome = {kind: 'annotation', capture}
       }
       pendingElementEventsRef.current.clear()
       lastSavedSceneRef.current = sceneJson
@@ -354,9 +406,11 @@ function AnnotationOverlayWindow() {
         const currentSignature = annotationContentSignature(currentApi.getSceneElements(), currentApi.getFiles())
         if (currentSignature === lastSavedContentSignatureRef.current) setDirty(false)
       }, 0)
+      return outcome
     } catch (error) {
       console.error('Failed to save annotation capture:', error)
       setDirty(true)
+      return null
     } finally {
       setSaving(false)
     }
@@ -413,6 +467,80 @@ function AnnotationOverlayWindow() {
     }))
   }
 
+  const queueAnnotationOCR = async () => {
+    if (ocrBusy) return
+    setOcrBusy(true)
+    setOcrResultId('')
+    setOcrResult(null)
+    setOcrMessage(copy.whiteboard.ocrPreparing)
+    try {
+      const saved = await saveCurrentAnnotation({force: true})
+      if (!saved) throw new Error(copy.whiteboard.saveFailed)
+      if (saved.kind === 'screenshot') {
+        const snapshot = await queueRecognizeScreenshot(saved.item.id)
+        ocrSourceRef.current = {
+          sourceKind: snapshot.request.sourceKind,
+          sourceId: snapshot.request.sourceId,
+        }
+      } else {
+        const sourceId = annotationOcrSourceId(saved.capture)
+        const imagePath = saved.capture.timelineSnapshotPath || saved.capture.snapshotPath
+        const snapshot = await queueRecognizeWhiteboard({
+          imagePath,
+          sceneId: sourceId,
+          language: 'zh-en',
+          priority: 'background',
+        })
+        ocrSourceRef.current = {
+          sourceKind: snapshot.request.sourceKind,
+          sourceId: snapshot.request.sourceId,
+        }
+      }
+      setOcrMessage(copy.whiteboard.ocrQueued)
+    } catch (error) {
+      console.error('Failed to queue annotation OCR:', error)
+      setOcrBusy(false)
+      setOcrMessage(readableAnnotationError(error) || copy.whiteboard.ocrStatusFailed)
+    }
+  }
+
+  const openAnnotationOcrResult = async (anchorElement: Element) => {
+    if (!ocrResultId) {
+      await queueAnnotationOCR()
+      return
+    }
+    try {
+      const result = await openOcrResult(ocrResultId)
+      setOcrResult(result)
+      const token = floatingPanelTokenRef.current + 1
+      floatingPanelTokenRef.current = token
+      const placement = await resolveFloatingPanelPlacement(anchorElement, {
+        dockSide: 'none',
+        width: annotationOcrPanelSize.width,
+        height: annotationOcrPanelSize.height,
+        maxHeight: annotationOcrPanelSize.maxHeight,
+        minWidth: annotationOcrPanelSize.minWidth,
+      })
+      await showFloatingPanel({
+        kind: 'ocr-result',
+        anchor: placement.anchor,
+        bounds: placement.bounds,
+        dockSide: 'none',
+        width: placement.bounds.width,
+        height: placement.bounds.height,
+        minWidth: annotationOcrPanelSize.minWidth,
+        maxHeight: annotationOcrPanelSize.maxHeight,
+        token,
+        screenId: placement.screenId,
+        direction: placement.direction,
+        contextId: result.id,
+      })
+    } catch (error) {
+      console.error('Failed to open annotation OCR result:', error)
+      setOcrMessage(readableAnnotationError(error) || copy.whiteboard.ocrStatusFailed)
+    }
+  }
+
   if (!initialData) {
     return (
       <main className="annotation-overlay-shell" data-theme={theme}>
@@ -430,6 +558,7 @@ function AnnotationOverlayWindow() {
       : lastSavedSceneRef.current
         ? copy.whiteboard.saved
         : copy.whiteboard.ready
+  const canOpenOcrResult = Boolean(ocrResultId || ocrResult?.id)
 
   return (
     <main className={`annotation-overlay-shell ${canvasReceivesInput ? 'is-drawing' : 'is-pass-through'}`} data-theme={theme}>
@@ -455,6 +584,13 @@ function AnnotationOverlayWindow() {
         <button type="button" aria-label={copy.whiteboard.reselectRegion} title={copy.whiteboard.reselectRegion} onClick={() => void reselectRegion()}>
           <RefreshCcw size={16} />
         </button>
+        <button type="button" disabled={ocrBusy} aria-label={copy.whiteboard.recognizeText} title={copy.whiteboard.recognizeText} onClick={() => void queueAnnotationOCR()}>
+          <FileText size={16} />
+        </button>
+        <button type="button" disabled={!canOpenOcrResult} aria-label={copy.whiteboard.openOcrResult} title={copy.whiteboard.openOcrResult} onClick={(event) => void openAnnotationOcrResult(event.currentTarget)}>
+          <FileText size={16} />
+        </button>
+        {ocrMessage && <span className="annotation-ocr-status">{ocrMessage}</span>}
         <button className="annotation-save-status" type="button" aria-label={copy.whiteboard.save} title={copy.whiteboard.save} onClick={() => void saveCurrentAnnotation()}>
           <Save size={16} />
           <span>{saveStatusLabel}</span>
@@ -818,6 +954,25 @@ function blobToDataURL(blob: Blob) {
     reader.onerror = () => reject(reader.error)
     reader.readAsDataURL(blob)
   })
+}
+
+function annotationOcrSourceId(capture: AnnotationCapture) {
+  return capture.packageDir || capture.scenePath || capture.snapshotPath || `annotation-${Date.now()}`
+}
+
+function annotationOcrEventMatches(event: OcrJobUpdate, source: {sourceKind: string; sourceId: string}) {
+  return event.sourceKind === source.sourceKind && event.sourceId === source.sourceId
+}
+
+function readableAnnotationError(error: unknown) {
+  if (!error) return ''
+  if (error instanceof Error) return error.message
+  if (typeof error === 'string') return error
+  try {
+    return JSON.stringify(error)
+  } catch {
+    return String(error)
+  }
 }
 
 export default AnnotationOverlayWindow

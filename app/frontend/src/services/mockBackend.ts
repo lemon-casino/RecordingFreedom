@@ -14,6 +14,7 @@ export type WhiteboardTool = 'selection' | 'hand' | 'freedraw' | 'laser' | 'arro
 export type WhiteboardStrokeWidth = 'thin' | 'medium' | 'bold'
 export type WhiteboardCapturePolicy = 'preview-only' | 'export-compose'
 export type ShortcutAction = 'toggleRecording' | 'togglePause' | 'toggleCamera' | 'openWhiteboard' | 'openScreenshot'
+export type OcrTranslationProvider = 'disabled' | 'deepl' | 'openai-compatible'
 
 export type ShortcutSettings = Record<ShortcutAction, string>
 
@@ -33,6 +34,12 @@ export type ScreenshotItem = {
   }
   pinned: boolean
   fixed: boolean
+  ocrStatus: 'none' | 'queued' | 'running' | 'ready' | 'failed'
+  ocrResultId?: string
+  ocrModelId?: string
+  ocrLanguage?: string
+  ocrUpdatedAt?: string
+  ocrError?: string
 }
 
 export type PIPConfig = {
@@ -173,6 +180,20 @@ export type AppSettings = {
     lastStrokeWidth: WhiteboardStrokeWidth
     lastOpacity: number
     capturePolicy: WhiteboardCapturePolicy
+  }
+  ocr: {
+    autoRecognizeScreenshots: boolean
+    translation: {
+      provider: OcrTranslationProvider
+      baseUrl?: string
+      apiKey?: string
+      apiKeySet?: boolean
+      model?: string
+      sourceLanguage: string
+      targetLanguage: string
+      privacyConfirmed: boolean
+      privacyConfirmedAt?: string
+    }
   }
   shortcuts: ShortcutSettings
   window: {
@@ -497,7 +518,7 @@ export const systemAudioDevices = mediaInventory.systemAudio
 export const cameraDevices = mediaInventory.cameras
 
 export const defaultSettings: AppSettings = {
-  schemaVersion: 2,
+  schemaVersion: 4,
   locale: 'zh-CN',
   source: {
     lastSourceType: 'screen',
@@ -540,6 +561,15 @@ export const defaultSettings: AppSettings = {
     lastStrokeWidth: 'medium',
     lastOpacity: 100,
     capturePolicy: 'export-compose',
+  },
+  ocr: {
+    autoRecognizeScreenshots: false,
+    translation: {
+      provider: 'disabled',
+      sourceLanguage: 'auto',
+      targetLanguage: 'zh-CN',
+      privacyConfirmed: false,
+    },
   },
   shortcuts: defaultShortcuts,
   window: {

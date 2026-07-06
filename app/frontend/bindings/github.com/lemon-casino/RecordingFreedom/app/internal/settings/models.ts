@@ -37,6 +37,23 @@ export enum Locale {
     LocaleEN = "en",
 };
 
+export interface OCRSettings {
+    "autoRecognizeScreenshots": boolean;
+    "translation": OCRTranslationSettings;
+}
+
+export interface OCRTranslationSettings {
+    "provider": string;
+    "baseUrl"?: string;
+    "apiKey"?: string;
+    "apiKeySet"?: boolean;
+    "model"?: string;
+    "sourceLanguage": string;
+    "targetLanguage": string;
+    "privacyConfirmed": boolean;
+    "privacyConfirmedAt"?: string;
+}
+
 export type RecordingSettings = recordingprofile$0.Profile;
 
 export interface Settings {
@@ -48,6 +65,7 @@ export interface Settings {
     "audio": AudioSettings;
     "camera": CameraSettings;
     "whiteboard": WhiteboardSettings;
+    "ocr": OCRSettings;
     "shortcuts": ShortcutSettings;
     "window": WindowSettings;
     "updatedAt": time$0.Time;

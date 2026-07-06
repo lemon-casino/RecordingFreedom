@@ -71,7 +71,7 @@ func (s *Service) Save(next Settings) (Settings, error) {
 		return Settings{}, err
 	}
 
-	next = normalize(next)
+	next = normalizeForSave(next)
 	next.UpdatedAt = s.now().UTC()
 	data, err := json.MarshalIndent(next, "", "  ")
 	if err != nil {
@@ -121,6 +121,14 @@ func Default() Settings {
 			LastOpacity:     100,
 			CapturePolicy:   "export-compose",
 		},
+		OCR: OCRSettings{
+			AutoRecognizeScreenshots: false,
+			Translation: OCRTranslationSettings{
+				Provider:       "disabled",
+				SourceLanguage: "auto",
+				TargetLanguage: "zh-CN",
+			},
+		},
 		Shortcuts: DefaultShortcuts(),
 		Window: WindowSettings{
 			MinimizeToTray: true,
@@ -157,11 +165,65 @@ func normalize(value Settings) Settings {
 	value.Camera.PIP = pip.NormalizeConfigForPreset(value.Camera.PIPPreset, value.Camera.PIP)
 	value.Camera.PIPPreset = string(value.Camera.PIP.Preset)
 	value.Whiteboard = normalizeWhiteboard(value.Whiteboard, defaults.Whiteboard)
+	value.OCR = normalizeOCR(value.OCR, defaults.OCR)
 	value.Shortcuts = normalizeShortcuts(value.Shortcuts, defaults.Shortcuts)
 	if value.Window.Theme == "" || !validTheme(value.Window.Theme) {
 		value.Window.Theme = defaults.Window.Theme
 	}
 	return value
+}
+
+func normalizeForSave(value Settings) Settings {
+	value = normalize(value)
+	if strings.TrimSpace(value.OCR.Translation.APIKey) != "" {
+		value.OCR.Translation.APIKeySet = true
+	}
+	value.OCR.Translation.APIKey = ""
+	return value
+}
+
+func normalizeOCR(value OCRSettings, defaults OCRSettings) OCRSettings {
+	value.Translation = normalizeOCRTranslation(value.Translation, defaults.Translation)
+	return value
+}
+
+func normalizeOCRTranslation(value OCRTranslationSettings, defaults OCRTranslationSettings) OCRTranslationSettings {
+	value.Provider = strings.TrimSpace(value.Provider)
+	if !validOCRTranslationProvider(value.Provider) {
+		value.Provider = defaults.Provider
+	}
+	value.BaseURL = strings.TrimSpace(value.BaseURL)
+	value.APIKey = strings.TrimSpace(value.APIKey)
+	if value.APIKey != "" {
+		value.APIKeySet = true
+	}
+	value.Model = strings.TrimSpace(value.Model)
+	value.SourceLanguage = strings.TrimSpace(value.SourceLanguage)
+	value.TargetLanguage = strings.TrimSpace(value.TargetLanguage)
+	value.PrivacyConfirmedAt = strings.TrimSpace(value.PrivacyConfirmedAt)
+	if value.SourceLanguage == "" {
+		value.SourceLanguage = defaults.SourceLanguage
+	}
+	if value.TargetLanguage == "" {
+		value.TargetLanguage = defaults.TargetLanguage
+	}
+	if value.Provider == "disabled" {
+		value.PrivacyConfirmed = false
+		value.PrivacyConfirmedAt = ""
+	}
+	if !value.PrivacyConfirmed {
+		value.PrivacyConfirmedAt = ""
+	}
+	return value
+}
+
+func validOCRTranslationProvider(provider string) bool {
+	switch provider {
+	case "disabled", "deepl", "openai-compatible":
+		return true
+	default:
+		return false
+	}
 }
 
 func migrateLoadedSettings(value Settings) Settings {

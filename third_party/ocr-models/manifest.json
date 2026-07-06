@@ -1,0 +1,159 @@
+{
+  "schemaVersion": 1,
+  "models": {
+    "ppocrv5-mobile-zh-en": {
+      "schemaVersion": 1,
+      "id": "ppocrv5-mobile-zh-en",
+      "name": "PP-OCRv5 Mobile Chinese/English",
+      "channel": "stable",
+      "engine": "onnxruntime",
+      "language": ["zh", "en"],
+      "version": "2025.10-hf-jingsongliu",
+      "source": {
+        "url": "https://huggingface.co/jingsongliu/onnxocr_model/tree/main/models/ppocrv5",
+        "license": "Apache-2.0",
+        "notes": "Pinned ONNX model files from the public jingsongliu/onnxocr_model Hugging Face repository. RecordingFreedom release builds must package these into a verified model zip before publishing; the app must not download unverified upstream files at runtime."
+      },
+      "files": [
+        {
+          "name": "cls.onnx",
+          "sourcePath": "models/ppocrv5/cls/cls.onnx",
+          "downloadUrl": "https://huggingface.co/jingsongliu/onnxocr_model/resolve/main/models/ppocrv5/cls/cls.onnx",
+          "bytes": 582663,
+          "sha256": "f4bb53707100c5f3d59ba834eb05bb400369f20aed35d4b26807b1bfadd2a70e"
+        },
+        {
+          "name": "det.onnx",
+          "sourcePath": "models/ppocrv5/det/det.onnx",
+          "downloadUrl": "https://huggingface.co/jingsongliu/onnxocr_model/resolve/main/models/ppocrv5/det/det.onnx",
+          "bytes": 4748769,
+          "sha256": "d7fe3ea74652890722c0f4d02458b7261d9f5ae6c92904d05707c9eb155c7924"
+        },
+        {
+          "name": "rec.onnx",
+          "sourcePath": "models/ppocrv5/rec/rec.onnx",
+          "downloadUrl": "https://huggingface.co/jingsongliu/onnxocr_model/resolve/main/models/ppocrv5/rec/rec.onnx",
+          "bytes": 16517247,
+          "sha256": "bf66820f48fa99f779974c4df78e5274a9d8e0458c4137e8c5357e40e2c3faf2"
+        },
+        {
+          "name": "keys.txt",
+          "sourcePath": "models/ppocrv5/ppocrv5_dict.txt",
+          "downloadUrl": "https://huggingface.co/jingsongliu/onnxocr_model/resolve/main/models/ppocrv5/ppocrv5_dict.txt",
+          "bytes": 92395,
+          "sha256": "1ea29636956177e400af712d9782e7693f3fb25f98617bed10479d2965a836fd"
+        }
+      ],
+      "smoke": {
+        "image": "smoke.png",
+        "expected": "smoke.expected.json",
+        "mustContain": ["RecordingFreedom", "文字识别"],
+        "maxDurationMs": 3000
+      }
+    },
+    "ppocrv6-mobile-zh-en": {
+      "schemaVersion": 1,
+      "id": "ppocrv6-mobile-zh-en",
+      "name": "PP-OCRv6 Mobile Chinese/English",
+      "channel": "latest",
+      "engine": "onnxruntime",
+      "language": ["zh", "en"],
+      "version": "2026.07-hf-paddle-small-candidate",
+      "source": {
+        "url": "https://huggingface.co/PaddlePaddle/PP-OCRv6_small_det_onnx + https://huggingface.co/PaddlePaddle/PP-OCRv6_small_rec_onnx",
+        "license": "Apache-2.0",
+        "notes": "Candidate manifest only. Official PP-OCRv6 small det/rec ONNX files are pinned from PaddlePaddle Hugging Face repositories, but this model must not be published until no-orientation worker smoke and real screenshot samples pass."
+      },
+      "releaseStatus": "candidate",
+      "textlineOrientation": {
+        "mode": "none"
+      },
+      "files": [
+        {
+          "name": "det.onnx",
+          "sourcePath": "PaddlePaddle/PP-OCRv6_small_det_onnx/inference.onnx",
+          "downloadUrl": "https://huggingface.co/PaddlePaddle/PP-OCRv6_small_det_onnx/resolve/main/inference.onnx",
+          "bytes": 9880512,
+          "sha256": "d73e0058b7a8086bbd57f3d10b8bcd4ff95363f67e06e2762b5e814fe9c9410e"
+        },
+        {
+          "name": "rec.onnx",
+          "sourcePath": "PaddlePaddle/PP-OCRv6_small_rec_onnx/inference.onnx",
+          "downloadUrl": "https://huggingface.co/PaddlePaddle/PP-OCRv6_small_rec_onnx/resolve/main/inference.onnx",
+          "bytes": 21159378,
+          "sha256": "5435fd747c9e0efe15a96d0b378d5bd157e9492ed8fd80edf08f30d02fa24634"
+        },
+        {
+          "name": "keys.txt",
+          "sourcePath": "PaddlePaddle/PP-OCRv6_small_rec_onnx/inference.yml",
+          "downloadUrl": "https://huggingface.co/PaddlePaddle/PP-OCRv6_small_rec_onnx/resolve/main/inference.yml",
+          "bytes": 74947,
+          "sha256": "b5f2bfe2bdd9448429e3e82b51c789775d9b42f2403d082b00662eb77e401c5d",
+          "generate": {
+            "type": "paddleocr-character-dict-keys",
+            "sourceBytes": 150579,
+            "sourceSha256": "ab078671bb49f06228eadccd34f1bb501e157f7a047095ffb943ba81512c77d1"
+          }
+        }
+      ],
+      "smoke": {
+        "image": "smoke.png",
+        "expected": "smoke.expected.json",
+        "mustContain": ["RecordingFreedom", "文字识别"],
+        "maxDurationMs": 3000
+      }
+    },
+    "ppocrv6-medium-zh-en": {
+      "schemaVersion": 1,
+      "id": "ppocrv6-medium-zh-en",
+      "name": "PP-OCRv6 Medium Chinese/English",
+      "channel": "quality",
+      "engine": "onnxruntime",
+      "language": ["zh", "en"],
+      "version": "2026.07-hf-paddle-medium-candidate",
+      "source": {
+        "url": "https://huggingface.co/PaddlePaddle/PP-OCRv6_medium_det_onnx + https://huggingface.co/PaddlePaddle/PP-OCRv6_medium_rec_onnx",
+        "license": "Apache-2.0",
+        "notes": "Candidate manifest only. Official PP-OCRv6 medium det/rec ONNX files are pinned from PaddlePaddle Hugging Face repositories, but this model must not be published until no-orientation worker smoke, quality sample review, and desktop performance checks pass."
+      },
+      "releaseStatus": "candidate",
+      "textlineOrientation": {
+        "mode": "none"
+      },
+      "files": [
+        {
+          "name": "det.onnx",
+          "sourcePath": "PaddlePaddle/PP-OCRv6_medium_det_onnx/inference.onnx",
+          "downloadUrl": "https://huggingface.co/PaddlePaddle/PP-OCRv6_medium_det_onnx/resolve/main/inference.onnx",
+          "bytes": 62032837,
+          "sha256": "eb13b44b25bb36f89528b68720af8a61d9cf381176107f465db1757b65d086e1"
+        },
+        {
+          "name": "rec.onnx",
+          "sourcePath": "PaddlePaddle/PP-OCRv6_medium_rec_onnx/inference.onnx",
+          "downloadUrl": "https://huggingface.co/PaddlePaddle/PP-OCRv6_medium_rec_onnx/resolve/main/inference.onnx",
+          "bytes": 76554979,
+          "sha256": "9c09abf0957f7968c7586464b7397b84ad2387a0497a351af40e9acc71b673ba"
+        },
+        {
+          "name": "keys.txt",
+          "sourcePath": "PaddlePaddle/PP-OCRv6_medium_rec_onnx/inference.yml",
+          "downloadUrl": "https://huggingface.co/PaddlePaddle/PP-OCRv6_medium_rec_onnx/resolve/main/inference.yml",
+          "bytes": 74947,
+          "sha256": "b5f2bfe2bdd9448429e3e82b51c789775d9b42f2403d082b00662eb77e401c5d",
+          "generate": {
+            "type": "paddleocr-character-dict-keys",
+            "sourceBytes": 150580,
+            "sourceSha256": "991b700facf5b50a7de193468207d5f4255b538dde0d312ae3b7c7a9b6873129"
+          }
+        }
+      ],
+      "smoke": {
+        "image": "smoke.png",
+        "expected": "smoke.expected.json",
+        "mustContain": ["RecordingFreedom", "文字识别"],
+        "maxDurationMs": 3000
+      }
+    }
+  }
+}

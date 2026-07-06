@@ -5,6 +5,12 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"errors"
+	"image"
+	"image/color"
+	"image/png"
+	"io"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strings"
@@ -15,6 +21,7 @@ import (
 	"github.com/lemon-casino/RecordingFreedom/app/internal/capture"
 	"github.com/lemon-casino/RecordingFreedom/app/internal/devices"
 	"github.com/lemon-casino/RecordingFreedom/app/internal/exportplan"
+	"github.com/lemon-casino/RecordingFreedom/app/internal/ocr"
 	"github.com/lemon-casino/RecordingFreedom/app/internal/pip"
 	"github.com/lemon-casino/RecordingFreedom/app/internal/preflight"
 	"github.com/lemon-casino/RecordingFreedom/app/internal/recording"
@@ -87,6 +94,160 @@ func TestLogClientEventWritesRootLogFile(t *testing.T) {
 	}
 }
 
+func TestOCRJobEventsPersistEvidenceJSONL(t *testing.T) {
+	root := t.TempDir()
+	service := &RecordingFreedomService{appData: appdata.NewService(root)}
+	result := &ocr.Result{
+		ID:          "ocr-ready",
+		SourceKind:  ocr.SourceRegionScreenshot,
+		SourceID:    "shot-1",
+		ImagePath:   filepath.Join(root, "data", "screenshots", "shot-1.png"),
+		ImageSHA256: strings.Repeat("a", 64),
+		ModelID:     "ppocrv5-mobile-zh-en",
+		Language:    "zh-en",
+		Width:       120,
+		Height:      48,
+		Blocks: []ocr.Block{{
+			ID:         "block-1",
+			Text:       "RecordingFreedom 文字识别",
+			Confidence: 0.92,
+			Box: []ocr.Point{
+				{X: 4, Y: 4},
+				{X: 116, Y: 4},
+				{X: 116, Y: 44},
+				{X: 4, Y: 44},
+			},
+		}},
+		PlainText: "RecordingFreedom\n文字识别",
+		CreatedAt: time.Now().UTC(),
+	}
+
+	service.emitOCRJobEvent("ocr.job.queued", OcrJobEvent{
+		JobID:      "job-1",
+		SourceKind: ocr.SourceRegionScreenshot,
+		SourceID:   "shot-1",
+		Status:     ocr.ResultStatusQueued,
+	})
+	service.emitOCRJobEvent("ocr.job.finished", OcrJobEvent{
+		JobID:      "job-1",
+		SourceKind: ocr.SourceRegionScreenshot,
+		SourceID:   "shot-1",
+		Status:     ocr.ResultStatusReady,
+		Result:     result,
+	})
+
+	path := filepath.Join(root, "data", "ocr", "evidence", "ocr-job-events.jsonl")
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("ReadFile(%s) error = %v", path, err)
+	}
+	lines := strings.Split(strings.TrimSpace(string(data)), "\n")
+	if len(lines) != 2 {
+		t.Fatalf("event lines = %d, want 2: %s", len(lines), data)
+	}
+	var queued, ready OcrJobEvent
+	if err := json.Unmarshal([]byte(lines[0]), &queued); err != nil {
+		t.Fatalf("queued event JSON error = %v", err)
+	}
+	if err := json.Unmarshal([]byte(lines[1]), &ready); err != nil {
+		t.Fatalf("ready event JSON error = %v", err)
+	}
+	if queued.Event != "ocr.job.queued" || queued.Status != ocr.ResultStatusQueued || queued.SourceKind != ocr.SourceRegionScreenshot {
+		t.Fatalf("queued event = %#v, want persisted queued region screenshot event", queued)
+	}
+	if ready.Event != "ocr.job.finished" || ready.Status != ocr.ResultStatusReady || ready.Result == nil || ready.Result.PlainText != result.PlainText {
+		t.Fatalf("ready event = %#v, want persisted ready event with result", ready)
+	}
+}
+
+func TestOCROperationLogsPersistSafeDesktopEvidence(t *testing.T) {
+	root := t.TempDir()
+	data := appdata.NewService(root)
+	ocrService := ocr.NewService(data)
+	service := &RecordingFreedomService{appData: data, ocr: ocrService}
+	imagePath := filepath.Join(root, "data", "screenshots", "ocr-operation.png")
+	writeServiceTestPNG(t, imagePath, 24, 16)
+
+	snapshot, err := service.QueueRecognizeImage(ocr.RecognizeRequest{
+		ImagePath:  imagePath,
+		SourceKind: ocr.SourceRegionScreenshot,
+		SourceID:   "shot-operation",
+		Language:   "zh-en",
+		ModelID:    "ppocrv5-mobile-zh-en",
+		Priority:   ocr.JobPriorityInteractive,
+	})
+	if err != nil {
+		t.Fatalf("QueueRecognizeImage() error = %v", err)
+	}
+	if snapshot.JobID == "" {
+		t.Fatalf("snapshot = %#v, want job id", snapshot)
+	}
+	result := ocr.Result{
+		ID:          "ocr-operation-result",
+		SourceKind:  ocr.SourceRegionScreenshot,
+		SourceID:    "shot-operation",
+		ImagePath:   imagePath,
+		ImageSHA256: strings.Repeat("b", 64),
+		ModelID:     "ppocrv5-mobile-zh-en",
+		Language:    "zh-en",
+		Width:       24,
+		Height:      16,
+		Blocks: []ocr.Block{{
+			ID:         "block-1",
+			Text:       "RecordingFreedom",
+			Confidence: 0.95,
+			Box: []ocr.Point{
+				{X: 1, Y: 1},
+				{X: 23, Y: 1},
+				{X: 23, Y: 15},
+				{X: 1, Y: 15},
+			},
+		}},
+		PlainText: "RecordingFreedom",
+		CreatedAt: time.Now().UTC(),
+	}
+	if err := ocrService.WriteResult(result); err != nil {
+		t.Fatalf("WriteResult() error = %v", err)
+	}
+	if _, err := service.OpenOcrResult(result.ID); err != nil {
+		t.Fatalf("OpenOcrResult() error = %v", err)
+	}
+	if image, err := service.ReadOcrResultImage(result.ID); err != nil {
+		t.Fatalf("ReadOcrResultImage() error = %v", err)
+	} else if !image.Available || image.Bytes == 0 {
+		t.Fatalf("ReadOcrResultImage() = %#v, want available image", image)
+	}
+	service.logOCRTranslateRequest("translate-request", ocr.TranslateRequest{
+		OcrResultID:    result.ID,
+		Provider:       "openai-compatible",
+		SourceLanguage: "zh-en",
+		TargetLanguage: "en",
+		BaseURL:        "https://secret.example/v1",
+		APIKey:         "sk-secret",
+		Model:          "rf-translator",
+	})
+
+	logData := readSingleRootLog(t, root)
+	for _, want := range []string{
+		`"event":"queue-request"`,
+		`"event":"queue-accepted"`,
+		`"event":"open-result"`,
+		`"event":"read-result-image"`,
+		`"event":"translate-request"`,
+		`"sourceKind":"region-screenshot"`,
+		`"ocrResultId":"ocr-operation-result"`,
+	} {
+		if !strings.Contains(logData, want) {
+			t.Fatalf("log is missing %s:\n%s", want, logData)
+		}
+	}
+	for _, forbidden := range []string{"sk-secret", "secret.example", "baseUrl", "apiKey"} {
+		if strings.Contains(logData, forbidden) {
+			t.Fatalf("log contains sensitive translation field %q:\n%s", forbidden, logData)
+		}
+	}
+}
+
 func TestReadPIPPreviewImageReadsManagedJPEG(t *testing.T) {
 	data := appdata.NewService(t.TempDir())
 	info, err := data.Info()
@@ -119,6 +280,43 @@ func TestReadPIPPreviewImageReadsManagedJPEG(t *testing.T) {
 	}
 	if unchanged.Available || unchanged.DataURL != "" || unchanged.ModifiedUnixNano != result.ModifiedUnixNano {
 		t.Fatalf("unchanged result = %#v, want unavailable without re-reading data URL", unchanged)
+	}
+}
+
+func readSingleRootLog(t *testing.T, root string) string {
+	t.Helper()
+	matches, err := filepath.Glob(filepath.Join(root, "logs", "recordingfreedom-*.log"))
+	if err != nil {
+		t.Fatalf("Glob(logs) error = %v", err)
+	}
+	if len(matches) != 1 {
+		t.Fatalf("log files = %#v, want one root logs file", matches)
+	}
+	data, err := os.ReadFile(matches[0])
+	if err != nil {
+		t.Fatalf("ReadFile(%s) error = %v", matches[0], err)
+	}
+	return string(data)
+}
+
+func writeServiceTestPNG(t *testing.T, path string, width int, height int) {
+	t.Helper()
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		t.Fatalf("MkdirAll(%s) error = %v", filepath.Dir(path), err)
+	}
+	img := image.NewRGBA(image.Rect(0, 0, width, height))
+	for y := 0; y < height; y++ {
+		for x := 0; x < width; x++ {
+			img.Set(x, y, color.RGBA{R: 242, G: 246, B: 250, A: 255})
+		}
+	}
+	file, err := os.Create(path)
+	if err != nil {
+		t.Fatalf("Create(%s) error = %v", path, err)
+	}
+	defer file.Close()
+	if err := png.Encode(file, img); err != nil {
+		t.Fatalf("png.Encode(%s) error = %v", path, err)
 	}
 }
 
@@ -277,6 +475,7 @@ func TestPatchSettingsPreferencesPersistsRecordingAndTheme(t *testing.T) {
 	captureCursor := false
 	countdown := 5
 	startAtLogin := true
+	autoOcr := true
 
 	saved, err := service.PatchSettingsPreferences(SettingsPreferencesPatchRequest{
 		Theme:            &theme,
@@ -285,12 +484,16 @@ func TestPatchSettingsPreferencesPersistsRecordingAndTheme(t *testing.T) {
 		CaptureCursor:    &captureCursor,
 		CountdownSeconds: &countdown,
 		StartAtLogin:     &startAtLogin,
+		AutoOCR:          &autoOcr,
 	})
 	if err != nil {
 		t.Fatalf("PatchSettingsPreferences() error = %v", err)
 	}
 	if saved.Window.Theme != theme || !saved.Window.StartAtLogin || saved.Recording.Quality != quality || saved.Recording.FPS != fps || saved.Recording.CaptureCursor || saved.Recording.CountdownSeconds != countdown {
 		t.Fatalf("saved preferences = theme %q recording %#v, want patched preferences", saved.Window.Theme, saved.Recording)
+	}
+	if !saved.OCR.AutoRecognizeScreenshots {
+		t.Fatal("saved preferences did not enable screenshot auto OCR")
 	}
 	if len(syncedStartAtLogin) != 1 || !syncedStartAtLogin[0] {
 		t.Fatalf("start at login sync calls = %#v, want enabled once", syncedStartAtLogin)
@@ -301,6 +504,272 @@ func TestPatchSettingsPreferencesPersistsRecordingAndTheme(t *testing.T) {
 	}
 	if loaded.Window.Theme != theme || !loaded.Window.StartAtLogin || loaded.Recording.Quality != quality || loaded.Recording.FPS != fps || loaded.Recording.CaptureCursor || loaded.Recording.CountdownSeconds != countdown {
 		t.Fatalf("loaded preferences = theme %q recording %#v, want patched preferences", loaded.Window.Theme, loaded.Recording)
+	}
+	if !loaded.OCR.AutoRecognizeScreenshots {
+		t.Fatal("loaded preferences did not persist screenshot auto OCR")
+	}
+}
+
+func TestPatchSettingsPreferencesStoresOCRTranslationAPIKeyOutsideSettings(t *testing.T) {
+	data := appdata.NewService(t.TempDir())
+	service := &RecordingFreedomService{
+		appData:  data,
+		settings: settings.NewService(data),
+	}
+	provider := "openai-compatible"
+	baseURL := "https://translator.example/v1"
+	apiKey := "desktop-secret-key"
+	model := "rf-translator"
+	privacy := true
+
+	saved, err := service.PatchSettingsPreferences(SettingsPreferencesPatchRequest{
+		OCRTranslation: &OCRTranslationPreferencesPatchRequest{
+			Provider:         &provider,
+			BaseURL:          &baseURL,
+			APIKey:           &apiKey,
+			Model:            &model,
+			PrivacyConfirmed: &privacy,
+		},
+	})
+	if err != nil {
+		t.Fatalf("PatchSettingsPreferences(OCRTranslation) error = %v", err)
+	}
+	if saved.OCR.Translation.APIKey != "" || !saved.OCR.Translation.APIKeySet {
+		t.Fatalf("returned translation settings = %#v, want hidden key with apiKeySet", saved.OCR.Translation)
+	}
+	settingsPath, err := service.settings.Path()
+	if err != nil {
+		t.Fatalf("settings Path() error = %v", err)
+	}
+	settingsData, err := os.ReadFile(settingsPath)
+	if err != nil {
+		t.Fatalf("ReadFile(settings) error = %v", err)
+	}
+	if strings.Contains(string(settingsData), apiKey) {
+		t.Fatalf("settings file contains raw OCR translation API key: %s", settingsData)
+	}
+	stored, ok, err := service.loadOCRTranslationAPIKey()
+	if err != nil {
+		t.Fatalf("loadOCRTranslationAPIKey() error = %v", err)
+	}
+	if !ok || stored != apiKey {
+		t.Fatalf("stored API key = %q %v, want secret store value", stored, ok)
+	}
+
+	emptyKey := ""
+	saved, err = service.PatchSettingsPreferences(SettingsPreferencesPatchRequest{
+		OCRTranslation: &OCRTranslationPreferencesPatchRequest{APIKey: &emptyKey},
+	})
+	if err != nil {
+		t.Fatalf("PatchSettingsPreferences(clear API key) error = %v", err)
+	}
+	if saved.OCR.Translation.APIKeySet {
+		t.Fatalf("apiKeySet after clearing = true, want false")
+	}
+	if stored, ok, err := service.loadOCRTranslationAPIKey(); err != nil || ok || stored != "" {
+		t.Fatalf("stored API key after clearing = %q %v %v, want missing", stored, ok, err)
+	}
+}
+
+func TestTranslateOcrUsesStoredOCRTranslationAPIKey(t *testing.T) {
+	data := appdata.NewService(t.TempDir())
+	ocrService := ocr.NewService(data)
+	service := &RecordingFreedomService{
+		appData:  data,
+		settings: settings.NewService(data),
+		secrets:  nil,
+		ocr:      ocrService,
+	}
+	if err := ocrService.WriteResult(ocr.Result{
+		ID:          "ocr_translate_service_fixture",
+		SourceKind:  ocr.SourceRegionScreenshot,
+		SourceID:    "shot-1",
+		ImagePath:   filepath.Join(t.TempDir(), "shot.png"),
+		ImageSHA256: "sha256-service-fixture",
+		ModelID:     "ppocr-test",
+		Language:    "zh-en",
+		Width:       200,
+		Height:      100,
+		Blocks: []ocr.Block{
+			{ID: "b1", Text: "RecordingFreedom", Confidence: 0.98, Box: []ocr.Point{{X: 1, Y: 2}}, LineIndex: 0},
+		},
+		PlainText:  "RecordingFreedom",
+		CreatedAt:  time.Date(2026, 7, 6, 1, 0, 0, 0, time.UTC),
+		DurationMS: 12,
+	}); err != nil {
+		t.Fatalf("WriteResult() error = %v", err)
+	}
+	var authHeader string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		authHeader = r.Header.Get("Authorization")
+		response := map[string]any{
+			"choices": []map[string]any{{
+				"message": map[string]string{
+					"role":    "assistant",
+					"content": `[{"blockId":"b1","translated":"RecordingFreedom translated"}]`,
+				},
+			}},
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(response)
+	}))
+	defer server.Close()
+	provider := "openai-compatible"
+	apiKey := "stored-translation-key"
+	model := "rf-translator"
+	privacy := true
+	if _, err := service.PatchSettingsPreferences(SettingsPreferencesPatchRequest{
+		OCRTranslation: &OCRTranslationPreferencesPatchRequest{
+			Provider:         &provider,
+			BaseURL:          &server.URL,
+			APIKey:           &apiKey,
+			Model:            &model,
+			PrivacyConfirmed: &privacy,
+		},
+	}); err != nil {
+		t.Fatalf("PatchSettingsPreferences(OCRTranslation) error = %v", err)
+	}
+
+	result, err := service.TranslateOcr(ocr.TranslateRequest{
+		OcrResultID:    "ocr_translate_service_fixture",
+		Provider:       provider,
+		BaseURL:        server.URL,
+		Model:          model,
+		SourceLanguage: "auto",
+		TargetLanguage: "zh-CN",
+	})
+	if err != nil {
+		t.Fatalf("TranslateOcr() error = %v", err)
+	}
+	if authHeader != "Bearer "+apiKey {
+		t.Fatalf("Authorization header = %q, want stored key", authHeader)
+	}
+	if len(result.Blocks) != 1 || result.Blocks[0].Translated != "RecordingFreedom translated" {
+		t.Fatalf("translation result = %#v, want provider response", result.Blocks)
+	}
+}
+
+func TestTranslateOcrServiceUsesStoredKeyAndCachesOpenAICompatibleEndpoint(t *testing.T) {
+	data := appdata.NewService(t.TempDir())
+	ocrService := ocr.NewService(data)
+	service := &RecordingFreedomService{
+		appData:  data,
+		settings: settings.NewService(data),
+		ocr:      ocrService,
+	}
+	if err := ocrService.WriteResult(ocr.Result{
+		ID:          "ocr_translate_service_cache_fixture",
+		SourceKind:  ocr.SourceRegionScreenshot,
+		SourceID:    "shot-cache-1",
+		ImagePath:   filepath.Join(t.TempDir(), "shot-cache.png"),
+		ImageSHA256: "sha256-service-cache-fixture",
+		ModelID:     "ppocr-test",
+		Language:    "zh-en",
+		Width:       320,
+		Height:      180,
+		Blocks: []ocr.Block{
+			{ID: "b1", Text: "RecordingFreedom", Confidence: 0.98, Box: []ocr.Point{{X: 1, Y: 2}}, LineIndex: 0},
+			{ID: "b2", Text: "文字识别", Confidence: 0.97, Box: []ocr.Point{{X: 3, Y: 4}}, LineIndex: 1},
+		},
+		PlainText:  "RecordingFreedom\n文字识别",
+		CreatedAt:  time.Date(2026, 7, 6, 2, 0, 0, 0, time.UTC),
+		DurationMS: 18,
+	}); err != nil {
+		t.Fatalf("WriteResult() error = %v", err)
+	}
+
+	apiKey := "stored-cache-translation-key"
+	var hitCount int
+	var authHeader string
+	var requestPath string
+	var requestBody string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		hitCount++
+		authHeader = r.Header.Get("Authorization")
+		requestPath = r.URL.Path
+		body, _ := io.ReadAll(r.Body)
+		requestBody = string(body)
+		response := map[string]any{
+			"choices": []map[string]any{{
+				"message": map[string]string{
+					"role":    "assistant",
+					"content": `[{"blockId":"b1","translated":"RecordingFreedom 已翻译"},{"blockId":"b2","translated":"文字识别 已翻译"}]`,
+				},
+			}},
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(response)
+	}))
+
+	provider := "openai-compatible"
+	model := "rf-translator"
+	privacy := true
+	if _, err := service.PatchSettingsPreferences(SettingsPreferencesPatchRequest{
+		OCRTranslation: &OCRTranslationPreferencesPatchRequest{
+			Provider:         &provider,
+			BaseURL:          &server.URL,
+			APIKey:           &apiKey,
+			Model:            &model,
+			PrivacyConfirmed: &privacy,
+		},
+	}); err != nil {
+		t.Fatalf("PatchSettingsPreferences(OCRTranslation) error = %v", err)
+	}
+	settingsPath, err := service.settings.Path()
+	if err != nil {
+		t.Fatalf("settings Path() error = %v", err)
+	}
+	settingsData, err := os.ReadFile(settingsPath)
+	if err != nil {
+		t.Fatalf("ReadFile(settings) error = %v", err)
+	}
+	if strings.Contains(string(settingsData), apiKey) {
+		t.Fatalf("settings file contains raw OCR translation API key: %s", settingsData)
+	}
+
+	req := ocr.TranslateRequest{
+		OcrResultID:    "ocr_translate_service_cache_fixture",
+		Provider:       provider,
+		BaseURL:        server.URL,
+		Model:          model,
+		SourceLanguage: "auto",
+		TargetLanguage: "zh-CN",
+	}
+	first, err := service.TranslateOcr(req)
+	if err != nil {
+		t.Fatalf("TranslateOcr(first) error = %v", err)
+	}
+	if hitCount != 1 {
+		t.Fatalf("provider hit count after first call = %d, want 1", hitCount)
+	}
+	if requestPath != "/chat/completions" {
+		t.Fatalf("provider request path = %q, want /chat/completions", requestPath)
+	}
+	if authHeader != "Bearer "+apiKey {
+		t.Fatalf("Authorization header = %q, want stored key", authHeader)
+	}
+	for _, text := range []string{"RecordingFreedom", "文字识别", "zh-CN", model} {
+		if !strings.Contains(requestBody, text) {
+			t.Fatalf("provider request body missing %q: %s", text, requestBody)
+		}
+	}
+	if first.Provider != provider || first.Model != model || len(first.Blocks) != 2 {
+		t.Fatalf("translation result = %#v, want provider/model and two blocks", first)
+	}
+	if first.Blocks[0].Translated != "RecordingFreedom 已翻译" || first.Blocks[1].Translated != "文字识别 已翻译" {
+		t.Fatalf("translated blocks = %#v, want provider response", first.Blocks)
+	}
+	server.Close()
+
+	second, err := service.TranslateOcr(req)
+	if err != nil {
+		t.Fatalf("TranslateOcr(cache hit after provider closed) error = %v", err)
+	}
+	if hitCount != 1 {
+		t.Fatalf("provider hit count after cache call = %d, want still 1", hitCount)
+	}
+	if len(second.Blocks) != len(first.Blocks) || second.Blocks[0].Translated != first.Blocks[0].Translated || second.Blocks[1].Translated != first.Blocks[1].Translated {
+		t.Fatalf("cached translation = %#v, want first result %#v", second.Blocks, first.Blocks)
 	}
 }
 
@@ -441,6 +910,7 @@ func TestSaveSettingsDoesNotOverwritePatchedPreferences(t *testing.T) {
 		t.Fatalf("Load() error = %v", err)
 	}
 	current.Window.StartAtLogin = true
+	current.OCR.AutoRecognizeScreenshots = true
 	if _, err := service.settings.Save(current); err != nil {
 		t.Fatalf("Save(start at login) error = %v", err)
 	}
@@ -450,6 +920,7 @@ func TestSaveSettingsDoesNotOverwritePatchedPreferences(t *testing.T) {
 	stale.Window.StartAtLogin = false
 	stale.Recording.Quality = recordingprofile.QualityStandard
 	stale.Recording.FPS = 24
+	stale.OCR.AutoRecognizeScreenshots = false
 	stale.Shortcuts.OpenWhiteboard = "CmdOrCtrl+Shift+W"
 	saved, err := service.SaveSettings(stale)
 	if err != nil {
@@ -463,6 +934,9 @@ func TestSaveSettingsDoesNotOverwritePatchedPreferences(t *testing.T) {
 	}
 	if !saved.Window.StartAtLogin {
 		t.Fatal("SaveSettings overwrote patched start at login preference")
+	}
+	if !saved.OCR.AutoRecognizeScreenshots {
+		t.Fatal("SaveSettings overwrote patched OCR auto-recognize preference")
 	}
 	if saved.Shortcuts.OpenWhiteboard != shortcut {
 		t.Fatalf("SaveSettings overwrote patched shortcut: %q, want %q", saved.Shortcuts.OpenWhiteboard, shortcut)
@@ -671,6 +1145,56 @@ func TestSaveAnnotationCaptureWritesActivePackageAnnotations(t *testing.T) {
 	}
 	if !strings.Contains(string(diagnosticsData), `"type":"save-capture"`) || !strings.Contains(string(diagnosticsData), `"windowBounds"`) {
 		t.Fatalf("overlay diagnostics = %s, want save-capture bounds evidence", diagnosticsData)
+	}
+}
+
+func TestRecordingAnnotationSnapshotQueuesBackgroundWhiteboardOCR(t *testing.T) {
+	data := appdata.NewService(t.TempDir())
+	service := &RecordingFreedomService{
+		appData:  data,
+		ocr:      ocr.NewService(data),
+		recorder: recording.NewServiceWithBackend(data, recording.NewMockBackend(recpackage.NewService())),
+	}
+	session, err := service.StartRecording(recording.StartRequest{
+		SourceID:   "screen:primary",
+		SourceType: recording.SourceScreen,
+		SourceName: "Primary",
+		SourceGeometry: &recording.SourceGeometry{
+			Width:  1280,
+			Height: 720,
+		},
+		Recording: recordingprofile.Default(),
+	})
+	if err != nil {
+		t.Fatalf("StartRecording() error = %v", err)
+	}
+	service.setAnnotationRegionDIP(session.ID, application.Rect{X: 80, Y: 90, Width: 640, Height: 360})
+
+	capture, err := service.SaveAnnotationCapture(AnnotationCaptureRequest{
+		SceneJSON:       `{"type":"excalidraw","elements":[{"id":"a","type":"freedraw"}],"appState":{},"files":{}}`,
+		SnapshotDataURL: "data:image/png;base64," + base64.StdEncoding.EncodeToString([]byte("png")),
+	})
+	if err != nil {
+		t.Fatalf("SaveAnnotationCapture() error = %v", err)
+	}
+	snapshot, err := service.QueueRecognizeWhiteboard(ocr.WhiteboardRequest{
+		ImagePath: capture.TimelineSnapshotPath,
+		SceneID:   capture.PackageDir,
+		Language:  "zh-en",
+		Priority:  ocr.JobPriorityBackground,
+	})
+	if err != nil {
+		t.Fatalf("QueueRecognizeWhiteboard(annotation) error = %v", err)
+	}
+	if snapshot.Status != ocr.ResultStatusQueued ||
+		snapshot.Request.SourceKind != ocr.SourceWhiteboard ||
+		snapshot.Request.SourceID != capture.PackageDir ||
+		snapshot.Request.ImagePath != capture.TimelineSnapshotPath ||
+		snapshot.Request.Priority != ocr.JobPriorityBackground {
+		t.Fatalf("annotation OCR snapshot = %#v, want package-local whiteboard background OCR", snapshot)
+	}
+	if _, ok := service.recorder.ActiveSession(); !ok {
+		t.Fatal("annotation OCR queue ended the active recording session")
 	}
 }
 

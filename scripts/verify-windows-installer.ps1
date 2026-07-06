@@ -2,6 +2,9 @@ param(
     [Parameter(Mandatory = $true)]
     [string]$InstallerPath,
 
+    [ValidateSet("x64", "arm64")]
+    [string]$Architecture = "x64",
+
     [string]$InstallDir = ""
 )
 
@@ -69,11 +72,21 @@ try {
     $rnnoisePath = Join-Path $toolsDir "rnnoise.dll"
     $noticePath = Join-Path $toolsDir "THIRD_PARTY_FFMPEG.txt"
     $thirdPartyNoticesPath = Join-Path $toolsDir "THIRD_PARTY_NOTICES.txt"
+    $goArch = if ($Architecture -eq "arm64") { "arm64" } else { "amd64" }
+    $ocrWorkerPath = Join-Path $toolsDir "ocr-worker\windows-$goArch\rf-ocr-worker.exe"
+    $onnxRuntimeDir = Join-Path $toolsDir "onnxruntime\windows-$goArch"
+    $onnxRuntimeDll = Join-Path $onnxRuntimeDir "onnxruntime.dll"
+    $onnxRuntimeProviders = Join-Path $onnxRuntimeDir "onnxruntime_providers_shared.dll"
+    $onnxRuntimeNotice = Join-Path $onnxRuntimeDir "THIRD_PARTY_ONNXRUNTIME.txt"
     Require-File $ffmpegPath | Out-Null
     Require-File $ffprobePath | Out-Null
     Require-File $rnnoisePath | Out-Null
     Require-File $noticePath | Out-Null
     Require-File $thirdPartyNoticesPath | Out-Null
+    Require-File $ocrWorkerPath | Out-Null
+    Require-File $onnxRuntimeDll | Out-Null
+    Require-File $onnxRuntimeProviders | Out-Null
+    Require-File $onnxRuntimeNotice | Out-Null
     Assert-FileContains -Path $thirdPartyNoticesPath -Needles @(
         "@excalidraw/excalidraw",
         "License: MIT",
@@ -85,6 +98,14 @@ try {
     $version = & $ffmpegPath -version 2>$null | Select-Object -First 1
     if ([string]::IsNullOrWhiteSpace($version) -or $version -notmatch "ffmpeg") {
         throw "Installed ffmpeg.exe did not report a valid version"
+    }
+    $ocrCapabilitiesText = & $ocrWorkerPath --capabilities --runtime-dir $onnxRuntimeDir 2>$null | Select-Object -First 1
+    if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace($ocrCapabilitiesText)) {
+        throw "Installed OCR worker did not report capabilities"
+    }
+    $ocrCapabilities = $ocrCapabilitiesText | ConvertFrom-Json
+    if (-not $ocrCapabilities.runtimeAvailable) {
+        throw "Installed OCR worker did not detect bundled ONNX Runtime at $onnxRuntimeDir"
     }
 
     Write-Host "Windows installer verified: $installer"

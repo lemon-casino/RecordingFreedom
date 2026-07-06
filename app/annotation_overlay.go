@@ -445,7 +445,7 @@ func (s *RecordingFreedomService) annotationCapturePolicy() string {
 	if s == nil || s.settings == nil {
 		return "export-compose"
 	}
-	current, err := s.settings.Load()
+	current, err := s.loadSettingsForMutation()
 	if err != nil {
 		return "export-compose"
 	}

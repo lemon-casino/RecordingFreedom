@@ -1,0 +1,102 @@
+{
+  "schemaVersion": 1,
+  "name": "ONNX Runtime CPU",
+  "version": "1.23.2",
+  "releaseTag": "v1.23.2",
+  "source": "https://github.com/microsoft/onnxruntime/releases/tag/v1.23.2",
+  "license": "MIT",
+  "notes": [
+    "v1.23.2 is pinned because newer v1.25+ and v1.27 releases no longer publish a macOS x64 CPU archive, while RecordingFreedom still targets macOS x64.",
+    "Only CPU runtime archives are used. GPU/CUDA archives are intentionally excluded from desktop release packaging."
+  ],
+  "targets": {
+    "windows-amd64": {
+      "platform": "windows",
+      "goos": "windows",
+      "goarch": "amd64",
+      "archiveName": "onnxruntime-win-x64-1.23.2.zip",
+      "archiveBytes": 78127794,
+      "archiveSha256": "0b38df9af21834e41e73d602d90db5cb06dbd1ca618948b8f1d66d607ac9f3cd",
+      "downloadUrl": "https://github.com/microsoft/onnxruntime/releases/download/v1.23.2/onnxruntime-win-x64-1.23.2.zip",
+      "libraryFiles": [
+        "onnxruntime.dll",
+        "onnxruntime_providers_shared.dll"
+      ],
+      "requiredLibrary": "onnxruntime.dll"
+    },
+    "windows-arm64": {
+      "platform": "windows",
+      "goos": "windows",
+      "goarch": "arm64",
+      "archiveName": "onnxruntime-win-arm64-1.23.2.zip",
+      "archiveBytes": 78932411,
+      "archiveSha256": "1cfe88b6435df3b5fb0e9f6bd7d6f5df1e887b6174de7f6e2a47bab956f3f168",
+      "downloadUrl": "https://github.com/microsoft/onnxruntime/releases/download/v1.23.2/onnxruntime-win-arm64-1.23.2.zip",
+      "libraryFiles": [
+        "onnxruntime.dll",
+        "onnxruntime_providers_shared.dll"
+      ],
+      "requiredLibrary": "onnxruntime.dll"
+    },
+    "darwin-amd64": {
+      "platform": "macos",
+      "goos": "darwin",
+      "goarch": "amd64",
+      "archiveName": "onnxruntime-osx-x86_64-1.23.2.tgz",
+      "archiveBytes": 11676322,
+      "archiveSha256": "d10359e16347b57d9959f7e80a225a5b4a66ed7d7e007274a15cae86836485a6",
+      "downloadUrl": "https://github.com/microsoft/onnxruntime/releases/download/v1.23.2/onnxruntime-osx-x86_64-1.23.2.tgz",
+      "libraryFiles": [
+        "libonnxruntime.dylib",
+        "libonnxruntime.1.23.2.dylib"
+      ],
+      "requiredLibrary": "libonnxruntime.dylib"
+    },
+    "darwin-arm64": {
+      "platform": "macos",
+      "goos": "darwin",
+      "goarch": "arm64",
+      "archiveName": "onnxruntime-osx-arm64-1.23.2.tgz",
+      "archiveBytes": 9999931,
+      "archiveSha256": "b4d513ab2b26f088c66891dbbc1408166708773d7cc4163de7bdca0e9bbb7856",
+      "downloadUrl": "https://github.com/microsoft/onnxruntime/releases/download/v1.23.2/onnxruntime-osx-arm64-1.23.2.tgz",
+      "libraryFiles": [
+        "libonnxruntime.dylib",
+        "libonnxruntime.1.23.2.dylib"
+      ],
+      "requiredLibrary": "libonnxruntime.dylib"
+    },
+    "linux-amd64": {
+      "platform": "linux",
+      "goos": "linux",
+      "goarch": "amd64",
+      "archiveName": "onnxruntime-linux-x64-1.23.2.tgz",
+      "archiveBytes": 8309231,
+      "archiveSha256": "1fa4dcaef22f6f7d5cd81b28c2800414350c10116f5fdd46a2160082551c5f9b",
+      "downloadUrl": "https://github.com/microsoft/onnxruntime/releases/download/v1.23.2/onnxruntime-linux-x64-1.23.2.tgz",
+      "libraryFiles": [
+        "libonnxruntime.so",
+        "libonnxruntime.so.1",
+        "libonnxruntime.so.1.23.2",
+        "libonnxruntime_providers_shared.so"
+      ],
+      "requiredLibrary": "libonnxruntime.so"
+    },
+    "linux-arm64": {
+      "platform": "linux",
+      "goos": "linux",
+      "goarch": "arm64",
+      "archiveName": "onnxruntime-linux-aarch64-1.23.2.tgz",
+      "archiveBytes": 7254068,
+      "archiveSha256": "7c63c73560ed76b1fac6cff8204ffe34fe180e70d6582b5332ec094810241e5c",
+      "downloadUrl": "https://github.com/microsoft/onnxruntime/releases/download/v1.23.2/onnxruntime-linux-aarch64-1.23.2.tgz",
+      "libraryFiles": [
+        "libonnxruntime.so",
+        "libonnxruntime.so.1",
+        "libonnxruntime.so.1.23.2",
+        "libonnxruntime_providers_shared.so"
+      ],
+      "requiredLibrary": "libonnxruntime.so"
+    }
+  }
+}

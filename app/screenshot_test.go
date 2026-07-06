@@ -3,18 +3,22 @@ package main
 import (
 	"bytes"
 	"encoding/base64"
+	"encoding/json"
 	"image"
 	"image/color"
 	imagedraw "image/draw"
 	"image/png"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/lemon-casino/RecordingFreedom/app/internal/appdata"
 	"github.com/lemon-casino/RecordingFreedom/app/internal/devices"
+	"github.com/lemon-casino/RecordingFreedom/app/internal/ocr"
+	"github.com/lemon-casino/RecordingFreedom/app/internal/settings"
 )
 
 func TestScreenshotHistoryPersistsSortedUniqueItems(t *testing.T) {
@@ -47,6 +51,56 @@ func TestScreenshotHistoryPersistsSortedUniqueItems(t *testing.T) {
 	}
 	if !got[0].Fixed {
 		t.Fatalf("fixed history state was not preserved")
+	}
+	if got[0].OCRStatus != "none" || got[1].OCRStatus != "none" {
+		t.Fatalf("default OCR status = %q/%q, want none", got[0].OCRStatus, got[1].OCRStatus)
+	}
+}
+
+func TestScreenshotHistoryPreservesReadyOCRStateAndClearsStaleNone(t *testing.T) {
+	service := NewRecordingFreedomService()
+	service.appData = appdata.NewService(t.TempDir())
+	items := []ScreenshotItem{
+		{
+			ID:           "ready",
+			Path:         filepath.Join(mustScreenshotDir(t, service), "ready.png"),
+			CreatedAt:    "2026-07-04T00:00:02Z",
+			Width:        200,
+			Height:       120,
+			Mode:         "region",
+			OCRStatus:    "ready",
+			OCRResultID:  "ocr_1",
+			OCRModelID:   "ppocrv5-mobile-zh-en",
+			OCRLanguage:  "zh-en",
+			OCRUpdatedAt: "2026-07-04T00:00:03Z",
+		},
+		{
+			ID:           "stale",
+			Path:         filepath.Join(mustScreenshotDir(t, service), "stale.png"),
+			CreatedAt:    "2026-07-04T00:00:01Z",
+			Width:        100,
+			Height:       100,
+			Mode:         "region",
+			OCRStatus:    "unknown",
+			OCRResultID:  "ocr_stale",
+			OCRModelID:   "ppocrv5-mobile-zh-en",
+			OCRUpdatedAt: "2026-07-04T00:00:03Z",
+			OCRError:     "old",
+		},
+	}
+	if err := service.saveScreenshotHistory(items); err != nil {
+		t.Fatalf("saveScreenshotHistory() error = %v", err)
+	}
+
+	got, err := service.loadScreenshotHistory()
+	if err != nil {
+		t.Fatalf("loadScreenshotHistory() error = %v", err)
+	}
+	if got[0].OCRStatus != "ready" || got[0].OCRResultID != "ocr_1" {
+		t.Fatalf("ready OCR state = %#v, want preserved", got[0])
+	}
+	if got[1].OCRStatus != "none" || got[1].OCRResultID != "" || got[1].OCRError != "" {
+		t.Fatalf("stale OCR state = %#v, want cleared none state", got[1])
 	}
 }
 
@@ -195,6 +249,855 @@ func TestSaveWhiteboardSnapshotWritesSceneAndScreenshotHistory(t *testing.T) {
 	}
 	if len(history) != 1 || history[0].ID != result.Item.ID || history[0].Mode != "whiteboard" {
 		t.Fatalf("history = %#v, want saved whiteboard item", history)
+	}
+}
+
+func TestRecognizeScreenshotRecordsRecoverableOCRFailure(t *testing.T) {
+	service := NewRecordingFreedomService()
+	service.appData = appdata.NewService(t.TempDir())
+	service.ocr = ocr.NewService(service.appData)
+	item, err := service.saveScreenshotImage(testPatternImage(80, 60), "region", nil)
+	if err != nil {
+		t.Fatalf("saveScreenshotImage() error = %v", err)
+	}
+
+	if _, err := service.RecognizeScreenshot(item.ID); err == nil {
+		t.Fatal("RecognizeScreenshot() succeeded without installed model, want error")
+	}
+	history, err := service.loadScreenshotHistory()
+	if err != nil {
+		t.Fatalf("loadScreenshotHistory() error = %v", err)
+	}
+	if len(history) != 1 {
+		t.Fatalf("history len = %d, want 1", len(history))
+	}
+	if history[0].OCRStatus != "failed" || history[0].OCRLanguage != "zh-en" || history[0].OCRError == "" {
+		t.Fatalf("OCR failure state = %#v, want failed zh-en with error", history[0])
+	}
+}
+
+func TestSaveScreenshotImageAutoQueuesOCRWhenEnabled(t *testing.T) {
+	data := appdata.NewService(t.TempDir())
+	service := NewRecordingFreedomService()
+	service.appData = data
+	service.settings = settings.NewService(data)
+	service.ocr = ocr.NewService(data)
+	service.startOCRJobEventPump()
+
+	current := settings.Default()
+	current.OCR.AutoRecognizeScreenshots = true
+	if _, err := service.settings.Save(current); err != nil {
+		t.Fatalf("Save(settings) error = %v", err)
+	}
+	item, err := service.saveScreenshotImage(testPatternImage(80, 60), "region", nil)
+	if err != nil {
+		t.Fatalf("saveScreenshotImage() error = %v", err)
+	}
+
+	var history []ScreenshotItem
+	deadline := time.Now().Add(2 * time.Second)
+	for time.Now().Before(deadline) {
+		history, err = service.loadScreenshotHistory()
+		if err != nil {
+			t.Fatalf("loadScreenshotHistory() error = %v", err)
+		}
+		if len(history) == 1 && history[0].ID == item.ID && history[0].OCRStatus != "none" {
+			break
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+	if len(history) != 1 || history[0].ID != item.ID {
+		t.Fatalf("history = %#v, want saved screenshot", history)
+	}
+	if history[0].OCRStatus == "none" || history[0].OCRLanguage != "zh-en" {
+		t.Fatalf("auto OCR history = %#v, want queued/running/ready/failed zh-en state", history[0])
+	}
+}
+
+func TestQueueRecognizeScreenshotUsesModeSourceKindsAndUpdatesHistory(t *testing.T) {
+	cases := []struct {
+		name string
+		mode string
+		want ocr.SourceKind
+	}{
+		{name: "region", mode: "region", want: ocr.SourceRegionScreenshot},
+		{name: "full", mode: "full", want: ocr.SourceFullScreenshot},
+		{name: "screen", mode: "screen", want: ocr.SourceFullScreenshot},
+		{name: "window", mode: "window", want: ocr.SourceWindowScreenshot},
+		{name: "focused window", mode: "focused-window", want: ocr.SourceFocusedWindowScreenshot},
+		{name: "scrolling", mode: "scrolling", want: ocr.SourceScrollingScreenshot},
+		{name: "whiteboard", mode: "whiteboard", want: ocr.SourceWhiteboard},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			service := NewRecordingFreedomService()
+			service.appData = appdata.NewService(t.TempDir())
+			service.ocr = ocr.NewService(service.appData)
+			item, err := service.saveScreenshotImage(testPatternImage(80, 60), tc.mode, nil)
+			if err != nil {
+				t.Fatalf("saveScreenshotImage() error = %v", err)
+			}
+
+			snapshot, err := service.QueueRecognizeScreenshot(item.ID)
+			if err != nil {
+				t.Fatalf("QueueRecognizeScreenshot() error = %v", err)
+			}
+			if snapshot.Status != ocr.ResultStatusQueued {
+				t.Fatalf("snapshot status = %q, want queued", snapshot.Status)
+			}
+			if snapshot.Request.SourceKind != tc.want ||
+				snapshot.Request.SourceID != item.ID ||
+				snapshot.Request.Priority != ocr.JobPriorityInteractive ||
+				snapshot.Request.Language != "zh-en" ||
+				snapshot.Request.ImagePath != item.Path {
+				t.Fatalf("snapshot request = %#v, want %s interactive zh-en request for %s", snapshot.Request, tc.want, item.ID)
+			}
+
+			history, err := service.loadScreenshotHistory()
+			if err != nil {
+				t.Fatalf("loadScreenshotHistory() error = %v", err)
+			}
+			if len(history) != 1 || history[0].ID != item.ID {
+				t.Fatalf("history = %#v, want screenshot item", history)
+			}
+			if history[0].OCRStatus != ocr.ResultStatusQueued ||
+				history[0].OCRLanguage != "zh-en" ||
+				history[0].OCRResultID != "" ||
+				history[0].OCRError != "" {
+				t.Fatalf("manual OCR history = %#v, want queued zh-en without result/error", history[0])
+			}
+			waitForOCRJobTerminal(t, service.ocr, snapshot.JobID)
+		})
+	}
+}
+
+func TestQueueRecognizeScreenshotRecordsEnqueueFailure(t *testing.T) {
+	service := NewRecordingFreedomService()
+	service.appData = appdata.NewService(t.TempDir())
+	service.ocr = ocr.NewService(service.appData)
+	item, err := service.saveScreenshotImage(testPatternImage(80, 60), "region", nil)
+	if err != nil {
+		t.Fatalf("saveScreenshotImage() error = %v", err)
+	}
+	if err := os.Remove(item.Path); err != nil {
+		t.Fatalf("Remove(screenshot) error = %v", err)
+	}
+
+	if _, err := service.QueueRecognizeScreenshot(item.ID); err == nil {
+		t.Fatal("QueueRecognizeScreenshot() succeeded for missing screenshot image, want error")
+	}
+	history, err := service.loadScreenshotHistory()
+	if err != nil {
+		t.Fatalf("loadScreenshotHistory() error = %v", err)
+	}
+	if len(history) != 1 || history[0].ID != item.ID {
+		t.Fatalf("history = %#v, want screenshot item preserved", history)
+	}
+	if history[0].OCRStatus != ocr.ResultStatusFailed || history[0].OCRLanguage != "zh-en" || history[0].OCRError == "" {
+		t.Fatalf("failed OCR history = %#v, want failed zh-en with error", history[0])
+	}
+	if _, err := os.Stat(item.ThumbnailPath); err != nil {
+		t.Fatalf("thumbnail should remain after OCR enqueue failure, stat error = %v", err)
+	}
+}
+
+func TestAutoQueueScreenshotOCRRecordsEnqueueFailure(t *testing.T) {
+	data := appdata.NewService(t.TempDir())
+	service := NewRecordingFreedomService()
+	service.appData = data
+	service.settings = settings.NewService(data)
+	service.ocr = ocr.NewService(data)
+
+	current := settings.Default()
+	current.OCR.AutoRecognizeScreenshots = true
+	if _, err := service.settings.Save(current); err != nil {
+		t.Fatalf("Save(settings) error = %v", err)
+	}
+	item := ScreenshotItem{
+		ID:        "missing-auto-ocr",
+		Path:      filepath.Join(mustScreenshotDir(t, service), "missing-auto-ocr.png"),
+		CreatedAt: time.Now().UTC().Format(time.RFC3339Nano),
+		Width:     80,
+		Height:    60,
+		Mode:      "region",
+		OCRStatus: ocr.ResultStatusNone,
+	}
+	if err := service.saveScreenshotHistory([]ScreenshotItem{item}); err != nil {
+		t.Fatalf("saveScreenshotHistory() error = %v", err)
+	}
+
+	service.queueScreenshotOCRAfterSave(item)
+	var history []ScreenshotItem
+	deadline := time.Now().Add(2 * time.Second)
+	for time.Now().Before(deadline) {
+		var err error
+		history, err = service.loadScreenshotHistory()
+		if err != nil {
+			t.Fatalf("loadScreenshotHistory() error = %v", err)
+		}
+		if len(history) == 1 && history[0].OCRStatus == ocr.ResultStatusFailed {
+			break
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+	if len(history) != 1 || history[0].ID != item.ID {
+		t.Fatalf("history = %#v, want auto OCR screenshot item preserved", history)
+	}
+	if history[0].OCRStatus != ocr.ResultStatusFailed || history[0].OCRLanguage != "zh-en" || history[0].OCRError == "" {
+		t.Fatalf("auto OCR failure history = %#v, want failed zh-en with error", history[0])
+	}
+}
+
+func TestScreenshotOCRRealWorkerSmoke(t *testing.T) {
+	if os.Getenv("RF_OCR_SCREENSHOT_SMOKE") != "1" {
+		t.Skip("set RF_OCR_SCREENSHOT_SMOKE=1 after running scripts/run-local-ocr-smoke.ps1 to exercise the real OCR worker screenshot path")
+	}
+	fixture := newOCRRealWorkerSmokeFixture(t)
+	service := fixture.service
+	workerTarget := fixture.workerTarget
+	smokeImage := fixture.smokeImage
+	longScrollingSmokeImage := buildLongOCRSmokeImage(t, smokeImage, 2800)
+	cases := []struct {
+		scenario string
+		mode     string
+		image    image.Image
+		want     ocr.SourceKind
+	}{
+		{scenario: "region", mode: "region", image: smokeImage, want: ocr.SourceRegionScreenshot},
+		{scenario: "full", mode: "full", image: smokeImage, want: ocr.SourceFullScreenshot},
+		{scenario: "window", mode: "window", image: smokeImage, want: ocr.SourceWindowScreenshot},
+		{scenario: "focused-window", mode: "focused-window", image: smokeImage, want: ocr.SourceFocusedWindowScreenshot},
+		{scenario: "scrolling", mode: "scrolling", image: smokeImage, want: ocr.SourceScrollingScreenshot},
+		{scenario: "scrolling-long", mode: "scrolling", image: longScrollingSmokeImage, want: ocr.SourceScrollingScreenshot},
+	}
+	items := make([]ScreenshotItem, 0, len(cases))
+	saved := make(map[string]struct {
+		item ScreenshotItem
+		want ocr.SourceKind
+	}, len(cases))
+	evidence := make([]screenshotOCRSmokeEvidence, 0, len(cases))
+	for _, tc := range cases {
+		item, err := service.saveScreenshotImage(tc.image, tc.mode, nil)
+		if err != nil {
+			t.Fatalf("saveScreenshotImage(%s) error = %v", tc.scenario, err)
+		}
+		snapshot, err := service.QueueRecognizeScreenshot(item.ID)
+		if err != nil {
+			t.Fatalf("QueueRecognizeScreenshot(%s) error = %v", tc.scenario, err)
+		}
+		if snapshot.Request.SourceKind != tc.want || snapshot.Request.SourceID != item.ID {
+			t.Fatalf("snapshot for %s = %#v, want source kind %s and source id %s", tc.scenario, snapshot.Request, tc.want, item.ID)
+		}
+		items = append(items, item)
+		saved[tc.scenario] = struct {
+			item ScreenshotItem
+			want ocr.SourceKind
+		}{item: item, want: tc.want}
+	}
+
+	ready := waitForScreenshotOCRReady(t, service, items, 45*time.Second)
+	for _, tc := range cases {
+		savedCase := saved[tc.scenario]
+		wantItem := savedCase.item
+		var readyItem ScreenshotItem
+		for _, candidate := range ready {
+			if candidate.ID == wantItem.ID {
+				readyItem = candidate
+				break
+			}
+		}
+		if readyItem.ID == "" {
+			t.Fatalf("ready history did not include scenario %s item %s: %#v", tc.scenario, wantItem.ID, ready)
+		}
+		result, err := service.OpenOcrResult(readyItem.OCRResultID)
+		if err != nil {
+			t.Fatalf("OpenOcrResult(%s) error = %v", readyItem.OCRResultID, err)
+		}
+		if result.SourceKind != tc.want || result.SourceID != readyItem.ID || result.ImagePath != readyItem.Path {
+			t.Fatalf("OCR result for %s = %#v, want source %s/%s and image path %s", tc.scenario, result, tc.want, readyItem.ID, readyItem.Path)
+		}
+		if !strings.Contains(result.PlainText, "RecordingFreedom") || !strings.Contains(result.PlainText, "文字识别") {
+			t.Fatalf("OCR result for %s plainText = %q, want smoke text", tc.scenario, result.PlainText)
+		}
+		if tc.scenario == "scrolling-long" {
+			if result.Height <= 2400 || result.Height != readyItem.Height {
+				t.Fatalf("long scrolling OCR height = result:%d item:%d, want tiled long image height > 2400", result.Height, readyItem.Height)
+			}
+			if result.Width != readyItem.Width {
+				t.Fatalf("long scrolling OCR width = result:%d item:%d, want full long image width", result.Width, readyItem.Width)
+			}
+		}
+		image, err := service.ReadOcrResultImage(result.ID)
+		if err != nil {
+			t.Fatalf("ReadOcrResultImage(%s) error = %v", result.ID, err)
+		}
+		if !image.Available || image.Path != readyItem.Path || !strings.HasPrefix(image.DataURL, "data:image/png;base64,") {
+			t.Fatalf("OCR result image for %s = %#v, want screenshot image data", tc.scenario, image)
+		}
+		evidence = append(evidence, screenshotOCRSmokeEvidence{
+			Scenario:       tc.scenario,
+			Mode:           readyItem.Mode,
+			SourceKind:     string(result.SourceKind),
+			SourceID:       result.SourceID,
+			ScreenshotPath: readyItem.Path,
+			ResultID:       result.ID,
+			ResultImage:    image.Path,
+			ImageWidth:     result.Width,
+			ImageHeight:    result.Height,
+			ModelID:        result.ModelID,
+			Language:       result.Language,
+			PlainText:      result.PlainText,
+			BlockCount:     len(result.Blocks),
+			Blocks:         result.Blocks,
+		})
+	}
+
+	if err := os.Rename(workerTarget, workerTarget+".disabled"); err != nil {
+		t.Fatalf("Rename(worker disabled) error = %v", err)
+	}
+	cached, err := service.RecognizeScreenshot(ready[0].ID)
+	if err != nil {
+		t.Fatalf("RecognizeScreenshot(cache hit without worker) error = %v", err)
+	}
+	if cached.SourceID != ready[0].ID || cached.ImagePath != ready[0].Path ||
+		!strings.Contains(cached.PlainText, "RecordingFreedom") ||
+		!strings.Contains(cached.PlainText, "文字识别") {
+		t.Fatalf("cached OCR result without worker = %#v, want current screenshot source and smoke text", cached)
+	}
+	persistedCached, err := service.OpenOcrResult(cached.ID)
+	if err != nil {
+		t.Fatalf("OpenOcrResult(cached %s) error = %v", cached.ID, err)
+	}
+	if persistedCached.SourceID != cached.SourceID || persistedCached.ImagePath != cached.ImagePath {
+		t.Fatalf("persisted cached OCR result = %#v, want current screenshot source", persistedCached)
+	}
+	for index := range evidence {
+		if evidence[index].SourceID == cached.SourceID {
+			evidence[index].CacheHitWithoutWorker = true
+			evidence[index].CachedResultID = cached.ID
+			break
+		}
+	}
+	queuedCacheItem, err := service.saveScreenshotImage(smokeImage, "region", nil)
+	if err != nil {
+		t.Fatalf("saveScreenshotImage(queued cache hit) error = %v", err)
+	}
+	queuedCacheSnapshot, err := service.QueueRecognizeScreenshot(queuedCacheItem.ID)
+	if err != nil {
+		t.Fatalf("QueueRecognizeScreenshot(queued cache hit without worker) error = %v", err)
+	}
+	if queuedCacheSnapshot.Request.SourceKind != ocr.SourceRegionScreenshot || queuedCacheSnapshot.Request.SourceID != queuedCacheItem.ID {
+		t.Fatalf("queued cache snapshot = %#v, want current region screenshot source", queuedCacheSnapshot.Request)
+	}
+	queuedCacheReady := waitForScreenshotOCRReady(t, service, []ScreenshotItem{queuedCacheItem}, 10*time.Second)[0]
+	queuedCacheResult, err := service.OpenOcrResult(queuedCacheReady.OCRResultID)
+	if err != nil {
+		t.Fatalf("OpenOcrResult(queued cache %s) error = %v", queuedCacheReady.OCRResultID, err)
+	}
+	if queuedCacheResult.SourceKind != ocr.SourceRegionScreenshot ||
+		queuedCacheResult.SourceID != queuedCacheItem.ID ||
+		queuedCacheResult.ImagePath != queuedCacheItem.Path ||
+		!strings.Contains(queuedCacheResult.PlainText, "RecordingFreedom") ||
+		!strings.Contains(queuedCacheResult.PlainText, "文字识别") {
+		t.Fatalf("queued cached OCR result without worker = %#v, want current screenshot source and smoke text", queuedCacheResult)
+	}
+	evidence = append(evidence, screenshotOCRSmokeEvidence{
+		Scenario:            "region-queued-cache-hit",
+		Mode:                queuedCacheReady.Mode,
+		SourceKind:          string(queuedCacheResult.SourceKind),
+		SourceID:            queuedCacheResult.SourceID,
+		ScreenshotPath:      queuedCacheReady.Path,
+		ResultID:            queuedCacheResult.ID,
+		ResultImage:         queuedCacheReady.Path,
+		ImageWidth:          queuedCacheResult.Width,
+		ImageHeight:         queuedCacheResult.Height,
+		ModelID:             queuedCacheResult.ModelID,
+		Language:            queuedCacheResult.Language,
+		PlainText:           queuedCacheResult.PlainText,
+		BlockCount:          len(queuedCacheResult.Blocks),
+		Blocks:              queuedCacheResult.Blocks,
+		QueuedCacheHit:      true,
+		QueuedCacheResultID: queuedCacheResult.ID,
+	})
+	writeScreenshotOCRSmokeEvidence(t, evidence)
+}
+
+func TestWhiteboardSelectionOCRRealWorkerSmoke(t *testing.T) {
+	if os.Getenv("RF_OCR_WHITEBOARD_SMOKE") != "1" {
+		t.Skip("set RF_OCR_WHITEBOARD_SMOKE=1 after running scripts/run-local-ocr-smoke.ps1 to exercise the real OCR worker whiteboard-selection path")
+	}
+	fixture := newOCRRealWorkerSmokeFixture(t)
+	service := fixture.service
+	selectionImage, err := service.saveScreenshotImage(fixture.smokeImage, "whiteboard", nil)
+	if err != nil {
+		t.Fatalf("saveScreenshotImage(whiteboard selection smoke) error = %v", err)
+	}
+
+	const elementID = "whiteboard-selection-real-worker-image"
+	snapshot, err := service.QueueRecognizeWhiteboard(ocr.WhiteboardRequest{
+		ImagePath: selectionImage.Path,
+		SceneID:   selectionImage.ID,
+		ElementID: elementID,
+		Language:  "zh-en",
+		Priority:  ocr.JobPriorityInteractive,
+	})
+	if err != nil {
+		t.Fatalf("QueueRecognizeWhiteboard(whiteboard selection real worker) error = %v", err)
+	}
+	if snapshot.Request.SourceKind != ocr.SourceWhiteboardSelection ||
+		snapshot.Request.SourceID != selectionImage.ID ||
+		snapshot.Request.ImagePath != selectionImage.Path ||
+		snapshot.Request.Priority != ocr.JobPriorityInteractive ||
+		snapshot.Request.Language != "zh-en" {
+		t.Fatalf("whiteboard-selection snapshot request = %#v, want selected image source %s", snapshot.Request, selectionImage.ID)
+	}
+
+	ready := waitForScreenshotOCRReady(t, service, []ScreenshotItem{selectionImage}, 45*time.Second)[0]
+	result, err := service.OpenOcrResult(ready.OCRResultID)
+	if err != nil {
+		t.Fatalf("OpenOcrResult(%s) error = %v", ready.OCRResultID, err)
+	}
+	if result.SourceKind != ocr.SourceWhiteboardSelection ||
+		result.SourceID != selectionImage.ID ||
+		result.ImagePath != selectionImage.Path ||
+		result.Width != selectionImage.Width ||
+		result.Height != selectionImage.Height {
+		t.Fatalf("whiteboard-selection result = %#v, want selected image source and dimensions %#v", result, selectionImage)
+	}
+	if !strings.Contains(result.PlainText, "RecordingFreedom") || !strings.Contains(result.PlainText, "文字识别") {
+		t.Fatalf("whiteboard-selection plainText = %q, want smoke text", result.PlainText)
+	}
+	if len(result.Blocks) == 0 {
+		t.Fatalf("whiteboard-selection result has no OCR blocks: %#v", result)
+	}
+	image, err := service.ReadOcrResultImage(result.ID)
+	if err != nil {
+		t.Fatalf("ReadOcrResultImage(%s) error = %v", result.ID, err)
+	}
+	if !image.Available || image.Path != selectionImage.Path || !strings.HasPrefix(image.DataURL, "data:image/png;base64,") {
+		t.Fatalf("whiteboard-selection result image = %#v, want selected image data", image)
+	}
+
+	writeWhiteboardOCRSmokeEvidence(t, []screenshotOCRSmokeEvidence{{
+		Scenario:        "whiteboard-selection-real-worker",
+		Mode:            "whiteboard-selection",
+		SourceKind:      string(result.SourceKind),
+		SourceID:        result.SourceID,
+		SourceImagePath: selectionImage.Path,
+		ElementID:       elementID,
+		ScreenshotPath:  selectionImage.Path,
+		ResultID:        result.ID,
+		ResultImage:     image.Path,
+		ImageWidth:      result.Width,
+		ImageHeight:     result.Height,
+		ModelID:         result.ModelID,
+		Language:        result.Language,
+		PlainText:       result.PlainText,
+		BlockCount:      len(result.Blocks),
+		Blocks:          result.Blocks,
+	}})
+}
+
+func TestQueueRecognizePinnedScreenshotUsesPinnedSourceAndUpdatesHistory(t *testing.T) {
+	service := NewRecordingFreedomService()
+	service.appData = appdata.NewService(t.TempDir())
+	service.ocr = ocr.NewService(service.appData)
+	item, err := service.saveScreenshotImage(testPatternImage(80, 60), "region", nil)
+	if err != nil {
+		t.Fatalf("saveScreenshotImage() error = %v", err)
+	}
+
+	snapshot, err := service.QueueRecognizePinnedScreenshot(item.ID)
+	if err != nil {
+		t.Fatalf("QueueRecognizePinnedScreenshot() error = %v", err)
+	}
+	if snapshot.Status != ocr.ResultStatusQueued {
+		t.Fatalf("snapshot status = %q, want queued", snapshot.Status)
+	}
+	if snapshot.Request.SourceKind != ocr.SourcePinnedScreenshot ||
+		snapshot.Request.SourceID != item.ID ||
+		snapshot.Request.Priority != ocr.JobPriorityInteractive ||
+		snapshot.Request.Language != "zh-en" {
+		t.Fatalf("snapshot request = %#v, want pinned screenshot interactive zh-en request", snapshot.Request)
+	}
+	if snapshot.Request.ImagePath != item.Path {
+		t.Fatalf("snapshot image path = %q, want %q", snapshot.Request.ImagePath, item.Path)
+	}
+
+	history, err := service.loadScreenshotHistory()
+	if err != nil {
+		t.Fatalf("loadScreenshotHistory() error = %v", err)
+	}
+	if len(history) != 1 || history[0].ID != item.ID {
+		t.Fatalf("history = %#v, want pinned OCR screenshot item", history)
+	}
+	if history[0].OCRStatus != ocr.ResultStatusQueued ||
+		history[0].OCRLanguage != "zh-en" ||
+		history[0].OCRResultID != "" ||
+		history[0].OCRError != "" {
+		t.Fatalf("pinned OCR history = %#v, want queued zh-en without result/error", history[0])
+	}
+	waitForOCRJobTerminal(t, service.ocr, snapshot.JobID)
+}
+
+func TestQueueRecognizeWhiteboardSnapshotUsesWhiteboardSourceAndUpdatesHistory(t *testing.T) {
+	service := NewRecordingFreedomService()
+	service.appData = appdata.NewService(t.TempDir())
+	service.ocr = ocr.NewService(service.appData)
+	item, err := service.saveScreenshotImage(testPatternImage(120, 80), "whiteboard", nil)
+	if err != nil {
+		t.Fatalf("saveScreenshotImage() error = %v", err)
+	}
+
+	snapshot, err := service.QueueRecognizeWhiteboard(ocr.WhiteboardRequest{
+		ImagePath: item.Path,
+		SceneID:   item.ID,
+		Language:  "zh-en",
+	})
+	if err != nil {
+		t.Fatalf("QueueRecognizeWhiteboard() error = %v", err)
+	}
+	if snapshot.Status != ocr.ResultStatusQueued {
+		t.Fatalf("snapshot status = %q, want queued", snapshot.Status)
+	}
+	if snapshot.Request.SourceKind != ocr.SourceWhiteboard ||
+		snapshot.Request.SourceID != item.ID ||
+		snapshot.Request.Priority != ocr.JobPriorityInteractive ||
+		snapshot.Request.Language != "zh-en" {
+		t.Fatalf("snapshot request = %#v, want whiteboard interactive zh-en request", snapshot.Request)
+	}
+
+	history, err := service.loadScreenshotHistory()
+	if err != nil {
+		t.Fatalf("loadScreenshotHistory() error = %v", err)
+	}
+	if len(history) != 1 || history[0].ID != item.ID {
+		t.Fatalf("history = %#v, want whiteboard screenshot item", history)
+	}
+	if history[0].OCRStatus != ocr.ResultStatusQueued || history[0].OCRLanguage != "zh-en" {
+		t.Fatalf("whiteboard OCR history = %#v, want queued zh-en", history[0])
+	}
+	waitForOCRJobTerminal(t, service.ocr, snapshot.JobID)
+}
+
+func TestWhiteboardSelectionOCRJobEventUpdatesHistory(t *testing.T) {
+	service := NewRecordingFreedomService()
+	service.appData = appdata.NewService(t.TempDir())
+	service.ocr = ocr.NewService(service.appData)
+	item, err := service.saveScreenshotImage(testPatternImage(120, 80), "whiteboard", nil)
+	if err != nil {
+		t.Fatalf("saveScreenshotImage() error = %v", err)
+	}
+
+	service.handleOCRJobEvent(ocr.JobEvent{
+		JobID:  "ocr-job-whiteboard-selection-ready",
+		Status: ocr.ResultStatusReady,
+		Request: ocr.RecognizeRequest{
+			ImagePath:  item.Path,
+			SourceKind: ocr.SourceWhiteboardSelection,
+			SourceID:   item.ID,
+			Language:   "zh-en",
+			Priority:   ocr.JobPriorityInteractive,
+		},
+		Result: &ocr.Result{
+			ID:         "ocr-result-whiteboard-selection-ready",
+			SourceKind: ocr.SourceWhiteboardSelection,
+			SourceID:   item.ID,
+			ImagePath:  item.Path,
+			ModelID:    "ppocrv5-mobile-zh-en",
+			Language:   "zh-en",
+			Width:      item.Width,
+			Height:     item.Height,
+			PlainText:  "RecordingFreedom",
+			CreatedAt:  time.Now().UTC(),
+		},
+	})
+
+	history, err := service.loadScreenshotHistory()
+	if err != nil {
+		t.Fatalf("loadScreenshotHistory() error = %v", err)
+	}
+	if len(history) != 1 || history[0].ID != item.ID {
+		t.Fatalf("history = %#v, want whiteboard selection item", history)
+	}
+	if history[0].OCRStatus != ocr.ResultStatusReady ||
+		history[0].OCRResultID != "ocr-result-whiteboard-selection-ready" ||
+		history[0].OCRModelID != "ppocrv5-mobile-zh-en" ||
+		history[0].OCRLanguage != "zh-en" ||
+		history[0].OCRError != "" {
+		t.Fatalf("whiteboard-selection OCR history = %#v, want ready result", history[0])
+	}
+}
+
+func TestReadOcrResultImageUsesManagedResultImagePath(t *testing.T) {
+	service := NewRecordingFreedomService()
+	service.appData = appdata.NewService(t.TempDir())
+	service.ocr = ocr.NewService(service.appData)
+	item, err := service.saveScreenshotImage(testPatternImage(120, 80), "whiteboard", nil)
+	if err != nil {
+		t.Fatalf("saveScreenshotImage() error = %v", err)
+	}
+	result := ocr.Result{
+		ID:          "ocr_result_image",
+		SourceKind:  ocr.SourceWhiteboard,
+		SourceID:    item.ID,
+		ImagePath:   item.Path,
+		ImageSHA256: "sha-managed-image",
+		ModelID:     "ppocrv5-mobile-zh-en",
+		Language:    "zh-en",
+		Width:       item.Width,
+		Height:      item.Height,
+		PlainText:   "RecordingFreedom",
+		CreatedAt:   time.Now().UTC(),
+	}
+	if err := service.ocr.WriteResult(result); err != nil {
+		t.Fatalf("WriteResult() error = %v", err)
+	}
+
+	image, err := service.ReadOcrResultImage(result.ID)
+	if err != nil {
+		t.Fatalf("ReadOcrResultImage() error = %v", err)
+	}
+	if !image.Available || !strings.HasPrefix(image.DataURL, "data:image/png;base64,") || image.Path != item.Path || image.Bytes <= 0 {
+		t.Fatalf("image = %#v, want managed PNG data URL", image)
+	}
+}
+
+func TestReadOcrResultImageFallsBackToScreenshotHistorySource(t *testing.T) {
+	service := NewRecordingFreedomService()
+	service.appData = appdata.NewService(t.TempDir())
+	service.ocr = ocr.NewService(service.appData)
+	item, err := service.saveScreenshotImage(testPatternImage(96, 64), "region", nil)
+	if err != nil {
+		t.Fatalf("saveScreenshotImage() error = %v", err)
+	}
+	result := ocr.Result{
+		ID:          "ocr_legacy_result_image",
+		SourceKind:  ocr.SourceRegionScreenshot,
+		SourceID:    item.ID,
+		ImageSHA256: "sha-legacy-image",
+		ModelID:     "ppocrv5-mobile-zh-en",
+		Language:    "zh-en",
+		Width:       item.Width,
+		Height:      item.Height,
+		PlainText:   "Legacy result",
+		CreatedAt:   time.Now().UTC(),
+	}
+	if err := service.ocr.WriteResult(result); err != nil {
+		t.Fatalf("WriteResult() error = %v", err)
+	}
+
+	image, err := service.ReadOcrResultImage(result.ID)
+	if err != nil {
+		t.Fatalf("ReadOcrResultImage() error = %v", err)
+	}
+	if !image.Available || !strings.HasPrefix(image.DataURL, "data:image/png;base64,") || image.Path != item.Path || image.Bytes <= 0 {
+		t.Fatalf("image = %#v, want fallback screenshot PNG data URL", image)
+	}
+}
+
+func TestReadOcrResultImageRejectsSelectionFallbackWithoutImagePath(t *testing.T) {
+	service := NewRecordingFreedomService()
+	service.appData = appdata.NewService(t.TempDir())
+	service.ocr = ocr.NewService(service.appData)
+	item, err := service.saveScreenshotImage(testPatternImage(96, 64), "whiteboard", nil)
+	if err != nil {
+		t.Fatalf("saveScreenshotImage() error = %v", err)
+	}
+	result := ocr.Result{
+		ID:          "ocr_selection_without_image",
+		SourceKind:  ocr.SourceWhiteboardSelection,
+		SourceID:    item.ID,
+		ImageSHA256: "sha-selection-image",
+		ModelID:     "ppocrv5-mobile-zh-en",
+		Language:    "zh-en",
+		PlainText:   "selection",
+		CreatedAt:   time.Now().UTC(),
+	}
+	if err := service.ocr.WriteResult(result); err != nil {
+		t.Fatalf("WriteResult() error = %v", err)
+	}
+
+	if _, err := service.ReadOcrResultImage(result.ID); err == nil {
+		t.Fatal("ReadOcrResultImage() allowed whiteboard-selection fallback without its own image path")
+	}
+}
+
+func TestReadOcrResultImageRejectsOutsideDataRoot(t *testing.T) {
+	service := NewRecordingFreedomService()
+	service.appData = appdata.NewService(t.TempDir())
+	service.ocr = ocr.NewService(service.appData)
+	outsidePath := filepath.Join(t.TempDir(), "outside.png")
+	if err := os.WriteFile(outsidePath, []byte("not a real png but outside root"), 0o644); err != nil {
+		t.Fatalf("WriteFile(outside) error = %v", err)
+	}
+	result := ocr.Result{
+		ID:          "ocr_outside_image",
+		SourceKind:  ocr.SourceImage,
+		SourceID:    "outside",
+		ImagePath:   outsidePath,
+		ImageSHA256: "sha-outside-image",
+		ModelID:     "ppocrv5-mobile-zh-en",
+		Language:    "zh-en",
+		PlainText:   "outside",
+		CreatedAt:   time.Now().UTC(),
+	}
+	if err := service.ocr.WriteResult(result); err != nil {
+		t.Fatalf("WriteResult() error = %v", err)
+	}
+
+	if _, err := service.ReadOcrResultImage(result.ID); err == nil {
+		t.Fatal("ReadOcrResultImage() accepted an OCR result image outside app data root")
+	}
+}
+
+func TestWhiteboardOCRRequestUsesSelectionSourceForElement(t *testing.T) {
+	req, err := whiteboardOCRRequest(ocr.WhiteboardRequest{
+		ImagePath: "selection.png",
+		SceneID:   "scene-1",
+		ElementID: "image-element-1",
+	})
+	if err != nil {
+		t.Fatalf("whiteboardOCRRequest() error = %v", err)
+	}
+	if req.SourceKind != ocr.SourceWhiteboardSelection {
+		t.Fatalf("source kind = %q, want whiteboard-selection", req.SourceKind)
+	}
+	if req.SourceID != "scene-1" {
+		t.Fatalf("source id = %q, want scene id", req.SourceID)
+	}
+}
+
+func TestWhiteboardOCRRequestAllowsBackgroundPriorityForRecordingAnnotation(t *testing.T) {
+	req, err := whiteboardOCRRequest(ocr.WhiteboardRequest{
+		ImagePath: "annotation.png",
+		SceneID:   "recording-package",
+		Priority:  ocr.JobPriorityBackground,
+	})
+	if err != nil {
+		t.Fatalf("whiteboardOCRRequest() error = %v", err)
+	}
+	if req.SourceKind != ocr.SourceWhiteboard ||
+		req.SourceID != "recording-package" ||
+		req.Priority != ocr.JobPriorityBackground {
+		t.Fatalf("request = %#v, want whiteboard background request for recording annotation", req)
+	}
+}
+
+func TestOCRJobEventUpdatesScreenshotHistoryState(t *testing.T) {
+	service := NewRecordingFreedomService()
+	service.appData = appdata.NewService(t.TempDir())
+	item, err := service.saveScreenshotImage(testPatternImage(80, 60), "region", nil)
+	if err != nil {
+		t.Fatalf("saveScreenshotImage() error = %v", err)
+	}
+
+	service.handleOCRJobEvent(ocr.JobEvent{
+		JobID:  "ocr-job-1",
+		Status: ocr.ResultStatusRunning,
+		Request: ocr.RecognizeRequest{
+			ImagePath:  item.Path,
+			SourceKind: ocr.SourceRegionScreenshot,
+			SourceID:   item.ID,
+			Language:   "zh-en",
+		},
+	})
+	history, err := service.loadScreenshotHistory()
+	if err != nil {
+		t.Fatalf("loadScreenshotHistory() error = %v", err)
+	}
+	if history[0].OCRStatus != "running" || history[0].OCRLanguage != "zh-en" {
+		t.Fatalf("running OCR history = %#v, want running zh-en", history[0])
+	}
+
+	service.handleOCRJobEvent(ocr.JobEvent{
+		JobID:  "ocr-job-1",
+		Status: ocr.ResultStatusReady,
+		Request: ocr.RecognizeRequest{
+			ImagePath:  item.Path,
+			SourceKind: ocr.SourceRegionScreenshot,
+			SourceID:   item.ID,
+			Language:   "zh-en",
+		},
+		Result: &ocr.Result{
+			ID:       "ocr_result_1",
+			ModelID:  "ppocrv5-mobile-zh-en",
+			Language: "zh-en",
+		},
+	})
+	history, err = service.loadScreenshotHistory()
+	if err != nil {
+		t.Fatalf("loadScreenshotHistory() error = %v", err)
+	}
+	if history[0].OCRStatus != "ready" ||
+		history[0].OCRResultID != "ocr_result_1" ||
+		history[0].OCRModelID != "ppocrv5-mobile-zh-en" ||
+		history[0].OCRError != "" {
+		t.Fatalf("ready OCR history = %#v, want ready result metadata", history[0])
+	}
+}
+
+func TestCancelledOCRJobEventDoesNotAllowLateReadyHistoryState(t *testing.T) {
+	service := NewRecordingFreedomService()
+	service.appData = appdata.NewService(t.TempDir())
+	item, err := service.saveScreenshotImage(testPatternImage(80, 60), "region", nil)
+	if err != nil {
+		t.Fatalf("saveScreenshotImage() error = %v", err)
+	}
+	request := ocr.RecognizeRequest{
+		ImagePath:  item.Path,
+		SourceKind: ocr.SourceRegionScreenshot,
+		SourceID:   item.ID,
+		Language:   "zh-en",
+	}
+
+	service.handleOCRJobEvent(ocr.JobEvent{JobID: "ocr-job-cancelled", Status: ocr.ResultStatusRunning, Request: request})
+	service.handleOCRJobEvent(ocr.JobEvent{JobID: "ocr-job-cancelled", Status: ocr.ResultStatusCancelled, Request: request})
+	history, err := service.loadScreenshotHistory()
+	if err != nil {
+		t.Fatalf("loadScreenshotHistory() error = %v", err)
+	}
+	if history[0].OCRStatus != ocr.ResultStatusNone || history[0].OCRResultID != "" || history[0].OCRError != "" {
+		t.Fatalf("cancelled OCR history = %#v, want none without stale result/error", history[0])
+	}
+
+	service.handleOCRJobEvent(ocr.JobEvent{
+		JobID:   "ocr-job-cancelled",
+		Status:  ocr.ResultStatusReady,
+		Request: request,
+		Result: &ocr.Result{
+			ID:       "late_cancelled_result",
+			ModelID:  "ppocrv5-mobile-zh-en",
+			Language: "zh-en",
+		},
+	})
+	history, err = service.loadScreenshotHistory()
+	if err != nil {
+		t.Fatalf("loadScreenshotHistory() error = %v", err)
+	}
+	if history[0].OCRStatus != ocr.ResultStatusNone || history[0].OCRResultID != "" || history[0].OCRModelID != "" {
+		t.Fatalf("late ready after cancel changed OCR history = %#v, want cancelled none state preserved", history[0])
+	}
+
+	service.handleOCRJobEvent(ocr.JobEvent{JobID: "ocr-job-new", Status: ocr.ResultStatusQueued, Request: request})
+	service.handleOCRJobEvent(ocr.JobEvent{
+		JobID:   "ocr-job-new",
+		Status:  ocr.ResultStatusReady,
+		Request: request,
+		Result: &ocr.Result{
+			ID:       "new_result",
+			ModelID:  "ppocrv5-mobile-zh-en",
+			Language: "zh-en",
+		},
+	})
+	history, err = service.loadScreenshotHistory()
+	if err != nil {
+		t.Fatalf("loadScreenshotHistory() error = %v", err)
+	}
+	if history[0].OCRStatus != ocr.ResultStatusReady ||
+		history[0].OCRResultID != "new_result" ||
+		history[0].OCRModelID != "ppocrv5-mobile-zh-en" {
+		t.Fatalf("new OCR job history = %#v, want new ready result after old cancellation", history[0])
 	}
 }
 
@@ -891,6 +1794,63 @@ func TestCaptureScrollingScreenshotImageFallsBackToDirectShotForStaticTarget(t *
 	}
 }
 
+func TestCaptureScrollingScreenshotStaticTargetQueuesRegionOCR(t *testing.T) {
+	service := NewRecordingFreedomService()
+	service.appData = appdata.NewService(t.TempDir())
+	service.ocr = ocr.NewService(service.appData)
+	frame := testPatternImage(80, 120)
+	scrolls := 0
+	capture := func(rect image.Rectangle) (*image.RGBA, error) {
+		next := image.NewRGBA(image.Rect(0, 0, rect.Dx(), rect.Dy()))
+		imagedraw.Draw(next, next.Bounds(), frame, image.Point{}, imagedraw.Src)
+		return next, nil
+	}
+	scroll := func(rect image.Rectangle) error {
+		scrolls++
+		return nil
+	}
+	region := RegionRect{X: 10, Y: 20, Width: 80, Height: 120}
+
+	item, err := service.captureScrollingScreenshotWith(image.Rect(10, 20, 90, 140), &region, capture, scroll, func(time.Duration) {})
+	if err != nil {
+		t.Fatalf("captureScrollingScreenshotWith() error = %v", err)
+	}
+	if item.Mode != "region" {
+		t.Fatalf("item mode = %q, want region for static scrolling target fallback", item.Mode)
+	}
+	if item.Width != 80 || item.Height != 120 {
+		t.Fatalf("item size = %dx%d, want direct region 80x120", item.Width, item.Height)
+	}
+	if item.Region == nil || *item.Region != region {
+		t.Fatalf("item region = %#v, want %#v", item.Region, region)
+	}
+	if scrolls == 0 {
+		t.Fatal("scroll automation was not attempted")
+	}
+
+	snapshot, err := service.QueueRecognizeScreenshot(item.ID)
+	if err != nil {
+		t.Fatalf("QueueRecognizeScreenshot() error = %v", err)
+	}
+	if snapshot.Request.SourceKind != ocr.SourceRegionScreenshot {
+		t.Fatalf("OCR source kind = %q, want region-screenshot for no-scroll fallback", snapshot.Request.SourceKind)
+	}
+	if snapshot.Request.SourceID != item.ID || snapshot.Request.ImagePath != item.Path {
+		t.Fatalf("OCR request = %#v, want fallback screenshot item path/id", snapshot.Request)
+	}
+	history, err := service.loadScreenshotHistory()
+	if err != nil {
+		t.Fatalf("loadScreenshotHistory() error = %v", err)
+	}
+	if len(history) != 1 || history[0].ID != item.ID {
+		t.Fatalf("history = %#v, want fallback screenshot item", history)
+	}
+	if history[0].Mode != "region" || history[0].OCRStatus != ocr.ResultStatusQueued || history[0].OCRLanguage != "zh-en" {
+		t.Fatalf("fallback OCR history = %#v, want queued region screenshot OCR", history[0])
+	}
+	waitForOCRJobTerminal(t, service.ocr, snapshot.JobID)
+}
+
 func testPNGDataURL(t *testing.T, width int, height int) string {
 	t.Helper()
 	img := testPatternImage(width, height)
@@ -899,6 +1859,462 @@ func testPNGDataURL(t *testing.T, width int, height int) string {
 		t.Fatalf("png.Encode() error = %v", err)
 	}
 	return whiteboardPNGContentPrefix + base64.StdEncoding.EncodeToString(buffer.Bytes())
+}
+
+type ocrRealWorkerSmokeFixture struct {
+	service      *RecordingFreedomService
+	root         string
+	workerTarget string
+	smokeImage   image.Image
+}
+
+func newOCRRealWorkerSmokeFixture(t *testing.T) ocrRealWorkerSmokeFixture {
+	t.Helper()
+	repoRoot := mustRepoRoot(t)
+	target := runtime.GOOS + "-" + runtime.GOARCH
+	workerName := "rf-ocr-worker"
+	if runtime.GOOS == "windows" {
+		workerName += ".exe"
+	}
+	workerSource := strings.TrimSpace(os.Getenv("RF_OCR_WORKER_PATH"))
+	if workerSource == "" {
+		workerSource = filepath.Join(repoRoot, "app", "tools", "ocr-worker", target, workerName)
+	}
+	runtimeSource := strings.TrimSpace(os.Getenv("RF_OCR_RUNTIME_DIR"))
+	if runtimeSource == "" {
+		runtimeSource = filepath.Join(repoRoot, "app", "tools", "onnxruntime", target)
+	}
+	modelPackage := strings.TrimSpace(os.Getenv("RF_OCR_MODEL_PACKAGE"))
+	if modelPackage == "" {
+		modelPackage = newestModelPackageForSmoke(t, filepath.Join(repoRoot, "release-out", "ocr-models"))
+	}
+	requireSmokeFile(t, workerSource)
+	requireSmokeDir(t, runtimeSource)
+	requireSmokeFile(t, modelPackage)
+
+	data := appdata.NewService(t.TempDir())
+	service := NewRecordingFreedomService()
+	service.appData = data
+	service.settings = settings.NewService(data)
+	service.ocr = ocr.NewService(data)
+	service.startOCRJobEventPump()
+	root, err := data.RootDir()
+	if err != nil {
+		t.Fatalf("RootDir() error = %v", err)
+	}
+	workerTarget := filepath.Join(root, "tools", "ocr-worker", target, workerName)
+	copySmokeFile(t, workerSource, workerTarget)
+	copySmokeDir(t, runtimeSource, filepath.Join(root, "tools", "onnxruntime", target))
+
+	installedModel, err := service.InstallOcrModelPackage(modelPackage)
+	if err != nil {
+		t.Fatalf("InstallOcrModelPackage() error = %v", err)
+	}
+	if installedModel.ID == "" {
+		t.Fatalf("InstallOcrModelPackage() returned empty model id for %s", modelPackage)
+	}
+	if status, err := service.SetActiveOcrModel(installedModel.ID); err != nil {
+		t.Fatalf("SetActiveOcrModel(%s) error = %v", installedModel.ID, err)
+	} else if status.Status != ocr.StatusReady {
+		t.Fatalf("OCR status = %#v, want ready real worker status", status)
+	}
+
+	smokeImagePath := filepath.Join(root, "data", "models", "ocr", installedModel.ID, "smoke.png")
+	return ocrRealWorkerSmokeFixture{
+		service:      service,
+		root:         root,
+		workerTarget: workerTarget,
+		smokeImage:   readSmokeImage(t, smokeImagePath),
+	}
+}
+
+func mustRepoRoot(t *testing.T) string {
+	t.Helper()
+	wd, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("Getwd() error = %v", err)
+	}
+	for {
+		if _, err := os.Stat(filepath.Join(wd, "third_party", "ocr-models", "manifest.json")); err == nil {
+			return wd
+		}
+		parent := filepath.Dir(wd)
+		if parent == wd {
+			t.Fatalf("could not locate repository root from %s", wd)
+		}
+		wd = parent
+	}
+}
+
+func newestModelPackageForSmoke(t *testing.T, dir string) string {
+	t.Helper()
+	matches, err := filepath.Glob(filepath.Join(dir, "ppocrv5-mobile-zh-en-*.zip"))
+	if err != nil {
+		t.Fatalf("Glob(model packages) error = %v", err)
+	}
+	if len(matches) == 0 {
+		t.Fatalf("no OCR model package found under %s; run scripts/run-local-ocr-smoke.ps1 first or set RF_OCR_MODEL_PACKAGE", dir)
+	}
+	newest := matches[0]
+	newestInfo, err := os.Stat(newest)
+	if err != nil {
+		t.Fatalf("Stat(%s) error = %v", newest, err)
+	}
+	for _, match := range matches[1:] {
+		info, err := os.Stat(match)
+		if err != nil {
+			t.Fatalf("Stat(%s) error = %v", match, err)
+		}
+		if info.ModTime().After(newestInfo.ModTime()) {
+			newest = match
+			newestInfo = info
+		}
+	}
+	return newest
+}
+
+func requireSmokeFile(t *testing.T, path string) {
+	t.Helper()
+	info, err := os.Stat(path)
+	if err != nil {
+		t.Fatalf("required OCR smoke file is unavailable at %s: %v", path, err)
+	}
+	if info.IsDir() {
+		t.Fatalf("required OCR smoke file path is a directory: %s", path)
+	}
+}
+
+func requireSmokeDir(t *testing.T, path string) {
+	t.Helper()
+	info, err := os.Stat(path)
+	if err != nil {
+		t.Fatalf("required OCR smoke directory is unavailable at %s: %v", path, err)
+	}
+	if !info.IsDir() {
+		t.Fatalf("required OCR smoke directory path is not a directory: %s", path)
+	}
+}
+
+func copySmokeFile(t *testing.T, source string, target string) {
+	t.Helper()
+	info, err := os.Stat(source)
+	if err != nil {
+		t.Fatalf("Stat(%s) error = %v", source, err)
+	}
+	data, err := os.ReadFile(source)
+	if err != nil {
+		t.Fatalf("ReadFile(%s) error = %v", source, err)
+	}
+	if err := os.MkdirAll(filepath.Dir(target), 0o755); err != nil {
+		t.Fatalf("MkdirAll(%s) error = %v", filepath.Dir(target), err)
+	}
+	if err := os.WriteFile(target, data, info.Mode()); err != nil {
+		t.Fatalf("WriteFile(%s) error = %v", target, err)
+	}
+}
+
+func copySmokeDir(t *testing.T, source string, target string) {
+	t.Helper()
+	entries, err := os.ReadDir(source)
+	if err != nil {
+		t.Fatalf("ReadDir(%s) error = %v", source, err)
+	}
+	if err := os.MkdirAll(target, 0o755); err != nil {
+		t.Fatalf("MkdirAll(%s) error = %v", target, err)
+	}
+	for _, entry := range entries {
+		sourcePath := filepath.Join(source, entry.Name())
+		targetPath := filepath.Join(target, entry.Name())
+		if entry.IsDir() {
+			copySmokeDir(t, sourcePath, targetPath)
+			continue
+		}
+		copySmokeFile(t, sourcePath, targetPath)
+	}
+}
+
+func readSmokeImage(t *testing.T, path string) image.Image {
+	t.Helper()
+	file, err := os.Open(path)
+	if err != nil {
+		t.Fatalf("Open(%s) error = %v", path, err)
+	}
+	defer file.Close()
+	img, _, err := image.Decode(file)
+	if err != nil {
+		t.Fatalf("Decode(%s) error = %v", path, err)
+	}
+	return img
+}
+
+func buildLongOCRSmokeImage(t *testing.T, source image.Image, minHeight int) image.Image {
+	t.Helper()
+	bounds := source.Bounds()
+	width := bounds.Dx()
+	height := bounds.Dy()
+	if width <= 0 || height <= 0 {
+		t.Fatalf("source smoke image has invalid bounds: %v", bounds)
+	}
+	repeats := (minHeight + height - 1) / height
+	if repeats < 2 {
+		repeats = 2
+	}
+	out := image.NewRGBA(image.Rect(0, 0, width, height*repeats))
+	for index := 0; index < repeats; index++ {
+		target := image.Rect(0, index*height, width, (index+1)*height)
+		imagedraw.Draw(out, target, source, bounds.Min, imagedraw.Src)
+	}
+	return out
+}
+
+type screenshotOCRSmokeEvidence struct {
+	Scenario              string      `json:"scenario,omitempty"`
+	Mode                  string      `json:"mode"`
+	SourceKind            string      `json:"sourceKind"`
+	SourceID              string      `json:"sourceId"`
+	SourceImagePath       string      `json:"sourceImagePath,omitempty"`
+	ElementID             string      `json:"elementId,omitempty"`
+	ScreenshotPath        string      `json:"screenshotPath"`
+	ResultID              string      `json:"resultId"`
+	ResultImage           string      `json:"resultImage"`
+	EvidenceImage         string      `json:"evidenceImage,omitempty"`
+	EvidenceOverlay       string      `json:"evidenceOverlay,omitempty"`
+	ImageWidth            int         `json:"imageWidth"`
+	ImageHeight           int         `json:"imageHeight"`
+	ModelID               string      `json:"modelId"`
+	Language              string      `json:"language"`
+	PlainText             string      `json:"plainText"`
+	BlockCount            int         `json:"blockCount"`
+	Blocks                []ocr.Block `json:"blocks"`
+	CacheHitWithoutWorker bool        `json:"cacheHitWithoutWorker,omitempty"`
+	CachedResultID        string      `json:"cachedResultId,omitempty"`
+	QueuedCacheHit        bool        `json:"queuedCacheHit,omitempty"`
+	QueuedCacheResultID   string      `json:"queuedCacheResultId,omitempty"`
+}
+
+func writeScreenshotOCRSmokeEvidence(t *testing.T, evidence []screenshotOCRSmokeEvidence) {
+	t.Helper()
+	dir := strings.TrimSpace(os.Getenv("RF_OCR_EVIDENCE_DIR"))
+	if dir == "" {
+		return
+	}
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatalf("MkdirAll(RF_OCR_EVIDENCE_DIR=%s) error = %v", dir, err)
+	}
+	for index := range evidence {
+		stem := evidence[index].Mode
+		if strings.TrimSpace(evidence[index].Scenario) != "" {
+			stem = evidence[index].Scenario
+		}
+		imagePath := filepath.Join(dir, stem+".png")
+		copySmokeFile(t, evidence[index].ResultImage, imagePath)
+		evidence[index].EvidenceImage = imagePath
+		overlayPath := filepath.Join(dir, stem+"-ocr-overlay.png")
+		writeScreenshotOCRSmokeOverlay(t, evidence[index].ResultImage, overlayPath, evidence[index].Blocks)
+		evidence[index].EvidenceOverlay = overlayPath
+	}
+	path := filepath.Join(dir, "screenshot-ocr-real-worker-smoke.json")
+	data, err := json.MarshalIndent(struct {
+		SchemaVersion int                          `json:"schemaVersion"`
+		GeneratedAt   string                       `json:"generatedAt"`
+		Entries       []screenshotOCRSmokeEvidence `json:"entries"`
+	}{
+		SchemaVersion: 1,
+		GeneratedAt:   time.Now().UTC().Format(time.RFC3339Nano),
+		Entries:       evidence,
+	}, "", "  ")
+	if err != nil {
+		t.Fatalf("MarshalIndent(screenshot OCR smoke evidence) error = %v", err)
+	}
+	if err := os.WriteFile(path, append(data, '\n'), 0o644); err != nil {
+		t.Fatalf("WriteFile(%s) error = %v", path, err)
+	}
+	t.Logf("wrote screenshot OCR smoke evidence: %s", path)
+}
+
+func writeWhiteboardOCRSmokeEvidence(t *testing.T, evidence []screenshotOCRSmokeEvidence) {
+	t.Helper()
+	dir := strings.TrimSpace(os.Getenv("RF_OCR_EVIDENCE_DIR"))
+	if dir == "" {
+		return
+	}
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatalf("MkdirAll(RF_OCR_EVIDENCE_DIR=%s) error = %v", dir, err)
+	}
+	for index := range evidence {
+		stem := evidence[index].Mode
+		if strings.TrimSpace(evidence[index].Scenario) != "" {
+			stem = evidence[index].Scenario
+		}
+		imagePath := filepath.Join(dir, stem+".png")
+		copySmokeFile(t, evidence[index].ResultImage, imagePath)
+		evidence[index].EvidenceImage = imagePath
+		overlayPath := filepath.Join(dir, stem+"-ocr-overlay.png")
+		writeScreenshotOCRSmokeOverlay(t, evidence[index].ResultImage, overlayPath, evidence[index].Blocks)
+		evidence[index].EvidenceOverlay = overlayPath
+	}
+	path := filepath.Join(dir, "whiteboard-ocr-real-worker-smoke.json")
+	data, err := json.MarshalIndent(struct {
+		SchemaVersion int                          `json:"schemaVersion"`
+		GeneratedAt   string                       `json:"generatedAt"`
+		Entries       []screenshotOCRSmokeEvidence `json:"entries"`
+	}{
+		SchemaVersion: 1,
+		GeneratedAt:   time.Now().UTC().Format(time.RFC3339Nano),
+		Entries:       evidence,
+	}, "", "  ")
+	if err != nil {
+		t.Fatalf("MarshalIndent(whiteboard OCR smoke evidence) error = %v", err)
+	}
+	if err := os.WriteFile(path, append(data, '\n'), 0o644); err != nil {
+		t.Fatalf("WriteFile(%s) error = %v", path, err)
+	}
+	t.Logf("wrote whiteboard OCR smoke evidence: %s", path)
+}
+
+func writeScreenshotOCRSmokeOverlay(t *testing.T, source string, target string, blocks []ocr.Block) {
+	t.Helper()
+	file, err := os.Open(source)
+	if err != nil {
+		t.Fatalf("Open(%s) error = %v", source, err)
+	}
+	defer file.Close()
+	img, _, err := image.Decode(file)
+	if err != nil {
+		t.Fatalf("Decode(%s) error = %v", source, err)
+	}
+	bounds := img.Bounds()
+	out := image.NewRGBA(bounds)
+	imagedraw.Draw(out, bounds, img, bounds.Min, imagedraw.Src)
+	red := color.RGBA{R: 236, G: 54, B: 54, A: 255}
+	for _, block := range blocks {
+		minX, minY, maxX, maxY, ok := ocrBlockPixelBounds(block, bounds)
+		if ok {
+			drawOCRSmokeRect(out, minX, minY, maxX, maxY, red)
+		}
+	}
+	if err := os.MkdirAll(filepath.Dir(target), 0o755); err != nil {
+		t.Fatalf("MkdirAll(%s) error = %v", filepath.Dir(target), err)
+	}
+	outFile, err := os.Create(target)
+	if err != nil {
+		t.Fatalf("Create(%s) error = %v", target, err)
+	}
+	defer outFile.Close()
+	if err := png.Encode(outFile, out); err != nil {
+		t.Fatalf("Encode(%s) error = %v", target, err)
+	}
+}
+
+func ocrBlockPixelBounds(block ocr.Block, bounds image.Rectangle) (int, int, int, int, bool) {
+	if len(block.Box) == 0 {
+		return 0, 0, 0, 0, false
+	}
+	minX, maxX := block.Box[0].X, block.Box[0].X
+	minY, maxY := block.Box[0].Y, block.Box[0].Y
+	for _, point := range block.Box[1:] {
+		if point.X < minX {
+			minX = point.X
+		}
+		if point.X > maxX {
+			maxX = point.X
+		}
+		if point.Y < minY {
+			minY = point.Y
+		}
+		if point.Y > maxY {
+			maxY = point.Y
+		}
+	}
+	left := clampOCRSmokeCoordinate(int(minX+0.5), bounds.Min.X, bounds.Max.X-1)
+	top := clampOCRSmokeCoordinate(int(minY+0.5), bounds.Min.Y, bounds.Max.Y-1)
+	right := clampOCRSmokeCoordinate(int(maxX+0.5), bounds.Min.X, bounds.Max.X-1)
+	bottom := clampOCRSmokeCoordinate(int(maxY+0.5), bounds.Min.Y, bounds.Max.Y-1)
+	if right <= left || bottom <= top {
+		return 0, 0, 0, 0, false
+	}
+	return left, top, right, bottom, true
+}
+
+func clampOCRSmokeCoordinate(value int, minValue int, maxValue int) int {
+	if value < minValue {
+		return minValue
+	}
+	if value > maxValue {
+		return maxValue
+	}
+	return value
+}
+
+func drawOCRSmokeRect(img *image.RGBA, left int, top int, right int, bottom int, c color.RGBA) {
+	const thickness = 3
+	for offset := 0; offset < thickness; offset++ {
+		for x := left; x <= right; x++ {
+			img.Set(x, top+offset, c)
+			img.Set(x, bottom-offset, c)
+		}
+		for y := top; y <= bottom; y++ {
+			img.Set(left+offset, y, c)
+			img.Set(right-offset, y, c)
+		}
+	}
+}
+
+func waitForScreenshotOCRReady(t *testing.T, service *RecordingFreedomService, items []ScreenshotItem, timeout time.Duration) []ScreenshotItem {
+	t.Helper()
+	want := map[string]bool{}
+	for _, item := range items {
+		want[item.ID] = true
+	}
+	deadline := time.Now().Add(timeout)
+	var last []ScreenshotItem
+	for time.Now().Before(deadline) {
+		history, err := service.loadScreenshotHistory()
+		if err != nil {
+			t.Fatalf("loadScreenshotHistory() error = %v", err)
+		}
+		last = history
+		ready := make([]ScreenshotItem, 0, len(items))
+		for _, item := range history {
+			if !want[item.ID] {
+				continue
+			}
+			if item.OCRStatus == ocr.ResultStatusFailed {
+				t.Fatalf("screenshot %s OCR failed: %s", item.ID, item.OCRError)
+			}
+			if item.OCRStatus == ocr.ResultStatusReady && item.OCRResultID != "" {
+				ready = append(ready, item)
+			}
+		}
+		if len(ready) == len(items) {
+			return ready
+		}
+		time.Sleep(50 * time.Millisecond)
+	}
+	t.Fatalf("timed out waiting for real OCR screenshot smoke; last history = %#v", last)
+	return nil
+}
+
+func waitForOCRJobTerminal(t *testing.T, service *ocr.Service, jobID string) {
+	t.Helper()
+	if service == nil {
+		t.Fatal("OCR service is nil")
+	}
+	deadline := time.After(2 * time.Second)
+	for {
+		select {
+		case event := <-service.Events():
+			if event.JobID != jobID {
+				continue
+			}
+			switch event.Status {
+			case ocr.ResultStatusReady, ocr.ResultStatusFailed, ocr.ResultStatusCancelled:
+				return
+			}
+		case <-deadline:
+			t.Fatalf("timed out waiting for OCR job %q to settle", jobID)
+		}
+	}
 }
 
 func testPatternImage(width int, height int) *image.RGBA {

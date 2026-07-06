@@ -10,6 +10,9 @@ import type { Events } from "@wailsio/runtime";
 import type * as main$0 from "../../../../lemon-casino/RecordingFreedom/app/models.js";
 // eslint-disable-next-line @typescript-eslint/ban-ts-comment
 // @ts-ignore: Unused imports
+import type * as ocr$0 from "../../../../lemon-casino/RecordingFreedom/app/internal/ocr/models.js";
+// eslint-disable-next-line @typescript-eslint/ban-ts-comment
+// @ts-ignore: Unused imports
 import type * as recording$0 from "../../../../lemon-casino/RecordingFreedom/app/internal/recording/models.js";
 // eslint-disable-next-line @typescript-eslint/ban-ts-comment
 // @ts-ignore: Unused imports
@@ -24,8 +27,18 @@ declare module "@wailsio/runtime" {
             "floating.panel.changed": main$0.FloatingPanelState;
             "floating.select.changed": main$0.FloatingSelectState;
             "floating.select.chosen": main$0.FloatingSelectChosenEvent;
+            "ocr.job.cancelled": main$0.OcrJobEvent;
+            "ocr.job.failed": main$0.OcrJobEvent;
+            "ocr.job.finished": main$0.OcrJobEvent;
+            "ocr.job.queued": main$0.OcrJobEvent;
+            "ocr.job.started": main$0.OcrJobEvent;
+            "ocr.model.download.changed": ocr$0.ModelDownloadEvent;
+            "ocr.model.failed": main$0.OcrModelEvent;
+            "ocr.model.installed": main$0.OcrModelEvent;
+            "ocr.status.changed": ocr$0.Status;
             "recording.status": recording$0.StatusEvent;
             "screenshot.captured": main$0.ScreenshotCapturedEvent;
+            "screenshot.history.changed": main$0.ScreenshotHistoryResult;
             "screenshot.pin": main$0.ScreenshotPinEvent;
             "screenshot.whiteboard": main$0.ScreenshotWhiteboardContext;
             "settings.changed": settings$0.Settings;

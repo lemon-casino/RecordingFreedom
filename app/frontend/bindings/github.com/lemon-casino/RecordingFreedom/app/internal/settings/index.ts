@@ -10,6 +10,8 @@ export {
 export type {
     AudioSettings,
     CameraSettings,
+    OCRSettings,
+    OCRTranslationSettings,
     RecordingSettings,
     Settings,
     ShortcutSettings,

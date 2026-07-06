@@ -111,6 +111,14 @@ jobs:
         working-directory: ${{ env.APP_DIR }}
         run: go run -tags gtk3 ./cmd/preview-smoke
 
+      - name: Run OCR translation smoke
+        working-directory: ${{ env.APP_DIR }}
+        run: go run -tags gtk3 ./cmd/ocr-translation-smoke
+
+      - name: Run OCR secret store smoke
+        working-directory: ${{ env.APP_DIR }}
+        run: go run ./cmd/ocr-secret-store-smoke
+
       - name: Prepare Linux FFmpeg tools for PIP export smoke
         run: ./scripts/ensure-unix-ffmpeg.sh --platform linux --arch x64 --force
 
@@ -258,6 +266,16 @@ jobs:
         shell: bash
         run: ./scripts/ensure-unix-ffmpeg.sh --platform "${{ matrix.platform }}" --arch "${{ matrix.ffmpeg_arch }}" --force
 
+      - name: Prepare Windows ONNX Runtime
+        if: matrix.platform == 'windows'
+        shell: pwsh
+        run: ./scripts/ensure-windows-onnxruntime.ps1 -Architecture "${{ matrix.ffmpeg_arch }}" -Force
+
+      - name: Prepare Unix ONNX Runtime
+        if: matrix.platform == 'macos' || matrix.platform == 'linux'
+        shell: bash
+        run: ./scripts/ensure-unix-onnxruntime.sh --platform "${{ matrix.platform }}" --arch "${{ matrix.ffmpeg_arch }}" --force
+
       - name: Build Windows RNNoise dynamic module
         if: matrix.platform == 'windows'
         shell: pwsh
@@ -277,6 +295,61 @@ jobs:
             cgo_enabled="${{ matrix.cgo_enabled }}"
           fi
           CGO_ENABLED="${cgo_enabled}" go test -tags "${RNNOISE_TAG}" ./internal/audio/rnnoise
+
+      - name: Run platform OCR secret store smoke
+        working-directory: ${{ env.APP_DIR }}
+        shell: bash
+        run: |
+          cgo_enabled="1"
+          if [ "${{ matrix.platform }}" = "windows" ]; then
+            cgo_enabled="${{ matrix.cgo_enabled }}"
+          fi
+          CGO_ENABLED="${cgo_enabled}" go run ./cmd/ocr-secret-store-smoke -evidence-dir "../release-out/ocr-secret-store-smoke/${{ matrix.name }}"
+
+      - name: Build OCR worker
+        working-directory: ${{ env.APP_DIR }}
+        shell: bash
+        run: |
+          worker_goos="${{ matrix.platform }}"
+          if [ "${worker_goos}" = "macos" ]; then
+            worker_goos="darwin"
+          fi
+          ext=""
+          if [ "${worker_goos}" = "windows" ]; then
+            ext=".exe"
+          fi
+          worker_dir="tools/ocr-worker/${worker_goos}-${{ matrix.arch }}"
+          mkdir -p "${worker_dir}"
+          CGO_ENABLED=0 GOOS="${worker_goos}" GOARCH="${{ matrix.arch }}" go build -trimpath -ldflags "-w -s" -o "${worker_dir}/rf-ocr-worker${ext}" "./cmd/ocr-worker"
+
+      - name: Build stable OCR model package for platform smoke
+        working-directory: ${{ env.APP_DIR }}
+        run: go run ./cmd/ocr-model-package -model ppocrv5-mobile-zh-en -output "../release-out/ocr-worker-platform-smoke/${{ matrix.name }}/models" -force
+
+      - name: Run platform OCR worker stable smoke
+        working-directory: ${{ env.APP_DIR }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          worker_goos="${{ matrix.platform }}"
+          if [ "${worker_goos}" = "macos" ]; then
+            worker_goos="darwin"
+          fi
+          ext=""
+          if [ "${worker_goos}" = "windows" ]; then
+            ext=".exe"
+          fi
+          model_zip="$(find "../release-out/ocr-worker-platform-smoke/${{ matrix.name }}/models" -maxdepth 1 -type f -name 'ppocrv5-mobile-zh-en-*.zip' -print -quit)"
+          if [ -z "${model_zip}" ]; then
+            echo "Stable OCR model package was not produced for platform smoke." >&2
+            exit 1
+          fi
+          go run ./cmd/ocr-worker-platform-smoke \
+            -worker-path "tools/ocr-worker/${worker_goos}-${{ matrix.arch }}/rf-ocr-worker${ext}" \
+            -runtime-dir "tools/onnxruntime/${worker_goos}-${{ matrix.arch }}" \
+            -model-package "${model_zip}" \
+            -evidence-dir "../release-out/ocr-worker-platform-smoke/${{ matrix.name }}"
+          test -s "../release-out/ocr-worker-platform-smoke/${{ matrix.name }}/ocr-worker-platform-smoke.json"
 
       - name: Build app
         working-directory: ${{ env.APP_DIR }}
@@ -332,6 +405,12 @@ jobs:
           CGO_ENABLED="${cgo_enabled}" go build "${tag_args[@]}" -trimpath -ldflags "-w -s" -o "bin/pip-export-smoke${ext}" "./cmd/pip-export-smoke"
           CGO_ENABLED="${cgo_enabled}" go build "${tag_args[@]}" -trimpath -ldflags "-w -s" -o "bin/annotation-export-smoke${ext}" "./cmd/annotation-export-smoke"
           CGO_ENABLED="${cgo_enabled}" go build "${tag_args[@]}" -trimpath -ldflags "-w -s" -o "bin/annotation-overlay-evidence-check${ext}" "./cmd/annotation-overlay-evidence-check"
+          CGO_ENABLED="${cgo_enabled}" go build -trimpath -ldflags "-w -s" -o "bin/ocr-desktop-evidence-export${ext}" "./cmd/ocr-desktop-evidence-export"
+          CGO_ENABLED="${cgo_enabled}" go build -trimpath -ldflags "-w -s" -o "bin/ocr-desktop-evidence-check${ext}" "./cmd/ocr-desktop-evidence-check"
+          CGO_ENABLED="${cgo_enabled}" go build -trimpath -ldflags "-w -s" -o "bin/ocr-desktop-evidence-plan${ext}" "./cmd/ocr-desktop-evidence-plan"
+          CGO_ENABLED="${cgo_enabled}" go build -trimpath -ldflags "-w -s" -o "bin/ocr-desktop-evidence-session${ext}" "./cmd/ocr-desktop-evidence-session"
+          CGO_ENABLED="${cgo_enabled}" go build -trimpath -ldflags "-w -s" -o "bin/ocr-translation-smoke${ext}" "./cmd/ocr-translation-smoke"
+          CGO_ENABLED="${cgo_enabled}" go build -trimpath -ldflags "-w -s" -o "bin/ocr-secret-store-smoke${ext}" "./cmd/ocr-secret-store-smoke"
 
       - name: Run desktop dependency doctor
         working-directory: ${{ env.APP_DIR }}
@@ -369,12 +448,22 @@ jobs:
             cp "${APP_DIR}/tools/rnnoise.dll" "${portable_dir}/tools/rnnoise.dll"
             cp "${APP_DIR}/tools/THIRD_PARTY_FFMPEG.txt" "${portable_dir}/tools/THIRD_PARTY_FFMPEG.txt"
             cp "${APP_DIR}/tools/THIRD_PARTY_NOTICES.txt" "${portable_dir}/tools/THIRD_PARTY_NOTICES.txt"
+            mkdir -p "${portable_dir}/tools/ocr-worker/windows-${{ matrix.arch }}"
+            cp "${APP_DIR}/tools/ocr-worker/windows-${{ matrix.arch }}/rf-ocr-worker.exe" "${portable_dir}/tools/ocr-worker/windows-${{ matrix.arch }}/rf-ocr-worker.exe"
+            mkdir -p "${portable_dir}/tools/onnxruntime"
+            cp -R "${APP_DIR}/tools/onnxruntime/windows-${{ matrix.arch }}" "${portable_dir}/tools/onnxruntime/windows-${{ matrix.arch }}"
             cp "${APP_DIR}/bin/desktop-doctor.exe" "${portable_dir}/tools/desktop-doctor.exe"
             cp "${APP_DIR}/bin/video-smoke.exe" "${portable_dir}/tools/video-smoke.exe"
             cp "${APP_DIR}/bin/audio-smoke.exe" "${portable_dir}/tools/audio-smoke.exe"
             cp "${APP_DIR}/bin/pip-export-smoke.exe" "${portable_dir}/tools/pip-export-smoke.exe"
             cp "${APP_DIR}/bin/annotation-export-smoke.exe" "${portable_dir}/tools/annotation-export-smoke.exe"
             cp "${APP_DIR}/bin/annotation-overlay-evidence-check.exe" "${portable_dir}/tools/annotation-overlay-evidence-check.exe"
+            cp "${APP_DIR}/bin/ocr-desktop-evidence-export.exe" "${portable_dir}/tools/ocr-desktop-evidence-export.exe"
+            cp "${APP_DIR}/bin/ocr-desktop-evidence-check.exe" "${portable_dir}/tools/ocr-desktop-evidence-check.exe"
+            cp "${APP_DIR}/bin/ocr-desktop-evidence-plan.exe" "${portable_dir}/tools/ocr-desktop-evidence-plan.exe"
+            cp "${APP_DIR}/bin/ocr-desktop-evidence-session.exe" "${portable_dir}/tools/ocr-desktop-evidence-session.exe"
+            cp "${APP_DIR}/bin/ocr-translation-smoke.exe" "${portable_dir}/tools/ocr-translation-smoke.exe"
+            cp "${APP_DIR}/bin/ocr-secret-store-smoke.exe" "${portable_dir}/tools/ocr-secret-store-smoke.exe"
             cp "scripts/run-windows-portable-smoke.ps1" "${portable_dir}/tools/run-windows-portable-smoke.ps1"
             powershell -NoProfile -Command "Compress-Archive -Path '${portable_dir}/*' -DestinationPath 'release-out/RecordingFreedom-${{ matrix.name }}-${{ github.ref_name }}-portable.zip' -Force"
             rm -rf "${portable_dir}"
@@ -390,9 +479,25 @@ jobs:
               echo "No macOS app bundle was produced at ${app_path}." >&2
               exit 1
             fi
+            worker_dir="${app_path}/Contents/MacOS/tools/ocr-worker/darwin-${{ matrix.arch }}"
+            mkdir -p "${worker_dir}"
+            cp "${APP_DIR}/tools/ocr-worker/darwin-${{ matrix.arch }}/rf-ocr-worker" "${worker_dir}/rf-ocr-worker"
+            chmod +x "${worker_dir}/rf-ocr-worker"
             stage_dir="release-out/RecordingFreedom-${{ matrix.name }}-${{ github.ref_name }}"
             mkdir -p "${stage_dir}"
             cp -R "${app_path}" "${stage_dir}/RecordingFreedom.app"
+            cp "${APP_DIR}/bin/ocr-desktop-evidence-export" "${stage_dir}/RecordingFreedom.app/Contents/MacOS/tools/ocr-desktop-evidence-export"
+            chmod +x "${stage_dir}/RecordingFreedom.app/Contents/MacOS/tools/ocr-desktop-evidence-export"
+            cp "${APP_DIR}/bin/ocr-desktop-evidence-check" "${stage_dir}/RecordingFreedom.app/Contents/MacOS/tools/ocr-desktop-evidence-check"
+            chmod +x "${stage_dir}/RecordingFreedom.app/Contents/MacOS/tools/ocr-desktop-evidence-check"
+            cp "${APP_DIR}/bin/ocr-desktop-evidence-plan" "${stage_dir}/RecordingFreedom.app/Contents/MacOS/tools/ocr-desktop-evidence-plan"
+            chmod +x "${stage_dir}/RecordingFreedom.app/Contents/MacOS/tools/ocr-desktop-evidence-plan"
+            cp "${APP_DIR}/bin/ocr-desktop-evidence-session" "${stage_dir}/RecordingFreedom.app/Contents/MacOS/tools/ocr-desktop-evidence-session"
+            chmod +x "${stage_dir}/RecordingFreedom.app/Contents/MacOS/tools/ocr-desktop-evidence-session"
+            cp "${APP_DIR}/bin/ocr-translation-smoke" "${stage_dir}/RecordingFreedom.app/Contents/MacOS/tools/ocr-translation-smoke"
+            chmod +x "${stage_dir}/RecordingFreedom.app/Contents/MacOS/tools/ocr-translation-smoke"
+            cp "${APP_DIR}/bin/ocr-secret-store-smoke" "${stage_dir}/RecordingFreedom.app/Contents/MacOS/tools/ocr-secret-store-smoke"
+            chmod +x "${stage_dir}/RecordingFreedom.app/Contents/MacOS/tools/ocr-secret-store-smoke"
             ditto -c -k --sequesterRsrc --keepParent "${stage_dir}/RecordingFreedom.app" "release-out/RecordingFreedom-${{ matrix.name }}-${{ github.ref_name }}-app.zip"
             rm -rf "${stage_dir}"
           else
@@ -404,18 +509,28 @@ jobs:
             cp "${APP_DIR}/tools/librnnoise.so" "${portable_dir}/tools/librnnoise.so"
             cp "${APP_DIR}/tools/THIRD_PARTY_FFMPEG.txt" "${portable_dir}/tools/THIRD_PARTY_FFMPEG.txt"
             cp "${APP_DIR}/tools/THIRD_PARTY_NOTICES.txt" "${portable_dir}/tools/THIRD_PARTY_NOTICES.txt"
+            mkdir -p "${portable_dir}/tools/ocr-worker/linux-${{ matrix.arch }}"
+            cp "${APP_DIR}/tools/ocr-worker/linux-${{ matrix.arch }}/rf-ocr-worker" "${portable_dir}/tools/ocr-worker/linux-${{ matrix.arch }}/rf-ocr-worker"
+            mkdir -p "${portable_dir}/tools/onnxruntime"
+            cp -R "${APP_DIR}/tools/onnxruntime/linux-${{ matrix.arch }}" "${portable_dir}/tools/onnxruntime/linux-${{ matrix.arch }}"
             cp "${APP_DIR}/bin/desktop-doctor" "${portable_dir}/tools/desktop-doctor"
             cp "${APP_DIR}/bin/video-smoke" "${portable_dir}/tools/video-smoke"
             cp "${APP_DIR}/bin/audio-smoke" "${portable_dir}/tools/audio-smoke"
             cp "${APP_DIR}/bin/pip-export-smoke" "${portable_dir}/tools/pip-export-smoke"
             cp "${APP_DIR}/bin/annotation-export-smoke" "${portable_dir}/tools/annotation-export-smoke"
             cp "${APP_DIR}/bin/annotation-overlay-evidence-check" "${portable_dir}/tools/annotation-overlay-evidence-check"
+            cp "${APP_DIR}/bin/ocr-desktop-evidence-export" "${portable_dir}/tools/ocr-desktop-evidence-export"
+            cp "${APP_DIR}/bin/ocr-desktop-evidence-check" "${portable_dir}/tools/ocr-desktop-evidence-check"
+            cp "${APP_DIR}/bin/ocr-desktop-evidence-plan" "${portable_dir}/tools/ocr-desktop-evidence-plan"
+            cp "${APP_DIR}/bin/ocr-desktop-evidence-session" "${portable_dir}/tools/ocr-desktop-evidence-session"
+            cp "${APP_DIR}/bin/ocr-translation-smoke" "${portable_dir}/tools/ocr-translation-smoke"
+            cp "${APP_DIR}/bin/ocr-secret-store-smoke" "${portable_dir}/tools/ocr-secret-store-smoke"
             if [ -f "${APP_DIR}/build/linux/recordingfreedom.desktop" ]; then
               cp "${APP_DIR}/build/linux/recordingfreedom.desktop" "${portable_dir}/recordingfreedom.desktop"
             else
               cp "${APP_DIR}/build/linux/desktop" "${portable_dir}/recordingfreedom.desktop"
             fi
-            chmod +x "${portable_dir}/recordingfreedom" "${portable_dir}/tools/ffmpeg" "${portable_dir}/tools/ffprobe" "${portable_dir}/tools/"*
+            chmod +x "${portable_dir}/recordingfreedom" "${portable_dir}/tools/ffmpeg" "${portable_dir}/tools/ffprobe" "${portable_dir}/tools/"* "${portable_dir}/tools/ocr-worker/linux-${{ matrix.arch }}/rf-ocr-worker"
             tar -C release-out -czf "release-out/RecordingFreedom-${{ matrix.name }}-${{ github.ref_name }}-portable.tar.gz" "$(basename "${portable_dir}")"
             rm -rf "${portable_dir}"
           fi
@@ -439,22 +554,44 @@ jobs:
       - name: Verify Windows portable artifact
         if: matrix.platform == 'windows'
         shell: pwsh
-        run: ./scripts/verify-windows-portable.ps1 -ZipPath "release-out/RecordingFreedom-${{ matrix.name }}-${{ github.ref_name }}-portable.zip" -Architecture "${{ matrix.ffmpeg_arch }}"
+        run: |
+          $modelZip = Get-ChildItem -LiteralPath "release-out/ocr-worker-platform-smoke/${{ matrix.name }}/models" -Filter "ppocrv5-mobile-zh-en-*.zip" | Select-Object -First 1
+          if ($null -eq $modelZip) {
+            throw "Stable OCR model package was not produced for Windows portable verification."
+          }
+          ./scripts/verify-windows-portable.ps1 `
+            -ZipPath "release-out/RecordingFreedom-${{ matrix.name }}-${{ github.ref_name }}-portable.zip" `
+            -Architecture "${{ matrix.ffmpeg_arch }}" `
+            -OcrModelPackagePath $modelZip.FullName
 
       - name: Verify Windows installer artifact
         if: matrix.platform == 'windows'
         shell: pwsh
-        run: ./scripts/verify-windows-installer.ps1 -InstallerPath "release-out/RecordingFreedom-${{ matrix.name }}-${{ github.ref_name }}-setup.exe"
+        run: ./scripts/verify-windows-installer.ps1 -InstallerPath "release-out/RecordingFreedom-${{ matrix.name }}-${{ github.ref_name }}-setup.exe" -Architecture "${{ matrix.ffmpeg_arch }}"
 
       - name: Verify macOS app artifact
         if: matrix.platform == 'macos'
         shell: bash
-        run: ./scripts/verify-macos-app-zip.sh "release-out/RecordingFreedom-${{ matrix.name }}-${{ github.ref_name }}-app.zip" "${{ matrix.ffmpeg_arch }}"
+        run: |
+          set -euo pipefail
+          model_zip="$(find "release-out/ocr-worker-platform-smoke/${{ matrix.name }}/models" -maxdepth 1 -type f -name 'ppocrv5-mobile-zh-en-*.zip' -print -quit)"
+          if [ -z "${model_zip}" ]; then
+            echo "Stable OCR model package was not produced for macOS app verification." >&2
+            exit 1
+          fi
+          ./scripts/verify-macos-app-zip.sh "release-out/RecordingFreedom-${{ matrix.name }}-${{ github.ref_name }}-app.zip" "${{ matrix.ffmpeg_arch }}" "${model_zip}"
 
       - name: Verify Linux portable artifact
         if: matrix.platform == 'linux'
         shell: bash
-        run: ./scripts/verify-linux-portable.sh "release-out/RecordingFreedom-${{ matrix.name }}-${{ github.ref_name }}-portable.tar.gz" "${{ matrix.ffmpeg_arch }}"
+        run: |
+          set -euo pipefail
+          model_zip="$(find "release-out/ocr-worker-platform-smoke/${{ matrix.name }}/models" -maxdepth 1 -type f -name 'ppocrv5-mobile-zh-en-*.zip' -print -quit)"
+          if [ -z "${model_zip}" ]; then
+            echo "Stable OCR model package was not produced for Linux portable verification." >&2
+            exit 1
+          fi
+          ./scripts/verify-linux-portable.sh "release-out/RecordingFreedom-${{ matrix.name }}-${{ github.ref_name }}-portable.tar.gz" "${{ matrix.ffmpeg_arch }}" "${model_zip}"
 
       - name: Upload release artifact
         uses: actions/upload-artifact@v5
@@ -463,10 +600,92 @@ jobs:
           path: release-out/**
           if-no-files-found: error
 
+  model-package:
+    name: Build OCR Model Package
+    runs-on: ubuntu-latest
+    needs: [validate]
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache-dependency-path: ${{ env.APP_DIR }}/go.sum
+
+      - name: Build OCR model packages
+        working-directory: ${{ env.APP_DIR }}
+        run: >
+          go run ./cmd/ocr-model-package
+          -model all
+          -output ../release-out/ocr-models
+          -catalog-output ../release-out/ocr-models/ocr-model-catalog.json
+          -release-base-url "https://github.com/lemon-casino/RecordingFreedom/releases/download/${{ github.ref_name }}"
+          -force
+
+      - name: Prepare Linux ONNX Runtime for OCR model smoke
+        run: ./scripts/ensure-unix-onnxruntime.sh --platform linux --arch x64 --force
+
+      - name: Build OCR worker for model smoke
+        run: |
+          mkdir -p "${APP_DIR}/bin"
+          CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -trimpath -ldflags "-w -s" -o "${APP_DIR}/bin/rf-ocr-worker-smoke" "./${APP_DIR}/cmd/ocr-worker"
+
+      - name: Run stable OCR model package smoke
+        shell: bash
+        run: |
+          set -euo pipefail
+          model_zip="$(find release-out/ocr-models -maxdepth 1 -type f -name 'ppocrv5-mobile-zh-en-*.zip' -print -quit)"
+          if [ -z "${model_zip}" ]; then
+            echo "Stable OCR model package was not produced." >&2
+            exit 1
+          fi
+          rm -rf release-out/ocr-model-smoke
+          mkdir -p release-out/ocr-model-smoke
+          unzip -q "${model_zip}" -d release-out/ocr-model-smoke
+          "${APP_DIR}/bin/rf-ocr-worker-smoke" \
+            --smoke \
+            --runtime-dir "${APP_DIR}/tools/onnxruntime/linux-amd64" \
+            --model-dir "release-out/ocr-model-smoke/ppocrv5-mobile-zh-en" \
+            --must-contain RecordingFreedom \
+            --must-contain 文字识别
+
+      - name: Verify stable OCR model package artifact
+        shell: bash
+        run: |
+          set -euo pipefail
+          model_zip="$(find release-out/ocr-models -maxdepth 1 -type f -name 'ppocrv5-mobile-zh-en-*.zip' -print -quit)"
+          if [ -z "${model_zip}" ]; then
+            echo "Stable OCR model package was not produced." >&2
+            exit 1
+          fi
+          test -s "${model_zip}"
+          unzip -l "${model_zip}" | grep -q "ppocrv5-mobile-zh-en/manifest.json"
+          unzip -l "${model_zip}" | grep -q "ppocrv5-mobile-zh-en/det.onnx"
+          unzip -l "${model_zip}" | grep -q "ppocrv5-mobile-zh-en/cls.onnx"
+          unzip -l "${model_zip}" | grep -q "ppocrv5-mobile-zh-en/rec.onnx"
+          unzip -l "${model_zip}" | grep -q "ppocrv5-mobile-zh-en/keys.txt"
+          unzip -l "${model_zip}" | grep -q "ppocrv5-mobile-zh-en/smoke.png"
+          unzip -l "${model_zip}" | grep -q "ppocrv5-mobile-zh-en/smoke.expected.json"
+          test -s release-out/ocr-models/ocr-model-catalog.json
+          grep -q "ppocrv5-mobile-zh-en" release-out/ocr-models/ocr-model-catalog.json
+          grep -q "$(basename "${model_zip}")" release-out/ocr-models/ocr-model-catalog.json
+          grep -q '"sha256"' release-out/ocr-models/ocr-model-catalog.json
+          (
+            cd "$(dirname "${model_zip}")"
+            sha256sum "$(basename "${model_zip}")" > SHA256SUMS-ocr-models.txt
+          )
+
+      - name: Upload OCR model package artifact
+        uses: actions/upload-artifact@v5
+        with:
+          name: RecordingFreedom-ocr-models
+          path: release-out/ocr-models/**
+          if-no-files-found: error
+
   publish:
     name: Publish GitHub Release
     runs-on: ubuntu-latest
-    needs: [build]
+    needs: [build, model-package]
     steps:
       - uses: actions/checkout@v5
 
@@ -500,12 +719,13 @@ jobs:
           - Explicit mock .rfrec package flow for UI/package validation.
           - No-GUI smoke for settings, storage, preflight, mock start/pause/resume/stop, ready manifest, RNNoise/camera/PIP manifest contract, and recovery scan.
           - Developer audio smoke for Windows WASAPI microphone and system-loopback capture.
-          - Windows FFmpeg desktop video writer contract for screen/all-screen/region/locked-window capture; enabled WASAPI system audio and microphone tracks are muxed into the final screen.mp4 at stop, and the Windows release artifacts are staged as a portable zip plus an NSIS setup installer. Both include tools/ffmpeg.exe and tools/ffprobe.exe; the portable zip also includes desktop-doctor/video-smoke/audio-smoke/pip-export-smoke/annotation-export-smoke/annotation-overlay-evidence-check diagnostics.
+          - Windows FFmpeg desktop video writer contract for screen/all-screen/region/locked-window capture; enabled WASAPI system audio and microphone tracks are muxed into the final screen.mp4 at stop, and the Windows release artifacts are staged as a portable zip plus an NSIS setup installer. Both include tools/ffmpeg.exe and tools/ffprobe.exe; the portable zip also includes desktop-doctor/video-smoke/audio-smoke/pip-export-smoke/annotation-export-smoke/annotation-overlay-evidence-check/ocr-desktop-evidence-export/ocr-desktop-evidence-check/ocr-desktop-evidence-plan/ocr-desktop-evidence-session/ocr-translation-smoke/ocr-secret-store-smoke diagnostics.
           - Windows clean-machine portable smoke entrypoint at tools/run-windows-portable-smoke.ps1.
           - RNNoise native DSP is built from source as a dynamic module for every desktop artifact: Windows packages include tools/rnnoise.dll, macOS app bundles include Contents/MacOS/tools/librnnoise.dylib, and Linux portable archives include tools/librnnoise.so. The Go/Wails app uses the rnnoise_dynamic build tag and loads the module at runtime; desktop-doctor -require-rnnoise and the RNNoise dynamic DSP smoke are release gates for all desktop architectures, including Windows ARM64.
           - Full desktop build matrix is enabled for Windows x64/arm64, macOS x64/arm64, and Linux x64/arm64. Release artifacts are Windows portable zip + Windows setup.exe, macOS RecordingFreedom.app zip, and Linux portable tar.gz for each architecture.
-          - macOS app bundles include Contents/MacOS/recordingfreedom, Contents/MacOS/tools/ffmpeg, Contents/MacOS/tools/ffprobe, Contents/MacOS/tools/librnnoise.dylib, icons, Info.plist permissions, and third-party notices.
-          - Linux portable archives include recordingfreedom, tools/ffmpeg, tools/ffprobe, tools/librnnoise.so, diagnostic smoke tools including pip-export-smoke, a desktop file, and third-party notices.
+          - macOS app bundles include Contents/MacOS/recordingfreedom, Contents/MacOS/tools/ffmpeg, Contents/MacOS/tools/ffprobe, Contents/MacOS/tools/librnnoise.dylib, Contents/MacOS/tools/ocr-desktop-evidence-export, Contents/MacOS/tools/ocr-desktop-evidence-check, Contents/MacOS/tools/ocr-desktop-evidence-plan, Contents/MacOS/tools/ocr-desktop-evidence-session, Contents/MacOS/tools/ocr-translation-smoke, Contents/MacOS/tools/ocr-secret-store-smoke, icons, Info.plist permissions, and third-party notices.
+          - Linux portable archives include recordingfreedom, tools/ffmpeg, tools/ffprobe, tools/librnnoise.so, diagnostic smoke tools including pip-export-smoke, ocr-desktop-evidence-export, ocr-desktop-evidence-check, ocr-desktop-evidence-plan, ocr-desktop-evidence-session, ocr-translation-smoke and ocr-secret-store-smoke, a desktop file, and third-party notices.
+          - OCR protocol worker is built for every desktop architecture and staged under tools/ocr-worker/<os-arch>/rf-ocr-worker(.exe). ONNX Runtime v1.23.2 CPU runtime is bundled under tools/onnxruntime/<os-arch>/ and verified through worker --capabilities --runtime-dir. A separate RecordingFreedom-ocr-models release artifact now contains the verified ppocrv5-mobile-zh-en stable model package and ocr-model-catalog.json for explicit in-app catalog refresh/download. Native ONNX OCR inference, stable model smoke, and release-catalog package metadata are release-gated; PP-OCRv6 latest/quality packages and real desktop catalog refresh/download evidence remain queued behind the OCR plan.
           - Whiteboard / Excalidraw board and recording annotation: the main capsule keeps a Whiteboard entry before recording, during compact video recording, while paused, and during audio-only recording. Before recording and during audio-only recording it opens the normal whiteboard; during video recording or pause it opens the annotation overlay.
           - Whiteboard scene persistence and export: normal boards save under app data, restore the latest scene, and export PNG/SVG/.excalidraw through the desktop backend.
           - Recording annotation package flow: annotation scenes, element events, overlay diagnostics, timeline snapshots, reconstructed element PNGs, and manifest metadata are written into the current .rfrec package for later recovery/export.
@@ -542,3 +762,24 @@ jobs:
           fi
 
           gh release upload "${TAG_NAME}" "${assets[@]}" --clobber
+
+      - name: Verify published release downloads
+        shell: bash
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          TAG_NAME: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          pwsh -NoProfile -ExecutionPolicy Bypass -File ./scripts/verify-release-artifacts.ps1 \
+            -Repository "${GITHUB_REPOSITORY}" \
+            -TagName "${TAG_NAME}" \
+            -Targets all \
+            -Architectures x64,arm64 \
+            -DownloadDir release-download-verification
+
+      - name: Upload release download verification evidence
+        uses: actions/upload-artifact@v5
+        with:
+          name: RecordingFreedom-release-download-verification
+          path: release-download-verification/release-artifact-verification.json
+          if-no-files-found: error

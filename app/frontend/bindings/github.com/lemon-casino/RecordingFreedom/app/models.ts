@@ -18,6 +18,9 @@ import * as exporter$0 from "./internal/exporter/models.js";
 import * as exportplan$0 from "./internal/exportplan/models.js";
 // eslint-disable-next-line @typescript-eslint/ban-ts-comment
 // @ts-ignore: Unused imports
+import * as ocr$0 from "./internal/ocr/models.js";
+// eslint-disable-next-line @typescript-eslint/ban-ts-comment
+// @ts-ignore: Unused imports
 import * as pip$0 from "./internal/pip/models.js";
 // eslint-disable-next-line @typescript-eslint/ban-ts-comment
 // @ts-ignore: Unused imports
@@ -198,6 +201,7 @@ export enum FloatingPanelKind {
     FloatingPanelLanguage = "language",
     FloatingPanelSettings = "settings",
     FloatingPanelClose = "close",
+    FloatingPanelOCRResult = "ocr-result",
 };
 
 export interface FloatingPanelRequest {
@@ -212,6 +216,7 @@ export interface FloatingPanelRequest {
     "token": number;
     "screenId"?: string;
     "direction"?: string;
+    "contextId"?: string;
 }
 
 export interface FloatingPanelState {
@@ -223,6 +228,7 @@ export interface FloatingPanelState {
     "token": number;
     "screenId"?: string;
     "direction"?: string;
+    "contextId"?: string;
     "updatedAt": time$0.Time;
 }
 
@@ -273,6 +279,36 @@ export interface FloatingSelectState {
     "screenId"?: string;
     "direction"?: string;
     "updatedAt": time$0.Time;
+}
+
+export interface OCRTranslationPreferencesPatchRequest {
+    "provider"?: string | null;
+    "baseUrl"?: string | null;
+    "apiKey"?: string | null;
+    "model"?: string | null;
+    "sourceLanguage"?: string | null;
+    "targetLanguage"?: string | null;
+    "privacyConfirmed"?: boolean | null;
+    "privacyConfirmedAt"?: string | null;
+}
+
+export interface OcrJobEvent {
+    "event"?: string;
+    "jobId": string;
+    "sourceKind": ocr$0.SourceKind;
+    "sourceId": string;
+    "status": string;
+    "cacheKey"?: string;
+    "merged"?: boolean;
+    "error"?: string;
+    "result"?: ocr$0.Result | null;
+}
+
+export interface OcrModelEvent {
+    "modelId": string;
+    "status": string;
+    "error"?: string;
+    "model"?: ocr$0.ModelInfo | null;
 }
 
 export interface PIPCamera {
@@ -446,6 +482,12 @@ export interface ScreenshotItem {
     "region"?: RegionRect | null;
     "pinned": boolean;
     "fixed": boolean;
+    "ocrStatus": string;
+    "ocrResultId"?: string;
+    "ocrModelId"?: string;
+    "ocrLanguage"?: string;
+    "ocrUpdatedAt"?: string;
+    "ocrError"?: string;
 }
 
 export interface ScreenshotItemPatchRequest {
@@ -481,6 +523,8 @@ export interface SettingsPreferencesPatchRequest {
     "captureCursor"?: boolean | null;
     "countdownSeconds"?: number | null;
     "startAtLogin"?: boolean | null;
+    "autoOcr"?: boolean | null;
+    "ocrTranslation"?: OCRTranslationPreferencesPatchRequest | null;
 }
 
 export interface ShortcutSettingsPatchRequest {

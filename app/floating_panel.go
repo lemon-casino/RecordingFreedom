@@ -13,13 +13,14 @@ import (
 type FloatingPanelKind string
 
 const (
-	FloatingPanelSource   FloatingPanelKind = "source"
-	FloatingPanelAudio    FloatingPanelKind = "audio"
-	FloatingPanelCamera   FloatingPanelKind = "camera"
-	FloatingPanelBoard    FloatingPanelKind = "board"
-	FloatingPanelLanguage FloatingPanelKind = "language"
-	FloatingPanelSettings FloatingPanelKind = "settings"
-	FloatingPanelClose    FloatingPanelKind = "close"
+	FloatingPanelSource    FloatingPanelKind = "source"
+	FloatingPanelAudio     FloatingPanelKind = "audio"
+	FloatingPanelCamera    FloatingPanelKind = "camera"
+	FloatingPanelBoard     FloatingPanelKind = "board"
+	FloatingPanelLanguage  FloatingPanelKind = "language"
+	FloatingPanelSettings  FloatingPanelKind = "settings"
+	FloatingPanelClose     FloatingPanelKind = "close"
+	FloatingPanelOCRResult FloatingPanelKind = "ocr-result"
 )
 
 type FloatingRect struct {
@@ -41,6 +42,7 @@ type FloatingPanelRequest struct {
 	Token     uint64            `json:"token"`
 	ScreenID  string            `json:"screenId,omitempty"`
 	Direction string            `json:"direction,omitempty"`
+	ContextID string            `json:"contextId,omitempty"`
 }
 
 type FloatingPanelState struct {
@@ -52,6 +54,7 @@ type FloatingPanelState struct {
 	Token     uint64            `json:"token"`
 	ScreenID  string            `json:"screenId,omitempty"`
 	Direction string            `json:"direction,omitempty"`
+	ContextID string            `json:"contextId,omitempty"`
 	UpdatedAt time.Time         `json:"updatedAt"`
 }
 
@@ -147,6 +150,7 @@ func (s *RecordingFreedomService) showFloatingPanel(req FloatingPanelRequest) (F
 		Token:     req.Token,
 		ScreenID:  strings.TrimSpace(req.ScreenID),
 		Direction: strings.TrimSpace(req.Direction),
+		ContextID: strings.TrimSpace(req.ContextID),
 		UpdatedAt: time.Now(),
 	}
 	s.floatingMu.Lock()
@@ -327,7 +331,7 @@ func (s *RecordingFreedomService) GetSourceState() (SourceControlState, error) {
 	s.sourceMu.Lock()
 	defer s.sourceMu.Unlock()
 	if s.sourceState.RecordingMode == "" && s.sourceState.SourceID == "" && s.settings != nil {
-		current, err := s.settings.Load()
+		current, err := s.loadSettingsForMutation()
 		if err == nil {
 			s.sourceState = sourceStateFromSettings(current)
 		}
@@ -347,7 +351,7 @@ func (s *RecordingFreedomService) PatchSourceState(req SourceStatePatchRequest) 
 	if current.RecordingMode == "" {
 		current = sourceStateFromSettings(settings.Settings{})
 		if s.settings != nil {
-			if saved, err := s.settings.Load(); err == nil {
+			if saved, err := s.loadSettingsForMutation(); err == nil {
 				current = sourceStateFromSettings(saved)
 			}
 		}
@@ -374,7 +378,7 @@ func (s *RecordingFreedomService) PatchSourceState(req SourceStatePatchRequest) 
 
 	if s.settings != nil && (strings.TrimSpace(req.SourceID) != "" || strings.TrimSpace(req.SourceType) != "") {
 		s.settingsMu.Lock()
-		saved, err := s.settings.Load()
+		saved, err := s.loadSettingsForMutation()
 		if err == nil {
 			if current.SourceID != "" {
 				saved.Source.LastSourceID = current.SourceID
@@ -409,7 +413,7 @@ func sourceStateFromSettings(current settings.Settings) SourceControlState {
 
 func validFloatingPanelKind(kind FloatingPanelKind) bool {
 	switch kind {
-	case FloatingPanelSource, FloatingPanelAudio, FloatingPanelCamera, FloatingPanelBoard, FloatingPanelLanguage, FloatingPanelSettings, FloatingPanelClose:
+	case FloatingPanelSource, FloatingPanelAudio, FloatingPanelCamera, FloatingPanelBoard, FloatingPanelLanguage, FloatingPanelSettings, FloatingPanelClose, FloatingPanelOCRResult:
 		return true
 	default:
 		return false

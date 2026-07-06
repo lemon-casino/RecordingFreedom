@@ -112,6 +112,14 @@ jobs:
         working-directory: ${{ env.APP_DIR }}
         run: go run -tags gtk3 ./cmd/preview-smoke
 
+      - name: Run OCR translation smoke
+        working-directory: ${{ env.APP_DIR }}
+        run: go run -tags gtk3 ./cmd/ocr-translation-smoke
+
+      - name: Run OCR secret store smoke
+        working-directory: ${{ env.APP_DIR }}
+        run: go run ./cmd/ocr-secret-store-smoke
+
       - name: Prepare Linux FFmpeg tools for PIP export smoke
         run: ./scripts/ensure-unix-ffmpeg.sh --platform linux --arch x64 --force
 
@@ -128,6 +136,49 @@ jobs:
         env:
           CGO_ENABLED: "1"
         run: go run -tags "gtk3 ${RNNOISE_TAG}" ./cmd/desktop-doctor -require-rnnoise
+
+  ocr-model-smoke:
+    name: OCR Model Smoke
+    runs-on: ubuntu-latest
+    needs: [validate]
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache-dependency-path: ${{ env.APP_DIR }}/go.sum
+
+      - name: Prepare Linux ONNX Runtime
+        run: ./scripts/ensure-unix-onnxruntime.sh --platform linux --arch x64 --force
+
+      - name: Build OCR model packages
+        working-directory: ${{ env.APP_DIR }}
+        run: go run ./cmd/ocr-model-package -model all -output ../release-out/ocr-models -force
+
+      - name: Build OCR worker for smoke
+        run: |
+          mkdir -p "${APP_DIR}/bin"
+          CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -trimpath -ldflags "-w -s" -o "${APP_DIR}/bin/rf-ocr-worker-smoke" "./${APP_DIR}/cmd/ocr-worker"
+
+      - name: Run stable OCR model package smoke
+        shell: bash
+        run: |
+          set -euo pipefail
+          model_zip="$(find release-out/ocr-models -maxdepth 1 -type f -name 'ppocrv5-mobile-zh-en-*.zip' -print -quit)"
+          if [ -z "${model_zip}" ]; then
+            echo "Stable OCR model package was not produced." >&2
+            exit 1
+          fi
+          rm -rf release-out/ocr-model-smoke
+          mkdir -p release-out/ocr-model-smoke
+          unzip -q "${model_zip}" -d release-out/ocr-model-smoke
+          "${APP_DIR}/bin/rf-ocr-worker-smoke" \
+            --smoke \
+            --runtime-dir "${APP_DIR}/tools/onnxruntime/linux-amd64" \
+            --model-dir "release-out/ocr-model-smoke/ppocrv5-mobile-zh-en" \
+            --must-contain RecordingFreedom \
+            --must-contain 文字识别
 
   desktop-build:
     name: Desktop Build ${{ matrix.name }}
@@ -249,6 +300,16 @@ jobs:
         shell: bash
         run: ./scripts/ensure-unix-ffmpeg.sh --platform "${{ matrix.platform }}" --arch "${{ matrix.ffmpeg_arch }}" --force
 
+      - name: Prepare Windows ONNX Runtime
+        if: matrix.platform == 'windows'
+        shell: pwsh
+        run: ./scripts/ensure-windows-onnxruntime.ps1 -Architecture "${{ matrix.ffmpeg_arch }}" -Force
+
+      - name: Prepare Unix ONNX Runtime
+        if: matrix.platform == 'macos' || matrix.platform == 'linux'
+        shell: bash
+        run: ./scripts/ensure-unix-onnxruntime.sh --platform "${{ matrix.platform }}" --arch "${{ matrix.ffmpeg_arch }}" --force
+
       - name: Build Windows RNNoise dynamic module
         if: matrix.platform == 'windows'
         shell: pwsh
@@ -268,6 +329,60 @@ jobs:
             cgo_enabled="${{ matrix.cgo_enabled }}"
           fi
           CGO_ENABLED="${cgo_enabled}" go test -tags "${RNNOISE_TAG}" ./internal/audio/rnnoise
+
+      - name: Run platform OCR secret store smoke
+        working-directory: ${{ env.APP_DIR }}
+        shell: bash
+        run: |
+          cgo_enabled="1"
+          if [ "${{ matrix.platform }}" = "windows" ]; then
+            cgo_enabled="${{ matrix.cgo_enabled }}"
+          fi
+          CGO_ENABLED="${cgo_enabled}" go run ./cmd/ocr-secret-store-smoke -evidence-dir "../release-out/ocr-secret-store-smoke/${{ matrix.name }}"
+
+      - name: Build OCR worker
+        working-directory: ${{ env.APP_DIR }}
+        shell: bash
+        run: |
+          worker_goos="${{ matrix.platform }}"
+          if [ "${worker_goos}" = "macos" ]; then
+            worker_goos="darwin"
+          fi
+          ext=""
+          if [ "${worker_goos}" = "windows" ]; then
+            ext=".exe"
+          fi
+          worker_dir="tools/ocr-worker/${worker_goos}-${{ matrix.arch }}"
+          mkdir -p "${worker_dir}"
+          CGO_ENABLED=0 GOOS="${worker_goos}" GOARCH="${{ matrix.arch }}" go build -trimpath -ldflags "-w -s" -o "${worker_dir}/rf-ocr-worker${ext}" "./cmd/ocr-worker"
+
+      - name: Build stable OCR model package for platform smoke
+        working-directory: ${{ env.APP_DIR }}
+        run: go run ./cmd/ocr-model-package -model ppocrv5-mobile-zh-en -output "../release-out/ocr-worker-platform-smoke/${{ matrix.name }}/models" -force
+
+      - name: Run platform OCR worker stable smoke
+        working-directory: ${{ env.APP_DIR }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          worker_goos="${{ matrix.platform }}"
+          if [ "${worker_goos}" = "macos" ]; then
+            worker_goos="darwin"
+          fi
+          ext=""
+          if [ "${worker_goos}" = "windows" ]; then
+            ext=".exe"
+          fi
+          model_zip="$(find "../release-out/ocr-worker-platform-smoke/${{ matrix.name }}/models" -maxdepth 1 -type f -name 'ppocrv5-mobile-zh-en-*.zip' -print -quit)"
+          if [ -z "${model_zip}" ]; then
+            echo "Stable OCR model package was not produced for platform smoke." >&2
+            exit 1
+          fi
+          go run ./cmd/ocr-worker-platform-smoke \
+            -worker-path "tools/ocr-worker/${worker_goos}-${{ matrix.arch }}/rf-ocr-worker${ext}" \
+            -runtime-dir "tools/onnxruntime/${worker_goos}-${{ matrix.arch }}" \
+            -model-package "${model_zip}" \
+            -evidence-dir "../release-out/ocr-worker-platform-smoke/${{ matrix.name }}"
 
       - name: Build app
         working-directory: ${{ env.APP_DIR }}
@@ -308,6 +423,12 @@ jobs:
           CGO_ENABLED="${cgo_enabled}" go build "${tag_args[@]}" -trimpath -ldflags "-w -s" -o "bin/pip-export-smoke${ext}" "./cmd/pip-export-smoke"
           CGO_ENABLED="${cgo_enabled}" go build "${tag_args[@]}" -trimpath -ldflags "-w -s" -o "bin/annotation-export-smoke${ext}" "./cmd/annotation-export-smoke"
           CGO_ENABLED="${cgo_enabled}" go build "${tag_args[@]}" -trimpath -ldflags "-w -s" -o "bin/annotation-overlay-evidence-check${ext}" "./cmd/annotation-overlay-evidence-check"
+          CGO_ENABLED="${cgo_enabled}" go build -trimpath -ldflags "-w -s" -o "bin/ocr-desktop-evidence-export${ext}" "./cmd/ocr-desktop-evidence-export"
+          CGO_ENABLED="${cgo_enabled}" go build -trimpath -ldflags "-w -s" -o "bin/ocr-desktop-evidence-check${ext}" "./cmd/ocr-desktop-evidence-check"
+          CGO_ENABLED="${cgo_enabled}" go build -trimpath -ldflags "-w -s" -o "bin/ocr-desktop-evidence-plan${ext}" "./cmd/ocr-desktop-evidence-plan"
+          CGO_ENABLED="${cgo_enabled}" go build -trimpath -ldflags "-w -s" -o "bin/ocr-desktop-evidence-session${ext}" "./cmd/ocr-desktop-evidence-session"
+          CGO_ENABLED="${cgo_enabled}" go build -trimpath -ldflags "-w -s" -o "bin/ocr-translation-smoke${ext}" "./cmd/ocr-translation-smoke"
+          CGO_ENABLED="${cgo_enabled}" go build -trimpath -ldflags "-w -s" -o "bin/ocr-secret-store-smoke${ext}" "./cmd/ocr-secret-store-smoke"
 
       - name: Run desktop dependency doctor
         working-directory: ${{ env.APP_DIR }}
@@ -336,4 +457,18 @@ jobs:
         with:
           name: recordingfreedom-${{ matrix.name }}
           path: ${{ env.APP_DIR }}/bin/**
+          if-no-files-found: error
+
+      - name: Upload OCR secret store smoke evidence
+        uses: actions/upload-artifact@v5
+        with:
+          name: recordingfreedom-ocr-secret-store-smoke-${{ matrix.name }}
+          path: release-out/ocr-secret-store-smoke/${{ matrix.name }}/secret-store-smoke.json
+          if-no-files-found: error
+
+      - name: Upload OCR worker platform smoke evidence
+        uses: actions/upload-artifact@v5
+        with:
+          name: recordingfreedom-ocr-worker-platform-smoke-${{ matrix.name }}
+          path: release-out/ocr-worker-platform-smoke/${{ matrix.name }}/ocr-worker-platform-smoke.json
           if-no-files-found: error

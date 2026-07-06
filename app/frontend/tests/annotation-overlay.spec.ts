@@ -53,6 +53,92 @@ test('annotation overlay exposes undo and region reselect controls', async ({pag
   })
 })
 
+test('recording annotation overlay queues background OCR and opens result panel', async ({page}) => {
+  await openAnnotationOverlay(page)
+
+  await page.getByRole('button', {name: 'Recognize board text'}).click()
+
+  await expect.poll(async () => page.evaluate(() => {
+    const state = window as Window & {
+      __RF_LAST_WHITEBOARD_OCR_QUEUE__?: {
+        status?: string
+        request?: {
+          imagePath?: string
+          sourceKind?: string
+          sourceId?: string
+          language?: string
+          priority?: string
+        }
+      }
+      __RF_LAST_WHITEBOARD_OCR_REQUEST__?: {
+        imagePath?: string
+        sceneId?: string
+        priority?: string
+      }
+    }
+    return {
+      status: state.__RF_LAST_WHITEBOARD_OCR_QUEUE__?.status ?? '',
+      imagePath: state.__RF_LAST_WHITEBOARD_OCR_QUEUE__?.request?.imagePath ?? '',
+      sourceKind: state.__RF_LAST_WHITEBOARD_OCR_QUEUE__?.request?.sourceKind ?? '',
+      sourceId: state.__RF_LAST_WHITEBOARD_OCR_QUEUE__?.request?.sourceId ?? '',
+      language: state.__RF_LAST_WHITEBOARD_OCR_QUEUE__?.request?.language ?? '',
+      priority: state.__RF_LAST_WHITEBOARD_OCR_QUEUE__?.request?.priority ?? '',
+      rawSceneId: state.__RF_LAST_WHITEBOARD_OCR_REQUEST__?.sceneId ?? '',
+      rawPriority: state.__RF_LAST_WHITEBOARD_OCR_REQUEST__?.priority ?? '',
+    }
+  })).toEqual({
+    status: 'queued',
+    imagePath: 'browser-preview/data/video/recording-preview.rfrec/annotations/snapshots/annotation-000001.png',
+    sourceKind: 'whiteboard',
+    sourceId: 'browser-preview/data/video/recording-preview.rfrec',
+    language: 'zh-en',
+    priority: 'background',
+    rawSceneId: 'browser-preview/data/video/recording-preview.rfrec',
+    rawPriority: 'background',
+  })
+  await expect(page.locator('.annotation-ocr-status')).toContainText('Board OCR queued')
+
+  const readyEvent = readyAnnotationOcrEvent()
+  const imageDataUrl = annotationOcrImageDataUrl()
+  await page.evaluate(({eventDetail, image}) => {
+    const result = eventDetail.result
+    ;(window as Window & {__RF_OCR_RESULTS__?: Record<string, unknown>}).__RF_OCR_RESULTS__ = {
+      [result.id]: result,
+    }
+    ;(window as Window & {__RF_OCR_IMAGES__?: Record<string, unknown>}).__RF_OCR_IMAGES__ = {
+      [result.id]: {
+        available: true,
+        dataUrl: image,
+        path: result.imagePath,
+        bytes: image.length,
+      },
+    }
+    window.dispatchEvent(new CustomEvent('rf-ocr-job', {detail: eventDetail}))
+  }, {eventDetail: readyEvent, image: imageDataUrl})
+
+  await expect(page.locator('.annotation-ocr-status')).toContainText('Board text recognized')
+  await page.getByRole('button', {name: 'View board OCR result'}).click()
+
+  await expect.poll(async () => page.evaluate(() => {
+    const panel = (window as Window & {
+      __RF_FLOATING_PANEL__?: {visible?: boolean; kind?: string; contextId?: string; bounds?: {width?: number; height?: number}}
+    }).__RF_FLOATING_PANEL__
+    return {
+      visible: panel?.visible === true,
+      kind: panel?.kind ?? '',
+      contextId: panel?.contextId ?? '',
+      width: panel?.bounds?.width ?? 0,
+      height: panel?.bounds?.height ?? 0,
+    }
+  })).toEqual({
+    visible: true,
+    kind: 'ocr-result',
+    contextId: 'annotation-ocr-result',
+    width: 380,
+    height: 420,
+  })
+})
+
 test('screenshot annotation overlay saves into screenshot history on explicit save', async ({page}) => {
   await openScreenshotAnnotationOverlay(page)
 
@@ -213,6 +299,49 @@ async function openScreenshotAnnotationOverlay(page: Page) {
     }
   }, {settingsKey: browserSettingsKey, screenshotAnnotationKey: browserScreenshotAnnotationKey, frameInset: annotationFrameInset})
   await page.goto('/#/annotation-overlay')
+}
+
+function readyAnnotationOcrEvent() {
+  return {
+    jobId: 'annotation-ocr-job',
+    sourceKind: 'whiteboard',
+    sourceId: 'browser-preview/data/video/recording-preview.rfrec',
+    status: 'ready',
+    result: {
+      id: 'annotation-ocr-result',
+      sourceKind: 'whiteboard',
+      sourceId: 'browser-preview/data/video/recording-preview.rfrec',
+      imagePath: 'browser-preview/data/video/recording-preview.rfrec/annotations/snapshots/annotation-000001.png',
+      imageSha256: 'browser-annotation-ocr',
+      modelId: 'ppocrv5-mobile-zh-en',
+      language: 'zh-en',
+      width: 1280,
+      height: 720,
+      blocks: [
+        {
+          id: 'annotation-block-recordingfreedom',
+          text: 'RecordingFreedom',
+          confidence: 0.97,
+          lineIndex: 0,
+          languageHint: 'en',
+          box: [
+            {x: 120, y: 120},
+            {x: 420, y: 120},
+            {x: 420, y: 168},
+            {x: 120, y: 168},
+          ],
+        },
+      ],
+      plainText: 'RecordingFreedom',
+      createdAt: '2026-07-06T10:00:00.000Z',
+      durationMs: 128,
+    },
+  }
+}
+
+function annotationOcrImageDataUrl() {
+  const svg = '<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="720"><rect width="1280" height="720" fill="#101820"/><text x="120" y="160" fill="#fff" font-family="Arial" font-size="44">RecordingFreedom</text></svg>'
+  return `data:image/svg+xml;base64,${Buffer.from(svg).toString('base64')}`
 }
 
 type HitRegionSnapshot = {

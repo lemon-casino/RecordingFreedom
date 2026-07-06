@@ -38,6 +38,12 @@ RecordingFreedom 是一个全新的录制软件重构项目，目标技术栈为
    记录 snow-shot 智能窗口识别分析、RecordingFreedom 智能候选合同、边缘吸附、焦点窗口截图和当前限制。
 17. [16-floating-panel-window-plan.md](16-floating-panel-window-plan.md)
    记录胶囊列表多窗口浮层方案，目标是让未展开时只占胶囊大小，列表/下拉独立占用实际区域。
+18. [17-ocr-translation-dispatch-plan.md](17-ocr-translation-dispatch-plan.md)
+   记录 OCR 本地模型、跨平台 worker、截图/滚动截图/画板调度、识别缓存和翻译提供方方案。
+19. [18-remaining-work-regroup.md](18-remaining-work-regroup.md)
+   重新归拢当前剩余功能、问题、暂停项、批次顺序和完成定义，后续按 A/B/C/D 四个闭环批量推进。
+20. [19-ocr-desktop-evidence-runbook.md](19-ocr-desktop-evidence-runbook.md)
+   固定真实 Wails 桌面 OCR evidence 的人工操作 runbook、session start/end、视觉证据命名、导出和 checker 命令。
 
 ## 当前硬性决策
 
@@ -53,6 +59,8 @@ RecordingFreedom 是一个全新的录制软件重构项目，目标技术栈为
 - 画板能力采用 Excalidraw React 组件作为画布核心，但由 RecordingFreedom 自己负责胶囊 UI、透明 overlay、点击穿透、录制包写入和导出合成。
 - 录制标注 overlay 不能只靠 `annotation-export-smoke` 宣称完成；真实平台完成状态必须按 `12-annotation-overlay-platform-smoke.md` 保存 evidence、来源矩阵、元素级标注事件、绘制/穿透 hit-region 诊断、1 分钟/5 分钟 `.rfrec`、`annotations/overlay-diagnostics.jsonl` 和真实导出视频，并通过矩阵验收。
 - 胶囊内所有会展开列表或面板的入口，后续应迁移到 `16-floating-panel-window-plan.md` 定义的 floating panel / floating select 合同；不要再通过扩大胶囊主窗口来承载大型 `.popover` 或 `.select-menu-list`。
+- OCR 采用本地模型优先的独立 worker 调度方案，截图、滚动截图、钉图和画板统一走 `17-ocr-translation-dispatch-plan.md` 定义的识别/翻译合同；翻译默认关闭，只有用户配置提供方后才会把识别文字发送到外部服务。
+- 真实桌面 OCR 验收必须先用 `ocr-desktop-evidence-session` 写入 `session-start/session-end`，再导出 evidence 包并通过检查器；源码树提供 `scripts/export-ocr-desktop-evidence.ps1` 和 `scripts/export-ocr-desktop-evidence.sh`，要求真实 `visual-dir`，导出后会立即运行 `ocr-desktop-evidence-check`，不能用浏览器 fallback、假截图或导出阶段补 marker 替代。
 
 ## 外部技术依据
 

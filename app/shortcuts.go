@@ -23,7 +23,7 @@ type ShortcutSettingsPatchRequest struct {
 func (s *RecordingFreedomService) PatchShortcutSettings(patch ShortcutSettingsPatchRequest) (settings.Settings, error) {
 	s.settingsMu.Lock()
 	defer s.settingsMu.Unlock()
-	currentSettings, err := s.settings.Load()
+	currentSettings, err := s.loadSettingsForMutation()
 	if err != nil {
 		return settings.Settings{}, err
 	}

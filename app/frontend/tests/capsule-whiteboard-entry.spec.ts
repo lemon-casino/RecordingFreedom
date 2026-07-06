@@ -1,4 +1,5 @@
 import {expect, test, type Page} from '@playwright/test'
+import {Buffer} from 'node:buffer'
 
 const browserSettingsKey = 'recordingfreedom.settings.v1'
 const browserScreenshotHistoryKey = 'recordingfreedom.screenshots.history.v1'
@@ -14,8 +15,8 @@ test('capsule whiteboard opens board before recording and annotation during vide
   await toolsButton.click()
   await expect(page.getByRole('dialog', {name: 'board menu'})).toBeVisible()
   await expect(page.getByRole('button', {name: /Region screenshot/})).toBeVisible()
-  await expect(page.getByRole('button', {name: /Window screenshot/})).toHaveCount(0)
-  await expect(page.getByRole('button', {name: /Focused window/})).toHaveCount(0)
+  await expect(page.getByRole('button', {name: /Window screenshot/})).toBeVisible()
+  await expect(page.getByRole('button', {name: /Focused window/})).toBeVisible()
   await page.getByRole('button', {name: /Board/}).click()
   await expectWhiteboardLaunch(page, 'whiteboard', '/#/whiteboard')
   await expect(toolsButton).toHaveAttribute('aria-pressed', 'true')
@@ -43,6 +44,24 @@ test('capsule whiteboard opens board before recording and annotation during vide
   await whiteboardButton.click()
   await expectWhiteboardLaunch(page, 'annotation', '/#/annotation-overlay')
   await expect(whiteboardButton).toHaveAttribute('aria-pressed', 'true')
+})
+
+test('screenshot tools expose window and focused-window capture modes for OCR evidence', async ({page}) => {
+  await openRecorderShell(page)
+
+  await page.getByRole('button', {name: 'Screenshot / board'}).click()
+  await page.getByRole('button', {name: /Window screenshot/}).click()
+  await expect.poll(async () => page.evaluate((key) => {
+    const history = JSON.parse(window.localStorage.getItem(key) || '[]')
+    return history[0]?.mode ?? ''
+  }, browserScreenshotHistoryKey)).toBe('window')
+
+  await page.getByRole('button', {name: 'Screenshot / board'}).click()
+  await page.getByRole('button', {name: /Focused window/}).click()
+  await expect.poll(async () => page.evaluate((key) => {
+    const history = JSON.parse(window.localStorage.getItem(key) || '[]')
+    return history[0]?.mode ?? ''
+  }, browserScreenshotHistoryKey)).toBe('focused-window')
 })
 
 test('capsule whiteboard remains available as a board during audio recording', async ({page}) => {
@@ -149,6 +168,578 @@ test('screenshot history pin action opens a real pinned image window state', asy
   await pinPage.goto('/#/screenshot-pin')
   await expect(pinPage.locator('.screenshot-pin-shell.empty')).toHaveCount(0)
   await expect(pinPage.locator('.screenshot-pin-shell img')).toHaveAttribute('src', /data:image\//)
+  await pinPage.close()
+})
+
+test('floating OCR result panel shows screenshot image blocks and translation guard', async ({page}) => {
+  const screenshotHistory = [{
+    id: 'ocr-ready-shot',
+    path: 'browser-preview/data/screenshots/ocr-ready-shot.png',
+    thumbnailPath: 'browser-preview/data/screenshots/thumbnails/ocr-ready-shot.png',
+    createdAt: '2026-07-04T12:00:00Z',
+    width: 520,
+    height: 320,
+    mode: 'region',
+    pinned: false,
+    fixed: false,
+    ocrStatus: 'ready',
+    ocrResultId: 'ocr-result-ready-shot',
+    ocrModelId: 'ppocrv5-mobile-zh-en',
+    ocrLanguage: 'zh-en',
+    ocrUpdatedAt: '2026-07-04T12:01:00Z',
+  }]
+  await page.addInitScript(({settingsKey, screenshotHistoryKey, settings, history}) => {
+    window.localStorage.setItem(settingsKey, JSON.stringify(settings))
+    window.localStorage.setItem(screenshotHistoryKey, JSON.stringify(history))
+    ;(window as Window & {__RF_FLOATING_PANEL__?: unknown}).__RF_FLOATING_PANEL__ = {
+      visible: true,
+      kind: 'ocr-result',
+      anchor: {x: 120, y: 120, width: 44, height: 44},
+      bounds: {x: 120, y: 174, width: 380, height: 420},
+      dockSide: 'none',
+      token: 9,
+      direction: 'down',
+      contextId: 'ocr-result-ready-shot',
+    }
+  }, {
+    settingsKey: browserSettingsKey,
+    screenshotHistoryKey: browserScreenshotHistoryKey,
+    settings: baseBrowserSettings('en', false, false),
+    history: screenshotHistory,
+  })
+
+  await page.goto('/#/floating-panel')
+
+  const panel = page.locator('.floating-panel-shell.panel-ocr-result')
+  await expect(panel).toBeVisible()
+  await expect(panel.getByText('OCR result')).toBeVisible()
+  await expect(panel.locator('.ocr-result-summary')).toContainText('ppocrv5-mobile-zh-en')
+  await expect(panel.locator('.ocr-result-summary')).toContainText('2 text blocks')
+  await expect(panel.locator('.ocr-result-text')).toContainText('RecordingFreedom')
+  await expect(panel.locator('.ocr-result-text')).toContainText('文字识别')
+  await expect(panel.locator('.ocr-preview-frame img')).toHaveAttribute('src', /^data:image\/svg\+xml;base64,/)
+  await expect(panel.locator('.ocr-preview-frame polygon')).toHaveCount(2)
+  await expect(panel.locator('.ocr-block-row')).toHaveCount(2)
+
+  const firstBlock = panel.locator('.ocr-block-row').filter({hasText: 'RecordingFreedom'})
+  await firstBlock.hover()
+  await expect(firstBlock).toHaveClass(/active/)
+  await expect(panel.locator('.ocr-preview-frame polygon.active')).toHaveCount(1)
+
+  await panel.getByRole('button', {name: 'Translate text'}).click()
+  await expect(panel.locator('.ocr-translation-note')).toContainText('Translation provider is not configured')
+})
+
+test('floating OCR result panel renders real worker smoke evidence coordinates', async ({page}) => {
+  const resultId = 'ocr-smoke-region-result'
+  const imageDataUrl = screenshotSvgDataUrl(900, 280, 'RecordingFreedom', '文字识别')
+  const smokeResult = {
+    id: resultId,
+    sourceKind: 'region-screenshot',
+    sourceId: 'screenshot-ocr-smoke-region',
+    imagePath: 'release-out/ocr-smoke-evidence/region.png',
+    imageSha256: 'browser-smoke-evidence-region',
+    modelId: 'ppocrv5-mobile-zh-en',
+    language: 'zh-en',
+    width: 900,
+    height: 280,
+    plainText: 'RecordingFreedom\n文字识别',
+    createdAt: '2026-07-05T20:37:46.0866316Z',
+    durationMs: 126,
+    blocks: [
+      {
+        id: 'b1',
+        text: 'RecordingFreedom',
+        confidence: 0.9995158016681671,
+        lineIndex: 0,
+        languageHint: 'en',
+        box: [
+          {x: 30.133928571428573, y: 32.083333333333336},
+          {x: 669.9776785714286, y: 32.083333333333336},
+          {x: 669.9776785714286, y: 109.86111111111113},
+          {x: 30.133928571428573, y: 109.86111111111113},
+        ],
+      },
+      {
+        id: 'b2',
+        text: '文字识别',
+        confidence: 0.9980595409870148,
+        lineIndex: 1,
+        languageHint: 'zh',
+        box: [
+          {x: 41.34375, y: 137.08333333333334},
+          {x: 330.3080357142857, y: 137.08333333333334},
+          {x: 330.3080357142857, y: 234.30555555555557},
+          {x: 41.34375, y: 234.30555555555557},
+        ],
+      },
+    ],
+  }
+  const screenshotHistory = [{
+    id: smokeResult.sourceId,
+    path: smokeResult.imagePath,
+    thumbnailPath: 'release-out/ocr-smoke-evidence/region.png',
+    createdAt: smokeResult.createdAt,
+    width: smokeResult.width,
+    height: smokeResult.height,
+    mode: 'region',
+    pinned: false,
+    fixed: false,
+    ocrStatus: 'ready',
+    ocrResultId: resultId,
+    ocrModelId: smokeResult.modelId,
+    ocrLanguage: smokeResult.language,
+    ocrUpdatedAt: smokeResult.createdAt,
+  }]
+  await page.addInitScript(({settingsKey, screenshotHistoryKey, settings, history, result, image}) => {
+    window.localStorage.setItem(settingsKey, JSON.stringify(settings))
+    window.localStorage.setItem(screenshotHistoryKey, JSON.stringify(history))
+    ;(window as Window & {__RF_OCR_RESULTS__?: Record<string, unknown>}).__RF_OCR_RESULTS__ = {
+      [result.id]: result,
+    }
+    ;(window as Window & {__RF_OCR_IMAGES__?: Record<string, unknown>}).__RF_OCR_IMAGES__ = {
+      [result.id]: {
+        available: true,
+        dataUrl: image,
+        path: result.imagePath,
+        bytes: image.length,
+      },
+    }
+    ;(window as Window & {__RF_FLOATING_PANEL__?: unknown}).__RF_FLOATING_PANEL__ = {
+      visible: true,
+      kind: 'ocr-result',
+      anchor: {x: 120, y: 120, width: 44, height: 44},
+      bounds: {x: 120, y: 174, width: 380, height: 420},
+      dockSide: 'none',
+      token: 10,
+      direction: 'down',
+      contextId: result.id,
+    }
+  }, {
+    settingsKey: browserSettingsKey,
+    screenshotHistoryKey: browserScreenshotHistoryKey,
+    settings: baseBrowserSettings('en', false, false),
+    history: screenshotHistory,
+    result: smokeResult,
+    image: imageDataUrl,
+  })
+
+  await page.goto('/#/floating-panel')
+
+  const panel = page.locator('.floating-panel-shell.panel-ocr-result')
+  await expect(panel).toBeVisible()
+  await expect(panel.locator('.ocr-result-summary')).toContainText('ppocrv5-mobile-zh-en')
+  await expect(panel.locator('.ocr-result-text')).toContainText('RecordingFreedom')
+  await expect(panel.locator('.ocr-result-text')).toContainText('文字识别')
+  await expect(panel.locator('.ocr-preview-frame img')).toHaveAttribute('src', /^data:image\/svg\+xml;base64,/)
+  await expect(panel.locator('.ocr-preview-frame svg')).toHaveAttribute('viewBox', '0 0 900 280')
+  await expect(panel.locator('.ocr-preview-frame polygon')).toHaveCount(2)
+  await expect(panel.locator('.ocr-preview-frame polygon').first()).toHaveAttribute(
+    'points',
+    '30.133928571428573,32.083333333333336 669.9776785714286,32.083333333333336 669.9776785714286,109.86111111111113 30.133928571428573,109.86111111111113',
+  )
+  await expect(panel.locator('.ocr-preview-frame polygon').nth(1)).toHaveAttribute(
+    'points',
+    '41.34375,137.08333333333334 330.3080357142857,137.08333333333334 330.3080357142857,234.30555555555557 41.34375,234.30555555555557',
+  )
+})
+
+test('screenshot history ready item opens OCR result floating panel with real worker evidence', async ({page}) => {
+  const resultId = 'ocr-history-smoke-region-result'
+  const imageDataUrl = screenshotSvgDataUrl(900, 280, 'RecordingFreedom', '文字识别')
+  const smokeResult = {
+    id: resultId,
+    sourceKind: 'region-screenshot',
+    sourceId: 'screenshot-history-smoke-region',
+    imagePath: 'release-out/ocr-smoke-evidence/region.png',
+    imageSha256: 'browser-history-smoke-evidence-region',
+    modelId: 'ppocrv5-mobile-zh-en',
+    language: 'zh-en',
+    width: 900,
+    height: 280,
+    plainText: 'RecordingFreedom\n文字识别',
+    createdAt: '2026-07-05T20:37:46.0866316Z',
+    durationMs: 126,
+    blocks: [
+      {
+        id: 'b1',
+        text: 'RecordingFreedom',
+        confidence: 0.9995158016681671,
+        lineIndex: 0,
+        languageHint: 'en',
+        box: [
+          {x: 30.133928571428573, y: 32.083333333333336},
+          {x: 669.9776785714286, y: 32.083333333333336},
+          {x: 669.9776785714286, y: 109.86111111111113},
+          {x: 30.133928571428573, y: 109.86111111111113},
+        ],
+      },
+      {
+        id: 'b2',
+        text: '文字识别',
+        confidence: 0.9980595409870148,
+        lineIndex: 1,
+        languageHint: 'zh',
+        box: [
+          {x: 41.34375, y: 137.08333333333334},
+          {x: 330.3080357142857, y: 137.08333333333334},
+          {x: 330.3080357142857, y: 234.30555555555557},
+          {x: 41.34375, y: 234.30555555555557},
+        ],
+      },
+    ],
+  }
+  const screenshotHistory = [{
+    id: smokeResult.sourceId,
+    path: smokeResult.imagePath,
+    thumbnailPath: 'release-out/ocr-smoke-evidence/region.png',
+    createdAt: smokeResult.createdAt,
+    width: smokeResult.width,
+    height: smokeResult.height,
+    mode: 'region',
+    pinned: false,
+    fixed: false,
+    ocrStatus: 'ready',
+    ocrResultId: resultId,
+    ocrModelId: smokeResult.modelId,
+    ocrLanguage: smokeResult.language,
+    ocrUpdatedAt: smokeResult.createdAt,
+  }]
+  const setup = {
+    settingsKey: browserSettingsKey,
+    screenshotHistoryKey: browserScreenshotHistoryKey,
+    settings: baseBrowserSettings('en', false, false),
+    history: screenshotHistory,
+    result: smokeResult,
+    image: imageDataUrl,
+  }
+  await page.addInitScript(({settingsKey, screenshotHistoryKey, settings, history, result, image}) => {
+    window.localStorage.setItem(settingsKey, JSON.stringify(settings))
+    window.localStorage.setItem(screenshotHistoryKey, JSON.stringify(history))
+    ;(window as Window & {__RF_FORCE_FLOATING_PANEL_WINDOWS__?: boolean}).__RF_FORCE_FLOATING_PANEL_WINDOWS__ = true
+    ;(window as Window & {__RF_OCR_RESULTS__?: Record<string, unknown>}).__RF_OCR_RESULTS__ = {
+      [result.id]: result,
+    }
+    ;(window as Window & {__RF_OCR_IMAGES__?: Record<string, unknown>}).__RF_OCR_IMAGES__ = {
+      [result.id]: {
+        available: true,
+        dataUrl: image,
+        path: result.imagePath,
+        bytes: image.length,
+      },
+    }
+  }, setup)
+  await page.goto('/')
+
+  await page.getByRole('button', {name: 'Screenshot / board'}).click()
+  const row = page.locator('.screenshot-history-row').filter({hasText: 'Recognized'})
+  await expect(row).toContainText('Recognized')
+  await row.getByRole('button', {name: 'View OCR result'}).click()
+
+  await expect.poll(async () => page.evaluate(() => {
+    const panel = (window as Window & {
+      __RF_FLOATING_PANEL__?: {visible?: boolean; kind?: string; contextId?: string; bounds?: {width?: number; height?: number}}
+    }).__RF_FLOATING_PANEL__
+    return {
+      visible: panel?.visible === true,
+      kind: panel?.kind ?? '',
+      contextId: panel?.contextId ?? '',
+      width: panel?.bounds?.width ?? 0,
+      height: panel?.bounds?.height ?? 0,
+    }
+  })).toEqual({
+    visible: true,
+    kind: 'ocr-result',
+    contextId: resultId,
+    width: 380,
+    height: 420,
+  })
+
+  const floatingPage = await page.context().newPage()
+  await floatingPage.addInitScript(({settingsKey, screenshotHistoryKey, settings, history, result, image, panel}) => {
+    window.localStorage.setItem(settingsKey, JSON.stringify(settings))
+    window.localStorage.setItem(screenshotHistoryKey, JSON.stringify(history))
+    ;(window as Window & {__RF_OCR_RESULTS__?: Record<string, unknown>}).__RF_OCR_RESULTS__ = {
+      [result.id]: result,
+    }
+    ;(window as Window & {__RF_OCR_IMAGES__?: Record<string, unknown>}).__RF_OCR_IMAGES__ = {
+      [result.id]: {
+        available: true,
+        dataUrl: image,
+        path: result.imagePath,
+        bytes: image.length,
+      },
+    }
+    ;(window as Window & {__RF_FLOATING_PANEL__?: unknown}).__RF_FLOATING_PANEL__ = panel
+  }, {...setup, panel: await page.evaluate(() => (window as Window & {__RF_FLOATING_PANEL__?: unknown}).__RF_FLOATING_PANEL__)})
+  await floatingPage.goto('/#/floating-panel')
+  const panel = floatingPage.locator('.floating-panel-shell.panel-ocr-result')
+  await expect(panel).toBeVisible()
+  await expect(panel.locator('.ocr-result-summary')).toContainText('ppocrv5-mobile-zh-en')
+  await expect(panel.locator('.ocr-result-text')).toContainText('RecordingFreedom')
+  await expect(panel.locator('.ocr-preview-frame svg')).toHaveAttribute('viewBox', '0 0 900 280')
+  await expect(panel.locator('.ocr-preview-frame polygon')).toHaveCount(2)
+  await floatingPage.close()
+})
+
+test('screenshot history translates ready OCR text through the configured provider', async ({page}) => {
+  await openRecorderShell(page, {
+    ocrTranslation: true,
+    screenshotHistory: [{
+      id: 'history-translate-shot',
+      path: 'browser-preview/data/screenshots/history-translate-shot.png',
+      thumbnailPath: 'browser-preview/data/screenshots/thumbnails/history-translate-shot.png',
+      createdAt: '2026-07-04T12:00:00Z',
+      width: 520,
+      height: 320,
+      mode: 'region',
+      pinned: false,
+      fixed: false,
+      ocrStatus: 'ready',
+      ocrResultId: 'ocr-result-history-translate-shot',
+      ocrModelId: 'ppocrv5-mobile-zh-en',
+      ocrLanguage: 'zh-en',
+      ocrUpdatedAt: '2026-07-04T12:01:00Z',
+    }],
+  })
+
+  await page.getByRole('button', {name: 'Screenshot / board'}).click()
+  await page.getByRole('button', {name: 'Translate text'}).click()
+  await expect(page.locator('.screenshot-history-header')).toContainText('Translation copied')
+})
+
+test('pinned screenshot window restores OCR highlight and result floating panel after resize', async ({page}) => {
+  await openRecorderShell(page, {
+    ocrTranslation: true,
+    screenshotHistory: [{
+      id: 'pin-ocr-ready-shot',
+      path: 'browser-preview/data/screenshots/pin-ocr-ready-shot.png',
+      thumbnailPath: 'browser-preview/data/screenshots/thumbnails/pin-ocr-ready-shot.png',
+      createdAt: '2026-07-04T12:00:00Z',
+      width: 640,
+      height: 360,
+      mode: 'region',
+      pinned: false,
+      fixed: false,
+      ocrStatus: 'ready',
+      ocrResultId: 'ocr-result-pin-ready-shot',
+      ocrModelId: 'ppocrv5-mobile-zh-en',
+      ocrLanguage: 'zh-en',
+      ocrUpdatedAt: '2026-07-04T12:01:00Z',
+    }],
+  })
+
+  await page.getByRole('button', {name: 'Screenshot / board'}).click()
+  await page.getByRole('button', {name: 'Pin image'}).click()
+  await expect.poll(async () => page.evaluate((key) => {
+    const state = JSON.parse(window.localStorage.getItem(key) || '{}')
+    return {
+      visible: state.visible === true,
+      itemId: state.item?.id ?? '',
+      ocrStatus: state.item?.ocrStatus ?? '',
+    }
+  }, browserScreenshotPinStateKey)).toEqual({
+    visible: true,
+    itemId: 'pin-ocr-ready-shot',
+    ocrStatus: 'ready',
+  })
+
+  const pinPage = await page.context().newPage()
+  await pinPage.setViewportSize({width: 520, height: 340})
+  await pinPage.goto('/#/screenshot-pin')
+  const pinShell = pinPage.locator('.screenshot-pin-shell')
+  await expect(pinShell).toBeVisible()
+  await expect(pinPage.locator('.screenshot-pin-title')).toContainText('2 text blocks')
+  await expect(pinPage.locator('.screenshot-pin-canvas img')).toHaveAttribute('src', /^data:image\//)
+
+  await pinPage.getByRole('button', {name: 'View OCR result'}).nth(1).click()
+  const overlay = pinPage.locator('.screenshot-pin-canvas svg')
+  await expect(overlay).toBeVisible()
+  await expect(overlay).toHaveAttribute('viewBox', '0 0 640 360')
+  await expect(overlay.locator('polygon')).toHaveCount(2)
+
+  const firstPolygon = overlay.locator('polygon').first()
+  await firstPolygon.hover()
+  await expect(firstPolygon).toHaveClass(/active/)
+  await firstPolygon.click()
+  await expect(pinPage.locator('.screenshot-pin-title')).toContainText('Text copied')
+
+  await pinPage.getByRole('button', {name: 'Translate text'}).click()
+  await expect(pinPage.locator('.screenshot-pin-title')).toContainText('Translation copied')
+
+  const beforeResize = await pinPage.locator('.screenshot-pin-canvas').boundingBox()
+  await pinPage.setViewportSize({width: 760, height: 460})
+  const afterResize = await pinPage.locator('.screenshot-pin-canvas').boundingBox()
+  expect(beforeResize).not.toBeNull()
+  expect(afterResize).not.toBeNull()
+  expect(afterResize!.width).toBeGreaterThan(beforeResize!.width)
+  await expect(overlay).toHaveAttribute('viewBox', '0 0 640 360')
+  await expect(overlay.locator('polygon')).toHaveCount(2)
+  await overlay.locator('polygon').nth(1).hover()
+  await expect(overlay.locator('polygon').nth(1)).toHaveClass(/active/)
+
+  await pinPage.getByRole('button', {name: 'View OCR result'}).first().click()
+  await expect.poll(async () => pinPage.evaluate(() => {
+    const panel = (window as Window & {
+      __RF_FLOATING_PANEL__?: {visible?: boolean; kind?: string; contextId?: string}
+    }).__RF_FLOATING_PANEL__
+    return {
+      visible: panel?.visible === true,
+      kind: panel?.kind ?? '',
+      contextId: panel?.contextId ?? '',
+    }
+  })).toEqual({
+    visible: true,
+    kind: 'ocr-result',
+    contextId: 'ocr-result-pin-ready-shot',
+  })
+  await pinPage.close()
+})
+
+test('pinned screenshot window renders real worker smoke evidence after resize', async ({page}) => {
+  const resultId = 'ocr-result-pin-smoke-region'
+  const imageDataUrl = screenshotSvgDataUrl(900, 280, 'RecordingFreedom', '文字识别')
+  const smokeResult = {
+    id: resultId,
+    sourceKind: 'pinned-screenshot',
+    sourceId: 'pin-smoke-ready-shot',
+    imagePath: 'release-out/ocr-smoke-evidence/region.png',
+    imageSha256: 'browser-pin-smoke-evidence-region',
+    modelId: 'ppocrv5-mobile-zh-en',
+    language: 'zh-en',
+    width: 900,
+    height: 280,
+    plainText: 'RecordingFreedom\n文字识别',
+    createdAt: '2026-07-05T20:37:46.0866316Z',
+    durationMs: 126,
+    blocks: [
+      {
+        id: 'b1',
+        text: 'RecordingFreedom',
+        confidence: 0.9995158016681671,
+        lineIndex: 0,
+        languageHint: 'en',
+        box: [
+          {x: 30.133928571428573, y: 32.083333333333336},
+          {x: 669.9776785714286, y: 32.083333333333336},
+          {x: 669.9776785714286, y: 109.86111111111113},
+          {x: 30.133928571428573, y: 109.86111111111113},
+        ],
+      },
+      {
+        id: 'b2',
+        text: '文字识别',
+        confidence: 0.9980595409870148,
+        lineIndex: 1,
+        languageHint: 'zh',
+        box: [
+          {x: 41.34375, y: 137.08333333333334},
+          {x: 330.3080357142857, y: 137.08333333333334},
+          {x: 330.3080357142857, y: 234.30555555555557},
+          {x: 41.34375, y: 234.30555555555557},
+        ],
+      },
+    ],
+  }
+  const screenshotHistory = [{
+    id: smokeResult.sourceId,
+    path: smokeResult.imagePath,
+    thumbnailPath: 'release-out/ocr-smoke-evidence/region.png',
+    createdAt: smokeResult.createdAt,
+    width: smokeResult.width,
+    height: smokeResult.height,
+    mode: 'region',
+    pinned: false,
+    fixed: false,
+    ocrStatus: 'ready',
+    ocrResultId: resultId,
+    ocrModelId: smokeResult.modelId,
+    ocrLanguage: smokeResult.language,
+    ocrUpdatedAt: smokeResult.createdAt,
+  }]
+  await page.addInitScript(({settingsKey, screenshotHistoryKey, settings, history, result, image}) => {
+    window.localStorage.setItem(settingsKey, JSON.stringify(settings))
+    window.localStorage.setItem(screenshotHistoryKey, JSON.stringify(history))
+    ;(window as Window & {__RF_OCR_RESULTS__?: Record<string, unknown>}).__RF_OCR_RESULTS__ = {
+      [result.id]: result,
+    }
+    ;(window as Window & {__RF_OCR_IMAGES__?: Record<string, unknown>}).__RF_OCR_IMAGES__ = {
+      [result.id]: {
+        available: true,
+        dataUrl: image,
+        path: result.imagePath,
+        bytes: image.length,
+      },
+    }
+  }, {
+    settingsKey: browserSettingsKey,
+    screenshotHistoryKey: browserScreenshotHistoryKey,
+    settings: baseBrowserSettings('en', false, false),
+    history: screenshotHistory,
+    result: smokeResult,
+    image: imageDataUrl,
+  })
+  await page.goto('/')
+
+  await page.getByRole('button', {name: 'Screenshot / board'}).click()
+  await page.getByRole('button', {name: 'Pin image'}).click()
+  await expect.poll(async () => page.evaluate((key) => {
+    const state = JSON.parse(window.localStorage.getItem(key) || '{}')
+    return {
+      visible: state.visible === true,
+      itemId: state.item?.id ?? '',
+      ocrResultId: state.item?.ocrResultId ?? '',
+    }
+  }, browserScreenshotPinStateKey)).toEqual({
+    visible: true,
+    itemId: 'pin-smoke-ready-shot',
+    ocrResultId: resultId,
+  })
+
+  const pinPage = await page.context().newPage()
+  await pinPage.setViewportSize({width: 520, height: 340})
+  await pinPage.addInitScript(({settingsKey, screenshotHistoryKey, settings, history, result, image}) => {
+    window.localStorage.setItem(settingsKey, JSON.stringify(settings))
+    window.localStorage.setItem(screenshotHistoryKey, JSON.stringify(history))
+    ;(window as Window & {__RF_OCR_RESULTS__?: Record<string, unknown>}).__RF_OCR_RESULTS__ = {
+      [result.id]: result,
+    }
+    ;(window as Window & {__RF_OCR_IMAGES__?: Record<string, unknown>}).__RF_OCR_IMAGES__ = {
+      [result.id]: {
+        available: true,
+        dataUrl: image,
+        path: result.imagePath,
+        bytes: image.length,
+      },
+    }
+  }, {
+    settingsKey: browserSettingsKey,
+    screenshotHistoryKey: browserScreenshotHistoryKey,
+    settings: baseBrowserSettings('en', false, false),
+    history: screenshotHistory,
+    result: smokeResult,
+    image: imageDataUrl,
+  })
+  await pinPage.goto('/#/screenshot-pin')
+  await expect(pinPage.locator('.screenshot-pin-title')).toContainText('2 text blocks')
+  await pinPage.getByRole('button', {name: 'View OCR result'}).nth(1).click()
+
+  const overlay = pinPage.locator('.screenshot-pin-canvas svg')
+  await expect(overlay).toHaveAttribute('viewBox', '0 0 900 280')
+  await expect(overlay.locator('polygon')).toHaveCount(2)
+  await expect(overlay.locator('polygon').first()).toHaveAttribute(
+    'points',
+    '30.133928571428573,32.083333333333336 669.9776785714286,32.083333333333336 669.9776785714286,109.86111111111113 30.133928571428573,109.86111111111113',
+  )
+
+  const beforeResize = await pinPage.locator('.screenshot-pin-canvas').boundingBox()
+  await pinPage.setViewportSize({width: 760, height: 460})
+  const afterResize = await pinPage.locator('.screenshot-pin-canvas').boundingBox()
+  expect(beforeResize).not.toBeNull()
+  expect(afterResize).not.toBeNull()
+  expect(afterResize!.width).toBeGreaterThan(beforeResize!.width)
+  await expect(overlay).toHaveAttribute('viewBox', '0 0 900 280')
+  await expect(overlay.locator('polygon')).toHaveCount(2)
   await pinPage.close()
 })
 
@@ -869,7 +1460,7 @@ test('region overlay drops stale hover candidates when the session changes or po
   ))).toBeNull()
 })
 
-async function openRecorderShell(page: Page, options: {locale?: 'zh-CN' | 'en'; microphone?: boolean; systemAudio?: boolean; screenshotHistory?: unknown[]} = {}) {
+async function openRecorderShell(page: Page, options: {locale?: 'zh-CN' | 'en'; microphone?: boolean; systemAudio?: boolean; screenshotHistory?: unknown[]; ocrTranslation?: boolean} = {}) {
   await page.addInitScript(({settingsKey, screenshotHistoryKey, settings, screenshotHistory}) => {
     window.localStorage.setItem(settingsKey, JSON.stringify(settings))
     if (screenshotHistory) {
@@ -886,11 +1477,11 @@ async function openRecorderShell(page: Page, options: {locale?: 'zh-CN' | 'en'; 
   }, {
     settingsKey: browserSettingsKey,
     screenshotHistoryKey: browserScreenshotHistoryKey,
-    settings: baseBrowserSettings(
+    settings: browserSettingsWithOcrTranslation(baseBrowserSettings(
       options.locale ?? 'en',
       options.microphone === true,
       options.systemAudio === true,
-    ),
+    ), options.ocrTranslation === true),
     screenshotHistory: options.screenshotHistory,
   })
   await page.goto('/')
@@ -943,6 +1534,35 @@ function baseBrowserSettings(locale: 'zh-CN' | 'en', microphone: boolean, system
       theme: 'night-teal',
     },
   }
+}
+
+function browserSettingsWithOcrTranslation(settings: Record<string, any>, enabled: boolean) {
+  return {
+    ...settings,
+    ocr: {
+      autoRecognizeScreenshots: false,
+      translation: enabled ? {
+        provider: 'openai-compatible',
+        baseUrl: 'https://translator.example/v1',
+        apiKey: 'browser-test-key',
+        model: 'rf-translator',
+        sourceLanguage: 'auto',
+        targetLanguage: 'en',
+        privacyConfirmed: true,
+        privacyConfirmedAt: '2026-07-06T10:00:00.000Z',
+      } : {
+        provider: 'disabled',
+        sourceLanguage: 'auto',
+        targetLanguage: 'zh-CN',
+        privacyConfirmed: false,
+      },
+    },
+  }
+}
+
+function screenshotSvgDataUrl(width: number, height: number, title: string, subtitle: string) {
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}"><rect width="100%" height="100%" fill="#ffffff"/><text x="30" y="92" fill="#111827" font-family="Arial, sans-serif" font-size="68" font-weight="700">${title}</text><text x="41" y="210" fill="#111827" font-family="Arial, sans-serif" font-size="78" font-weight="700">${subtitle}</text></svg>`
+  return `data:image/svg+xml;base64,${Buffer.from(svg, 'utf-8').toString('base64')}`
 }
 
 async function expectWhiteboardLaunch(page: Page, mode: 'whiteboard' | 'annotation', url: string) {

@@ -249,7 +249,7 @@ func (s *RecordingFreedomService) SaveWhiteboardExport(req WhiteboardExportReque
 func (s *RecordingFreedomService) PatchWhiteboardSettings(patch WhiteboardSettingsPatchRequest) (settings.Settings, error) {
 	s.settingsMu.Lock()
 	defer s.settingsMu.Unlock()
-	currentSettings, err := s.settings.Load()
+	currentSettings, err := s.loadSettingsForMutation()
 	if err != nil {
 		return settings.Settings{}, err
 	}

@@ -7,7 +7,7 @@ import (
 	"github.com/lemon-casino/RecordingFreedom/app/internal/recordingprofile"
 )
 
-const SchemaVersion = 2
+const SchemaVersion = 5
 
 type Locale string
 
@@ -36,6 +36,7 @@ type Settings struct {
 	Audio         AudioSettings      `json:"audio"`
 	Camera        CameraSettings     `json:"camera"`
 	Whiteboard    WhiteboardSettings `json:"whiteboard"`
+	OCR           OCRSettings        `json:"ocr"`
 	Shortcuts     ShortcutSettings   `json:"shortcuts"`
 	Window        WindowSettings     `json:"window"`
 	UpdatedAt     time.Time          `json:"updatedAt"`
@@ -76,6 +77,23 @@ type WhiteboardSettings struct {
 	LastStrokeWidth string `json:"lastStrokeWidth"`
 	LastOpacity     int    `json:"lastOpacity"`
 	CapturePolicy   string `json:"capturePolicy"`
+}
+
+type OCRSettings struct {
+	AutoRecognizeScreenshots bool                   `json:"autoRecognizeScreenshots"`
+	Translation              OCRTranslationSettings `json:"translation"`
+}
+
+type OCRTranslationSettings struct {
+	Provider           string `json:"provider"`
+	BaseURL            string `json:"baseUrl,omitempty"`
+	APIKey             string `json:"apiKey,omitempty"`
+	APIKeySet          bool   `json:"apiKeySet,omitempty"`
+	Model              string `json:"model,omitempty"`
+	SourceLanguage     string `json:"sourceLanguage"`
+	TargetLanguage     string `json:"targetLanguage"`
+	PrivacyConfirmed   bool   `json:"privacyConfirmed"`
+	PrivacyConfirmedAt string `json:"privacyConfirmedAt,omitempty"`
 }
 
 type ShortcutAction string

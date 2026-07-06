@@ -12,6 +12,7 @@ Thumbs.db
 *.out
 *.test
 coverage/
+release-out/
 
 # Wails / Go build output
 app/.task/

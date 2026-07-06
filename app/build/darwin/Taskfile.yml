@@ -141,6 +141,24 @@ tasks:
         fi
       - cp "{{.BIN_DIR}}/{{.APP_NAME}}" "{{.BIN_DIR}}/{{.APP_NAME}}.app/Contents/MacOS"
       - |
+        worker_dir="tools/ocr-worker/darwin-{{.ARCH | default ARCH}}"
+        if [ -x "${worker_dir}/rf-ocr-worker" ]; then
+          mkdir -p "{{.BIN_DIR}}/{{.APP_NAME}}.app/Contents/MacOS/tools/ocr-worker/darwin-{{.ARCH | default ARCH}}"
+          cp "${worker_dir}/rf-ocr-worker" "{{.BIN_DIR}}/{{.APP_NAME}}.app/Contents/MacOS/tools/ocr-worker/darwin-{{.ARCH | default ARCH}}/rf-ocr-worker"
+        else
+          echo "Missing executable ${worker_dir}/rf-ocr-worker; macOS release bundles must include the OCR worker under Contents/MacOS/tools/ocr-worker/darwin-{{.ARCH | default ARCH}}." >&2
+          exit 1
+        fi
+      - |
+        runtime_dir="tools/onnxruntime/darwin-{{.ARCH | default ARCH}}"
+        if [ -f "${runtime_dir}/libonnxruntime.dylib" ]; then
+          mkdir -p "{{.BIN_DIR}}/{{.APP_NAME}}.app/Contents/MacOS/tools/onnxruntime"
+          cp -R "${runtime_dir}" "{{.BIN_DIR}}/{{.APP_NAME}}.app/Contents/MacOS/tools/onnxruntime/darwin-{{.ARCH | default ARCH}}"
+        else
+          echo "Missing ${runtime_dir}/libonnxruntime.dylib; macOS release bundles must include ONNX Runtime under Contents/MacOS/tools/onnxruntime/darwin-{{.ARCH | default ARCH}}." >&2
+          exit 1
+        fi
+      - |
         if [ -x tools/ffmpeg ]; then
           cp tools/ffmpeg "{{.BIN_DIR}}/{{.APP_NAME}}.app/Contents/MacOS/tools/ffmpeg"
         else

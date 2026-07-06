@@ -3,6 +3,7 @@ package settings
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -50,6 +51,12 @@ func TestLoadMissingSettingsReturnsDefaults(t *testing.T) {
 	}
 	if got.Whiteboard.LastOpacity != 100 {
 		t.Fatalf("default whiteboard opacity = %d, want 100", got.Whiteboard.LastOpacity)
+	}
+	if got.OCR.AutoRecognizeScreenshots {
+		t.Fatal("default settings should not auto-run OCR after screenshots")
+	}
+	if got.OCR.Translation.Provider != "disabled" || got.OCR.Translation.PrivacyConfirmed {
+		t.Fatalf("default OCR translation = %#v, want disabled and unconfirmed", got.OCR.Translation)
 	}
 	if got.Shortcuts.ToggleRecording != "CmdOrCtrl+Shift+R" || got.Shortcuts.OpenWhiteboard != "CmdOrCtrl+Shift+B" {
 		t.Fatalf("default shortcuts = %#v, want recording and whiteboard defaults", got.Shortcuts)
@@ -106,6 +113,19 @@ func TestSaveAndLoadSettings(t *testing.T) {
 			LastOpacity:     65,
 			CapturePolicy:   "export-compose",
 		},
+		OCR: OCRSettings{
+			AutoRecognizeScreenshots: true,
+			Translation: OCRTranslationSettings{
+				Provider:           "openai-compatible",
+				BaseURL:            "  https://translate.example/v1  ",
+				APIKey:             "  local-secret  ",
+				Model:              "  gpt-4o-mini  ",
+				SourceLanguage:     "auto",
+				TargetLanguage:     "en",
+				PrivacyConfirmed:   true,
+				PrivacyConfirmedAt: "2026-07-06T00:00:00Z",
+			},
+		},
 		Shortcuts: ShortcutSettings{
 			ToggleRecording: "cmdorctrl + shift + r",
 			TogglePause:     "CmdOrCtrl+Alt+P",
@@ -151,6 +171,23 @@ func TestSaveAndLoadSettings(t *testing.T) {
 	}
 	if loaded.Whiteboard.LastTool != "arrow" || loaded.Whiteboard.LastStrokeWidth != "bold" || loaded.Whiteboard.LastOpacity != 65 {
 		t.Fatalf("whiteboard settings were not persisted: %#v", loaded.Whiteboard)
+	}
+	if !loaded.OCR.AutoRecognizeScreenshots {
+		t.Fatal("OCR auto-recognize setting was not persisted")
+	}
+	if loaded.OCR.Translation.Provider != "openai-compatible" || loaded.OCR.Translation.BaseURL != "https://translate.example/v1" || loaded.OCR.Translation.APIKey != "" || !loaded.OCR.Translation.APIKeySet || loaded.OCR.Translation.Model != "gpt-4o-mini" || loaded.OCR.Translation.TargetLanguage != "en" || !loaded.OCR.Translation.PrivacyConfirmed {
+		t.Fatalf("OCR translation settings were not persisted and normalized: %#v", loaded.OCR.Translation)
+	}
+	settingsPath, err := service.Path()
+	if err != nil {
+		t.Fatalf("Path() error = %v", err)
+	}
+	settingsData, err := os.ReadFile(settingsPath)
+	if err != nil {
+		t.Fatalf("ReadFile(settings) error = %v", err)
+	}
+	if len(settingsData) == 0 || strings.Contains(string(settingsData), "local-secret") {
+		t.Fatalf("settings file should not contain raw OCR translation API key: %s", settingsData)
 	}
 	if loaded.Window.Theme != ThemeSunsetYellow {
 		t.Fatalf("theme = %q, want %q", loaded.Window.Theme, ThemeSunsetYellow)
@@ -259,6 +296,15 @@ func TestSaveNormalizesInvalidSettings(t *testing.T) {
 			ToggleCamera:    "Shift+C",
 			OpenWhiteboard:  "CmdOrCtrl+Shift+B",
 		},
+		OCR: OCRSettings{
+			Translation: OCRTranslationSettings{
+				Provider:           "cloud-mystery",
+				SourceLanguage:     "",
+				TargetLanguage:     "",
+				PrivacyConfirmed:   true,
+				PrivacyConfirmedAt: "2026-07-06T00:00:00Z",
+			},
+		},
 		Window: WindowSettings{Theme: Theme("neon")},
 	})
 	if err != nil {
@@ -287,6 +333,9 @@ func TestSaveNormalizesInvalidSettings(t *testing.T) {
 	}
 	if saved.Shortcuts != DefaultShortcuts() {
 		t.Fatalf("invalid shortcuts normalized to %#v, want defaults %#v", saved.Shortcuts, DefaultShortcuts())
+	}
+	if saved.OCR.Translation.Provider != "disabled" || saved.OCR.Translation.SourceLanguage != "auto" || saved.OCR.Translation.TargetLanguage != "zh-CN" || saved.OCR.Translation.PrivacyConfirmed || saved.OCR.Translation.PrivacyConfirmedAt != "" {
+		t.Fatalf("invalid OCR translation normalized to %#v, want disabled defaults", saved.OCR.Translation)
 	}
 }
 

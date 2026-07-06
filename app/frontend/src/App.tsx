@@ -5,7 +5,10 @@ import {
   ChevronDown,
   ChevronLeft,
   CircleDot,
+  Copy as CopyIcon,
   Crosshair,
+  Eye,
+  FileText,
   FlipHorizontal,
   FolderOpen,
   Gauge,
@@ -71,7 +74,7 @@ import {
   fallbackCapabilities,
   fallbackStorageStatus,
 } from './services/mockBackend'
-import {assistRegionSelection, beginScreenshotAnnotationOverlay, cancelRegionSelector, cancelSelectedRegion, captureScreenshot, completeAnnotationRegionSelection, completeRegionSelection, completeScreenshotRegionSelection, completeScrollingScreenshotSelection, completeFloatingSelect, deleteScreenshotItem, exportRecordingPackage, getFloatingPanelState, getFloatingSelectState, getSourceState, hideFloatingPanel, hideFloatingSelect, hidePinnedScreenshot, hidePipOverlay, hideRegionFrame, hideScreenIndicator, hideSettingsWindow, isWailsDesktopRuntime, listScreenshots, loadBootstrap, loadPinnedScreenshot, loadSettings, logClientEvent, openRecordingPackage, openScreenshot, openScreenshotDirectory, openScreenshotInWhiteboard, openVideoDirectory, patchAudioState, patchCameraState, patchScreenshotItem, patchSettingsPreferences, patchShortcutSettings, patchSourceState, patchWhiteboardSettings, pauseRecording, preflightAudioOnlyRecording, preflightRecording, previewExportRecordingPackage, quitApplication, readAnnotationPreviewImage, readPipPreviewImage, recoverRecordingPackage, restoreCapsuleWindow, resumeRecording, saveSettings, setCapsuleWindowExpanded, setCapsuleWindowHitRegions, setDataRoot, setFloatingPanelHitRegions, setFloatingSelectHitRegions, showAnnotationOverlay, showAnnotationRegionSelector, showFloatingPanel, showFloatingSelect, showPinnedScreenshot, showPipOverlay, showRegionSelector, showScreenIndicator, showScreenshotRegionSelector, showWhiteboardWindow, snapCapsuleWindowToEdge, startAudioOnlyRecording, startMicrophoneLevelMonitor, startRecording, startScrollingScreenshot, stopMicrophoneLevelMonitor, stopRecording, subscribeAudioLevel, subscribeAudioState, subscribeCapsuleDockSide, subscribeCapsuleWindowMoveEnded, subscribeFloatingPanelChanged, subscribeFloatingSelectChanged, subscribeFloatingSelectChosen, subscribeRecordingStatus, subscribeRegionSelection, subscribeScreenshotCaptured, subscribeScreenshotPin, subscribeSettingsChanged, subscribeShortcutTriggered, subscribeSourceStateChanged, subscribeWhiteboardVisibility, updatePipOverlay, updateScreenshotRegionSelection, updateSelectedRegion, type AudioControlState, type AudioLevelUpdate, type AudioStatePatch, type CapsuleWindowDockSide, type CapsuleWindowExpandDirection, type CapsuleWindowHitRegion, type FloatingPanelKind, type FloatingPanelState, type FloatingSelectOption, type FloatingSelectState, type PIPOverlayCamera, type PIPOverlayState, type RecordingExportPlan, type RecordingRecovery, type RecordingStatusUpdate, type RegionSelectionSession, type RegionSmartCandidate, type ScreenshotPinState, type SettingsPreferencesPatch, type ShortcutSettingsPatch, type SourceControlState, type WhiteboardSettingsPatch, type WhiteboardVisibilityUpdate} from './services/recorderBackend'
+import {assistRegionSelection, beginScreenshotAnnotationOverlay, cancelOcrModelDownload, cancelRegionSelector, cancelSelectedRegion, captureScreenshot, completeAnnotationRegionSelection, completeRegionSelection, completeScreenshotRegionSelection, completeScrollingScreenshotSelection, completeFloatingSelect, deleteScreenshotItem, exportRecordingPackage, getFloatingPanelState, getFloatingSelectState, getOcrModelDownloads, getOcrStatus, getSourceState, hideFloatingPanel, hideFloatingSelect, hidePinnedScreenshot, hidePipOverlay, hideRegionFrame, hideScreenIndicator, hideSettingsWindow, installOcrModelPackage, isWailsDesktopRuntime, listScreenshots, loadBootstrap, loadPinnedScreenshot, loadSettings, logClientEvent, openOcrResult, openRecordingPackage, openScreenshot, openScreenshotDirectory, openScreenshotInWhiteboard, openVideoDirectory, patchAudioState, patchCameraState, patchScreenshotItem, patchSettingsPreferences, patchShortcutSettings, patchSourceState, patchWhiteboardSettings, pauseRecording, preflightAudioOnlyRecording, preflightRecording, previewExportRecordingPackage, queueRecognizePinnedScreenshot, queueRecognizeScreenshot, quitApplication, readAnnotationPreviewImage, readPipPreviewImage, readOcrResultImage, recoverRecordingPackage, refreshOcrModelCatalog, removeOcrModel, restoreCapsuleWindow, resumeRecording, saveSettings, setActiveOcrModel, setCapsuleWindowExpanded, setCapsuleWindowHitRegions, setDataRoot, setFloatingPanelHitRegions, setFloatingSelectHitRegions, showAnnotationOverlay, showAnnotationRegionSelector, showFloatingPanel, showFloatingSelect, showPinnedScreenshot, showPipOverlay, showRegionSelector, showScreenIndicator, showScreenshotRegionSelector, showWhiteboardWindow, snapCapsuleWindowToEdge, startAudioOnlyRecording, startMicrophoneLevelMonitor, startOcrModelDownload, startRecording, startScrollingScreenshot, stopMicrophoneLevelMonitor, stopRecording, subscribeAudioLevel, subscribeAudioState, subscribeCapsuleDockSide, subscribeCapsuleWindowMoveEnded, subscribeFloatingPanelChanged, subscribeFloatingSelectChanged, subscribeFloatingSelectChosen, subscribeOcrJobEvents, subscribeOcrModelDownloadEvents, subscribeRecordingStatus, subscribeRegionSelection, subscribeScreenshotCaptured, subscribeScreenshotHistoryChanged, subscribeScreenshotPin, subscribeSettingsChanged, subscribeShortcutTriggered, subscribeSourceStateChanged, subscribeWhiteboardVisibility, translateOcr, updatePipOverlay, updateScreenshotRegionSelection, updateSelectedRegion, type AudioControlState, type AudioLevelUpdate, type AudioStatePatch, type CapsuleWindowDockSide, type CapsuleWindowExpandDirection, type CapsuleWindowHitRegion, type FloatingPanelKind, type FloatingPanelState, type FloatingSelectOption, type FloatingSelectState, type OcrBlock, type OcrModelDownloadSnapshot, type OcrModelInfo, type OcrResult, type OcrStatus, type OcrTranslationResult, type PIPOverlayCamera, type PIPOverlayState, type RecordingExportPlan, type RecordingRecovery, type RecordingStatusUpdate, type RegionSelectionSession, type RegionSmartCandidate, type ScreenshotPinState, type SettingsPreferencesPatch, type ShortcutSettingsPatch, type SourceControlState, type WhiteboardSettingsPatch, type WhiteboardVisibilityUpdate} from './services/recorderBackend'
 import {resolveFloatingPanelPlacement, resolveFloatingSelectPlacement} from './components/floating/floatingPosition'
 
 const AnnotationOverlayWindow = lazy(() => import('./AnnotationOverlayWindow'))
@@ -98,6 +101,8 @@ const pipMaximumDisplayPercent = 100
 const recordingQualityOptions: RecordingQuality[] = ['standard', 'balanced', 'high']
 const fpsOptions = [24, 30, 60]
 const countdownOptions = [0, 3, 5, 10]
+const ocrTranslationProviders: AppSettings['ocr']['translation']['provider'][] = ['disabled', 'deepl', 'openai-compatible']
+const ocrTranslationLanguageOptions = ['auto', 'zh-CN', 'en', 'ja', 'ko', 'fr', 'de', 'es']
 const previewPackagePath = 'data/video/recording-preview.rfrec'
 type ActivePanel = 'source' | 'audio' | 'camera' | 'language' | 'board'
 
@@ -116,6 +121,7 @@ const floatingPanelSizes: Record<FloatingPanelKind, {width: number; height: numb
   language: floatingPanelCompactSize,
   settings: floatingPanelSettingsSize,
   close: {width: 340, height: 170, maxHeight: 170, minWidth: 320},
+  'ocr-result': {width: 380, height: 420, maxHeight: 420, minWidth: 340},
 }
 
 function normalizePipPreset(value: PIPPreset): PIPPreset {
@@ -167,6 +173,35 @@ function ensureVisiblePipConfig(value: PIPConfig): PIPConfig {
 
 function normalizeRecordingQuality(value: string): RecordingQuality {
   return recordingQualityOptions.includes(value as RecordingQuality) ? value as RecordingQuality : 'balanced'
+}
+
+function normalizeOcrTranslationSettings(value: Partial<AppSettings['ocr']['translation']> | undefined): AppSettings['ocr']['translation'] {
+  const provider = value?.provider === 'deepl' || value?.provider === 'openai-compatible' ? value.provider : 'disabled'
+  const privacyConfirmed = provider !== 'disabled' && value?.privacyConfirmed === true
+  return {
+    provider,
+    baseUrl: cleanOptionalString(value?.baseUrl),
+    apiKey: cleanOptionalString(value?.apiKey),
+    apiKeySet: value?.apiKeySet === true || Boolean(cleanOptionalString(value?.apiKey)),
+    model: cleanOptionalString(value?.model),
+    sourceLanguage: cleanOptionalString(value?.sourceLanguage) || 'auto',
+    targetLanguage: cleanOptionalString(value?.targetLanguage) || 'zh-CN',
+    privacyConfirmed,
+    privacyConfirmedAt: privacyConfirmed ? cleanOptionalString(value?.privacyConfirmedAt) : undefined,
+  }
+}
+
+function ocrTranslationUnavailableMessage(translation: AppSettings['ocr']['translation'], copy: RecorderCopy): string {
+  if (translation.provider === 'disabled') return copy.screenshot.translationUnavailable
+  if (!translation.privacyConfirmed) return copy.screenshot.translationPrivacyRequired
+  if (!translation.baseUrl) return copy.screenshot.translationMissingBaseUrl
+  if (!translation.apiKey && !translation.apiKeySet) return copy.screenshot.translationMissingApiKey
+  if (translation.provider === 'openai-compatible' && !translation.model) return copy.screenshot.translationMissingModel
+  return ''
+}
+
+function cleanOptionalString(value: unknown): string | undefined {
+  return typeof value === 'string' && value.trim() ? value.trim() : undefined
 }
 
 function annotationCapturePolicy(includeAnnotations: boolean): AppSettings['whiteboard']['capturePolicy'] {
@@ -328,6 +363,7 @@ type SourceSelectionMessageState = {
 type ApplySettingsOptions = {
   preserveRecordingSettings?: boolean
   preserveTheme?: boolean
+  preserveOcr?: boolean
   preserveAudioEnabled?: boolean
   preserveAudioSelection?: boolean
   preserveCameraEnabled?: boolean
@@ -427,6 +463,8 @@ function App() {
   const [locale, setLocale] = useState<LocaleCode>('zh-CN')
   const [theme, setTheme] = useState<ThemeCode>('night-teal')
   const [startAtLogin, setStartAtLogin] = useState(false)
+  const [autoRecognizeScreenshots, setAutoRecognizeScreenshots] = useState(false)
+  const [ocrTranslation, setOcrTranslation] = useState<AppSettings['ocr']['translation']>(defaultSettings.ocr.translation)
   const [shortcuts, setShortcuts] = useState<ShortcutSettings>(defaultSettings.shortcuts)
   const [shortcutCapture, setShortcutCapture] = useState<ShortcutAction | null>(null)
   const [shortcutError, setShortcutError] = useState('')
@@ -545,7 +583,7 @@ function App() {
     }, pipPreset)
     const savedPipConfig = camera ? ensureVisiblePipConfig(rawPipConfig) : rawPipConfig
     const nextSettings = {
-      schemaVersion: 2,
+      schemaVersion: 4,
       locale,
       source: {
         lastSourceId: selectedSource.id,
@@ -578,6 +616,11 @@ function App() {
         ...(persistedSettingsRef.current?.whiteboard ?? defaultSettings.whiteboard),
         capturePolicy: annotationCapturePolicy(includeAnnotationsInExport),
       },
+      ocr: {
+        ...(persistedSettingsRef.current?.ocr ?? defaultSettings.ocr),
+        autoRecognizeScreenshots,
+        translation: ocrTranslation,
+      },
       shortcuts,
       window: {
         minimizeToTray: true,
@@ -588,7 +631,7 @@ function App() {
     if (!isSettingsWindow || !persistedSettingsRef.current) return nextSettings
     return {
       ...persistedSettingsRef.current,
-      schemaVersion: 2,
+      schemaVersion: 4,
       locale,
       storage: {
         dataRootDir: appData.rootDir,
@@ -603,6 +646,11 @@ function App() {
         ...persistedSettingsRef.current.whiteboard,
         capturePolicy: annotationCapturePolicy(includeAnnotationsInExport),
       },
+      ocr: {
+        ...persistedSettingsRef.current.ocr,
+        autoRecognizeScreenshots,
+        translation: ocrTranslation,
+      },
       shortcuts,
       window: {
         minimizeToTray: true,
@@ -610,7 +658,7 @@ function App() {
         startAtLogin,
       },
     }
-  }, [appData.rootDir, camera, captureCursor, countdownSeconds, includeAnnotationsInExport, isSettingsWindow, locale, microphone, noiseSuppression, pipEdgeFeather, pipMirror, pipPosition, pipPreset, pipScale, pipShape, recordingFPS, recordingQuality, selectedCamera, selectedMic, selectedSource.id, selectedSource.type, selectedSystemAudio, shortcuts, startAtLogin, systemAudio, theme])
+  }, [appData.rootDir, autoRecognizeScreenshots, camera, captureCursor, countdownSeconds, includeAnnotationsInExport, isSettingsWindow, locale, microphone, noiseSuppression, ocrTranslation, pipEdgeFeather, pipMirror, pipPosition, pipPreset, pipScale, pipShape, recordingFPS, recordingQuality, selectedCamera, selectedMic, selectedSource.id, selectedSource.type, selectedSystemAudio, shortcuts, startAtLogin, systemAudio, theme])
   const settingsAutosaveKey = useMemo(() => JSON.stringify({
     locale,
     sourceId: selectedSource.id,
@@ -914,11 +962,21 @@ function App() {
         theme: patch.theme ?? settings.window.theme,
         startAtLogin: patch.startAtLogin ?? settings.window.startAtLogin,
       },
+      ocr: {
+        ...settings.ocr,
+        autoRecognizeScreenshots: patch.autoOcr ?? settings.ocr.autoRecognizeScreenshots,
+        translation: normalizeOcrTranslationSettings({
+          ...settings.ocr.translation,
+          ...(patch.ocrTranslation ?? {}),
+        }),
+      },
     }
   }
   const applyLocalPreferencePatch = (patch: SettingsPreferencesPatch) => {
     if (patch.theme !== undefined) setTheme(normalizeTheme(patch.theme))
     if (patch.startAtLogin !== undefined) setStartAtLogin(patch.startAtLogin)
+    if (patch.autoOcr !== undefined) setAutoRecognizeScreenshots(patch.autoOcr)
+    if (patch.ocrTranslation !== undefined) setOcrTranslation((current) => normalizeOcrTranslationSettings({...current, ...patch.ocrTranslation}))
     if (patch.recordingQuality !== undefined) setRecordingQuality(normalizeRecordingQuality(patch.recordingQuality))
     if (patch.recordingFps !== undefined) setRecordingFPS(fpsOptions.includes(patch.recordingFps) ? patch.recordingFps : 30)
     if (patch.captureCursor !== undefined) setCaptureCursor(patch.captureCursor)
@@ -938,6 +996,9 @@ function App() {
       recordingFps: patch.recordingFps ?? '',
       captureCursor: patch.captureCursor ?? '',
       countdownSeconds: patch.countdownSeconds ?? '',
+      autoOcr: patch.autoOcr ?? '',
+      ocrTranslationProvider: patch.ocrTranslation?.provider ?? '',
+      ocrTranslationApiKeySet: patch.ocrTranslation?.apiKey !== undefined ? String(Boolean(patch.ocrTranslation.apiKey)) : '',
     })
     void patchSettingsPreferences(patch)
       .then((settings) => {
@@ -950,10 +1011,14 @@ function App() {
           recordingFps: settings.recording.fps,
           captureCursor: settings.recording.captureCursor,
           countdownSeconds: settings.recording.countdownSeconds,
+          autoOcr: settings.ocr.autoRecognizeScreenshots,
+          ocrTranslationProvider: settings.ocr.translation.provider,
+          ocrTranslationApiKeySet: Boolean(settings.ocr.translation.apiKey || settings.ocr.translation.apiKeySet),
         })
         applySettingsState(settings, undefined, undefined, {
           preserveRecordingSettings: hasLocalPreferenceIntent(),
           preserveTheme: hasLocalPreferenceIntent(),
+          preserveOcr: hasLocalPreferenceIntent(),
         })
       })
       .catch((error) => {
@@ -1140,7 +1205,7 @@ function App() {
   }
   const applySettingsState = (nextSettings: AppSettings, nextMedia?: MediaInventory, nextSources?: CaptureSource[], options: ApplySettingsOptions = {}) => {
     let effectiveSettings = nextSettings
-    if ((options.preserveRecordingSettings || options.preserveTheme || options.preservePipConfig || options.preserveWhiteboard) && currentSettingsRef.current) {
+    if ((options.preserveRecordingSettings || options.preserveTheme || options.preserveOcr || options.preservePipConfig || options.preserveWhiteboard) && currentSettingsRef.current) {
       effectiveSettings = {
         ...effectiveSettings,
         recording: options.preserveRecordingSettings
@@ -1153,6 +1218,9 @@ function App() {
               startAtLogin: currentSettingsRef.current.window.startAtLogin,
             }
           : effectiveSettings.window,
+        ocr: options.preserveOcr
+          ? currentSettingsRef.current.ocr
+          : effectiveSettings.ocr,
         camera: options.preservePipConfig
           ? {
               ...effectiveSettings.camera,
@@ -1176,6 +1244,10 @@ function App() {
       setTheme(normalizeTheme(effectiveSettings.window.theme))
     }
     setStartAtLogin(Boolean(effectiveSettings.window.startAtLogin))
+    if (!options.preserveOcr) {
+      setAutoRecognizeScreenshots(effectiveSettings.ocr.autoRecognizeScreenshots)
+      setOcrTranslation(normalizeOcrTranslationSettings(effectiveSettings.ocr.translation))
+    }
     if (!options.preserveRecordingSettings) {
       setRecordingQuality(normalizeRecordingQuality(effectiveSettings.recording.quality))
       setRecordingFPS(fpsOptions.includes(effectiveSettings.recording.fps) ? effectiveSettings.recording.fps : 30)
@@ -1804,6 +1876,29 @@ function App() {
     setScreenshotMessage(copy.screenshot.captured(item.width, item.height))
   }), [copy])
 
+  useEffect(() => subscribeScreenshotHistoryChanged((items) => {
+    setScreenshots(items)
+  }), [])
+
+  useEffect(() => subscribeOcrJobEvents((event) => {
+    if (!event.sourceId) return
+    if (event.status === 'queued') {
+      setScreenshotMessage(copy.screenshot.ocrQueued)
+      return
+    }
+    if (event.status === 'running') {
+      setScreenshotMessage(copy.screenshot.ocrStatusRunning)
+      return
+    }
+    if (event.status === 'ready') {
+      setScreenshotMessage(copy.screenshot.ocrStatusReady)
+      return
+    }
+    if (event.status === 'failed') {
+      setScreenshotMessage(event.error || copy.screenshot.ocrStatusFailed)
+    }
+  }), [copy])
+
   useEffect(() => subscribeAudioState((audio) => {
     void logClientEvent('audio', 'state', {
       system: audio.system,
@@ -1831,6 +1926,7 @@ function App() {
       recordingQuality: settings.recording.quality,
       recordingFps: settings.recording.fps,
       theme: settings.window.theme,
+      autoOcr: settings.ocr.autoRecognizeScreenshots,
       whiteboardCapturePolicy: settings.whiteboard.capturePolicy,
       preservePreferences,
       preserveWhiteboard,
@@ -1848,6 +1944,7 @@ function App() {
     applySettingsState(settings, undefined, undefined, {
       preserveRecordingSettings: preservePreferences,
       preserveTheme: preservePreferences,
+      preserveOcr: preservePreferences,
       preserveAudioEnabled,
       preserveAudioSelection,
       preserveCameraEnabled,
@@ -2300,7 +2397,7 @@ function App() {
     }
   }
 
-  const openFloatingPanelFromAnchor = async (panel: FloatingPanelKind, anchorElement: Element) => {
+  const openFloatingPanelFromAnchor = async (panel: FloatingPanelKind, anchorElement: Element, contextId = '') => {
     const size = floatingPanelSizes[panel]
     const token = floatingPanelTokenRef.current + 1
     floatingPanelTokenRef.current = token
@@ -2323,6 +2420,7 @@ function App() {
       token,
       screenId: placement.screenId,
       direction: placement.direction,
+      contextId,
     })
   }
 
@@ -2522,6 +2620,62 @@ function App() {
       })
   }
 
+  const queueScreenshotOcr = (item: ScreenshotItem) => {
+    if (item.ocrStatus === 'queued' || item.ocrStatus === 'running') return
+    setScreenshotMessage(copy.screenshot.ocrQueued)
+    void queueRecognizeScreenshot(item.id)
+      .catch((error) => {
+        const message = readableError(error)
+        console.error('Failed to queue screenshot OCR:', error)
+        setScreenshotMessage(message || copy.screenshot.ocrStatusFailed)
+      })
+  }
+
+  const openScreenshotOcrResult = (item: ScreenshotItem, anchorElement?: Element) => {
+    if (!item.ocrResultId || item.ocrStatus !== 'ready') {
+      queueScreenshotOcr(item)
+      return
+    }
+    if (shouldUseFloatingPanelWindows() && anchorElement) {
+      void openFloatingPanelFromAnchor('ocr-result', anchorElement, item.ocrResultId)
+      return
+    }
+    void openOcrResult(item.ocrResultId)
+      .then((result) => setScreenshotMessage(result.plainText ? copy.screenshot.ocrBlocks(result.blocks.length) : copy.screenshot.ocrNoText))
+      .catch((error) => {
+        console.error('Failed to open screenshot OCR result:', error)
+        setScreenshotMessage(readableError(error) || copy.screenshot.ocrStatusFailed)
+      })
+  }
+
+  const copyScreenshotOcrText = (item: ScreenshotItem) => {
+    if (!item.ocrResultId || item.ocrStatus !== 'ready') {
+      queueScreenshotOcr(item)
+      return
+    }
+    void openOcrResult(item.ocrResultId)
+      .then((result) => copyOcrResultText(result, copy))
+      .then((message) => setScreenshotMessage(message))
+      .catch((error) => {
+        console.error('Failed to copy screenshot OCR text:', error)
+        setScreenshotMessage(readableError(error) || copy.screenshot.copyTextEmpty)
+      })
+  }
+
+  const translateScreenshotOcrText = (item: ScreenshotItem) => {
+    if (!item.ocrResultId || item.ocrStatus !== 'ready') {
+      queueScreenshotOcr(item)
+      return
+    }
+    setScreenshotMessage(copy.screenshot.translationWorking)
+    void translateAndCopyOcrResultText(item.ocrResultId, ocrTranslation, copy)
+      .then(setScreenshotMessage)
+      .catch((error) => {
+        console.error('Failed to translate screenshot OCR text:', error)
+        setScreenshotMessage(`${copy.screenshot.translationFailed}: ${readableError(error)}`)
+      })
+  }
+
   const toggleCameraFromShortcut = () => {
     if (recordingConfigLocked || recordingMode !== 'video') {
       void logClientEvent('shortcuts', 'camera-ignored', {
@@ -2681,6 +2835,18 @@ function App() {
           detail={copy.settings.startAtLoginDetail}
           onChange={(value) => commitSettingsPreferencePatch({startAtLogin: value})}
         />
+        <SettingToggle
+          title={copy.settings.autoOcr}
+          checked={autoRecognizeScreenshots}
+          detail={copy.settings.autoOcrDetail}
+          onChange={(value) => commitSettingsPreferencePatch({autoOcr: value})}
+        />
+        <OcrTranslationSettingsPanel
+          copy={copy}
+          translation={currentSettings.ocr.translation}
+          onChange={(ocrTranslation) => commitSettingsPreferencePatch({ocrTranslation})}
+        />
+        <OcrModelSettings copy={copy} />
         <SettingLine
           title={copy.settings.shortcuts}
           value={copy.settings.shortcutSummary}
@@ -3239,6 +3405,20 @@ function App() {
                       <small>{copy.screenshot.fullDetail}</small>
                     </span>
                   </button>
+                  <button type="button" className="menu-row" onClick={() => captureScreenshotMode('window')}>
+                    <AppWindow size={18} />
+                    <span>
+                      <strong>{copy.screenshot.window}</strong>
+                      <small>{copy.screenshot.windowDetail}</small>
+                    </span>
+                  </button>
+                  <button type="button" className="menu-row" onClick={() => captureScreenshotMode('focused-window')}>
+                    <MousePointer2 size={18} />
+                    <span>
+                      <strong>{copy.screenshot.focusedWindow}</strong>
+                      <small>{copy.screenshot.focusedWindowDetail}</small>
+                    </span>
+                  </button>
                   <button type="button" className="menu-row" onClick={beginScrollingScreenshot}>
                     <ScrollText size={18} />
                     <span>
@@ -3262,40 +3442,53 @@ function App() {
                   <small>{screenshotMessage || copy.screenshot.historyDetail}</small>
                 </div>
                 <div className="screenshot-history-list">
-                  {screenshots.length > 0 ? screenshots.slice(0, 6).map((item) => (
-                    <div className="screenshot-history-row" key={item.id}>
-                      <button type="button" className="screenshot-history-main" onClick={() => openScreenshotFile(item)}>
-                        <ImageIcon size={17} />
-                        <span>
-                          <strong>{screenshotDisplayName(item)}</strong>
-                          <small>{screenshotMeta(item, copy)}</small>
-                        </span>
-                      </button>
-                      <div className="screenshot-history-actions">
-                        <button type="button" aria-label={copy.screenshot.openFolder} title={copy.screenshot.openFolder} onClick={() => openScreenshotFolder(item)}>
-                          <FolderOpen size={15} />
+                  {screenshots.length > 0 ? screenshots.slice(0, 6).map((item) => {
+                    const ocrBusy = screenshotOcrBusy(item)
+                    return (
+                      <div className="screenshot-history-row" key={item.id}>
+                        <button type="button" className="screenshot-history-main" onClick={() => openScreenshotFile(item)}>
+                          <ImageIcon size={17} />
+                          <span>
+                            <strong>{screenshotDisplayName(item)}</strong>
+                            <small>{screenshotMeta(item, copy)}</small>
+                            <small className={`screenshot-ocr-status ${item.ocrStatus}`}>{screenshotOcrStatusText(item, copy)}</small>
+                          </span>
                         </button>
-                        <button type="button" aria-label={copy.screenshot.annotate} title={copy.screenshot.annotate} onClick={() => annotateScreenshot(item)}>
-                          <PenLine size={15} />
-                        </button>
-                        <button type="button" aria-label={copy.screenshot.pin} title={copy.screenshot.pin} onClick={() => pinScreenshot(item)}>
-                          <Pin size={15} />
-                        </button>
-                        <button
-                          type="button"
-                          className={item.fixed ? 'selected' : ''}
-                          aria-label={item.fixed ? copy.screenshot.unfix : copy.screenshot.fix}
-                          title={item.fixed ? copy.screenshot.unfix : copy.screenshot.fix}
-                          onClick={() => toggleScreenshotFixed(item)}
-                        >
-                          {item.fixed ? <Lock size={15} /> : <Unlock size={15} />}
-                        </button>
-                        <button type="button" className="danger" aria-label={copy.screenshot.delete} title={copy.screenshot.delete} onClick={() => deleteScreenshot(item)}>
-                          <Trash2 size={15} />
-                        </button>
+                        <div className="screenshot-history-actions">
+                          <button type="button" className={item.ocrStatus === 'ready' ? 'selected' : ''} disabled={ocrBusy} aria-label={screenshotOcrPrimaryTitle(item, copy)} title={screenshotOcrPrimaryTitle(item, copy)} onClick={(event) => openScreenshotOcrResult(item, event.currentTarget)}>
+                            <FileText size={15} />
+                          </button>
+                          <button type="button" disabled={item.ocrStatus !== 'ready'} aria-label={copy.screenshot.copyText} title={copy.screenshot.copyText} onClick={() => copyScreenshotOcrText(item)}>
+                            <CopyIcon size={15} />
+                          </button>
+                          <button type="button" disabled={item.ocrStatus !== 'ready'} aria-label={copy.screenshot.translateText} title={copy.screenshot.translateText} onClick={() => translateScreenshotOcrText(item)}>
+                            <Languages size={15} />
+                          </button>
+                          <button type="button" aria-label={copy.screenshot.openFolder} title={copy.screenshot.openFolder} onClick={() => openScreenshotFolder(item)}>
+                            <FolderOpen size={15} />
+                          </button>
+                          <button type="button" aria-label={copy.screenshot.annotate} title={copy.screenshot.annotate} onClick={() => annotateScreenshot(item)}>
+                            <PenLine size={15} />
+                          </button>
+                          <button type="button" aria-label={copy.screenshot.pin} title={copy.screenshot.pin} onClick={() => pinScreenshot(item)}>
+                            <Pin size={15} />
+                          </button>
+                          <button
+                            type="button"
+                            className={item.fixed ? 'selected' : ''}
+                            aria-label={item.fixed ? copy.screenshot.unfix : copy.screenshot.fix}
+                            title={item.fixed ? copy.screenshot.unfix : copy.screenshot.fix}
+                            onClick={() => toggleScreenshotFixed(item)}
+                          >
+                            {item.fixed ? <Lock size={15} /> : <Unlock size={15} />}
+                          </button>
+                          <button type="button" className="danger" aria-label={copy.screenshot.delete} title={copy.screenshot.delete} onClick={() => deleteScreenshot(item)}>
+                            <Trash2 size={15} />
+                          </button>
+                        </div>
                       </div>
-                    </div>
-                  )) : (
+                    )
+                  }) : (
                     <div className="source-empty">
                       <ImageIcon size={18} />
                       <span>{copy.screenshot.empty}</span>
@@ -3400,6 +3593,9 @@ function FloatingPanelWindow() {
   const [micMonitorError, setMicMonitorError] = useState<string | null>(null)
   const [screenshots, setScreenshots] = useState<ScreenshotItem[]>([])
   const [screenshotMessage, setScreenshotMessage] = useState('')
+  const [ocrResult, setOcrResult] = useState<OcrResult | null>(null)
+  const [ocrResultLoading, setOcrResultLoading] = useState(false)
+  const [ocrResultError, setOcrResultError] = useState('')
   const [shortcutCapture, setShortcutCapture] = useState<ShortcutAction | null>(null)
   const [shortcutError, setShortcutError] = useState('')
   const [lastBackend, setLastBackend] = useState('ffmpeg-desktop-capture')
@@ -3512,6 +3708,14 @@ function FloatingPanelWindow() {
       setScreenshots((current) => [item, ...current.filter((entry) => entry.id !== item.id)].slice(0, 200))
       setScreenshotMessage(copy.screenshot.captured(item.width, item.height))
     })
+    const unsubscribeScreenshotHistory = subscribeScreenshotHistoryChanged(setScreenshots)
+    const unsubscribeOcr = subscribeOcrJobEvents((event) => {
+      if (!event.sourceId) return
+      if (event.status === 'queued') setScreenshotMessage(copy.screenshot.ocrQueued)
+      if (event.status === 'running') setScreenshotMessage(copy.screenshot.ocrStatusRunning)
+      if (event.status === 'ready') setScreenshotMessage(copy.screenshot.ocrStatusReady)
+      if (event.status === 'failed') setScreenshotMessage(event.error || copy.screenshot.ocrStatusFailed)
+    })
     return () => {
       cancelled = true
       unsubscribePanel()
@@ -3521,8 +3725,38 @@ function FloatingPanelWindow() {
       unsubscribeSource()
       unsubscribeRegion()
       unsubscribeScreenshot()
+      unsubscribeScreenshotHistory()
+      unsubscribeOcr()
     }
   }, [])
+
+  useEffect(() => {
+    const resultId = panelState.kind === 'ocr-result' ? panelState.contextId?.trim() : ''
+    if (!panelState.visible || !resultId) {
+      setOcrResult(null)
+      setOcrResultError('')
+      setOcrResultLoading(false)
+      return
+    }
+    let cancelled = false
+    setOcrResultLoading(true)
+    setOcrResultError('')
+    void openOcrResult(resultId)
+      .then((result) => {
+        if (!cancelled) setOcrResult(result)
+      })
+      .catch((error) => {
+        if (cancelled) return
+        setOcrResult(null)
+        setOcrResultError(readableError(error) || copy.screenshot.ocrStatusFailed)
+      })
+      .finally(() => {
+        if (!cancelled) setOcrResultLoading(false)
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [copy, panelState.contextId, panelState.kind, panelState.visible])
 
   useEffect(() => subscribeAudioLevel((update: AudioLevelUpdate) => {
     if (update.deviceId && selectedMic && update.deviceId !== selectedMic) return
@@ -3689,6 +3923,14 @@ function FloatingPanelWindow() {
         ...current.window,
         theme: patch.theme ?? current.window.theme,
         startAtLogin: patch.startAtLogin ?? current.window.startAtLogin,
+      },
+      ocr: {
+        ...current.ocr,
+        autoRecognizeScreenshots: patch.autoOcr ?? current.ocr.autoRecognizeScreenshots,
+        translation: normalizeOcrTranslationSettings({
+          ...current.ocr.translation,
+          ...(patch.ocrTranslation ?? {}),
+        }),
       },
     }))
     if (patch.theme !== undefined) setTheme(normalizeTheme(patch.theme))
@@ -3870,6 +4112,71 @@ function FloatingPanelWindow() {
   const openWhiteboard = () => {
     void hideFloatingPanel(panelState.token)
     void showWhiteboardWindow()
+  }
+
+  const queueScreenshotOcr = (item: ScreenshotItem) => {
+    if (screenshotOcrBusy(item)) return
+    setScreenshotMessage(copy.screenshot.ocrQueued)
+    void queueRecognizeScreenshot(item.id)
+      .catch((error) => {
+        console.error('Failed to queue floating screenshot OCR:', error)
+        setScreenshotMessage(readableError(error) || copy.screenshot.ocrStatusFailed)
+      })
+  }
+
+  const openScreenshotOcrResult = (item: ScreenshotItem) => {
+    if (!item.ocrResultId || item.ocrStatus !== 'ready') {
+      queueScreenshotOcr(item)
+      return
+    }
+    const size = floatingPanelSizes['ocr-result']
+    const token = panelState.token + 1
+    void showFloatingPanel({
+      kind: 'ocr-result',
+      anchor: panelState.anchor,
+      bounds: {
+        ...panelState.bounds,
+        width: size.width,
+        height: size.height,
+      },
+      dockSide: panelState.dockSide,
+      width: size.width,
+      height: size.height,
+      minWidth: size.minWidth,
+      maxHeight: size.maxHeight,
+      token,
+      screenId: panelState.screenId,
+      direction: panelState.direction,
+      contextId: item.ocrResultId,
+    })
+  }
+
+  const copyScreenshotOcrText = (item: ScreenshotItem) => {
+    if (!item.ocrResultId || item.ocrStatus !== 'ready') {
+      queueScreenshotOcr(item)
+      return
+    }
+    void openOcrResult(item.ocrResultId)
+      .then((result) => copyOcrResultText(result, copy))
+      .then((message) => setScreenshotMessage(message))
+      .catch((error) => {
+        console.error('Failed to copy floating screenshot OCR text:', error)
+        setScreenshotMessage(readableError(error) || copy.screenshot.copyTextEmpty)
+      })
+  }
+
+  const translateScreenshotOcrText = (item: ScreenshotItem) => {
+    if (!item.ocrResultId || item.ocrStatus !== 'ready') {
+      queueScreenshotOcr(item)
+      return
+    }
+    setScreenshotMessage(copy.screenshot.translationWorking)
+    void translateAndCopyOcrResultText(item.ocrResultId, settings.ocr.translation, copy)
+      .then(setScreenshotMessage)
+      .catch((error) => {
+        console.error('Failed to translate floating screenshot OCR text:', error)
+        setScreenshotMessage(`${copy.screenshot.translationFailed}: ${readableError(error)}`)
+      })
   }
 
   const applyDataRoot = async () => {
@@ -4070,6 +4377,14 @@ function FloatingPanelWindow() {
               <Maximize2 size={18} />
               <span><strong>{copy.screenshot.full}</strong><small>{copy.screenshot.fullDetail}</small></span>
             </button>
+            <button type="button" className="menu-row" onClick={() => captureScreenshotMode('window')}>
+              <AppWindow size={18} />
+              <span><strong>{copy.screenshot.window}</strong><small>{copy.screenshot.windowDetail}</small></span>
+            </button>
+            <button type="button" className="menu-row" onClick={() => captureScreenshotMode('focused-window')}>
+              <MousePointer2 size={18} />
+              <span><strong>{copy.screenshot.focusedWindow}</strong><small>{copy.screenshot.focusedWindowDetail}</small></span>
+            </button>
             <button type="button" className="menu-row" onClick={beginScrollingScreenshot}>
               <ScrollText size={18} />
               <span><strong>{copy.screenshot.scrolling}</strong><small>{copy.screenshot.scrollingDetail}</small></span>
@@ -4084,19 +4399,29 @@ function FloatingPanelWindow() {
             <small>{screenshotMessage || copy.screenshot.historyDetail}</small>
           </div>
           <div className="screenshot-history-list">
-            {screenshots.length > 0 ? screenshots.slice(0, 6).map((item) => (
-              <div className="screenshot-history-row" key={item.id}>
-                <button type="button" className="screenshot-history-main" onClick={() => void openScreenshot(item.id)}>
-                  <ImageIcon size={17} />
-                  <span><strong>{screenshotDisplayName(item)}</strong><small>{screenshotMeta(item, copy)}</small></span>
-                </button>
-                <div className="screenshot-history-actions">
-                  <button type="button" aria-label={copy.screenshot.openFolder} title={copy.screenshot.openFolder} onClick={() => void openScreenshotDirectory(item.id)}><FolderOpen size={15} /></button>
-                  <button type="button" aria-label={copy.screenshot.annotate} title={copy.screenshot.annotate} onClick={() => void openScreenshotInWhiteboard(item.id)}><PenLine size={15} /></button>
-                  <button type="button" aria-label={copy.screenshot.pin} title={copy.screenshot.pin} onClick={() => void showPinnedScreenshot(item.id)}><Pin size={15} /></button>
+            {screenshots.length > 0 ? screenshots.slice(0, 6).map((item) => {
+              const ocrBusy = screenshotOcrBusy(item)
+              return (
+                <div className="screenshot-history-row" key={item.id}>
+                  <button type="button" className="screenshot-history-main" onClick={() => void openScreenshot(item.id)}>
+                    <ImageIcon size={17} />
+                    <span>
+                      <strong>{screenshotDisplayName(item)}</strong>
+                      <small>{screenshotMeta(item, copy)}</small>
+                      <small className={`screenshot-ocr-status ${item.ocrStatus}`}>{screenshotOcrStatusText(item, copy)}</small>
+                    </span>
+                  </button>
+                  <div className="screenshot-history-actions">
+                    <button type="button" className={item.ocrStatus === 'ready' ? 'selected' : ''} disabled={ocrBusy} aria-label={screenshotOcrPrimaryTitle(item, copy)} title={screenshotOcrPrimaryTitle(item, copy)} onClick={() => openScreenshotOcrResult(item)}><FileText size={15} /></button>
+                    <button type="button" disabled={item.ocrStatus !== 'ready'} aria-label={copy.screenshot.copyText} title={copy.screenshot.copyText} onClick={() => copyScreenshotOcrText(item)}><CopyIcon size={15} /></button>
+                    <button type="button" disabled={item.ocrStatus !== 'ready'} aria-label={copy.screenshot.translateText} title={copy.screenshot.translateText} onClick={() => translateScreenshotOcrText(item)}><Languages size={15} /></button>
+                    <button type="button" aria-label={copy.screenshot.openFolder} title={copy.screenshot.openFolder} onClick={() => void openScreenshotDirectory(item.id)}><FolderOpen size={15} /></button>
+                    <button type="button" aria-label={copy.screenshot.annotate} title={copy.screenshot.annotate} onClick={() => void openScreenshotInWhiteboard(item.id)}><PenLine size={15} /></button>
+                    <button type="button" aria-label={copy.screenshot.pin} title={copy.screenshot.pin} onClick={() => void showPinnedScreenshot(item.id)}><Pin size={15} /></button>
+                  </div>
                 </div>
-              </div>
-            )) : (
+              )
+            }) : (
               <div className="source-empty"><ImageIcon size={18} /><span>{copy.screenshot.empty}</span></div>
             )}
           </div>
@@ -4121,6 +4446,21 @@ function FloatingPanelWindow() {
         </div>
       )}
 
+      {panel === 'ocr-result' && (
+        <OcrResultPanel
+          copy={copy}
+          result={ocrResult}
+          translation={settings.ocr.translation}
+          loading={ocrResultLoading}
+          error={ocrResultError}
+          onClose={() => void hideFloatingPanel(panelState.token)}
+          onCopy={() => {
+            if (!ocrResult) return
+            void copyOcrResultText(ocrResult, copy).then(setScreenshotMessage)
+          }}
+        />
+      )}
+
       {panel === 'settings' && (
         <section className="settings-panel settings-sheet floating-settings-panel" role="dialog" aria-label={copy.aria.settingsDialog}>
           <div className="sheet-header">
@@ -4142,6 +4482,9 @@ function FloatingPanelWindow() {
             }} />
             <SettingSelect title={copy.settings.theme} value={theme} options={themeOptions.map((option) => ({value: option, label: copy.themeNames[option], swatch: themeSwatches[option]}))} onChange={(value) => commitSettingsPreferencePatch({theme: normalizeTheme(value)})} />
             <SettingToggle title={copy.settings.startAtLogin} checked={settings.window.startAtLogin} detail={copy.settings.startAtLoginDetail} onChange={(value) => commitSettingsPreferencePatch({startAtLogin: value})} />
+            <SettingToggle title={copy.settings.autoOcr} checked={settings.ocr.autoRecognizeScreenshots} detail={copy.settings.autoOcrDetail} onChange={(value) => commitSettingsPreferencePatch({autoOcr: value})} />
+            <OcrTranslationSettingsPanel copy={copy} translation={settings.ocr.translation} onChange={(ocrTranslation) => commitSettingsPreferencePatch({ocrTranslation})} compact />
+            <OcrModelSettings copy={copy} compact />
             <SettingLine title={copy.settings.shortcuts} value={copy.settings.shortcutSummary} detail={shortcutError || copy.settings.shortcutDetail} />
             {shortcutActions.map((action) => (
               <SettingShortcut
@@ -4189,6 +4532,262 @@ function FloatingPanelWindow() {
         </section>
       )}
     </main>
+  )
+}
+
+function OcrResultPanel({
+  copy,
+  result,
+  translation,
+  loading,
+  error,
+  onClose,
+  onCopy,
+}: {
+  copy: RecorderCopy
+  result: OcrResult | null
+  translation: AppSettings['ocr']['translation']
+  loading: boolean
+  error: string
+  onClose: () => void
+  onCopy: () => void
+}) {
+  const plainText = result?.plainText.trim() ?? ''
+  const [previewDataUrl, setPreviewDataUrl] = useState('')
+  const [previewError, setPreviewError] = useState('')
+  const [hoveredBlockId, setHoveredBlockId] = useState('')
+  const [copiedBlockId, setCopiedBlockId] = useState('')
+  const [translationCopied, setTranslationCopied] = useState(false)
+  const [translationMessage, setTranslationMessage] = useState('')
+  const [translationBusy, setTranslationBusy] = useState(false)
+  const [translationResult, setTranslationResult] = useState<OcrTranslationResult | null>(null)
+  const previewLogKeyRef = useRef('')
+  const renderedLogKeyRef = useRef('')
+  const translatedText = translationResult?.blocks.map((block) => block.translated.trim()).filter(Boolean).join('\n').trim() ?? ''
+
+  useEffect(() => {
+    let cancelled = false
+    previewLogKeyRef.current = ''
+    renderedLogKeyRef.current = ''
+    setPreviewDataUrl('')
+    setPreviewError('')
+    setHoveredBlockId('')
+    setCopiedBlockId('')
+    setTranslationCopied(false)
+    setTranslationMessage('')
+    setTranslationBusy(false)
+    setTranslationResult(null)
+    if (!result) return
+    void readOcrResultImage(result.id)
+      .then((image) => {
+        if (cancelled) return
+        const logKey = `${result.id}:${image.available ? 'available' : 'missing'}:${image.bytes || 0}`
+        if (previewLogKeyRef.current !== logKey) {
+          previewLogKeyRef.current = logKey
+          void logClientEvent('ocr-result', 'preview-loaded', {
+            resultId: result.id,
+            sourceKind: result.sourceKind,
+            sourceId: result.sourceId,
+            width: result.width,
+            height: result.height,
+            blockCount: result.blocks.length,
+            available: image.available,
+            bytes: image.bytes || 0,
+          })
+        }
+        if (image.available && image.dataUrl) {
+          setPreviewDataUrl(image.dataUrl)
+        }
+      })
+      .catch((error) => {
+        if (cancelled) return
+        setPreviewError(readableError(error))
+        void logClientEvent('ocr-result', 'preview-error', {
+          resultId: result.id,
+          sourceKind: result.sourceKind,
+          sourceId: result.sourceId,
+        })
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [result?.id])
+
+  useEffect(() => {
+    if (!result || !previewDataUrl) return
+    const polygonCount = result.blocks.filter((block) => block.box.length >= 4 && ocrBlockPolygonPoints(block)).length
+    const logKey = `${result.id}:${result.width}x${result.height}:${result.blocks.length}:${polygonCount}`
+    if (renderedLogKeyRef.current === logKey) return
+    let cancelled = false
+    const frame = window.requestAnimationFrame(() => {
+      if (cancelled || renderedLogKeyRef.current === logKey) return
+      renderedLogKeyRef.current = logKey
+      void logClientEvent('ocr-result', 'rendered', {
+        resultId: result.id,
+        sourceKind: result.sourceKind,
+        sourceId: result.sourceId,
+        width: result.width,
+        height: result.height,
+        blockCount: result.blocks.length,
+        polygonCount,
+        hasPreview: true,
+      })
+    })
+    return () => {
+      cancelled = true
+      window.cancelAnimationFrame(frame)
+    }
+  }, [previewDataUrl, result])
+
+  const copyBlockText = (block: OcrBlock) => {
+    const text = block.text.trim()
+    if (!text) return
+    void writeClipboardText(text)
+      .then(() => {
+        void logClientEvent('ocr-result', 'copy-block', {
+          resultId: result?.id ?? '',
+          sourceKind: result?.sourceKind ?? '',
+          sourceId: result?.sourceId ?? '',
+          blockId: block.id,
+        })
+        setCopiedBlockId(block.id)
+        window.setTimeout(() => setCopiedBlockId((current) => current === block.id ? '' : current), 1200)
+      })
+      .catch(() => undefined)
+  }
+
+  const runTranslation = () => {
+    if (!result || !plainText || translationBusy) return
+    const normalized = normalizeOcrTranslationSettings(translation)
+    const unavailable = ocrTranslationUnavailableMessage(normalized, copy)
+    if (unavailable) {
+      setTranslationResult(null)
+      setTranslationMessage(unavailable)
+      return
+    }
+    setTranslationBusy(true)
+    setTranslationMessage(copy.screenshot.translationWorking)
+    void translateOcr({
+      ocrResultId: result.id,
+      provider: normalized.provider,
+      sourceLanguage: normalized.sourceLanguage,
+      targetLanguage: normalized.targetLanguage,
+      baseUrl: normalized.baseUrl,
+      apiKey: normalized.apiKey,
+      model: normalized.model,
+      force: false,
+    })
+      .then((next) => {
+        setTranslationResult(next)
+        setTranslationMessage(copy.screenshot.translationReady)
+        void logClientEvent('ocr-result', 'translation-rendered', {
+          resultId: result.id,
+          sourceKind: result.sourceKind,
+          sourceId: result.sourceId,
+          provider: next.provider,
+          targetLanguage: next.targetLanguage,
+          blockCount: next.blocks.length,
+        })
+      })
+      .catch((error) => {
+        setTranslationResult(null)
+        setTranslationMessage(`${copy.screenshot.translationFailed}: ${readableError(error)}`)
+      })
+      .finally(() => setTranslationBusy(false))
+  }
+
+  const copyTranslatedText = () => {
+    if (!translatedText) return
+    void writeClipboardText(translatedText)
+      .then(() => {
+        setTranslationCopied(true)
+        window.setTimeout(() => setTranslationCopied(false), 1200)
+      })
+      .catch(() => undefined)
+  }
+
+  return (
+    <section className="ocr-result-panel">
+      <div className="ocr-result-header">
+        <span>
+          <Eye size={16} />
+          <strong>{copy.screenshot.ocrResult}</strong>
+        </span>
+        <button type="button" className="sheet-close" onClick={onClose}>{copy.common.close}</button>
+      </div>
+      {loading && <div className="source-empty"><FileText size={18} /><span>{copy.screenshot.ocrStatusRunning}</span></div>}
+      {!loading && error && <div className="source-empty error"><FileText size={18} /><span>{error}</span></div>}
+      {!loading && !error && result && (
+        <>
+          <div className="ocr-result-summary">
+            <span>{result.modelId || copy.screenshot.ocr}</span>
+            <b>{copy.screenshot.ocrBlocks(result.blocks.length)}</b>
+          </div>
+          {previewDataUrl && (
+            <div className="ocr-preview-frame">
+              <img src={previewDataUrl} alt={copy.screenshot.ocrResult} draggable={false} />
+              <svg viewBox={`0 0 ${Math.max(1, result.width)} ${Math.max(1, result.height)}`} preserveAspectRatio="none" aria-hidden="true">
+                {result.blocks.map((block) => (
+                  <polygon
+                    key={block.id}
+                    points={ocrBlockPolygonPoints(block)}
+                    className={block.id === hoveredBlockId ? 'active' : ''}
+                  />
+                ))}
+              </svg>
+            </div>
+          )}
+          {!previewDataUrl && previewError && <div className="ocr-preview-note">{previewError}</div>}
+          <div className="ocr-result-text">
+            {plainText || copy.screenshot.ocrNoText}
+          </div>
+          <div className="ocr-result-actions">
+            <button type="button" className="menu-row" disabled={!plainText} onClick={onCopy}>
+              <CopyIcon size={16} />
+              <span><strong>{copy.screenshot.copyText}</strong></span>
+            </button>
+            <button type="button" className="menu-row" disabled={!plainText || translationBusy} onClick={runTranslation}>
+              <Languages size={16} />
+              <span><strong>{translationBusy ? copy.screenshot.translationWorking : copy.screenshot.translateText}</strong></span>
+            </button>
+            <button type="button" className="menu-row" disabled={!translatedText} onClick={copyTranslatedText}>
+              <CopyIcon size={16} />
+              <span><strong>{translationCopied ? copy.screenshot.copiedTranslation : copy.screenshot.copyTranslation}</strong></span>
+            </button>
+          </div>
+          {translationMessage && <div className="ocr-translation-note">{translationMessage}</div>}
+          {translationResult && translationResult.blocks.length > 0 && (
+            <div className="ocr-translation-list" aria-label={copy.screenshot.translationReady}>
+              {translationResult.blocks.map((block) => (
+                <div className="ocr-translation-row" key={block.blockId}>
+                  <span>{block.source}</span>
+                  <strong>{block.translated}</strong>
+                </div>
+              ))}
+            </div>
+          )}
+          <div className="ocr-block-list" aria-label={copy.screenshot.ocrBlocks(result.blocks.length)}>
+            {result.blocks.map((block) => (
+              <button
+                type="button"
+                className={`ocr-block-row ${block.id === hoveredBlockId ? 'active' : ''}`}
+                key={block.id || `${block.lineIndex}-${block.text}`}
+                onPointerEnter={() => setHoveredBlockId(block.id)}
+                onPointerLeave={() => setHoveredBlockId('')}
+                onFocus={() => setHoveredBlockId(block.id)}
+                onBlur={() => setHoveredBlockId('')}
+                onClick={() => copyBlockText(block)}
+                title={copiedBlockId === block.id ? copy.screenshot.copiedText : copy.screenshot.copyText}
+              >
+                <span>{block.text || copy.screenshot.ocrNoText}</span>
+                <b>{copiedBlockId === block.id ? copy.screenshot.copiedText : `${Math.round((block.confidence || 0) * 100)}%`}</b>
+              </button>
+            ))}
+          </div>
+        </>
+      )}
+      {!loading && !error && !result && <div className="source-empty"><FileText size={18} /><span>{copy.screenshot.ocrNoText}</span></div>}
+    </section>
   )
 }
 
@@ -4289,6 +4888,102 @@ function FloatingSelectWindow() {
   )
 }
 
+function screenshotOcrBusy(item: ScreenshotItem) {
+  return item.ocrStatus === 'queued' || item.ocrStatus === 'running'
+}
+
+function screenshotOcrStatusText(item: ScreenshotItem, copy: RecorderCopy) {
+  switch (item.ocrStatus) {
+    case 'queued':
+      return copy.screenshot.ocrStatusQueued
+    case 'running':
+      return copy.screenshot.ocrStatusRunning
+    case 'ready':
+      return copy.screenshot.ocrStatusReady
+    case 'failed':
+      return item.ocrError || copy.screenshot.ocrStatusFailed
+    default:
+      return copy.screenshot.ocrStatusNone
+  }
+}
+
+function screenshotOcrPrimaryTitle(item: ScreenshotItem, copy: RecorderCopy) {
+  if (item.ocrStatus === 'ready') return copy.screenshot.openOcrResult
+  if (item.ocrStatus === 'failed') return copy.screenshot.retryOcr
+  if (screenshotOcrBusy(item)) return screenshotOcrStatusText(item, copy)
+  return copy.screenshot.recognizeText
+}
+
+function shouldUseFloatingPanelWindows() {
+  return isWailsDesktopRuntime() || (window as Window & {__RF_FORCE_FLOATING_PANEL_WINDOWS__?: boolean}).__RF_FORCE_FLOATING_PANEL_WINDOWS__ === true
+}
+
+function ocrBlockPolygonPoints(block: OcrBlock) {
+  if (block.box.length === 0) return ''
+  return block.box.map((point) => `${point.x},${point.y}`).join(' ')
+}
+
+function ocrBlockStableId(block: OcrBlock, index: number) {
+  if (block.id) return block.id
+  const boxKey = block.box.map((point) => `${Math.round(point.x)}:${Math.round(point.y)}`).join('|')
+  return `block-${index}-${block.lineIndex}-${boxKey}-${block.text}`
+}
+
+async function copyOcrResultText(result: OcrResult, copy: RecorderCopy) {
+  const text = result.plainText.trim()
+  if (!text) return copy.screenshot.copyTextEmpty
+  await writeClipboardText(text)
+  return copy.screenshot.copiedText
+}
+
+async function translateAndCopyOcrResultText(resultId: string, translation: AppSettings['ocr']['translation'], copy: RecorderCopy) {
+  const normalized = normalizeOcrTranslationSettings(translation)
+  const unavailable = ocrTranslationUnavailableMessage(normalized, copy)
+  if (unavailable) return unavailable
+  const result = await translateOcr({
+    ocrResultId: resultId,
+    provider: normalized.provider,
+    sourceLanguage: normalized.sourceLanguage,
+    targetLanguage: normalized.targetLanguage,
+    baseUrl: normalized.baseUrl,
+    apiKey: normalized.apiKey,
+    model: normalized.model,
+    force: false,
+  })
+  const text = ocrTranslationPlainText(result)
+  if (!text) return copy.screenshot.copyTextEmpty
+  await writeClipboardText(text)
+  return copy.screenshot.copiedTranslation
+}
+
+function ocrTranslationPlainText(result: OcrTranslationResult | null) {
+  return result?.blocks.map((block) => block.translated.trim()).filter(Boolean).join('\n').trim() ?? ''
+}
+
+async function writeClipboardText(text: string) {
+  if (navigator.clipboard?.writeText) {
+    try {
+      await navigator.clipboard.writeText(text)
+      return
+    } catch {
+      // Some desktop webviews expose clipboard but reject without focus; fall back to a temporary selection.
+    }
+  }
+  const textarea = document.createElement('textarea')
+  textarea.value = text
+  textarea.setAttribute('readonly', 'true')
+  textarea.style.position = 'fixed'
+  textarea.style.left = '-9999px'
+  textarea.style.top = '0'
+  document.body.appendChild(textarea)
+  textarea.select()
+  try {
+    if (!document.execCommand('copy')) throw new Error('clipboard copy failed')
+  } finally {
+    document.body.removeChild(textarea)
+  }
+}
+
 function ScreenIndicatorWindow() {
   const indicatorWindow = window as Window & {__RF_SCREEN_INDICATOR__?: {label?: string}}
   const [label, setLabel] = useState(indicatorWindow.__RF_SCREEN_INDICATOR__?.label ?? '')
@@ -4319,8 +5014,19 @@ function ScreenshotPinWindow() {
   const [pinState, setPinState] = useState<ScreenshotPinState | undefined>(pinWindow.__RF_SCREENSHOT_PIN__)
   const [locale, setLocale] = useState<LocaleCode>(navigator.language.toLowerCase().startsWith('zh') ? 'zh-CN' : 'en')
   const [theme, setTheme] = useState<ThemeCode>('night-teal')
+  const [translationSettings, setTranslationSettings] = useState<AppSettings['ocr']['translation']>(defaultSettings.ocr.translation)
+  const [ocrResult, setOcrResult] = useState<OcrResult | null>(null)
+  const [ocrMessage, setOcrMessage] = useState('')
+  const [highlightOcr, setHighlightOcr] = useState(false)
+  const [hoveredBlockId, setHoveredBlockId] = useState('')
+  const [copiedBlockId, setCopiedBlockId] = useState('')
+  const itemRef = useRef<ScreenshotItem | undefined>(pinState?.item)
+  const floatingTokenRef = useRef(0)
   const copy = copyByLocale[locale]
   const item = pinState?.item
+  const ocrBusy = item ? screenshotOcrBusy(item) : false
+  const ocrReady = item?.ocrStatus === 'ready' && Boolean(item.ocrResultId) && Boolean(ocrResult)
+  const ocrStatusText = item ? screenshotOcrStatusText(item, copy) : ''
 
   useEffect(() => {
     document.body.classList.add('rf-screenshot-pin-window')
@@ -4332,26 +5038,151 @@ function ScreenshotPinWindow() {
       .then(([settings, state]) => {
         setLocale(normalizeLocale(settings.locale))
         setTheme(normalizeTheme(settings.window.theme))
+        setTranslationSettings(normalizeOcrTranslationSettings(settings.ocr.translation))
         setPinState(state)
       })
       .catch((error) => console.info('Using screenshot pin fallback:', error))
     const unsubscribeSettings = subscribeSettingsChanged((settings) => {
       setLocale(normalizeLocale(settings.locale))
       setTheme(normalizeTheme(settings.window.theme))
+      setTranslationSettings(normalizeOcrTranslationSettings(settings.ocr.translation))
     })
     const unsubscribePin = subscribeScreenshotPin((state) => {
       setPinState(state)
     })
+    const unsubscribeHistory = subscribeScreenshotHistoryChanged((items) => {
+      setPinState((current) => {
+        if (!current?.item) return current
+        const updated = items.find((entry) => entry.id === current.item?.id)
+        if (!updated) return current
+        return {
+          ...current,
+          item: updated,
+          fixed: updated.fixed,
+        }
+      })
+    })
+    const unsubscribeOcr = subscribeOcrJobEvents((event) => {
+      const currentItem = itemRef.current
+      if (!currentItem || event.sourceId !== currentItem.id) return
+      if (event.status === 'queued') setOcrMessage(copy.screenshot.ocrQueued)
+      if (event.status === 'running') setOcrMessage(copy.screenshot.ocrStatusRunning)
+      if (event.status === 'ready') setOcrMessage(copy.screenshot.ocrStatusReady)
+      if (event.status === 'failed') setOcrMessage(event.error || copy.screenshot.ocrStatusFailed)
+    })
     return () => {
       unsubscribeSettings()
       unsubscribePin()
+      unsubscribeHistory()
+      unsubscribeOcr()
     }
-  }, [])
+  }, [copy])
 
   useEffect(() => {
     document.documentElement.lang = locale
     document.documentElement.dataset.theme = theme
   }, [locale, theme])
+
+  useEffect(() => {
+    itemRef.current = item
+  }, [item])
+
+  useEffect(() => {
+    setHoveredBlockId('')
+    setCopiedBlockId('')
+    if (!item?.ocrResultId || item.ocrStatus !== 'ready') {
+      setOcrResult(null)
+      setHighlightOcr(false)
+      return
+    }
+    let cancelled = false
+    void openOcrResult(item.ocrResultId)
+      .then((result) => {
+        if (cancelled) return
+        setOcrResult(result)
+        setOcrMessage(result.plainText ? copy.screenshot.ocrBlocks(result.blocks.length) : copy.screenshot.ocrNoText)
+      })
+      .catch((error) => {
+        if (cancelled) return
+        setOcrResult(null)
+        setOcrMessage(readableError(error) || copy.screenshot.ocrStatusFailed)
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [copy, item?.id, item?.ocrResultId, item?.ocrStatus])
+
+  const queuePinnedOcr = () => {
+    if (!item || ocrBusy) return
+    setOcrMessage(copy.screenshot.ocrQueued)
+    void queueRecognizePinnedScreenshot(item.id)
+      .catch((error) => {
+        console.error('Failed to queue pinned screenshot OCR:', error)
+        setOcrMessage(readableError(error) || copy.screenshot.ocrStatusFailed)
+      })
+  }
+
+  const openPinnedOcrResult = async (anchorElement: Element) => {
+    if (!item?.ocrResultId || item.ocrStatus !== 'ready') {
+      queuePinnedOcr()
+      return
+    }
+    const size = floatingPanelSizes['ocr-result']
+    const token = floatingTokenRef.current + 1
+    floatingTokenRef.current = token
+    const placement = await resolveFloatingPanelPlacement(anchorElement, {
+      dockSide: 'none',
+      width: size.width,
+      height: size.height,
+      maxHeight: size.maxHeight,
+      minWidth: size.minWidth,
+    })
+    await showFloatingPanel({
+      kind: 'ocr-result',
+      anchor: placement.anchor,
+      bounds: placement.bounds,
+      dockSide: 'none',
+      width: placement.bounds.width,
+      height: placement.bounds.height,
+      minWidth: size.minWidth,
+      maxHeight: size.maxHeight,
+      token,
+      screenId: placement.screenId,
+      direction: placement.direction,
+      contextId: item.ocrResultId,
+    })
+  }
+
+  const copyPinnedOcrText = () => {
+    if (!ocrResult) return
+    void copyOcrResultText(ocrResult, copy).then(setOcrMessage).catch(() => setOcrMessage(copy.screenshot.copyTextEmpty))
+  }
+
+  const translatePinnedOcrText = () => {
+    if (!item?.ocrResultId || item.ocrStatus !== 'ready') {
+      queuePinnedOcr()
+      return
+    }
+    setOcrMessage(copy.screenshot.translationWorking)
+    void translateAndCopyOcrResultText(item.ocrResultId, translationSettings, copy)
+      .then(setOcrMessage)
+      .catch((error) => {
+        console.error('Failed to translate pinned screenshot OCR text:', error)
+        setOcrMessage(`${copy.screenshot.translationFailed}: ${readableError(error)}`)
+      })
+  }
+
+  const copyPinnedBlockText = (block: OcrBlock, blockId: string) => {
+    const text = block.text.trim()
+    if (!text) return
+    void writeClipboardText(text)
+      .then(() => {
+        setCopiedBlockId(blockId)
+        setOcrMessage(copy.screenshot.copiedText)
+        window.setTimeout(() => setCopiedBlockId((current) => current === blockId ? '' : current), 1200)
+      })
+      .catch(() => setOcrMessage(copy.screenshot.copyTextEmpty))
+  }
 
   if (!pinState?.visible || !pinState.dataUrl || !item) {
     return (
@@ -4364,11 +5195,26 @@ function ScreenshotPinWindow() {
   return (
     <main className={`screenshot-pin-shell ${pinState.fixed ? 'fixed' : ''}`} data-theme={theme}>
       <section className="screenshot-pin-toolbar">
-        <span>
+        <span className="screenshot-pin-title">
           <ImageIcon size={15} />
-          <strong>{screenshotDisplayName(item)}</strong>
+          <span>
+            <strong>{screenshotDisplayName(item)}</strong>
+            <small>{ocrMessage || ocrStatusText}</small>
+          </span>
         </span>
         <div>
+          <button type="button" disabled={ocrBusy} aria-label={screenshotOcrPrimaryTitle(item, copy)} title={screenshotOcrPrimaryTitle(item, copy)} onClick={(event) => void openPinnedOcrResult(event.currentTarget)}>
+            <FileText size={15} />
+          </button>
+          <button type="button" disabled={!ocrReady} className={highlightOcr ? 'selected' : ''} aria-label={copy.screenshot.openOcrResult} title={copy.screenshot.openOcrResult} onClick={() => setHighlightOcr((visible) => !visible)}>
+            <Eye size={15} />
+          </button>
+          <button type="button" disabled={!ocrReady || !ocrResult?.plainText.trim()} aria-label={copy.screenshot.copyText} title={copy.screenshot.copyText} onClick={copyPinnedOcrText}>
+            <CopyIcon size={15} />
+          </button>
+          <button type="button" disabled={!ocrReady || !ocrResult?.plainText.trim()} aria-label={copy.screenshot.translateText} title={copy.screenshot.translateText} onClick={translatePinnedOcrText}>
+            <Languages size={15} />
+          </button>
           <button type="button" aria-label={pinState.fixed ? copy.screenshot.fixed : copy.screenshot.pin} title={pinState.fixed ? copy.screenshot.fixed : copy.screenshot.pin}>
             {pinState.fixed ? <Lock size={15} /> : <Pin size={15} />}
           </button>
@@ -4377,7 +5223,36 @@ function ScreenshotPinWindow() {
           </button>
         </div>
       </section>
-      <img src={pinState.dataUrl} alt={copy.screenshot.pinned} draggable={false} />
+      <div className="screenshot-pin-canvas">
+        <img src={pinState.dataUrl} alt={copy.screenshot.pinned} draggable={false} />
+        {highlightOcr && ocrResult && ocrReady && ocrResult.blocks.length > 0 && (
+          <svg viewBox={`0 0 ${Math.max(1, ocrResult.width)} ${Math.max(1, ocrResult.height)}`} preserveAspectRatio="xMidYMid meet" aria-label={copy.screenshot.ocrBlocks(ocrResult.blocks.length)}>
+            {ocrResult.blocks.map((block, index) => {
+              const blockId = ocrBlockStableId(block, index)
+              return (
+                <polygon
+                  key={blockId}
+                  points={ocrBlockPolygonPoints(block)}
+                  className={`${blockId === hoveredBlockId ? 'active' : ''} ${blockId === copiedBlockId ? 'copied' : ''}`.trim()}
+                  tabIndex={0}
+                  role="button"
+                  aria-label={block.text || copy.screenshot.ocrNoText}
+                  onPointerEnter={() => setHoveredBlockId(blockId)}
+                  onPointerLeave={() => setHoveredBlockId('')}
+                  onFocus={() => setHoveredBlockId(blockId)}
+                  onBlur={() => setHoveredBlockId('')}
+                  onClick={() => copyPinnedBlockText(block, blockId)}
+                  onKeyDown={(event) => {
+                    if (event.key !== 'Enter' && event.key !== ' ') return
+                    event.preventDefault()
+                    copyPinnedBlockText(block, blockId)
+                  }}
+                />
+              )
+            })}
+          </svg>
+        )}
+      </div>
     </main>
   )
 }
@@ -6504,6 +7379,394 @@ function preflightDetail(preflight: RecordingPreflight, copy: RecorderCopy) {
   return detail ? `${message} ${label}: ${detail}` : message
 }
 
+function OcrTranslationSettingsPanel({
+  copy,
+  translation,
+  compact = false,
+  onChange,
+}: {
+  copy: RecorderCopy
+  translation: AppSettings['ocr']['translation']
+  compact?: boolean
+  onChange: (patch: Partial<AppSettings['ocr']['translation']>) => void
+}) {
+  const normalized = normalizeOcrTranslationSettings(translation)
+  const enabled = normalized.provider !== 'disabled'
+  const providerOptions = ocrTranslationProviders.map((provider) => ({
+    value: provider,
+    label: copy.settings.ocrTranslationProviderLabels[provider] ?? provider,
+  }))
+  const languageOptions = ocrTranslationLanguageOptions.map((language) => ({value: language, label: language === 'auto' ? 'Auto' : language}))
+  return (
+    <div className={`setting-line ocr-translation-settings ${compact ? 'compact' : ''}`}>
+      <span>{copy.settings.ocrTranslation}</span>
+      <div className="ocr-translation-grid">
+        <SettingSelect
+          title={copy.settings.ocrTranslationProvider}
+          value={normalized.provider}
+          options={providerOptions}
+          detail={copy.settings.ocrTranslationDetail}
+          onChange={(provider) => {
+            const nextProvider = provider === 'deepl' || provider === 'openai-compatible' ? provider : 'disabled'
+            onChange({
+              provider: nextProvider,
+              privacyConfirmed: nextProvider !== 'disabled' ? normalized.privacyConfirmed : false,
+              privacyConfirmedAt: nextProvider !== 'disabled' ? normalized.privacyConfirmedAt : '',
+            })
+          }}
+        />
+        {enabled && (
+          <>
+            <SettingTextInput
+              title={copy.settings.ocrTranslationBaseUrl}
+              value={normalized.baseUrl ?? ''}
+              detail={copy.settings.ocrTranslationBaseUrlDetail}
+              placeholder={normalized.provider === 'deepl' ? 'https://api-free.deepl.com/v2/translate' : 'https://api.example.com/v1'}
+              onCommit={(baseUrl) => onChange({baseUrl})}
+            />
+            <SettingTextInput
+              title={copy.settings.ocrTranslationApiKey}
+              value={normalized.apiKey ?? ''}
+              detail={copy.settings.ocrTranslationApiKeyDetail}
+              inputType="password"
+              placeholder={normalized.apiKeySet ? copy.settings.ocrTranslationApiKeySaved : 'sk-...'}
+              onCommit={(apiKey) => onChange({apiKey, apiKeySet: Boolean(apiKey.trim())})}
+            />
+            {normalized.provider === 'openai-compatible' && (
+              <SettingTextInput
+                title={copy.settings.ocrTranslationModel}
+                value={normalized.model ?? ''}
+                placeholder="gpt-4o-mini"
+                onCommit={(model) => onChange({model})}
+              />
+            )}
+            <SettingSelect
+              title={copy.settings.ocrTranslationSourceLanguage}
+              value={normalized.sourceLanguage}
+              options={languageOptions}
+              onChange={(sourceLanguage) => onChange({sourceLanguage})}
+            />
+            <SettingSelect
+              title={copy.settings.ocrTranslationTargetLanguage}
+              value={normalized.targetLanguage}
+              options={languageOptions.filter((option) => option.value !== 'auto')}
+              onChange={(targetLanguage) => onChange({targetLanguage})}
+            />
+            <SettingToggle
+              title={copy.settings.ocrTranslationPrivacy}
+              checked={normalized.privacyConfirmed}
+              detail={copy.settings.ocrTranslationPrivacyDetail}
+              onChange={(privacyConfirmed) => onChange({
+                privacyConfirmed,
+                privacyConfirmedAt: privacyConfirmed ? new Date().toISOString() : '',
+              })}
+            />
+          </>
+        )}
+      </div>
+    </div>
+  )
+}
+
+function OcrModelSettings({copy, compact = false}: {copy: RecorderCopy; compact?: boolean}) {
+  const [status, setStatus] = useState<OcrStatus | null>(null)
+  const [loading, setLoading] = useState(true)
+  const [busy, setBusy] = useState('')
+  const [packagePath, setPackagePath] = useState('')
+  const [message, setMessage] = useState('')
+  const [confirmModelId, setConfirmModelId] = useState('')
+  const [downloads, setDownloads] = useState<Record<string, OcrModelDownloadSnapshot>>({})
+
+  const refresh = useCallback(async (quiet = false) => {
+    if (!quiet) setLoading(true)
+    try {
+      const [next, nextDownloads] = await Promise.all([
+        getOcrStatus(),
+        getOcrModelDownloads().catch(() => [] as OcrModelDownloadSnapshot[]),
+      ])
+      setStatus(next)
+      setDownloads(Object.fromEntries(nextDownloads.map((download) => [download.modelId, download])))
+      setMessage(next.message || '')
+    } catch (error) {
+      setMessage(readableError(error) || copy.settings.ocrModelsUnavailable)
+    } finally {
+      if (!quiet) setLoading(false)
+    }
+  }, [copy.settings.ocrModelsUnavailable])
+
+  useEffect(() => {
+    let cancelled = false
+    setLoading(true)
+    Promise.all([
+      getOcrStatus(),
+      getOcrModelDownloads().catch(() => [] as OcrModelDownloadSnapshot[]),
+    ])
+      .then(([next, nextDownloads]) => {
+        if (cancelled) return
+        setStatus(next)
+        setDownloads(Object.fromEntries(nextDownloads.map((download) => [download.modelId, download])))
+        setMessage(next.message || '')
+      })
+      .catch((error) => {
+        if (!cancelled) setMessage(readableError(error) || copy.settings.ocrModelsUnavailable)
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false)
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [copy.settings.ocrModelsUnavailable])
+
+  useEffect(() => subscribeOcrModelDownloadEvents((snapshot) => {
+    setDownloads((current) => ({...current, [snapshot.modelId]: snapshot}))
+    if (snapshot.status === 'installed') {
+      void refresh(true).finally(() => setMessage(copy.settings.ocrModelDownloadInstalled))
+    } else if (snapshot.status === 'failed') {
+      void refresh(true).finally(() => setMessage(snapshot.error || copy.settings.ocrModelDownloadFailed))
+    }
+  }), [copy.settings.ocrModelDownloadFailed, copy.settings.ocrModelDownloadInstalled, refresh])
+
+  const runAction = async (key: string, action: () => Promise<void>, success: string) => {
+    setBusy(key)
+    setMessage('')
+    try {
+      await action()
+      await refresh(true)
+      setMessage(success)
+    } catch (error) {
+      await refresh(true).catch(() => undefined)
+      setMessage(readableError(error) || copy.settings.ocrModelActionFailed)
+    } finally {
+      setBusy('')
+    }
+  }
+
+  const importPackage = () => {
+    const trimmed = packagePath.trim()
+    if (!trimmed) {
+      setMessage(copy.settings.ocrModelPackageEmpty)
+      return
+    }
+    void runAction('import', async () => {
+      await installOcrModelPackage(trimmed)
+    }, copy.settings.ocrModelImported)
+  }
+
+  const downloadModel = (model: OcrModelInfo) => {
+    void runAction(`download:${model.id}`, async () => {
+      const snapshot = await startOcrModelDownload(model.id)
+      setDownloads((current) => ({...current, [model.id]: snapshot}))
+    }, copy.settings.ocrModelDownloadQueued)
+  }
+
+  const refreshCatalog = () => {
+    void runAction('catalog', async () => {
+      const next = await refreshOcrModelCatalog('')
+      setStatus(next)
+    }, copy.settings.ocrModelCatalogRefreshed)
+  }
+
+  const cancelDownload = (model: OcrModelInfo) => {
+    void runAction(`cancel-download:${model.id}`, async () => {
+      const snapshot = await cancelOcrModelDownload(model.id)
+      setDownloads((current) => ({...current, [model.id]: snapshot}))
+    }, copy.settings.ocrModelDownloadCancelled)
+  }
+
+  const models = status?.models ?? []
+  const statusValue = loading ? copy.settings.ocrModelsLoading : ocrStatusText(status, copy)
+  const disabled = loading || busy !== ''
+
+  return (
+    <div className={`setting-line ocr-model-settings ${compact ? 'compact' : ''}`}>
+      <span>{copy.settings.ocrModels}</span>
+      <div className="setting-value">
+        <strong>{statusValue}</strong>
+        <button className="setting-action" type="button" disabled={disabled} onClick={() => void refresh()}>
+          {copy.settings.ocrModelRefresh}
+        </button>
+        <button className="setting-action" type="button" disabled={disabled} onClick={refreshCatalog}>
+          {busy === 'catalog' ? copy.settings.ocrModelCatalogRefreshing : copy.settings.ocrModelCatalogRefresh}
+        </button>
+      </div>
+      <small>{message || `${copy.settings.ocrModelsDetail} ${copy.settings.ocrModelCatalogDetail}`}</small>
+      <div className="ocr-model-package-row">
+        <input
+          className="setting-control-input"
+          value={packagePath}
+          placeholder={copy.settings.ocrModelPackagePath}
+          onChange={(event) => setPackagePath(event.target.value)}
+        />
+        <button className="setting-action" type="button" disabled={disabled || packagePath.trim() === ''} onClick={importPackage}>
+          {busy === 'import' ? copy.settings.ocrModelImporting : copy.settings.ocrModelPackageImport}
+        </button>
+      </div>
+      <div className="ocr-model-list">
+        {models.map((model) => (
+          <OcrModelRow
+            key={model.id}
+            model={model}
+            copy={copy}
+            busy={busy}
+            disabled={disabled}
+            download={downloads[model.id]}
+            confirming={confirmModelId === model.id}
+            onUse={() => {
+              setConfirmModelId(model.id)
+              setMessage(copy.settings.ocrModelSwitchConfirm(model.name))
+            }}
+            onConfirmUse={() => void runAction(`use:${model.id}`, async () => {
+              await setActiveOcrModel(model.id)
+            }, copy.settings.ocrModelActivated).finally(() => setConfirmModelId(''))}
+            onCancelUse={() => {
+              setConfirmModelId('')
+              setMessage(status?.message || '')
+            }}
+            onRemove={() => void runAction(`remove:${model.id}`, async () => {
+              await removeOcrModel(model.id)
+            }, copy.settings.ocrModelRemoved)}
+            onDownload={() => downloadModel(model)}
+            onCancelDownload={() => cancelDownload(model)}
+          />
+        ))}
+      </div>
+      {status && (
+        <small>
+          {copy.settings.ocrModelWorkerStatus}: {status.workerPath || copy.common.notRun}
+          {status.runtimeDir ? ` · ${copy.settings.ocrModelRuntime}: ${status.runtimeDir}` : ''}
+        </small>
+      )}
+    </div>
+  )
+}
+
+function OcrModelRow({
+  model,
+  copy,
+  busy,
+  disabled,
+  download,
+  confirming,
+  onUse,
+  onConfirmUse,
+  onCancelUse,
+  onRemove,
+  onDownload,
+  onCancelDownload,
+}: {
+  model: OcrModelInfo
+  copy: RecorderCopy
+  busy: string
+  disabled: boolean
+  download?: OcrModelDownloadSnapshot
+  confirming: boolean
+  onUse: () => void
+  onConfirmUse: () => void
+  onCancelUse: () => void
+  onRemove: () => void
+  onDownload: () => void
+  onCancelDownload: () => void
+}) {
+  const downloadActive = download?.status === 'queued' || download?.status === 'running'
+  const downloadFinished = download?.status === 'installed'
+  const downloadFailed = download?.status === 'failed'
+  const state = downloadActive ? copy.settings.ocrModelDownloading : ocrModelStateText(model, copy)
+  const channel = copy.settings.ocrModelChannelLabels[model.channel] ?? model.channel
+  const detail = ocrModelDetail(model, copy)
+  const progressText = downloadActive ? ocrModelDownloadProgressText(download) : ''
+  return (
+    <div className={`ocr-model-row ${model.active ? 'active' : ''} ${downloadActive ? 'downloading' : ''}`}>
+      <div>
+        <strong>{model.name}</strong>
+        <span>{channel} · {model.id}</span>
+        {detail && <small>{detail}</small>}
+        {!model.installed && !model.downloadAvailable && <small>{copy.settings.ocrModelDownloadUnavailable}</small>}
+        {progressText && <small>{progressText}</small>}
+        {downloadFinished && !model.installed && <small>{copy.settings.ocrModelDownloadInstalled}</small>}
+        {downloadFailed && <small>{download?.error || copy.settings.ocrModelDownloadFailed}</small>}
+      </div>
+      <div className="ocr-model-actions">
+        <b className={`status-badge ${ocrModelBadge(model)}`}>{state}</b>
+        {!model.installed && model.downloadAvailable && !downloadActive && (
+          <button className="setting-action" type="button" disabled={disabled || busy === `download:${model.id}`} onClick={onDownload}>
+            {busy === `download:${model.id}` ? copy.settings.ocrModelDownloading : copy.settings.ocrModelDownload}
+          </button>
+        )}
+        {downloadActive && (
+          <button className="setting-action" type="button" disabled={busy === `cancel-download:${model.id}`} onClick={onCancelDownload}>
+            {busy === `cancel-download:${model.id}` ? copy.settings.ocrModelCancellingDownload : copy.settings.ocrModelCancelDownload}
+          </button>
+        )}
+        {model.installed && model.verified && !model.active && (
+          <button className="setting-action" type="button" disabled={disabled || busy === `use:${model.id}`} onClick={onUse}>
+            {copy.settings.ocrModelUse}
+          </button>
+        )}
+        {model.installed && !model.active && (
+          <button className="setting-action danger" type="button" disabled={disabled || busy === `remove:${model.id}`} onClick={onRemove}>
+            {busy === `remove:${model.id}` ? copy.settings.ocrModelRemoving : copy.settings.ocrModelRemove}
+          </button>
+        )}
+      </div>
+      {confirming && (
+        <div className="ocr-model-confirm" role="alert">
+          <small>{copy.settings.ocrModelSwitchRisk}</small>
+          <div>
+            <button className="setting-action" type="button" disabled={disabled || busy === `use:${model.id}`} onClick={onConfirmUse}>
+              {busy === `use:${model.id}` ? copy.settings.ocrModelActivating : copy.settings.ocrModelConfirmUse}
+            </button>
+            <button className="setting-action" type="button" disabled={busy !== ''} onClick={onCancelUse}>
+              {copy.settings.ocrModelCancelUse}
+            </button>
+          </div>
+        </div>
+      )}
+      {downloadActive && (
+        <div className="ocr-model-progress" aria-label={progressText}>
+          <span style={{width: `${Math.max(3, Math.min(100, Math.round(download?.percent ?? 0)))}%`}} />
+        </div>
+      )}
+    </div>
+  )
+}
+
+function ocrStatusText(status: OcrStatus | null, copy: RecorderCopy) {
+  if (!status) return copy.settings.ocrModelsUnavailable
+  return copy.settings.ocrStatusLabels[status.status] ?? status.status
+}
+
+function ocrModelStateText(model: OcrModelInfo, copy: RecorderCopy) {
+  if (model.active && model.verified) return copy.settings.ocrModelActive
+  if (model.installed && model.verified) return copy.settings.ocrModelVerified
+  if (model.installed) return copy.settings.ocrModelInvalid
+  return copy.settings.ocrModelMissing
+}
+
+function ocrModelBadge(model: OcrModelInfo): CaptureCapability['status'] {
+  if (model.active && model.verified) return 'available'
+  if (model.installed && model.verified) return 'queued'
+  if (model.installed) return 'blocked'
+  return 'unsupported'
+}
+
+function ocrModelDetail(model: OcrModelInfo, copy: RecorderCopy) {
+  const details = [
+    model.version,
+    model.language.length > 0 ? model.language.join('/') : '',
+    !model.installed && model.downloadAvailable && model.downloadBytes ? `${copy.settings.ocrModelDownloadSize}: ${formatBytes(model.downloadBytes)}` : '',
+    model.smokeAssetReady ? copy.settings.ocrModelSmokeReady : '',
+    model.smokeError || model.verificationError || (model.missingFiles.length > 0 ? `${copy.settings.ocrModelMissing}: ${model.missingFiles.join(', ')}` : ''),
+  ].filter(Boolean)
+  return details.join(' · ')
+}
+
+function ocrModelDownloadProgressText(download?: OcrModelDownloadSnapshot) {
+  if (!download) return ''
+  const percent = Math.max(0, Math.min(100, Math.round(download.percent || 0)))
+  return `${percent}% · ${formatBytes(download.downloadedBytes)} / ${formatBytes(download.totalBytes)}`
+}
+
 function SettingLine({
   title,
   value,
@@ -6592,6 +7855,48 @@ function SettingTextAction({
           {actionLabel}
         </button>
       </div>
+      {detail && <small>{detail}</small>}
+    </label>
+  )
+}
+
+function SettingTextInput({
+  title,
+  value,
+  detail,
+  placeholder,
+  inputType = 'text',
+  onCommit,
+}: {
+  title: string
+  value: string
+  detail?: string
+  placeholder?: string
+  inputType?: 'text' | 'password'
+  onCommit: (value: string) => void
+}) {
+  const [draft, setDraft] = useState(value)
+  useEffect(() => setDraft(value), [value])
+  const commit = () => {
+    if (draft.trim() !== value.trim()) onCommit(draft.trim())
+  }
+  return (
+    <label className="setting-line setting-control">
+      <span>{title}</span>
+      <input
+        className="setting-control-input"
+        value={draft}
+        type={inputType}
+        placeholder={placeholder}
+        onChange={(event) => setDraft(event.target.value)}
+        onBlur={commit}
+        onKeyDown={(event) => {
+          if (event.key === 'Enter') {
+            event.preventDefault()
+            event.currentTarget.blur()
+          }
+        }}
+      />
       {detail && <small>{detail}</small>}
     </label>
   )

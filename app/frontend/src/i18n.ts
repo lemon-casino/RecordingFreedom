@@ -117,6 +117,66 @@ export type RecorderCopy = {
     themeDetail: string
     startAtLogin: string
     startAtLoginDetail: string
+    autoOcr: string
+    autoOcrDetail: string
+    ocrModels: string
+    ocrModelsDetail: string
+    ocrModelsLoading: string
+    ocrModelsUnavailable: string
+    ocrStatusLabels: Record<string, string>
+    ocrModelChannelLabels: Record<string, string>
+    ocrModelPackagePath: string
+    ocrModelPackageImport: string
+    ocrModelPackageEmpty: string
+    ocrModelImporting: string
+    ocrModelImported: string
+    ocrModelDownload: string
+    ocrModelDownloading: string
+    ocrModelDownloadQueued: string
+    ocrModelCancelDownload: string
+    ocrModelCancellingDownload: string
+    ocrModelDownloadCancelled: string
+    ocrModelDownloadUnavailable: string
+    ocrModelDownloadInstalled: string
+    ocrModelDownloadFailed: string
+    ocrModelDownloadSize: string
+    ocrModelCatalogRefresh: string
+    ocrModelCatalogRefreshing: string
+    ocrModelCatalogRefreshed: string
+    ocrModelCatalogDetail: string
+    ocrModelUse: string
+    ocrModelActivating: string
+    ocrModelSwitchConfirm: (modelName: string) => string
+    ocrModelSwitchRisk: string
+    ocrModelConfirmUse: string
+    ocrModelCancelUse: string
+    ocrModelActive: string
+    ocrModelVerified: string
+    ocrModelInvalid: string
+    ocrModelMissing: string
+    ocrModelRemove: string
+    ocrModelRemoving: string
+    ocrModelRemoved: string
+    ocrModelActivated: string
+    ocrModelActionFailed: string
+    ocrModelSmokeReady: string
+    ocrModelWorkerStatus: string
+    ocrModelRuntime: string
+    ocrModelRefresh: string
+    ocrTranslation: string
+    ocrTranslationDetail: string
+    ocrTranslationProvider: string
+    ocrTranslationProviderLabels: Record<string, string>
+    ocrTranslationBaseUrl: string
+    ocrTranslationBaseUrlDetail: string
+    ocrTranslationApiKey: string
+    ocrTranslationApiKeyDetail: string
+    ocrTranslationApiKeySaved: string
+    ocrTranslationModel: string
+    ocrTranslationSourceLanguage: string
+    ocrTranslationTargetLanguage: string
+    ocrTranslationPrivacy: string
+    ocrTranslationPrivacyDetail: string
     shortcuts: string
     shortcutSummary: string
     shortcutDetail: string
@@ -257,6 +317,22 @@ export type RecorderCopy = {
     bold: string
     unsaved: string
     ready: string
+    recognizeText: string
+    recognizeSelectedImage: string
+    noImageSelection: string
+    openOcrResult: string
+    toggleOcrBlocks: string
+    ocrBlocksHidden: string
+    insertOcrText: string
+    translateOcrText: string
+    insertOcrTranslation: string
+    ocrTextInserted: string
+    ocrTranslationInserted: string
+    ocrPreparing: string
+    ocrQueued: string
+    ocrStatusRunning: string
+    ocrStatusReady: string
+    ocrStatusFailed: string
   }
   screenshot: {
     tools: string
@@ -290,6 +366,33 @@ export type RecorderCopy = {
     delete: string
     deleted: string
     deleteFailed: string
+    ocr: string
+    ocrStatusNone: string
+    ocrStatusQueued: string
+    ocrStatusRunning: string
+    ocrStatusReady: string
+    ocrStatusFailed: string
+    recognizeText: string
+    retryOcr: string
+    openOcrResult: string
+    copyText: string
+    copiedText: string
+    copyTextEmpty: string
+    copyTranslation: string
+    copiedTranslation: string
+    translateText: string
+    translationUnavailable: string
+    translationPrivacyRequired: string
+    translationMissingBaseUrl: string
+    translationMissingApiKey: string
+    translationMissingModel: string
+    translationWorking: string
+    translationReady: string
+    translationFailed: string
+    ocrQueued: string
+    ocrResult: string
+    ocrBlocks: (count: number) => string
+    ocrNoText: string
   }
   statusChips: Record<RecordingState, string>
   statusMessages: Record<StatusMessageKey, string>
@@ -459,6 +562,80 @@ const zhCN: RecorderCopy = {
     themeDetail: '立即应用到胶囊、设置页和下拉列表，并会在下次启动时保留。',
     startAtLogin: '开机自启',
     startAtLoginDetail: '默认关闭。开启后会随系统登录自动启动，并直接最小化到托盘。',
+    autoOcr: '截图后自动识别文字',
+    autoOcrDetail: '默认关闭。开启后，区域、全屏、窗口、焦点窗口和滚动截图保存后会在后台排队进行本地 OCR。',
+    ocrModels: 'OCR 模型',
+    ocrModelsDetail: '本地模型优先。导入通过 RecordingFreedom 校验的模型包后，才能切换为 active 模型。',
+    ocrModelsLoading: '读取模型状态中',
+    ocrModelsUnavailable: 'OCR 模型状态不可用',
+    ocrStatusLabels: {
+      ready: '可用',
+      'no-model': '缺少模型',
+      'model-invalid': '模型无效',
+      'worker-absent': '缺少 worker',
+      'worker-unavailable': 'worker 不可用',
+    },
+    ocrModelChannelLabels: {
+      stable: '稳定',
+      latest: '最新',
+      quality: '高质量',
+    },
+    ocrModelPackagePath: '模型包 .zip 或解压目录路径',
+    ocrModelPackageImport: '导入',
+    ocrModelPackageEmpty: '请先输入本地模型包 .zip 或解压目录路径',
+    ocrModelImporting: '导入中',
+    ocrModelImported: '模型包已导入并通过校验',
+    ocrModelDownload: '下载',
+    ocrModelDownloading: '下载中',
+    ocrModelDownloadQueued: '模型下载已开始，完成后仍需手动确认切换',
+    ocrModelCancelDownload: '取消下载',
+    ocrModelCancellingDownload: '取消中',
+    ocrModelDownloadCancelled: '模型下载已取消',
+    ocrModelDownloadUnavailable: '暂无 RecordingFreedom 已校验下载包',
+    ocrModelDownloadInstalled: '模型已下载并通过校验',
+    ocrModelDownloadFailed: '模型下载失败',
+    ocrModelDownloadSize: '下载大小',
+    ocrModelCatalogRefresh: '刷新目录',
+    ocrModelCatalogRefreshing: '刷新目录中',
+    ocrModelCatalogRefreshed: '模型目录已刷新，下载仍需手动触发',
+    ocrModelCatalogDetail: '从 RecordingFreedom release catalog 获取已校验模型包元数据；不会自动下载、安装或切换模型。',
+    ocrModelUse: '使用',
+    ocrModelActivating: '切换中',
+    ocrModelSwitchConfirm: (modelName) => `确认切换到 ${modelName}？`,
+    ocrModelSwitchRisk: '切换只会在模型已安装、校验和 smoke 资产通过后执行；失败时保持当前 active 模型不变。',
+    ocrModelConfirmUse: '确认切换',
+    ocrModelCancelUse: '取消',
+    ocrModelActive: '当前',
+    ocrModelVerified: '已校验',
+    ocrModelInvalid: '无效',
+    ocrModelMissing: '缺失',
+    ocrModelRemove: '删除',
+    ocrModelRemoving: '删除中',
+    ocrModelRemoved: '模型已删除',
+    ocrModelActivated: '已切换 OCR 模型',
+    ocrModelActionFailed: 'OCR 模型操作失败',
+    ocrModelSmokeReady: 'smoke 资产已就绪',
+    ocrModelWorkerStatus: 'worker',
+    ocrModelRuntime: 'runtime',
+    ocrModelRefresh: '刷新',
+    ocrTranslation: 'OCR 翻译',
+    ocrTranslationDetail: '默认关闭。只有选择 provider、填写配置并确认隐私提示后，才会发送识别文字。',
+    ocrTranslationProvider: '翻译提供方',
+    ocrTranslationProviderLabels: {
+      disabled: '关闭',
+      deepl: 'DeepL',
+      'openai-compatible': 'OpenAI-compatible',
+    },
+    ocrTranslationBaseUrl: '接口地址',
+    ocrTranslationBaseUrlDetail: 'DeepL 填 translate 接口；OpenAI-compatible 填 /v1 或 /chat/completions。',
+    ocrTranslationApiKey: 'API Key',
+    ocrTranslationApiKeyDetail: '保存在本地受保护 secret store；输入新 key 会替换，清空并回车会删除。',
+    ocrTranslationApiKeySaved: '已保存，出于安全不会回显',
+    ocrTranslationModel: '模型',
+    ocrTranslationSourceLanguage: '原文语言',
+    ocrTranslationTargetLanguage: '目标语言',
+    ocrTranslationPrivacy: '允许发送 OCR 文本进行翻译',
+    ocrTranslationPrivacyDetail: '开启后，点击翻译会把本次 OCR 文本发送到你配置的翻译服务。',
     shortcuts: '快捷键',
     shortcutSummary: '全局快捷键',
     shortcutDetail: '点击修改后按下组合键即可保存；普通单字母和仅 Shift 的组合不会生效。',
@@ -605,6 +782,22 @@ const zhCN: RecorderCopy = {
     bold: '粗',
     unsaved: '未保存',
     ready: '可绘制',
+    recognizeText: '识别画板文字',
+    recognizeSelectedImage: '识别选中图片',
+    noImageSelection: '请先选中一张图片',
+    openOcrResult: '查看画板识别结果',
+    toggleOcrBlocks: '显示 / 隐藏 OCR 标注',
+    ocrBlocksHidden: 'OCR 标注已隐藏',
+    insertOcrText: '插入识别文字',
+    translateOcrText: '翻译识别文字',
+    insertOcrTranslation: '插入译文',
+    ocrTextInserted: '识别文字已插入画板',
+    ocrTranslationInserted: '译文已插入画板',
+    ocrPreparing: '正在导出画板快照',
+    ocrQueued: '画板 OCR 已加入队列',
+    ocrStatusRunning: '画板文字识别中',
+    ocrStatusReady: '画板文字已识别',
+    ocrStatusFailed: '画板 OCR 失败',
   },
   screenshot: {
     tools: '截图 / 画板',
@@ -638,6 +831,33 @@ const zhCN: RecorderCopy = {
     delete: '删除截图',
     deleted: '截图已删除',
     deleteFailed: '删除截图失败',
+    ocr: '文字识别',
+    ocrStatusNone: '未识别',
+    ocrStatusQueued: '已排队',
+    ocrStatusRunning: '识别中',
+    ocrStatusReady: '已识别',
+    ocrStatusFailed: '识别失败',
+    recognizeText: '识别文字',
+    retryOcr: '重新识别',
+    openOcrResult: '查看识别结果',
+    copyText: '复制文字',
+    copiedText: '文字已复制',
+    copyTextEmpty: '没有可复制的文字',
+    copyTranslation: '复制译文',
+    copiedTranslation: '译文已复制',
+    translateText: '翻译文字',
+    translationUnavailable: '翻译提供方未配置，当前不会发送任何识别文字',
+    translationPrivacyRequired: '需要先在设置中确认允许发送 OCR 文本进行翻译',
+    translationMissingBaseUrl: '需要先填写翻译接口地址',
+    translationMissingApiKey: '需要先填写翻译 API Key',
+    translationMissingModel: 'OpenAI-compatible 翻译需要先填写模型',
+    translationWorking: '翻译中',
+    translationReady: '翻译完成',
+    translationFailed: '翻译失败',
+    ocrQueued: 'OCR 已加入队列',
+    ocrResult: '识别结果',
+    ocrBlocks: (count) => `${count} 个文字块`,
+    ocrNoText: '未识别到文字',
   },
   statusChips: {
     idle: '待机',
@@ -938,6 +1158,80 @@ const en: RecorderCopy = {
     themeDetail: 'Applies immediately to the capsule, settings, and dropdown menus, and is kept after restart.',
     startAtLogin: 'Start at login',
     startAtLoginDetail: 'Off by default. When enabled, RecordingFreedom starts on system login and opens minimized to tray.',
+    autoOcr: 'Auto OCR after screenshots',
+    autoOcrDetail: 'Off by default. When enabled, region, full, window, focused-window, and scrolling screenshots queue local OCR after saving.',
+    ocrModels: 'OCR models',
+    ocrModelsDetail: 'Local-first OCR. Import a RecordingFreedom-verified model package before switching it active.',
+    ocrModelsLoading: 'Loading model status',
+    ocrModelsUnavailable: 'OCR model status unavailable',
+    ocrStatusLabels: {
+      ready: 'Ready',
+      'no-model': 'No model',
+      'model-invalid': 'Invalid model',
+      'worker-absent': 'Worker missing',
+      'worker-unavailable': 'Worker unavailable',
+    },
+    ocrModelChannelLabels: {
+      stable: 'Stable',
+      latest: 'Latest',
+      quality: 'Quality',
+    },
+    ocrModelPackagePath: 'Model package .zip or extracted folder path',
+    ocrModelPackageImport: 'Import',
+    ocrModelPackageEmpty: 'Enter a local model package .zip or extracted folder path first',
+    ocrModelImporting: 'Importing',
+    ocrModelImported: 'Model package imported and verified',
+    ocrModelDownload: 'Download',
+    ocrModelDownloading: 'Downloading',
+    ocrModelDownloadQueued: 'Model download started. Switching still requires manual confirmation after install.',
+    ocrModelCancelDownload: 'Cancel download',
+    ocrModelCancellingDownload: 'Cancelling',
+    ocrModelDownloadCancelled: 'Model download cancelled',
+    ocrModelDownloadUnavailable: 'No RecordingFreedom-verified download package yet',
+    ocrModelDownloadInstalled: 'Model downloaded and verified',
+    ocrModelDownloadFailed: 'Model download failed',
+    ocrModelDownloadSize: 'Download size',
+    ocrModelCatalogRefresh: 'Refresh catalog',
+    ocrModelCatalogRefreshing: 'Refreshing catalog',
+    ocrModelCatalogRefreshed: 'Model catalog refreshed. Downloads still require a manual action.',
+    ocrModelCatalogDetail: 'Fetches verified model package metadata from the RecordingFreedom release catalog. It does not auto-download, install, or switch models.',
+    ocrModelUse: 'Use',
+    ocrModelActivating: 'Switching',
+    ocrModelSwitchConfirm: (modelName) => `Switch to ${modelName}?`,
+    ocrModelSwitchRisk: 'Switching runs only after the model is installed, verified, and smoke assets are present; failures keep the current active model unchanged.',
+    ocrModelConfirmUse: 'Confirm switch',
+    ocrModelCancelUse: 'Cancel',
+    ocrModelActive: 'Active',
+    ocrModelVerified: 'Verified',
+    ocrModelInvalid: 'Invalid',
+    ocrModelMissing: 'Missing',
+    ocrModelRemove: 'Remove',
+    ocrModelRemoving: 'Removing',
+    ocrModelRemoved: 'Model removed',
+    ocrModelActivated: 'OCR model switched',
+    ocrModelActionFailed: 'OCR model action failed',
+    ocrModelSmokeReady: 'smoke assets ready',
+    ocrModelWorkerStatus: 'worker',
+    ocrModelRuntime: 'runtime',
+    ocrModelRefresh: 'Refresh',
+    ocrTranslation: 'OCR translation',
+    ocrTranslationDetail: 'Off by default. Recognized text is sent only after a provider is selected, configured, and privacy is confirmed.',
+    ocrTranslationProvider: 'Translation provider',
+    ocrTranslationProviderLabels: {
+      disabled: 'Off',
+      deepl: 'DeepL',
+      'openai-compatible': 'OpenAI-compatible',
+    },
+    ocrTranslationBaseUrl: 'Endpoint',
+    ocrTranslationBaseUrlDetail: 'Use the translate endpoint for DeepL; use /v1 or /chat/completions for OpenAI-compatible providers.',
+    ocrTranslationApiKey: 'API key',
+    ocrTranslationApiKeyDetail: 'Stored in the local protected secret store. Enter a new key to replace it, or clear and press Enter to remove it.',
+    ocrTranslationApiKeySaved: 'Saved; hidden for safety',
+    ocrTranslationModel: 'Model',
+    ocrTranslationSourceLanguage: 'Source language',
+    ocrTranslationTargetLanguage: 'Target language',
+    ocrTranslationPrivacy: 'Allow sending OCR text for translation',
+    ocrTranslationPrivacyDetail: 'When enabled, Translate sends this OCR text to your configured translation service.',
     shortcuts: 'Shortcuts',
     shortcutSummary: 'Global shortcuts',
     shortcutDetail: 'Click change, then press a key combination to save. Plain letters and Shift-only combos are ignored.',
@@ -1084,6 +1378,22 @@ const en: RecorderCopy = {
     bold: 'Bold',
     unsaved: 'Unsaved',
     ready: 'Ready',
+    recognizeText: 'Recognize board text',
+    recognizeSelectedImage: 'Recognize selected image',
+    noImageSelection: 'Select an image first',
+    openOcrResult: 'View board OCR result',
+    toggleOcrBlocks: 'Show / hide OCR blocks',
+    ocrBlocksHidden: 'OCR blocks hidden',
+    insertOcrText: 'Insert recognized text',
+    translateOcrText: 'Translate recognized text',
+    insertOcrTranslation: 'Insert translated text',
+    ocrTextInserted: 'Recognized text inserted on board',
+    ocrTranslationInserted: 'Translated text inserted on board',
+    ocrPreparing: 'Exporting board snapshot',
+    ocrQueued: 'Board OCR queued',
+    ocrStatusRunning: 'Recognizing board text',
+    ocrStatusReady: 'Board text recognized',
+    ocrStatusFailed: 'Board OCR failed',
   },
   screenshot: {
     tools: 'Screenshot / board',
@@ -1117,6 +1427,33 @@ const en: RecorderCopy = {
     delete: 'Delete screenshot',
     deleted: 'Screenshot deleted',
     deleteFailed: 'Failed to delete screenshot',
+    ocr: 'OCR',
+    ocrStatusNone: 'Not recognized',
+    ocrStatusQueued: 'Queued',
+    ocrStatusRunning: 'Recognizing',
+    ocrStatusReady: 'Recognized',
+    ocrStatusFailed: 'Failed',
+    recognizeText: 'Recognize text',
+    retryOcr: 'Retry OCR',
+    openOcrResult: 'View OCR result',
+    copyText: 'Copy text',
+    copiedText: 'Text copied',
+    copyTextEmpty: 'No text to copy',
+    copyTranslation: 'Copy translation',
+    copiedTranslation: 'Translation copied',
+    translateText: 'Translate text',
+    translationUnavailable: 'Translation provider is not configured; no recognized text is sent',
+    translationPrivacyRequired: 'Confirm in settings before sending OCR text for translation',
+    translationMissingBaseUrl: 'Enter a translation endpoint first',
+    translationMissingApiKey: 'Enter a translation API key first',
+    translationMissingModel: 'OpenAI-compatible translation needs a model first',
+    translationWorking: 'Translating',
+    translationReady: 'Translation ready',
+    translationFailed: 'Translation failed',
+    ocrQueued: 'OCR queued',
+    ocrResult: 'OCR result',
+    ocrBlocks: (count) => `${count} text blocks`,
+    ocrNoText: 'No text recognized',
   },
   statusChips: {
     idle: 'IDLE',
