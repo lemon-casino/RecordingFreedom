@@ -71,7 +71,24 @@ jobs:
 
       - name: Run frontend e2e
         working-directory: ${{ env.APP_DIR }}/frontend
-        run: npm run test:e2e
+        shell: bash
+        run: |
+          set -o pipefail
+          set +e
+          npm run test:e2e 2>&1 | tee frontend-e2e.log
+          status="${PIPESTATUS[0]}"
+          set -e
+          if [ "${status}" -ne 0 ]; then
+            {
+              echo "### Frontend e2e failure"
+              echo '```text'
+              tail -200 frontend-e2e.log
+              echo '```'
+            } >> "${GITHUB_STEP_SUMMARY}"
+            message="$(tail -50 frontend-e2e.log | tr '\n' ' ' | sed 's/%/%25/g; s/\r/%0D/g')"
+            echo "::error title=Frontend e2e failed::${message}"
+            exit "${status}"
+          fi
 
       - name: Upload frontend e2e failure report
         if: failure()
@@ -79,13 +96,14 @@ jobs:
         with:
           name: recordingfreedom-ci-frontend-e2e-${{ github.run_id }}
           path: |
+            ${{ env.APP_DIR }}/frontend/frontend-e2e.log
             ${{ env.APP_DIR }}/frontend/playwright-report
             ${{ env.APP_DIR }}/frontend/test-results
           if-no-files-found: ignore
 
       - name: Clean frontend e2e artifacts before Go tests
         working-directory: ${{ env.APP_DIR }}
-        run: rm -rf frontend/test-results frontend/playwright-report
+        run: rm -rf frontend/test-results frontend/playwright-report frontend/frontend-e2e.log
 
       - name: Test Go packages
         working-directory: ${{ env.APP_DIR }}
