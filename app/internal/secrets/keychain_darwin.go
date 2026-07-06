@@ -7,6 +7,79 @@ package secrets
 #include <Security/Security.h>
 #include <CoreFoundation/CoreFoundation.h>
 #include <stdlib.h>
+
+static void rf_release_keychain_item(SecKeychainItemRef item) {
+	if (item != NULL) {
+		CFRelease((CFTypeRef)item);
+	}
+}
+
+static OSStatus rf_keychain_update_secret(SecKeychainItemRef item, UInt32 secretLength, const void *secretData) {
+	return SecKeychainItemModifyAttributesAndData(item, NULL, secretLength, secretData);
+}
+
+static OSStatus rf_keychain_add_secret(
+	UInt32 serviceLength,
+	const char *serviceName,
+	UInt32 accountLength,
+	const char *accountName,
+	UInt32 secretLength,
+	const void *secretData
+) {
+	return SecKeychainAddGenericPassword(
+		NULL,
+		serviceLength,
+		serviceName,
+		accountLength,
+		accountName,
+		secretLength,
+		secretData,
+		NULL
+	);
+}
+
+static OSStatus rf_keychain_load_secret(
+	UInt32 serviceLength,
+	const char *serviceName,
+	UInt32 accountLength,
+	const char *accountName,
+	UInt32 *passwordLength,
+	void **passwordData
+) {
+	return SecKeychainFindGenericPassword(
+		NULL,
+		serviceLength,
+		serviceName,
+		accountLength,
+		accountName,
+		passwordLength,
+		passwordData,
+		NULL
+	);
+}
+
+static OSStatus rf_keychain_find_item(
+	UInt32 serviceLength,
+	const char *serviceName,
+	UInt32 accountLength,
+	const char *accountName,
+	SecKeychainItemRef *item
+) {
+	return SecKeychainFindGenericPassword(
+		NULL,
+		serviceLength,
+		serviceName,
+		accountLength,
+		accountName,
+		NULL,
+		NULL,
+		item
+	);
+}
+
+static OSStatus rf_keychain_free_content(void *passwordData) {
+	return SecKeychainItemFreeContent(NULL, passwordData);
+}
 */
 import "C"
 
@@ -52,8 +125,8 @@ func backendSave(s *Store, name string, secret string) error {
 	secretC := C.CString(secret)
 	defer C.free(unsafe.Pointer(secretC))
 	if found {
-		defer C.CFRelease(C.CFTypeRef(item))
-		status := C.SecKeychainItemModifyAttributesAndData(item, nil, C.UInt32(len(secret)), unsafe.Pointer(secretC))
+		defer C.rf_release_keychain_item(item)
+		status := C.rf_keychain_update_secret(item, C.UInt32(len(secret)), unsafe.Pointer(secretC))
 		if status != C.errSecSuccess {
 			err := keychainError("update secret", status)
 			if isKeychainUnavailable(err) {
@@ -68,15 +141,13 @@ func backendSave(s *Store, name string, secret string) error {
 	accountC := C.CString(account)
 	defer C.free(unsafe.Pointer(serviceC))
 	defer C.free(unsafe.Pointer(accountC))
-	status := C.SecKeychainAddGenericPassword(
-		nil,
+	status := C.rf_keychain_add_secret(
 		C.UInt32(len(keychainServiceName)),
 		serviceC,
 		C.UInt32(len(account)),
 		accountC,
 		C.UInt32(len(secret)),
 		unsafe.Pointer(secretC),
-		nil,
 	)
 	if status != C.errSecSuccess {
 		err := keychainError("save secret", status)
@@ -97,15 +168,13 @@ func backendLoad(s *Store, name string) (string, bool, error) {
 	defer C.free(unsafe.Pointer(accountC))
 	var passwordLength C.UInt32
 	var passwordData unsafe.Pointer
-	status := C.SecKeychainFindGenericPassword(
-		nil,
+	status := C.rf_keychain_load_secret(
 		C.UInt32(len(keychainServiceName)),
 		serviceC,
 		C.UInt32(len(account)),
 		accountC,
 		&passwordLength,
 		&passwordData,
-		nil,
 	)
 	if status == C.errSecItemNotFound {
 		return diskLoad(s, name)
@@ -117,7 +186,7 @@ func backendLoad(s *Store, name string) (string, bool, error) {
 		}
 		return "", false, err
 	}
-	defer C.SecKeychainItemFreeContent(nil, passwordData)
+	defer C.rf_keychain_free_content(passwordData)
 	secret := strings.TrimSpace(string(C.GoBytes(passwordData, C.int(passwordLength))))
 	return secret, secret != "", nil
 }
@@ -133,7 +202,7 @@ func backendDelete(s *Store, name string) error {
 	if !found {
 		return diskDelete(s, name)
 	}
-	defer C.CFRelease(C.CFTypeRef(item))
+	defer C.rf_release_keychain_item(item)
 	status := C.SecKeychainItemDelete(item)
 	if status == C.errSecItemNotFound {
 		return diskDelete(s, name)
@@ -154,21 +223,18 @@ func findKeychainItem(account string) (C.SecKeychainItemRef, bool, error) {
 	defer C.free(unsafe.Pointer(serviceC))
 	defer C.free(unsafe.Pointer(accountC))
 	var item C.SecKeychainItemRef
-	status := C.SecKeychainFindGenericPassword(
-		nil,
+	status := C.rf_keychain_find_item(
 		C.UInt32(len(keychainServiceName)),
 		serviceC,
 		C.UInt32(len(account)),
 		accountC,
-		nil,
-		nil,
 		&item,
 	)
 	if status == C.errSecItemNotFound {
-		return nil, false, nil
+		return item, false, nil
 	}
 	if status != C.errSecSuccess {
-		return nil, false, keychainError("find secret", status)
+		return item, false, keychainError("find secret", status)
 	}
 	return item, true, nil
 }

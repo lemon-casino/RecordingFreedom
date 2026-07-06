@@ -1192,7 +1192,7 @@ func (s *RecordingFreedomService) loadScreenshotHistory() ([]ScreenshotItem, err
 	if err != nil {
 		return nil, err
 	}
-	data, err := os.ReadFile(path)
+	data, err := readFileWithTransientRetry(path)
 	if errors.Is(err, os.ErrNotExist) {
 		return []ScreenshotItem{}, nil
 	}

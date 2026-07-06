@@ -9,7 +9,9 @@ import (
 	"image/png"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
+	"syscall"
 	"time"
 
 	"github.com/lemon-casino/RecordingFreedom/app/internal/settings"
@@ -351,13 +353,78 @@ func writeFileAtomic(path string, data []byte, perm os.FileMode) error {
 	if err := os.WriteFile(tmp, data, perm); err != nil {
 		return err
 	}
-	if err := os.Remove(path); err != nil && !errors.Is(err, os.ErrNotExist) {
+	if err := retryTransientFileAccess(func() error {
+		if err := os.Remove(path); err != nil && !errors.Is(err, os.ErrNotExist) {
+			return err
+		}
+		return nil
+	}); err != nil {
 		_ = os.Remove(tmp)
 		return err
 	}
-	if err := os.Rename(tmp, path); err != nil {
+	if err := retryTransientFileAccess(func() error {
+		return os.Rename(tmp, path)
+	}); err != nil {
 		_ = os.Remove(tmp)
 		return err
 	}
 	return nil
+}
+
+func readFileWithTransientRetry(path string) ([]byte, error) {
+	var lastErr error
+	for attempt := 0; attempt < transientFileAccessAttempts; attempt++ {
+		data, err := os.ReadFile(path)
+		if err == nil {
+			return data, nil
+		}
+		lastErr = err
+		if !isTransientFileAccessError(err) && !(errors.Is(err, os.ErrNotExist) && atomicWriteTempExists(path)) {
+			return nil, err
+		}
+		time.Sleep(transientFileAccessDelay)
+	}
+	return nil, lastErr
+}
+
+const (
+	transientFileAccessAttempts = 20
+	transientFileAccessDelay    = 10 * time.Millisecond
+)
+
+func retryTransientFileAccess(op func() error) error {
+	var lastErr error
+	for attempt := 0; attempt < transientFileAccessAttempts; attempt++ {
+		err := op()
+		if err == nil {
+			return nil
+		}
+		lastErr = err
+		if !isTransientFileAccessError(err) {
+			return err
+		}
+		time.Sleep(transientFileAccessDelay)
+	}
+	return lastErr
+}
+
+func atomicWriteTempExists(path string) bool {
+	_, err := os.Stat(path + ".tmp")
+	return err == nil
+}
+
+func isTransientFileAccessError(err error) bool {
+	if runtime.GOOS != "windows" || err == nil {
+		return false
+	}
+	var errno syscall.Errno
+	if !errors.As(err, &errno) {
+		return false
+	}
+	switch errno {
+	case 5, 32, 33:
+		return true
+	default:
+		return false
+	}
 }
