@@ -301,7 +301,7 @@ func TestSaveScreenshotImageAutoQueuesOCRWhenEnabled(t *testing.T) {
 		if err != nil {
 			t.Fatalf("loadScreenshotHistory() error = %v", err)
 		}
-		if len(history) == 1 && history[0].ID == item.ID && history[0].OCRStatus != "none" {
+		if len(history) == 1 && history[0].ID == item.ID && isTerminalOCRStatus(history[0].OCRStatus) {
 			break
 		}
 		time.Sleep(20 * time.Millisecond)
@@ -309,8 +309,17 @@ func TestSaveScreenshotImageAutoQueuesOCRWhenEnabled(t *testing.T) {
 	if len(history) != 1 || history[0].ID != item.ID {
 		t.Fatalf("history = %#v, want saved screenshot", history)
 	}
-	if history[0].OCRStatus == "none" || history[0].OCRLanguage != "zh-en" {
-		t.Fatalf("auto OCR history = %#v, want queued/running/ready/failed zh-en state", history[0])
+	if !isTerminalOCRStatus(history[0].OCRStatus) || history[0].OCRLanguage != "zh-en" {
+		t.Fatalf("auto OCR history = %#v, want terminal zh-en OCR state", history[0])
+	}
+}
+
+func isTerminalOCRStatus(status string) bool {
+	switch status {
+	case ocr.ResultStatusReady, ocr.ResultStatusFailed, ocr.ResultStatusCancelled:
+		return true
+	default:
+		return false
 	}
 }
 

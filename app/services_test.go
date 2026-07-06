@@ -1196,6 +1196,7 @@ func TestRecordingAnnotationSnapshotQueuesBackgroundWhiteboardOCR(t *testing.T) 
 	if _, ok := service.recorder.ActiveSession(); !ok {
 		t.Fatal("annotation OCR queue ended the active recording session")
 	}
+	waitForOCRJobTerminal(t, service.ocr, snapshot.JobID)
 }
 
 func TestClearAnnotationCaptureForSessionRemovesArtifactsAndRegion(t *testing.T) {

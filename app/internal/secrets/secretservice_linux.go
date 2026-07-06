@@ -36,12 +36,13 @@ type secretServiceClient struct {
 }
 
 func backendStatus(s *Store) (Status, error) {
-	if _, err := diskDir(s); err != nil {
+	dir, err := diskDir(s)
+	if err != nil {
 		return Status{}, err
 	}
 	return Status{
 		Backend: secretServiceFallbackName,
-		Dir:     "org.freedesktop.secrets; fallback " + diskBackendName(),
+		Dir:     dir,
 	}, nil
 }
 
