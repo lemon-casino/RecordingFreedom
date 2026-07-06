@@ -14,7 +14,19 @@ func TestMacOSKeychainBackendStatus(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Status() error = %v", err)
 	}
-	if status.Backend != "macos-keychain" || status.Dir != "macOS Keychain" {
-		t.Fatalf("Status() = %#v, want macOS Keychain backend", status)
+	if status.Backend != keychainFallbackName || status.Dir == "" {
+		t.Fatalf("Status() = %#v, want macOS Keychain backend with explicit fallback", status)
+	}
+}
+
+func TestMacOSKeychainUnavailableErrorsPermitFallback(t *testing.T) {
+	if !isKeychainUnavailable(keychainStatusError{operation: "save secret", status: -25307}) {
+		t.Fatal("missing default keychain should permit local-file fallback")
+	}
+	if !isKeychainUnavailable(keychainStatusError{operation: "save secret", status: -25308}) {
+		t.Fatal("headless interaction denial should permit local-file fallback")
+	}
+	if isKeychainUnavailable(keychainStatusError{operation: "save secret", status: -25299}) {
+		t.Fatal("unexpected Keychain errors should not silently downgrade to local-file fallback")
 	}
 }
