@@ -237,8 +237,10 @@ function Invoke-OcrStableSmoke {
         [Parameter(Mandatory = $true)][string]$ModelDir
     )
 
-    $smokeText = (& $WorkerPath --smoke --runtime-dir $RuntimeDir --model-dir $ModelDir --must-contain RecordingFreedom --must-contain 文字识别 2>$null | Select-Object -First 1)
-    if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace($smokeText)) {
+    $smokeOutput = & $WorkerPath --smoke --runtime-dir $RuntimeDir --model-dir $ModelDir --must-contain RecordingFreedom --must-contain 文字识别 2>$null
+    $exitCode = $LASTEXITCODE
+    $smokeText = $smokeOutput | Select-Object -First 1
+    if ($exitCode -ne 0 -or [string]::IsNullOrWhiteSpace($smokeText)) {
         throw "OCR worker stable model smoke failed for $WorkerPath"
     }
     $smoke = $smokeText | ConvertFrom-Json
@@ -347,8 +349,10 @@ if (-not $SkipExecutableCheck) {
         }
         Assert-PEMetadata -Path $onnxRuntimeProviders -ExpectedMachine $expectedMachine
         if (Can-ExecuteWindowsTarget -Architecture $Architecture) {
-            $ocrCapabilitiesText = (& $ocrWorkerPath --capabilities --runtime-dir $onnxRuntimeDir 2>$null | Select-Object -First 1)
-            if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace($ocrCapabilitiesText)) {
+            $ocrCapabilitiesOutput = & $ocrWorkerPath --capabilities --runtime-dir $onnxRuntimeDir 2>$null
+            $ocrCapabilitiesExitCode = $LASTEXITCODE
+            $ocrCapabilitiesText = $ocrCapabilitiesOutput | Select-Object -First 1
+            if ($ocrCapabilitiesExitCode -ne 0 -or [string]::IsNullOrWhiteSpace($ocrCapabilitiesText)) {
                 throw "OCR worker --capabilities failed for $ocrWorkerPath"
             }
             $ocrCapabilities = $ocrCapabilitiesText | ConvertFrom-Json

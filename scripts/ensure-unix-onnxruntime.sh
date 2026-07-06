@@ -177,6 +177,8 @@ def member_score(member: tarfile.TarInfo, wanted: str) -> int:
         return 2
     return 1
 
+member_by_normalized = {}
+
 def resolve_member(tar: tarfile.TarFile, member: tarfile.TarInfo, seen: set[str]) -> tarfile.TarInfo:
     name = safe_name(member.name)
     if name in seen:
@@ -187,7 +189,9 @@ def resolve_member(tar: tarfile.TarFile, member: tarfile.TarInfo, seen: set[str]
     if member.issym():
         parent = posixpath.dirname(name)
         link_name = safe_name(posixpath.join(parent, member.linkname))
-        linked = tar.getmember(link_name)
+        linked = member_by_normalized.get(link_name)
+        if linked is None:
+            raise RuntimeError(f"ONNX Runtime symlink target was not found: {member.name} -> {member.linkname}")
         return resolve_member(tar, linked, seen)
     raise RuntimeError(f"unsupported ONNX Runtime archive member: {member.name}")
 
@@ -208,6 +212,7 @@ def copy_member(tar: tarfile.TarFile, wanted: str, required: bool) -> None:
     os.chmod(output_path, stat.S_IRUSR | stat.S_IWUSR | stat.S_IRGRP | stat.S_IROTH)
 
 with tarfile.open(archive_path, "r:gz") as tar:
+    member_by_normalized = {safe_name(member.name): member for member in tar.getmembers()}
     for library in target["libraryFiles"]:
         copy_member(tar, library, True)
     for optional in ["LICENSE", "ThirdPartyNotices.txt", "VERSION_NUMBER", "GIT_COMMIT_ID"]:

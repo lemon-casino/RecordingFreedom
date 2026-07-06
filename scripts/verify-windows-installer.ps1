@@ -99,8 +99,10 @@ try {
     if ([string]::IsNullOrWhiteSpace($version) -or $version -notmatch "ffmpeg") {
         throw "Installed ffmpeg.exe did not report a valid version"
     }
-    $ocrCapabilitiesText = & $ocrWorkerPath --capabilities --runtime-dir $onnxRuntimeDir 2>$null | Select-Object -First 1
-    if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace($ocrCapabilitiesText)) {
+    $ocrCapabilitiesOutput = & $ocrWorkerPath --capabilities --runtime-dir $onnxRuntimeDir 2>$null
+    $ocrCapabilitiesExitCode = $LASTEXITCODE
+    $ocrCapabilitiesText = $ocrCapabilitiesOutput | Select-Object -First 1
+    if ($ocrCapabilitiesExitCode -ne 0 -or [string]::IsNullOrWhiteSpace($ocrCapabilitiesText)) {
         throw "Installed OCR worker did not report capabilities"
     }
     $ocrCapabilities = $ocrCapabilitiesText | ConvertFrom-Json
