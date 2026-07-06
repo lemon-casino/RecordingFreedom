@@ -59,6 +59,7 @@ test('settings exposes local OCR model package management', async ({page}) => {
   await expect(ocrModels).toContainText('ppocrv6-mobile-zh-en')
   await expect(ocrModels).toContainText('ppocrv6-medium-zh-en')
   await expect(ocrModels).toContainText('No RecordingFreedom-verified download package yet')
+  await expect(ocrModels.getByRole('button', {name: 'Refresh catalog'})).toBeVisible()
   await expect(ocrModels.getByPlaceholder('Model package .zip or extracted folder path')).toBeVisible()
 
   await ocrModels.getByPlaceholder('Model package .zip or extracted folder path').fill('C:/tmp/missing-ocr-model.zip')
@@ -98,7 +99,7 @@ test('settings downloads a verified OCR model package without auto-switching act
   })).toBe('ppocrv6-mobile-zh-en')
 })
 
-test('settings refreshes the verified OCR model catalog before exposing downloads', async ({page}) => {
+test('settings refreshes the verified OCR model catalog before manual download', async ({page}) => {
   await page.addInitScript(({initialStatus, catalogStatus}) => {
     ;(window as Window & {
       __RF_OCR_STATUS__?: unknown
@@ -118,15 +119,17 @@ test('settings refreshes the verified OCR model catalog before exposing download
   const latestModel = ocrModels.locator('.ocr-model-row').filter({hasText: 'ppocrv6-mobile-zh-en'})
 
   await expect(latestModel).toContainText('No RecordingFreedom-verified download package yet')
-  await expect(latestModel.getByRole('button', {name: 'Download'})).toHaveCount(0)
+  await expect(latestModel.getByRole('button', {name: 'Download'})).toBeVisible()
 
-  await ocrModels.getByRole('button', {name: 'Refresh catalog'}).click()
+  await latestModel.getByRole('button', {name: 'Download'}).click()
   await expect.poll(async () => page.evaluate(() => {
     return (window as Window & {__RF_LAST_OCR_MODEL_CATALOG_REFRESH__?: {catalogUrl: string}}).__RF_LAST_OCR_MODEL_CATALOG_REFRESH__?.catalogUrl ?? 'missing'
   })).toBe('')
-  await expect(ocrModels).toContainText('Model catalog refreshed')
-  await expect(latestModel).toContainText('Download size')
-  await expect(latestModel.getByRole('button', {name: 'Download'})).toBeVisible()
+  await expect.poll(async () => page.evaluate(() => {
+    return (window as Window & {__RF_LAST_OCR_MODEL_DOWNLOAD__?: {modelId: string}}).__RF_LAST_OCR_MODEL_DOWNLOAD__?.modelId ?? ''
+  })).toBe('ppocrv6-mobile-zh-en')
+  await expect(ocrModels).toContainText('Model downloaded and verified')
+  await expect(latestModel).toContainText('Verified')
 })
 
 test('settings confirms before switching the active OCR model', async ({page}) => {

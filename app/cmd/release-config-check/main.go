@@ -169,7 +169,7 @@ var releaseConfigChecks = []configCheck{
 		Needles: []string{
 			"settings exposes local OCR model package management",
 			"settings downloads a verified OCR model package without auto-switching active model",
-			"settings refreshes the verified OCR model catalog before exposing downloads",
+			"settings refreshes the verified OCR model catalog before manual download",
 			"settings confirms before switching the active OCR model",
 			"settings keeps the current OCR model when a confirmed switch fails",
 			"settings persists explicit OCR translation provider configuration",
@@ -1376,10 +1376,8 @@ var releaseConfigChecks = []configCheck{
 		File: ".github/workflows/release.yml",
 		Name: "Release upload is filtered, complete, and retried",
 		Needles: []string{
-			`-name "RecordingFreedom-*"`,
-			`-name "SHA256SUMS-*.txt"`,
-			`-name "ocr-model-catalog.json"`,
-			`-name "ppocr*.zip"`,
+			`*/ocr-secret-store-smoke/*|*/ocr-worker-platform-smoke/*`,
+			`RecordingFreedom-*|SHA256SUMS-*.txt|ocr-model-catalog.json|ppocr*.zip`,
 			"Duplicate release asset basename",
 			"RecordingFreedom-windows-x64-${TAG_NAME}-portable.zip",
 			"RecordingFreedom-windows-arm64-${TAG_NAME}-portable.zip",

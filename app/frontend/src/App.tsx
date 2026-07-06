@@ -7566,7 +7566,16 @@ function OcrModelSettings({copy, compact = false}: {copy: RecorderCopy; compact?
 
   const downloadModel = (model: OcrModelInfo) => {
     void runAction(`download:${model.id}`, async () => {
-      const snapshot = await startOcrModelDownload(model.id)
+      let downloadable = model
+      if (!downloadable.downloadAvailable) {
+        const nextStatus = await refreshOcrModelCatalog('')
+        setStatus(nextStatus)
+        downloadable = nextStatus.models.find((candidate) => candidate.id === model.id) ?? downloadable
+      }
+      if (!downloadable.downloadAvailable) {
+        throw new Error(copy.settings.ocrModelDownloadUnavailable)
+      }
+      const snapshot = await startOcrModelDownload(downloadable.id)
       setDownloads((current) => ({...current, [model.id]: snapshot}))
     }, copy.settings.ocrModelDownloadQueued)
   }
@@ -7699,7 +7708,7 @@ function OcrModelRow({
       </div>
       <div className="ocr-model-actions">
         <b className={`status-badge ${ocrModelBadge(model)}`}>{state}</b>
-        {!model.installed && model.downloadAvailable && !downloadActive && (
+        {!model.installed && !downloadActive && (
           <button className="setting-action" type="button" disabled={disabled || busy === `download:${model.id}`} onClick={onDownload}>
             {busy === `download:${model.id}` ? copy.settings.ocrModelDownloading : copy.settings.ocrModelDownload}
           </button>
