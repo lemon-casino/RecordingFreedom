@@ -900,7 +900,7 @@ jobs:
             -Repository "${GITHUB_REPOSITORY}" \
             -TagName "${TAG_NAME}" \
             -Targets all \
-            -Architectures x64 arm64 \
+            -Architectures x64,arm64 \
             -DownloadDir release-download-verification
 
       - name: Upload release download verification evidence

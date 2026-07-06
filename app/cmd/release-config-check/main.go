@@ -1430,7 +1430,7 @@ var releaseConfigChecks = []configCheck{
 			"-Repository \"${GITHUB_REPOSITORY}\"",
 			"-TagName \"${TAG_NAME}\"",
 			"-Targets all",
-			"-Architectures x64 arm64",
+			"-Architectures x64,arm64",
 			"release-download-verification",
 			"Upload release download verification evidence",
 			"RecordingFreedom-release-download-verification",
