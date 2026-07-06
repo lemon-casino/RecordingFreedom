@@ -2521,9 +2521,9 @@ OCR smoke 标准：
 - 已通过 PowerShell Parser 静态解析 `scripts/verify-release-artifacts.ps1` 和 `scripts/verify-windows-portable.ps1`。
 - 已通过 `git diff --check`。
 - 仍未完成：
-  - 全平台 release artifact 下载后的真实完整性回验仍需要在下一次实际发布 workflow 中产出并保存 `RecordingFreedom-release-download-verification/release-artifact-verification.json`；当前完成的是 workflow 自动回验入口和 release gate 防回归，尚未有新的真实发布 run evidence。
-  - Windows/macOS/Linux 发布包 stable OCR smoke 已接入 build/download verifier，但当前工作区没有新生成的 `RecordingFreedom-*-portable/app.zip` 可本机即时回验；需要下一次 release build 产出真实包后保存对应日志/evidence。
-  - Windows/macOS/Linux 各架构真实 worker `--capabilities` 和 stable 模型 smoke 矩阵 gate 已进入 CI/Release；仍需要下一次 Actions run 产出每个平台的 `ocr-worker-platform-smoke.json` 作为真实跨平台 evidence。
+  - v0.1.32 已完成全平台 release artifact 下载后的 workflow 级完整性回验，并上传 `RecordingFreedom-release-download-verification` artifact；当前本地未认证环境不能直接下载 Actions artifact zip，后续如需离线归档，需要在有 GitHub token 的环境下载并保存其中的 `release-artifact-verification.json`。
+  - Windows/macOS/Linux 发布包 stable OCR smoke 已接入 build/download verifier，v0.1.32 Release workflow 已证明该门禁可通过；仍未形成真实用户桌面操作的 OCR evidence 包。
+  - Windows/macOS/Linux 各架构真实 worker `--capabilities` 和 stable 模型 smoke 矩阵 gate 已进入 CI/Release，并随 v0.1.32 build matrix 通过；如需长期审计，需要下载 Actions build artifacts 中的各平台 `ocr-worker-platform-smoke.json` 做离线归档。
   - 真实桌面截图/钉图/画板 OCR 的视觉/e2e 证据。
 
 执行纪律：
@@ -2548,7 +2548,7 @@ OCR smoke 标准：
 | 1 | A. 真实桌面 OCR 入口闭环 | 区域/全屏/滚动截图、截图历史、钉图、画板、录制中画板 OCR | OCR 队列、worker、result、evidence contract、export/check 工具已接线；窗口/焦点窗口 sourceKind 仅兼容保留 | 缺真实 Wails 桌面 evidence；OCR result 浮层、polygon、高亮、画板选区、录制中 annotation 还未形成一包验收证据 | 一次性跑完所有用户可见入口的真实桌面采集，导出 evidence 包并用 checker 通过 | “OCR 入口进入桌面验收” |
 | 2 | B. 翻译 provider 与隐私闭环 | OCR 结果翻译、复制、缓存、provider 配置、隐私保护 | local/external provider smoke 和 release gate 基础已接线 | 真实 DeepL/OpenAI-compatible、三端 secret store、日志脱敏和 UI 调用证据不足 | 一次性验证 provider、secret store、缓存、强制请求、失败提示、日志无 key/原文 | “翻译进入桌面验收” |
 | 3 | C. 模型通道与质量闭环 | stable/latest/quality 模型、下载、切换、删除、回退 | stable 默认方向、模型包/下载/worker smoke 门禁已具备 | PP-OCRv6 latest/quality 仍是 candidate；真实截图样例质量、跨平台 smoke 和失败回退证据不足 | 一次性完成 latest/quality 模型包 manifest、SHA256、smoke、真实样例、回退和设置页桌面证据 | “模型通道可给用户切换” |
-| 4 | D. 发布与长期防回归闭环 | Windows/macOS/Linux 发布包、worker/runtime/model/tool 回验 | release-config-check、verifier、evidence scripts 已加固 | 下一次 Actions 真实产物、下载后完整回验和全平台 smoke JSON 还没有形成最终证据 | 发布后下载产物，跑完整 verifier，保存 `release-artifact-verification.json` 和各平台 smoke evidence | “全平台 OCR/翻译发布可验收” |
+| 4 | D. 发布与长期防回归闭环 | Windows/macOS/Linux 发布包、worker/runtime/model/tool 回验 | release-config-check、verifier、evidence scripts 已加固；v0.1.32 Release workflow 已通过发布后下载复验并上传 `RecordingFreedom-release-download-verification` artifact | 真实桌面 OCR evidence 包尚未作为 release 后验收资产固定；Actions artifact 仍需在有 token 的环境下载归档 | 下载并归档 v0.1.32 `release-artifact-verification.json` 和各平台 smoke evidence；后续把真实桌面 OCR evidence 包纳入 release 后验收 | “全平台 OCR/翻译发布可验收” |
 
 ### 问题重新归类
 
@@ -2559,7 +2559,7 @@ OCR smoke 标准：
 - A 批次：录制中画板 OCR 必须证明在录制、鼠标、写盘和绘制并行时不造成阻塞。
 - B 批次：翻译必须证明 provider、secret store、缓存和脱敏日志真实可用；不能只停留在 smoke 命令或未配置提示。
 - C 批次：latest/quality 模型不能因为 catalog 存在就开放给用户；必须先过质量样例、跨平台 runtime 和回退验证。
-- D 批次：发布包必须从下载产物反向验证，不再用源码目录或本机开发环境代替。
+- D 批次：v0.1.32 已完成发布包下载产物反向验证；后续仍要把真实桌面 OCR evidence 包纳入 release 后验收，不能用源码目录或本机开发环境代替。
 
 已经有基础但不能宣称完成的事项：
 
@@ -2712,7 +2712,7 @@ OCR smoke 标准：
 2. 下一批批量完成 A：真实桌面 OCR 入口 evidence 包。只有这一批通过后，才能说 OCR 入口进入桌面验收。
 3. 再批量完成 B：真实 provider/secret store/翻译缓存 evidence。只有这一批通过后，才能说翻译进入桌面验收。
 4. 再批量完成 C：latest/quality 模型通道和真实质量样例。没有跨平台 smoke 前不开放 latest/quality 给普通用户。
-5. 最后批量完成 D：发布包下载后完整回验。没有真实 release artifact evidence 前，不发布“全平台 OCR/翻译已完成”的结论。
+5. 最后批量完成 D：发布包下载后完整回验。v0.1.32 已证明基础发布下载回验闭环可通过；没有真实桌面 OCR evidence 包进入 release 后验收前，仍不能发布“全平台 OCR/翻译已完成”的结论。
 
 当前暂停项：
 
@@ -2726,6 +2726,7 @@ OCR smoke 标准：
 - OCR 原位可复制文本已落地：`ocr-result` 浮层在预览图的 OCR block 坐标上渲染可点击文本按钮，点击即可复制对应识别文本；钉图 OCR 高亮也使用同一套原位文本按钮，并按 `object-fit: contain` 的真实图片显示区域重新计算坐标，窗口 resize 后不漂移。对应前端 e2e 已固定 `.ocr-position-text-button`，防止后续退回“只显示框线和列表”。
 - macOS OCR 翻译 secret store 已从废弃 `SecKeychain*` API 迁移到 `SecItemCopyMatching` / `SecItemAdd` / `SecItemUpdate` / `SecItemDelete`，保留 keychain 不可用时的本地 0600 fallback。`release-config-check` 已加入 forbidden gate，禁止 `SecKeychain` 旧符号重新进入 `keychain_darwin.go`。
 - v0.1.30 发布失败根因已确认并修复：`Verify published release downloads` 中 `-Architectures x64,arm64` 被 PowerShell 当作单个参数，触发 ValidateSet 失败。`verify-release-artifacts.ps1` 已新增 `Normalize-Architectures`，保留 workflow 的单参数逗号格式并在脚本内拆分、去重、校验 x64/arm64。
+- v0.1.32 Release workflow 已通过：Release Gate、OCR Model Package、Windows x64/ARM64、macOS x64/ARM64、Linux x64/ARM64 和 Publish GitHub Release 全部 success；Actions run 为 <https://github.com/lemon-casino/RecordingFreedom/actions/runs/28810435505>。GitHub Release 包含 17 个资产，包括 Windows portable/setup、macOS app.zip、Linux portable.tar.gz、stable OCR 模型包、catalog 和 SHA256SUMS。Actions 已上传 `RecordingFreedom-release-download-verification` artifact，说明发布后下载复验已在 workflow 中通过。
 - 已验证项：`go test ./...`、`go test -tags gtk3 ./...`、`cd app/frontend && npm run build`、`cd app/frontend && npm run test:e2e`、`cd app && go run ./cmd/release-config-check`、`git diff --check`、以及 `verify-release-artifacts.ps1 -Targets ocr-models -Architectures x64,arm64` 均通过。
 - 未扩大结论：上述内容只代表 OCR UI 原位复制、macOS Keychain warning 修复、发布复验参数修复已经收口；真实 Wails 桌面 OCR evidence、真实 provider/secret store 桌面回验、PP-OCRv6 release-ready catalog 和全平台发布产物下载后完整回验仍按本计划继续验收。
 
