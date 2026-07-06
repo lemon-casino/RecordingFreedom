@@ -713,9 +713,69 @@ jobs:
           TAG_NAME: ${{ github.ref_name }}
         run: |
           set -euo pipefail
-          mapfile -t assets < <(find release-artifacts -type f | sort)
+          mapfile -t assets < <(
+            find release-artifacts -type f \( \
+              -name "RecordingFreedom-*" -o \
+              -name "SHA256SUMS-*.txt" -o \
+              -name "ocr-model-catalog.json" -o \
+              -name "ppocr*.zip" \
+            \) | sort
+          )
           if [ "${#assets[@]}" -eq 0 ]; then
             echo "No release artifacts were produced." >&2
+            exit 1
+          fi
+          declare -A asset_by_name=()
+          for asset in "${assets[@]}"; do
+            asset_name="$(basename "${asset}")"
+            if [ -n "${asset_by_name[${asset_name}]:-}" ]; then
+              echo "Duplicate release asset basename ${asset_name}:" >&2
+              echo "  ${asset_by_name[${asset_name}]}" >&2
+              echo "  ${asset}" >&2
+              exit 1
+            fi
+            asset_by_name["${asset_name}"]="${asset}"
+          done
+
+          required_assets=(
+            "RecordingFreedom-windows-x64-${TAG_NAME}-portable.zip"
+            "RecordingFreedom-windows-x64-${TAG_NAME}-setup.exe"
+            "RecordingFreedom-windows-arm64-${TAG_NAME}-portable.zip"
+            "RecordingFreedom-windows-arm64-${TAG_NAME}-setup.exe"
+            "RecordingFreedom-macos-x64-${TAG_NAME}-app.zip"
+            "RecordingFreedom-macos-arm64-${TAG_NAME}-app.zip"
+            "RecordingFreedom-linux-x64-${TAG_NAME}-portable.tar.gz"
+            "RecordingFreedom-linux-arm64-${TAG_NAME}-portable.tar.gz"
+            "SHA256SUMS-windows-x64.txt"
+            "SHA256SUMS-windows-arm64.txt"
+            "SHA256SUMS-macos-x64.txt"
+            "SHA256SUMS-macos-arm64.txt"
+            "SHA256SUMS-linux-x64.txt"
+            "SHA256SUMS-linux-arm64.txt"
+            "SHA256SUMS-ocr-models.txt"
+            "ocr-model-catalog.json"
+          )
+          missing_assets=()
+          for required in "${required_assets[@]}"; do
+            if [ -z "${asset_by_name[${required}]:-}" ]; then
+              missing_assets+=("${required}")
+            fi
+          done
+          has_ocr_model_zip="false"
+          for asset_name in "${!asset_by_name[@]}"; do
+            if [[ "${asset_name}" == ppocr*.zip ]]; then
+              has_ocr_model_zip="true"
+              break
+            fi
+          done
+          if [ "${has_ocr_model_zip}" != "true" ]; then
+            missing_assets+=("ppocr*.zip")
+          fi
+          if [ "${#missing_assets[@]}" -ne 0 ]; then
+            echo "Required release assets are missing before upload:" >&2
+            printf '  %s\n' "${missing_assets[@]}" >&2
+            echo "Available release assets:" >&2
+            printf '  %s\n' "${!asset_by_name[@]}" | sort >&2
             exit 1
           fi
 
@@ -772,7 +832,38 @@ jobs:
             gh release create "${TAG_NAME}" "${release_flags[@]}"
           fi
 
-          gh release upload "${TAG_NAME}" "${assets[@]}" --clobber
+          upload_asset() {
+            local asset="$1"
+            local asset_name
+            asset_name="$(basename "${asset}")"
+            for attempt in 1 2 3; do
+              if gh release upload "${TAG_NAME}" "${asset}" --clobber; then
+                return 0
+              fi
+              echo "Upload failed for ${asset_name} (attempt ${attempt}/3)." >&2
+              sleep "$((attempt * 10))"
+            done
+            echo "Failed to upload ${asset_name} after 3 attempts." >&2
+            return 1
+          }
+
+          for asset in "${assets[@]}"; do
+            upload_asset "${asset}"
+          done
+
+          expected_asset_names="$(mktemp)"
+          actual_asset_names="$(mktemp)"
+          missing_uploaded_assets="$(mktemp)"
+          for asset in "${assets[@]}"; do
+            basename "${asset}"
+          done | sort > "${expected_asset_names}"
+          gh api "repos/${GITHUB_REPOSITORY}/releases/tags/${TAG_NAME}" --jq '.assets[].name' | sort > "${actual_asset_names}"
+          comm -23 "${expected_asset_names}" "${actual_asset_names}" > "${missing_uploaded_assets}"
+          if [ -s "${missing_uploaded_assets}" ]; then
+            echo "Release upload finished but these assets are missing from ${TAG_NAME}:" >&2
+            sed 's/^/  /' "${missing_uploaded_assets}" >&2
+            exit 1
+          fi
 
       - name: Verify published release downloads
         shell: bash

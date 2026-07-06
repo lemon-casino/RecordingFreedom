@@ -1373,6 +1373,26 @@ var releaseConfigChecks = []configCheck{
 		},
 	},
 	{
+		File: ".github/workflows/release.yml",
+		Name: "Release upload is filtered, complete, and retried",
+		Needles: []string{
+			`-name "RecordingFreedom-*"`,
+			`-name "SHA256SUMS-*.txt"`,
+			`-name "ocr-model-catalog.json"`,
+			`-name "ppocr*.zip"`,
+			"Duplicate release asset basename",
+			"RecordingFreedom-windows-x64-${TAG_NAME}-portable.zip",
+			"RecordingFreedom-windows-arm64-${TAG_NAME}-portable.zip",
+			"Required release assets are missing before upload",
+			"upload_asset()",
+			"attempt ${attempt}/3",
+			`gh release upload "${TAG_NAME}" "${asset}" --clobber`,
+			"Release upload finished but these assets are missing from ${TAG_NAME}",
+			`gh api "repos/${GITHUB_REPOSITORY}/releases/tags/${TAG_NAME}" --jq '.assets[].name'`,
+			`comm -23 "${expected_asset_names}" "${actual_asset_names}"`,
+		},
+	},
+	{
 		File: "scripts/build-rnnoise-windows.ps1",
 		Name: "Windows RNNoise dynamic module builder emits x64 and arm64 DLLs",
 		Needles: []string{
