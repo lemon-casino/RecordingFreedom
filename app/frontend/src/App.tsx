@@ -17,6 +17,7 @@ import {
   Languages,
   Lock,
   Maximize2,
+  Minimize2,
   Move,
   MousePointer2,
   Monitor,
@@ -109,6 +110,8 @@ type ActivePanel = 'source' | 'audio' | 'camera' | 'language' | 'board'
 const floatingPanelStandardSize = {width: 320, height: 340, maxHeight: 340, minWidth: 300}
 const floatingPanelCompactSize = {width: 260, height: 120, maxHeight: 120, minWidth: 240}
 const floatingPanelSettingsSize = {width: 340, height: 340, maxHeight: 340, minWidth: 320}
+const floatingPanelOcrResultSize = {width: 380, height: 420, maxHeight: 420, minWidth: 340}
+const floatingPanelOcrResultExpandedSize = {width: 560, height: 620, maxHeight: 620, minWidth: 500}
 const floatingSelectMinWidth = 180
 const floatingSelectMaxWidth = 280
 const floatingSelectMaxHeight = 220
@@ -121,7 +124,7 @@ const floatingPanelSizes: Record<FloatingPanelKind, {width: number; height: numb
   language: floatingPanelCompactSize,
   settings: floatingPanelSettingsSize,
   close: {width: 340, height: 170, maxHeight: 170, minWidth: 320},
-  'ocr-result': {width: 380, height: 420, maxHeight: 420, minWidth: 340},
+  'ocr-result': floatingPanelOcrResultSize,
 }
 
 function normalizePipPreset(value: PIPPreset): PIPPreset {
@@ -3442,48 +3445,21 @@ function App() {
                   {screenshots.length > 0 ? screenshots.slice(0, 6).map((item) => {
                     const ocrBusy = screenshotOcrBusy(item)
                     return (
-                      <div className="screenshot-history-row" key={item.id}>
-                        <button type="button" className="screenshot-history-main" onClick={() => openScreenshotFile(item)}>
-                          <ImageIcon size={17} />
-                          <span>
-                            <strong>{screenshotDisplayName(item)}</strong>
-                            <small>{screenshotMeta(item, copy)}</small>
-                            <small className={`screenshot-ocr-status ${item.ocrStatus}`}>{screenshotOcrStatusText(item, copy)}</small>
-                          </span>
-                        </button>
-                        <div className="screenshot-history-actions">
-                          <button type="button" className={item.ocrStatus === 'ready' ? 'selected' : ''} disabled={ocrBusy} aria-label={screenshotOcrPrimaryTitle(item, copy)} title={screenshotOcrPrimaryTitle(item, copy)} onClick={(event) => openScreenshotOcrResult(item, event.currentTarget)}>
-                            <FileText size={15} />
-                          </button>
-                          <button type="button" disabled={item.ocrStatus !== 'ready'} aria-label={copy.screenshot.copyText} title={copy.screenshot.copyText} onClick={() => copyScreenshotOcrText(item)}>
-                            <CopyIcon size={15} />
-                          </button>
-                          <button type="button" disabled={item.ocrStatus !== 'ready'} aria-label={copy.screenshot.translateText} title={copy.screenshot.translateText} onClick={() => translateScreenshotOcrText(item)}>
-                            <Languages size={15} />
-                          </button>
-                          <button type="button" aria-label={copy.screenshot.openFolder} title={copy.screenshot.openFolder} onClick={() => openScreenshotFolder(item)}>
-                            <FolderOpen size={15} />
-                          </button>
-                          <button type="button" aria-label={copy.screenshot.annotate} title={copy.screenshot.annotate} onClick={() => annotateScreenshot(item)}>
-                            <PenLine size={15} />
-                          </button>
-                          <button type="button" aria-label={copy.screenshot.pin} title={copy.screenshot.pin} onClick={() => pinScreenshot(item)}>
-                            <Pin size={15} />
-                          </button>
-                          <button
-                            type="button"
-                            className={item.fixed ? 'selected' : ''}
-                            aria-label={item.fixed ? copy.screenshot.unfix : copy.screenshot.fix}
-                            title={item.fixed ? copy.screenshot.unfix : copy.screenshot.fix}
-                            onClick={() => toggleScreenshotFixed(item)}
-                          >
-                            {item.fixed ? <Lock size={15} /> : <Unlock size={15} />}
-                          </button>
-                          <button type="button" className="danger" aria-label={copy.screenshot.delete} title={copy.screenshot.delete} onClick={() => deleteScreenshot(item)}>
-                            <Trash2 size={15} />
-                          </button>
-                        </div>
-                      </div>
+                      <ScreenshotHistoryRow
+                        key={item.id}
+                        item={item}
+                        copy={copy}
+                        ocrBusy={ocrBusy}
+                        onOpen={openScreenshotFile}
+                        onOpenOcr={openScreenshotOcrResult}
+                        onCopyOcr={copyScreenshotOcrText}
+                        onTranslateOcr={translateScreenshotOcrText}
+                        onOpenFolder={openScreenshotFolder}
+                        onAnnotate={annotateScreenshot}
+                        onPin={pinScreenshot}
+                        onToggleFixed={toggleScreenshotFixed}
+                        onDelete={deleteScreenshot}
+                      />
                     )
                   }) : (
                     <div className="source-empty">
@@ -3593,6 +3569,7 @@ function FloatingPanelWindow() {
   const [ocrResult, setOcrResult] = useState<OcrResult | null>(null)
   const [ocrResultLoading, setOcrResultLoading] = useState(false)
   const [ocrResultError, setOcrResultError] = useState('')
+  const [ocrResultExpanded, setOcrResultExpanded] = useState(false)
   const [shortcutCapture, setShortcutCapture] = useState<ShortcutAction | null>(null)
   const [shortcutError, setShortcutError] = useState('')
   const [lastBackend, setLastBackend] = useState('ffmpeg-desktop-capture')
@@ -3726,6 +3703,10 @@ function FloatingPanelWindow() {
       unsubscribeOcr()
     }
   }, [])
+
+  useEffect(() => {
+    if (panelState.kind !== 'ocr-result' || !panelState.visible) setOcrResultExpanded(false)
+  }, [panelState.kind, panelState.visible])
 
   useEffect(() => {
     const resultId = panelState.kind === 'ocr-result' ? panelState.contextId?.trim() : ''
@@ -4126,6 +4107,7 @@ function FloatingPanelWindow() {
       queueScreenshotOcr(item)
       return
     }
+    setOcrResultExpanded(false)
     const size = floatingPanelSizes['ocr-result']
     const token = panelState.token + 1
     void showFloatingPanel({
@@ -4145,6 +4127,26 @@ function FloatingPanelWindow() {
       screenId: panelState.screenId,
       direction: panelState.direction,
       contextId: item.ocrResultId,
+    })
+  }
+
+  const resizeOcrResultPanel = (expanded: boolean) => {
+    setOcrResultExpanded(expanded)
+    if (panelState.kind !== 'ocr-result' || !panelState.visible) return
+    const size = expanded ? floatingPanelOcrResultExpandedSize : floatingPanelOcrResultSize
+    void showFloatingPanel({
+      ...panelState,
+      kind: 'ocr-result',
+      bounds: {
+        ...panelState.bounds,
+        width: size.width,
+        height: size.height,
+      },
+      width: size.width,
+      height: size.height,
+      minWidth: size.minWidth,
+      maxHeight: size.maxHeight,
+      token: panelState.token + 1,
     })
   }
 
@@ -4173,6 +4175,66 @@ function FloatingPanelWindow() {
       .catch((error) => {
         console.error('Failed to translate floating screenshot OCR text:', error)
         setScreenshotMessage(`${copy.screenshot.translationFailed}: ${readableError(error)}`)
+      })
+  }
+
+  const openScreenshotFile = (item: ScreenshotItem) => {
+    void openScreenshot(item.id)
+      .catch((error) => {
+        console.error('Failed to open floating screenshot:', error)
+        setScreenshotMessage(readableError(error))
+      })
+  }
+
+  const openScreenshotFolder = (item: ScreenshotItem) => {
+    void openScreenshotDirectory(item.id)
+      .catch((error) => {
+        console.error('Failed to open floating screenshot directory:', error)
+        setScreenshotMessage(readableError(error))
+      })
+  }
+
+  const annotateScreenshot = (item: ScreenshotItem) => {
+    void hideFloatingPanel(panelState.token)
+    void openScreenshotInWhiteboard(item.id)
+      .catch((error) => {
+        console.error('Failed to open floating screenshot in whiteboard:', error)
+        setScreenshotMessage(readableError(error))
+      })
+  }
+
+  const pinScreenshot = (item: ScreenshotItem) => {
+    void showPinnedScreenshot(item.id)
+      .then(() => listScreenshots())
+      .then(setScreenshots)
+      .catch((error) => {
+        console.error('Failed to pin floating screenshot:', error)
+        setScreenshotMessage(readableError(error))
+      })
+  }
+
+  const deleteScreenshot = (item: ScreenshotItem) => {
+    void deleteScreenshotItem(item.id)
+      .then((items) => {
+        setScreenshots(items)
+        setScreenshotMessage(copy.screenshot.deleted)
+      })
+      .catch((error) => {
+        console.error('Failed to delete floating screenshot:', error)
+        setScreenshotMessage(readableError(error) || copy.screenshot.deleteFailed)
+      })
+  }
+
+  const toggleScreenshotFixed = (item: ScreenshotItem) => {
+    void patchScreenshotItem(item.id, {fixed: !item.fixed})
+      .then(setScreenshots)
+      .then(() => {
+        if (!item.fixed) return showPinnedScreenshot(item.id).then(() => undefined)
+        return undefined
+      })
+      .catch((error) => {
+        console.error('Failed to toggle floating screenshot fixed state:', error)
+        setScreenshotMessage(readableError(error))
       })
   }
 
@@ -4391,24 +4453,21 @@ function FloatingPanelWindow() {
             {screenshots.length > 0 ? screenshots.slice(0, 6).map((item) => {
               const ocrBusy = screenshotOcrBusy(item)
               return (
-                <div className="screenshot-history-row" key={item.id}>
-                  <button type="button" className="screenshot-history-main" onClick={() => void openScreenshot(item.id)}>
-                    <ImageIcon size={17} />
-                    <span>
-                      <strong>{screenshotDisplayName(item)}</strong>
-                      <small>{screenshotMeta(item, copy)}</small>
-                      <small className={`screenshot-ocr-status ${item.ocrStatus}`}>{screenshotOcrStatusText(item, copy)}</small>
-                    </span>
-                  </button>
-                  <div className="screenshot-history-actions">
-                    <button type="button" className={item.ocrStatus === 'ready' ? 'selected' : ''} disabled={ocrBusy} aria-label={screenshotOcrPrimaryTitle(item, copy)} title={screenshotOcrPrimaryTitle(item, copy)} onClick={() => openScreenshotOcrResult(item)}><FileText size={15} /></button>
-                    <button type="button" disabled={item.ocrStatus !== 'ready'} aria-label={copy.screenshot.copyText} title={copy.screenshot.copyText} onClick={() => copyScreenshotOcrText(item)}><CopyIcon size={15} /></button>
-                    <button type="button" disabled={item.ocrStatus !== 'ready'} aria-label={copy.screenshot.translateText} title={copy.screenshot.translateText} onClick={() => translateScreenshotOcrText(item)}><Languages size={15} /></button>
-                    <button type="button" aria-label={copy.screenshot.openFolder} title={copy.screenshot.openFolder} onClick={() => void openScreenshotDirectory(item.id)}><FolderOpen size={15} /></button>
-                    <button type="button" aria-label={copy.screenshot.annotate} title={copy.screenshot.annotate} onClick={() => void openScreenshotInWhiteboard(item.id)}><PenLine size={15} /></button>
-                    <button type="button" aria-label={copy.screenshot.pin} title={copy.screenshot.pin} onClick={() => void showPinnedScreenshot(item.id)}><Pin size={15} /></button>
-                  </div>
-                </div>
+                <ScreenshotHistoryRow
+                  key={item.id}
+                  item={item}
+                  copy={copy}
+                  ocrBusy={ocrBusy}
+                  onOpen={openScreenshotFile}
+                  onOpenOcr={openScreenshotOcrResult}
+                  onCopyOcr={copyScreenshotOcrText}
+                  onTranslateOcr={translateScreenshotOcrText}
+                  onOpenFolder={openScreenshotFolder}
+                  onAnnotate={annotateScreenshot}
+                  onPin={pinScreenshot}
+                  onToggleFixed={toggleScreenshotFixed}
+                  onDelete={deleteScreenshot}
+                />
               )
             }) : (
               <div className="source-empty"><ImageIcon size={18} /><span>{copy.screenshot.empty}</span></div>
@@ -4442,6 +4501,8 @@ function FloatingPanelWindow() {
           translation={settings.ocr.translation}
           loading={ocrResultLoading}
           error={ocrResultError}
+          expanded={ocrResultExpanded}
+          onToggleExpanded={() => resizeOcrResultPanel(!ocrResultExpanded)}
           onClose={() => void hideFloatingPanel(panelState.token)}
           onCopy={() => {
             if (!ocrResult) return
@@ -4530,6 +4591,8 @@ function OcrResultPanel({
   translation,
   loading,
   error,
+  expanded,
+  onToggleExpanded,
   onClose,
   onCopy,
 }: {
@@ -4538,6 +4601,8 @@ function OcrResultPanel({
   translation: AppSettings['ocr']['translation']
   loading: boolean
   error: string
+  expanded: boolean
+  onToggleExpanded: () => void
   onClose: () => void
   onCopy: () => void
 }) {
@@ -4696,13 +4761,24 @@ function OcrResultPanel({
   }
 
   return (
-    <section className="ocr-result-panel">
+    <section className={`ocr-result-panel ${expanded ? 'expanded' : ''}`}>
       <div className="ocr-result-header">
         <span>
           <Eye size={16} />
           <strong>{copy.screenshot.ocrResult}</strong>
         </span>
-        <button type="button" className="sheet-close" onClick={onClose}>{copy.common.close}</button>
+        <div className="ocr-result-header-actions">
+          <button
+            type="button"
+            className="icon-button"
+            aria-label={expanded ? copy.screenshot.collapseOcrResult : copy.screenshot.expandOcrResult}
+            title={expanded ? copy.screenshot.collapseOcrResult : copy.screenshot.expandOcrResult}
+            onClick={onToggleExpanded}
+          >
+            {expanded ? <Minimize2 size={15} /> : <Maximize2 size={15} />}
+          </button>
+          <button type="button" className="sheet-close" onClick={onClose}>{copy.common.close}</button>
+        </div>
       </div>
       {loading && <div className="source-empty"><FileText size={18} /><span>{copy.screenshot.ocrStatusRunning}</span></div>}
       {!loading && error && <div className="source-empty error"><FileText size={18} /><span>{error}</span></div>}
@@ -4946,6 +5022,174 @@ function FloatingSelectWindow() {
         </button>
       ))}
     </main>
+  )
+}
+
+const screenshotDeleteRevealWidth = 116
+
+function ScreenshotHistoryRow({
+  item,
+  copy,
+  ocrBusy,
+  onOpen,
+  onOpenOcr,
+  onCopyOcr,
+  onTranslateOcr,
+  onOpenFolder,
+  onAnnotate,
+  onPin,
+  onToggleFixed,
+  onDelete,
+}: {
+  item: ScreenshotItem
+  copy: RecorderCopy
+  ocrBusy: boolean
+  onOpen: (item: ScreenshotItem) => void
+  onOpenOcr: (item: ScreenshotItem, anchorElement?: Element) => void
+  onCopyOcr: (item: ScreenshotItem) => void
+  onTranslateOcr: (item: ScreenshotItem) => void
+  onOpenFolder: (item: ScreenshotItem) => void
+  onAnnotate: (item: ScreenshotItem) => void
+  onPin: (item: ScreenshotItem) => void
+  onToggleFixed: (item: ScreenshotItem) => void
+  onDelete: (item: ScreenshotItem) => void
+}) {
+  const [deleteOpen, setDeleteOpen] = useState(false)
+  const [dragOffset, setDragOffset] = useState<number | null>(null)
+  const dragRef = useRef<{pointerId: number; startX: number; startY: number; base: number} | null>(null)
+  const suppressClickUntilRef = useRef(0)
+  const offset = dragOffset ?? (deleteOpen ? -screenshotDeleteRevealWidth : 0)
+
+  const suppressNextClick = () => {
+    suppressClickUntilRef.current = Date.now() + 260
+  }
+
+  const beginSwipe = (event: ReactPointerEvent<HTMLDivElement>) => {
+    if (event.pointerType === 'mouse' && event.button !== 0) return
+    const target = event.target as HTMLElement | null
+    if (target?.closest('.screenshot-history-actions, .screenshot-history-delete-actions')) return
+    dragRef.current = {
+      pointerId: event.pointerId,
+      startX: event.clientX,
+      startY: event.clientY,
+      base: deleteOpen ? -screenshotDeleteRevealWidth : 0,
+    }
+    event.currentTarget.setPointerCapture?.(event.pointerId)
+  }
+
+  const moveSwipe = (event: ReactPointerEvent<HTMLDivElement>) => {
+    const drag = dragRef.current
+    if (!drag || drag.pointerId !== event.pointerId) return
+    const deltaX = event.clientX - drag.startX
+    const deltaY = event.clientY - drag.startY
+    if (Math.abs(deltaX) < 4 && Math.abs(deltaY) < 4) return
+    if (Math.abs(deltaX) >= Math.abs(deltaY)) {
+      event.preventDefault()
+      setDragOffset(Math.max(-screenshotDeleteRevealWidth, Math.min(0, drag.base + deltaX)))
+    }
+  }
+
+  const finishSwipe = (event: ReactPointerEvent<HTMLDivElement>) => {
+    const drag = dragRef.current
+    if (!drag || drag.pointerId !== event.pointerId) return
+    const deltaX = event.clientX - drag.startX
+    const finalOffset = Math.max(-screenshotDeleteRevealWidth, Math.min(0, drag.base + deltaX))
+    const moved = Math.abs(deltaX) > 7 || Math.abs(event.clientY - drag.startY) > 7
+    if (moved) suppressNextClick()
+    setDeleteOpen(deltaX > 32 ? false : finalOffset < -screenshotDeleteRevealWidth * 0.44)
+    setDragOffset(null)
+    dragRef.current = null
+    event.currentTarget.releasePointerCapture?.(event.pointerId)
+  }
+
+  const cancelSwipe = (event: ReactPointerEvent<HTMLDivElement>) => {
+    if (dragRef.current?.pointerId === event.pointerId) {
+      setDragOffset(null)
+      dragRef.current = null
+      suppressNextClick()
+    }
+  }
+
+  const handleOpen = () => {
+    if (Date.now() < suppressClickUntilRef.current) return
+    if (deleteOpen) {
+      setDeleteOpen(false)
+      return
+    }
+    onOpen(item)
+  }
+
+  const handleAction = (action: (item: ScreenshotItem) => void) => {
+    if (Date.now() < suppressClickUntilRef.current) return
+    action(item)
+  }
+
+  return (
+    <div
+      className={`screenshot-history-row ${deleteOpen ? 'delete-open' : ''}`}
+      onPointerDown={beginSwipe}
+      onPointerMove={moveSwipe}
+      onPointerUp={finishSwipe}
+      onPointerCancel={cancelSwipe}
+    >
+      <div className="screenshot-history-delete-actions" aria-hidden={!deleteOpen && dragOffset === null}>
+        <button type="button" className="delete-back" tabIndex={deleteOpen ? 0 : -1} onClick={() => setDeleteOpen(false)}>
+          <X size={14} />
+          <span>{copy.screenshot.deleteReturn}</span>
+        </button>
+        <button
+          type="button"
+          className="delete-confirm"
+          tabIndex={deleteOpen ? 0 : -1}
+          onClick={() => {
+            setDeleteOpen(false)
+            onDelete(item)
+          }}
+        >
+          <Trash2 size={14} />
+          <span>{copy.screenshot.delete}</span>
+        </button>
+      </div>
+      <div className="screenshot-history-slide" style={{transform: `translateX(${offset}px)`}}>
+        <button type="button" className="screenshot-history-main" onClick={handleOpen}>
+          <ImageIcon size={17} />
+          <span>
+            <strong>{screenshotDisplayName(item)}</strong>
+            <small>{screenshotMeta(item, copy)}</small>
+            <small className={`screenshot-ocr-status ${item.ocrStatus}`}>{screenshotOcrStatusText(item, copy)}</small>
+          </span>
+        </button>
+        <div className="screenshot-history-actions">
+          <button type="button" className={item.ocrStatus === 'ready' ? 'selected' : ''} disabled={ocrBusy} aria-label={screenshotOcrPrimaryTitle(item, copy)} title={screenshotOcrPrimaryTitle(item, copy)} onClick={(event) => handleAction(() => onOpenOcr(item, event.currentTarget))}>
+            <FileText size={15} />
+          </button>
+          <button type="button" disabled={item.ocrStatus !== 'ready'} aria-label={copy.screenshot.copyText} title={copy.screenshot.copyText} onClick={() => handleAction(onCopyOcr)}>
+            <CopyIcon size={15} />
+          </button>
+          <button type="button" disabled={item.ocrStatus !== 'ready'} aria-label={copy.screenshot.translateText} title={copy.screenshot.translateText} onClick={() => handleAction(onTranslateOcr)}>
+            <Languages size={15} />
+          </button>
+          <button type="button" aria-label={copy.screenshot.openFolder} title={copy.screenshot.openFolder} onClick={() => handleAction(onOpenFolder)}>
+            <FolderOpen size={15} />
+          </button>
+          <button type="button" aria-label={copy.screenshot.annotate} title={copy.screenshot.annotate} onClick={() => handleAction(onAnnotate)}>
+            <PenLine size={15} />
+          </button>
+          <button type="button" aria-label={copy.screenshot.pin} title={copy.screenshot.pin} onClick={() => handleAction(onPin)}>
+            <Pin size={15} />
+          </button>
+          <button
+            type="button"
+            className={item.fixed ? 'selected' : ''}
+            aria-label={item.fixed ? copy.screenshot.unfix : copy.screenshot.fix}
+            title={item.fixed ? copy.screenshot.unfix : copy.screenshot.fix}
+            onClick={() => handleAction(onToggleFixed)}
+          >
+            {item.fixed ? <Lock size={15} /> : <Unlock size={15} />}
+          </button>
+        </div>
+      </div>
+    </div>
   )
 }
 

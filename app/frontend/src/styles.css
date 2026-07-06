@@ -1215,14 +1215,79 @@ body.rf-recorder-window .select-menu-list {
 }
 
 .screenshot-history-row {
+  position: relative;
+  min-width: 0;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.045);
+  touch-action: pan-y;
+  --wails-draggable: no-drag;
+}
+
+.screenshot-history-slide {
+  position: relative;
+  z-index: 2;
   display: flex;
   align-items: center;
   gap: 6px;
   min-width: 0;
   padding: 4px;
-  border: 1px solid var(--line);
-  border-radius: 16px;
-  background: rgba(255, 255, 255, 0.045);
+  border-radius: 15px;
+  background: color-mix(in srgb, var(--panel) 86%, rgba(255, 255, 255, 0.05));
+  transition: transform 160ms ease;
+  will-change: transform;
+}
+
+.screenshot-history-row.delete-open .screenshot-history-slide {
+  box-shadow: 10px 0 22px rgba(0, 0, 0, 0.22);
+}
+
+.screenshot-history-delete-actions {
+  position: absolute;
+  inset: 4px 4px 4px auto;
+  z-index: 1;
+  display: grid;
+  grid-template-columns: 54px 58px;
+  gap: 4px;
+  width: 116px;
+}
+
+.screenshot-history-delete-actions button {
+  display: grid;
+  place-items: center;
+  gap: 2px;
+  min-width: 0;
+  border: 1px solid transparent;
+  border-radius: 12px;
+  color: #fff;
+  cursor: pointer;
+  font-size: 10px;
+  line-height: 1;
+  --wails-draggable: no-drag;
+}
+
+.screenshot-history-delete-actions button span {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.screenshot-history-delete-actions .delete-back {
+  background: rgba(117, 125, 135, 0.42);
+  color: rgba(255, 255, 255, 0.84);
+}
+
+.screenshot-history-delete-actions .delete-confirm {
+  background: linear-gradient(135deg, rgba(239, 68, 68, 0.96), rgba(190, 18, 60, 0.96));
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.16);
+}
+
+.screenshot-history-delete-actions button:hover,
+.screenshot-history-delete-actions button:focus-visible {
+  border-color: rgba(255, 255, 255, 0.34);
+  outline: none;
 }
 
 .screenshot-history-main {
@@ -1345,6 +1410,19 @@ body.rf-recorder-window .select-menu-list {
   min-width: 0;
 }
 
+.ocr-result-header-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex: 0 0 auto;
+}
+
+.ocr-result-header-actions .icon-button {
+  width: 30px;
+  height: 30px;
+  border-radius: 11px;
+}
+
 .ocr-result-summary {
   display: flex;
   align-items: center;
@@ -1375,6 +1453,11 @@ body.rf-recorder-window .select-menu-list {
   white-space: pre-wrap;
 }
 
+.ocr-result-panel.expanded .ocr-result-text {
+  min-height: 136px;
+  max-height: 220px;
+}
+
 .ocr-preview-frame {
   position: relative;
   display: grid;
@@ -1386,6 +1469,11 @@ body.rf-recorder-window .select-menu-list {
   background: rgba(255, 255, 255, 0.045);
 }
 
+.ocr-result-panel.expanded .ocr-preview-frame {
+  min-height: 168px;
+  max-height: 240px;
+}
+
 .ocr-preview-frame img,
 .ocr-preview-frame svg {
   width: 100%;
@@ -1394,6 +1482,12 @@ body.rf-recorder-window .select-menu-list {
   max-height: 126px;
   object-fit: fill;
   grid-area: 1 / 1;
+}
+
+.ocr-result-panel.expanded .ocr-preview-frame img,
+.ocr-result-panel.expanded .ocr-preview-frame svg {
+  min-height: 168px;
+  max-height: 240px;
 }
 
 .ocr-preview-frame svg {
@@ -1411,6 +1505,11 @@ body.rf-recorder-window .select-menu-list {
   overflow: hidden;
   pointer-events: none;
   --wails-draggable: no-drag;
+}
+
+.ocr-result-panel.expanded .ocr-position-text-layer {
+  min-height: 168px;
+  max-height: 240px;
 }
 
 .ocr-position-text-button {
@@ -1530,6 +1629,10 @@ body.rf-recorder-window .select-menu-list {
   gap: 6px;
   max-height: 124px;
   overflow: auto;
+}
+
+.ocr-result-panel.expanded .ocr-block-list {
+  max-height: 220px;
 }
 
 .ocr-block-row {

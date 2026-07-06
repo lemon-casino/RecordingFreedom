@@ -1,4 +1,4 @@
-import {expect, test, type Page} from '@playwright/test'
+import {expect, test, type Locator, type Page} from '@playwright/test'
 import {Buffer} from 'node:buffer'
 
 const browserSettingsKey = 'recordingfreedom.settings.v1'
@@ -57,6 +57,40 @@ test('screenshot tools hide window and focused-window capture modes', async ({pa
   await expect(page.getByRole('button', {name: /Focused window/})).toHaveCount(0)
 })
 
+test('screenshot history delete requires left swipe confirmation', async ({page}) => {
+  await openRecorderShell(page, {
+    screenshotHistory: [{
+      id: 'delete-confirm-shot',
+      path: 'browser-preview/data/screenshots/delete-confirm-shot.png',
+      thumbnailPath: 'browser-preview/data/screenshots/thumbnails/delete-confirm-shot.png',
+      createdAt: '2026-07-04T12:00:00Z',
+      width: 520,
+      height: 320,
+      mode: 'region',
+      pinned: false,
+      fixed: false,
+      ocrStatus: 'none',
+    }],
+  })
+
+  await page.getByRole('button', {name: 'Screenshot / board'}).click()
+  const row = page.locator('.screenshot-history-row').first()
+  await expect(row).toContainText('Region screenshot')
+  await revealScreenshotDelete(row, page)
+  await expect(row).toHaveClass(/delete-open/)
+  await expect(row.getByRole('button', {name: 'Back'})).toBeVisible()
+  await row.getByRole('button', {name: 'Back'}).click()
+  await expect(row).not.toHaveClass(/delete-open/)
+  await expect.poll(async () => page.evaluate((key) => JSON.parse(window.localStorage.getItem(key) || '[]').length, browserScreenshotHistoryKey)).toBe(1)
+  await page.waitForTimeout(180)
+
+  await revealScreenshotDelete(row, page)
+  await expect(row).toHaveClass(/delete-open/)
+  await row.getByRole('button', {name: 'Delete screenshot'}).click()
+  await expect(page.locator('.screenshot-history-list')).toContainText('No screenshot history')
+  await expect.poll(async () => page.evaluate((key) => JSON.parse(window.localStorage.getItem(key) || '[]').length, browserScreenshotHistoryKey)).toBe(0)
+})
+
 test('capsule whiteboard remains available as a board during audio recording', async ({page}) => {
   await openRecorderShell(page, {systemAudio: true})
 
@@ -85,7 +119,7 @@ test('capsule shows an icon-only whiteboard entry before recording in Chinese', 
   await expect(toolsButton).not.toContainText('工具')
 })
 
-test('screenshot history exposes folder and delete actions', async ({page}) => {
+test('screenshot history exposes folder action and keeps delete behind swipe confirmation', async ({page}) => {
   await openRecorderShell(page, {
     screenshotHistory: [{
       id: 'history-shot',
@@ -101,8 +135,11 @@ test('screenshot history exposes folder and delete actions', async ({page}) => {
   })
 
   await page.getByRole('button', {name: 'Screenshot / board'}).click()
+  const row = page.locator('.screenshot-history-row').first()
   await expect(page.getByRole('button', {name: 'Open containing folder'})).toBeVisible()
-  await page.getByRole('button', {name: 'Delete screenshot'}).click()
+  await expect(page.getByRole('button', {name: 'Delete screenshot'})).toHaveCount(0)
+  await revealScreenshotDelete(row, page)
+  await row.getByRole('button', {name: 'Delete screenshot'}).click()
   await expect(page.getByText('No screenshot history')).toBeVisible()
   await expect.poll(async () => page.evaluate((key) => JSON.parse(window.localStorage.getItem(key) || '[]').length, browserScreenshotHistoryKey)).toBe(0)
 })
@@ -477,6 +514,15 @@ test('screenshot history ready item opens OCR result floating panel with real wo
   await expect(panel.locator('.ocr-result-text')).toContainText('RecordingFreedom')
   await expect(panel.locator('.ocr-preview-frame svg')).toHaveAttribute('viewBox', '0 0 900 280')
   await expect(panel.locator('.ocr-preview-frame polygon')).toHaveCount(2)
+  await panel.getByRole('button', {name: 'Expand result'}).click()
+  await expect(panel.locator('.ocr-result-panel')).toHaveClass(/expanded/)
+  await expect.poll(async () => floatingPage.evaluate(() => {
+    const panelState = (window as Window & {__RF_FLOATING_PANEL__?: {bounds?: {width?: number; height?: number}}}).__RF_FLOATING_PANEL__
+    return {
+      width: panelState?.bounds?.width ?? 0,
+      height: panelState?.bounds?.height ?? 0,
+    }
+  })).toEqual({width: 560, height: 620})
   await floatingPage.close()
 })
 
@@ -1566,6 +1612,17 @@ function browserSettingsWithOcrTranslation(settings: Record<string, any>, enable
 function screenshotSvgDataUrl(width: number, height: number, title: string, subtitle: string) {
   const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}"><rect width="100%" height="100%" fill="#ffffff"/><text x="30" y="92" fill="#111827" font-family="Arial, sans-serif" font-size="68" font-weight="700">${title}</text><text x="41" y="210" fill="#111827" font-family="Arial, sans-serif" font-size="78" font-weight="700">${subtitle}</text></svg>`
   return `data:image/svg+xml;base64,${Buffer.from(svg, 'utf-8').toString('base64')}`
+}
+
+async function revealScreenshotDelete(row: Locator, page: Page) {
+  const box = await row.boundingBox()
+  expect(box).not.toBeNull()
+  if (!box) return
+  const y = box.y + box.height / 2
+  await page.mouse.move(box.x + box.width * 0.48, y)
+  await page.mouse.down()
+  await page.mouse.move(box.x + 14, y, {steps: 8})
+  await page.mouse.up()
 }
 
 async function expectWhiteboardLaunch(page: Page, mode: 'whiteboard' | 'annotation', url: string) {

@@ -364,6 +364,7 @@ export type RecorderCopy = {
     fixed: string
     unfix: string
     delete: string
+    deleteReturn: string
     deleted: string
     deleteFailed: string
     ocr: string
@@ -375,6 +376,8 @@ export type RecorderCopy = {
     recognizeText: string
     retryOcr: string
     openOcrResult: string
+    expandOcrResult: string
+    collapseOcrResult: string
     copyText: string
     copiedText: string
     copyTextEmpty: string
@@ -829,6 +832,7 @@ const zhCN: RecorderCopy = {
     fixed: '已固定',
     unfix: '取消固定',
     delete: '删除截图',
+    deleteReturn: '返回',
     deleted: '截图已删除',
     deleteFailed: '删除截图失败',
     ocr: '文字识别',
@@ -840,6 +844,8 @@ const zhCN: RecorderCopy = {
     recognizeText: '识别文字',
     retryOcr: '重新识别',
     openOcrResult: '查看识别结果',
+    expandOcrResult: '放大查看',
+    collapseOcrResult: '收起查看',
     copyText: '复制文字',
     copiedText: '文字已复制',
     copyTextEmpty: '没有可复制的文字',
@@ -1425,6 +1431,7 @@ const en: RecorderCopy = {
     fixed: 'Fixed',
     unfix: 'Unfix',
     delete: 'Delete screenshot',
+    deleteReturn: 'Back',
     deleted: 'Screenshot deleted',
     deleteFailed: 'Failed to delete screenshot',
     ocr: 'OCR',
@@ -1436,6 +1443,8 @@ const en: RecorderCopy = {
     recognizeText: 'Recognize text',
     retryOcr: 'Retry OCR',
     openOcrResult: 'View OCR result',
+    expandOcrResult: 'Expand result',
+    collapseOcrResult: 'Collapse result',
     copyText: 'Copy text',
     copiedText: 'Text copied',
     copyTextEmpty: 'No text to copy',
