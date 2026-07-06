@@ -74,6 +74,9 @@ func TestRunExportsDesktopOCREvidenceFromDataRoot(t *testing.T) {
 	if !checklist.CheckComplete || checklist.DataRootPrecheck == nil || !checklist.DataRootPrecheck.CheckComplete || len(checklist.EvidenceChainRequirements) != len(ocrevidence.EvidenceChainRequirements) {
 		t.Fatalf("checklist = %#v", checklist)
 	}
+	if len(checklist.NextMissingRequirements) != 0 {
+		t.Fatalf("checklist.NextMissingRequirements = %#v, want empty for complete export", checklist.NextMissingRequirements)
+	}
 	var dataRootPrecheck ocrevidence.DataRootPrecheckReport
 	readJSONTest(t, filepath.Join(evidenceDir, "data-root-precheck.json"), &dataRootPrecheck)
 	if !dataRootPrecheck.CheckComplete || dataRootPrecheck.RunWindow.ResultStart.IsZero() || dataRootPrecheck.Session.SessionID == "" {

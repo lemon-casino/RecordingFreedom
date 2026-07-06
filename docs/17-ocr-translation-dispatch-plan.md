@@ -2631,6 +2631,7 @@ OCR smoke 标准：
 - Windows OCR 命令窗口闪烁修复已落地：`queryWorkerCapabilities` 和 `runWorkerRecognize` 两条 OCR worker 启动路径都调用平台级 `configureBackgroundCommand`；Windows 下设置 `HideWindow` 与 `CREATE_NO_WINDOW`，macOS/Linux 为空实现。`release-config-check` 已固定该防回归门禁，避免打开设置或执行识别时再次弹出一闪而过的命令窗口。
 - A2 evidence 导出链路已强制要求显式 `DataRoot`：Windows/macOS/Linux 脚本、底层 `ocr-desktop-evidence-export` 和发布后下载回验都会拒绝缺少或不存在的 data root，并把同一个解析后的目录同时传给 plan/export；`release-config-check` 已固定该门禁，避免只用视觉截图目录或猜测默认数据目录导出一个缺少真实 app-log/job-events/results/session 链路的假 evidence 包。
 - `ocr-desktop-evidence-plan -check` 已同步收紧：只要传入 `-visual-dir` 进入验收检查，就必须同时传入同一次真实桌面 session 使用的 `-data-root`；直接运行 plan 工具也不能再只凭完整截图目录返回可验收结果。新增 `TestRunCheckRejectsVisualDirWithoutDataRoot` 与 release gate 针脚固定该行为。
+- A2 evidence 缺口定位已结构化：`visual-capture-checklist.json/md` 和最终 `check-report.json` 都会输出 `nextMissingRequirements`，按 `visual`、`visual-dimensions`、`data-root-source`、`recording-annotation`、`session`、`ocr-chain` 等 area 归类，并带 sourceKind、stepId、推荐视觉文件和下一步操作。缺少某个入口截图、某个 result/sourceId 链路、session marker、annotation packageDir 绑定或 OCR result 坐标时，验收工具会直接告诉下一步要补哪一颗，不再让用户从散乱 blocked message 里猜。`release-config-check` 已固定该输出，防止后续发布包退回只给笼统失败原因。
 
 ### B. 翻译 provider 与隐私闭环
 

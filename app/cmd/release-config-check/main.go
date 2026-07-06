@@ -430,6 +430,9 @@ var releaseConfigChecks = []configCheck{
 			"evidence image path",
 			"must stay inside",
 			"outside image",
+			"NextMissingRequirements",
+			"buildNextMissingRequirements",
+			"checkAction",
 		},
 	},
 	{
@@ -480,6 +483,8 @@ var releaseConfigChecks = []configCheck{
 			"文字识别",
 			"whiteboard-selection",
 			"outside image",
+			"hasCheckNextMissing",
+			"nextMissingRequirements",
 		},
 	},
 	{
@@ -522,6 +527,7 @@ var releaseConfigChecks = []configCheck{
 			"jobEventRequirements",
 			"scopedJobEventKey",
 			"appLogLineTimestamp",
+			"BuildNextMissingRequirements",
 		},
 	},
 	{
@@ -562,6 +568,7 @@ var releaseConfigChecks = []configCheck{
 			"visual-capture-checklist.json",
 			"EvidenceChainRequirements",
 			"DataRootPrecheck",
+			"NextMissingRequirements",
 		},
 	},
 	{
@@ -725,6 +732,9 @@ var releaseConfigChecks = []configCheck{
 			"Capture each scene from a real app run",
 			"Capture runbook",
 			"Evidence chain requirements",
+			"NextMissingRequirements",
+			"BuildNextMissingRequirements",
+			"Next Missing Requirements",
 		},
 	},
 	{
@@ -771,6 +781,7 @@ var releaseConfigChecks = []configCheck{
 			"imageSize",
 			"not a decodable image",
 			"isIgnoredVisualMetadataFile",
+			"BuildNextMissingRequirements",
 		},
 	},
 	{
@@ -807,6 +818,8 @@ var releaseConfigChecks = []configCheck{
 			"existingVisualDimensions",
 			"dataRootPrecheck",
 			"sessionId",
+			"hasPlanNextMissing",
+			"nextMissingRequirements",
 		},
 	},
 	{

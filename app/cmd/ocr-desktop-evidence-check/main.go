@@ -32,11 +32,12 @@ type options struct {
 }
 
 type report struct {
-	OK          bool           `json:"ok"`
-	GeneratedAt time.Time      `json:"generatedAt"`
-	EvidenceDir string         `json:"evidenceDir"`
-	Checks      []checkResult  `json:"checks"`
-	SourceKinds []sourceResult `json:"sourceKinds"`
+	OK                      bool                                 `json:"ok"`
+	GeneratedAt             time.Time                            `json:"generatedAt"`
+	EvidenceDir             string                               `json:"evidenceDir"`
+	Checks                  []checkResult                        `json:"checks"`
+	SourceKinds             []sourceResult                       `json:"sourceKinds"`
+	NextMissingRequirements []ocrevidence.NextMissingRequirement `json:"nextMissingRequirements,omitempty"`
 }
 
 type checkResult struct {
@@ -224,6 +225,7 @@ func run(opts options) (report, error) {
 			break
 		}
 	}
+	result.NextMissingRequirements = buildNextMissingRequirements(result)
 	return result, nil
 }
 
@@ -233,6 +235,64 @@ func (r *report) addCheck(name string, err error) {
 		return
 	}
 	r.Checks = append(r.Checks, checkResult{Name: name, Status: "ready"})
+}
+
+func buildNextMissingRequirements(result report) []ocrevidence.NextMissingRequirement {
+	items := []ocrevidence.NextMissingRequirement{}
+	for _, source := range result.SourceKinds {
+		if source.Status == "ready" {
+			continue
+		}
+		items = append(items, ocrevidence.NextMissingRequirement{
+			Area:              "source-result",
+			SourceKind:        source.SourceKind,
+			Title:             "OCR source result",
+			Missing:           source.Message,
+			RecommendedAction: "Repeat the real desktop OCR flow for sourceKind=" + source.SourceKind + " inside the active evidence session, open the result panel, and export again.",
+		})
+	}
+	for _, check := range result.Checks {
+		if check.Status == "ready" {
+			continue
+		}
+		items = append(items, ocrevidence.NextMissingRequirement{
+			Area:              checkArea(check.Name),
+			Title:             check.Name,
+			Missing:           check.Message,
+			RecommendedAction: checkAction(check.Name),
+		})
+	}
+	return items
+}
+
+func checkArea(name string) string {
+	switch name {
+	case "visual evidence", "visual-capture-checklist":
+		return "visual"
+	case "data-root-precheck", "app-log run window", "desktop evidence session", "app-log.jsonl":
+		return "data-root"
+	case "ocr-job-events.jsonl", "evidence chain", "OCR results":
+		return "ocr-chain"
+	case "translation results":
+		return "translation"
+	default:
+		return "evidence-package"
+	}
+}
+
+func checkAction(name string) string {
+	switch name {
+	case "visual evidence", "visual-capture-checklist":
+		return "Capture every required real desktop visual scene and rerun ocr-desktop-evidence-plan/export with the same visual directory."
+	case "data-root-precheck", "app-log run window", "desktop evidence session", "app-log.jsonl":
+		return "Repeat the real desktop OCR run with session start/end markers and export with the same RecordingFreedom data root."
+	case "ocr-job-events.jsonl", "evidence chain", "OCR results":
+		return "Queue, open, and render every required OCR result from the desktop app before ending the evidence session."
+	case "translation results":
+		return "Run the translation evidence flow with an explicitly configured provider only when validating B batch."
+	default:
+		return "Fix this evidence package requirement and rerun ocr-desktop-evidence-check."
+	}
 }
 
 func validateREADME(path string) error {

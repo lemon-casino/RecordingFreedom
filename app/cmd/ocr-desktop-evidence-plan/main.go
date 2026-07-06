@@ -104,6 +104,7 @@ func run(opts options) (planReport, error) {
 		report.OutputDir = outDir
 		report.MarkdownChecklistPath = filepath.Join(outDir, "visual-capture-checklist.md")
 		report.JSONChecklistPath = filepath.Join(outDir, "visual-capture-checklist.json")
+		report.NextMissingRequirements = ocrevidence.BuildNextMissingRequirements(report)
 		if err := os.WriteFile(report.MarkdownChecklistPath, []byte(markdownChecklist(report)), 0o644); err != nil {
 			return planReport{}, err
 		}
@@ -115,6 +116,7 @@ func run(opts options) (planReport, error) {
 			return planReport{}, err
 		}
 	}
+	report.NextMissingRequirements = ocrevidence.BuildNextMissingRequirements(report)
 	return report, nil
 }
 

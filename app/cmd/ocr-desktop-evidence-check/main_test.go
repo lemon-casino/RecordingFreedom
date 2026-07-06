@@ -51,6 +51,9 @@ func TestRunRejectsMissingDesktopOCRSourceKind(t *testing.T) {
 	if !found {
 		t.Fatalf("missing source failure not found: %#v", report.SourceKinds)
 	}
+	if !hasCheckNextMissing(report, "source-result", string(ocr.SourceWhiteboardSelection), "missing OCR result") {
+		t.Fatalf("nextMissingRequirements = %#v, want whiteboard-selection missing result", report.NextMissingRequirements)
+	}
 }
 
 func TestRunRejectsOutOfBoundsOCRBlock(t *testing.T) {
@@ -605,6 +608,9 @@ func TestRunRejectsMissingEvidenceSessionMarkers(t *testing.T) {
 	if !found {
 		t.Fatalf("missing session marker failure not found: %#v", report.Checks)
 	}
+	if !hasCheckNextMissing(report, "data-root", "", "session-start") {
+		t.Fatalf("nextMissingRequirements = %#v, want session marker action", report.NextMissingRequirements)
+	}
 }
 
 func createDesktopOCREvidence(t *testing.T, omit map[ocr.SourceKind]bool) string {
@@ -893,6 +899,21 @@ func writeVisualManifest(t *testing.T, root string, names []string) {
 		})
 	}
 	writeJSONFile(t, filepath.Join(root, "visual-manifest.json"), manifest)
+}
+
+func hasCheckNextMissing(report report, area string, sourceKind string, contains string) bool {
+	for _, item := range report.NextMissingRequirements {
+		if item.Area != area {
+			continue
+		}
+		if sourceKind != "" && item.SourceKind != sourceKind {
+			continue
+		}
+		if strings.Contains(item.Missing, contains) && strings.TrimSpace(item.RecommendedAction) != "" {
+			return true
+		}
+	}
+	return false
 }
 
 func makeOCRResult(t *testing.T, root string, kind ocr.SourceKind) ocr.Result {

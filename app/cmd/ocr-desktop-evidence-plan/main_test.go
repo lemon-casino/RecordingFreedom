@@ -69,6 +69,9 @@ func TestRunReportsMissingVisualRequirements(t *testing.T) {
 	if !containsString(report.MissingVisualRequirements, "recording annotation OCR safety") {
 		t.Fatalf("missing requirements = %#v", report.MissingVisualRequirements)
 	}
+	if !hasPlanNextMissing(report, "visual", "", "recording annotation OCR safety") {
+		t.Fatalf("nextMissingRequirements = %#v, want recording annotation visual action", report.NextMissingRequirements)
+	}
 }
 
 func TestRunReportsTooSmallVisualRequirement(t *testing.T) {
@@ -129,6 +132,9 @@ func TestRunReportsIncompleteDataRootPrecheck(t *testing.T) {
 	}
 	if report.DataRootPrecheck == nil || !strings.Contains(strings.Join(report.DataRootPrecheck.MissingRequirements, "\n"), "missing client rendered sourceKind=pinned-screenshot") {
 		t.Fatalf("dataRootPrecheck = %#v, want pinned-screenshot render failure", report.DataRootPrecheck)
+	}
+	if !hasPlanNextMissing(report, "data-root-source", string(ocr.SourcePinnedScreenshot), "missing client rendered sourceKind=pinned-screenshot") {
+		t.Fatalf("nextMissingRequirements = %#v, want pinned-screenshot render failure", report.NextMissingRequirements)
 	}
 }
 
@@ -247,6 +253,21 @@ func writePlanPNG(t *testing.T, path string, width int, height int) {
 func containsString(values []string, want string) bool {
 	for _, value := range values {
 		if value == want {
+			return true
+		}
+	}
+	return false
+}
+
+func hasPlanNextMissing(report planReport, area string, sourceKind string, contains string) bool {
+	for _, item := range report.NextMissingRequirements {
+		if item.Area != area {
+			continue
+		}
+		if sourceKind != "" && item.SourceKind != sourceKind {
+			continue
+		}
+		if strings.Contains(item.Missing, contains) && strings.TrimSpace(item.RecommendedAction) != "" {
 			return true
 		}
 	}

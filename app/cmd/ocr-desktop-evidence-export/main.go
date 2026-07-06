@@ -274,6 +274,7 @@ func writeVisualCaptureChecklist(evidenceDir string, visualDir string, entries [
 			report.CheckComplete = false
 		}
 	}
+	report.NextMissingRequirements = ocrevidence.BuildNextMissingRequirements(report)
 	if !report.CheckComplete {
 		missing := append([]string{}, report.MissingVisualRequirements...)
 		missing = append(missing, report.VisualDimensionFailures...)

@@ -170,6 +170,7 @@ macOS/Linux:
 - `visual-capture-checklist.json` 的 `checkComplete` 为 `true`。
 - `data-root-precheck.json` 的 `checkComplete` 为 `true`。
 - `check-report.json` 整体为通过。
+- 如果 `visual-capture-checklist.json` 或 `check-report.json` 失败，先看 `nextMissingRequirements`：它会按 area/sourceKind/stepId 给出缺失截图、缺失日志链路、缺失 session marker、缺失 annotation packageDir 绑定或 result 坐标问题，以及对应下一步操作。
 - `app-log.jsonl` 只包含本次 session 窗口内的日志。
 - `ocr-job-events.jsonl` 只包含本次 source/result 链路。
 - `known failures` 为 `none`。

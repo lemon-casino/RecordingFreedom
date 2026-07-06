@@ -932,6 +932,9 @@ func workflowFixture(name string) string {
 		builder.WriteString("evidence image path\n")
 		builder.WriteString("must stay inside\n")
 		builder.WriteString("outside image\n")
+		builder.WriteString("NextMissingRequirements\n")
+		builder.WriteString("buildNextMissingRequirements\n")
+		builder.WriteString("checkAction\n")
 	}
 	if strings.Contains(name, "app/cmd/ocr-desktop-evidence-check/main_test.go") {
 		builder.WriteString("internal/ocrevidence\n")
@@ -978,6 +981,8 @@ func workflowFixture(name string) string {
 		builder.WriteString("文字识别\n")
 		builder.WriteString("whiteboard-selection\n")
 		builder.WriteString("outside image\n")
+		builder.WriteString("hasCheckNextMissing\n")
+		builder.WriteString("nextMissingRequirements\n")
 	}
 	if strings.Contains(name, "app/cmd/ocr-desktop-evidence-export/main.go") {
 		builder.WriteString("internal/ocrevidence\n")
@@ -1027,6 +1032,7 @@ func workflowFixture(name string) string {
 		builder.WriteString("jobEventRequirements\n")
 		builder.WriteString("scopedJobEventKey\n")
 		builder.WriteString("appLogLineTimestamp\n")
+		builder.WriteString("BuildNextMissingRequirements\n")
 	}
 	if strings.Contains(name, "app/cmd/ocr-desktop-evidence-export/main_test.go") {
 		builder.WriteString("internal/ocrevidence\n")
@@ -1063,6 +1069,7 @@ func workflowFixture(name string) string {
 		builder.WriteString("visual-capture-checklist.json\n")
 		builder.WriteString("EvidenceChainRequirements\n")
 		builder.WriteString("DataRootPrecheck\n")
+		builder.WriteString("NextMissingRequirements\n")
 	}
 	if strings.Contains(name, "app/cmd/ocr-desktop-evidence-session/main.go") {
 		builder.WriteString("internal/ocrevidence\n")
@@ -1198,6 +1205,9 @@ func workflowFixture(name string) string {
 		builder.WriteString("Capture each scene from a real app run\n")
 		builder.WriteString("Capture runbook\n")
 		builder.WriteString("Evidence chain requirements\n")
+		builder.WriteString("NextMissingRequirements\n")
+		builder.WriteString("BuildNextMissingRequirements\n")
+		builder.WriteString("Next Missing Requirements\n")
 	}
 	if strings.Contains(name, "app/internal/ocrevidence/contract_test.go") {
 		builder.WriteString("TestDesktopEvidenceRequirementsExcludeHiddenWindowCaptureEntries\n")
@@ -1239,6 +1249,7 @@ func workflowFixture(name string) string {
 		builder.WriteString("imageSize\n")
 		builder.WriteString("not a decodable image\n")
 		builder.WriteString("isIgnoredVisualMetadataFile\n")
+		builder.WriteString("BuildNextMissingRequirements\n")
 	}
 	if strings.Contains(name, "app/cmd/ocr-desktop-evidence-plan/main_test.go") {
 		builder.WriteString("TestRunWritesChecklistAndAcceptsCompleteVisualDir\n")
@@ -1271,6 +1282,8 @@ func workflowFixture(name string) string {
 		builder.WriteString("existingVisualDimensions\n")
 		builder.WriteString("dataRootPrecheck\n")
 		builder.WriteString("sessionId\n")
+		builder.WriteString("hasPlanNextMissing\n")
+		builder.WriteString("nextMissingRequirements\n")
 	}
 	if strings.Contains(name, "export-ocr-desktop-evidence.ps1") {
 		builder.WriteString("VisualDir\n")

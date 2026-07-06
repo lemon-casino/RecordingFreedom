@@ -23,6 +23,7 @@ type ChecklistReport struct {
 	MissingVisualRequirements []string                 `json:"missingVisualRequirements,omitempty"`
 	VisualDimensionFailures   []string                 `json:"visualDimensionFailures,omitempty"`
 	DataRootPrecheck          *DataRootPrecheckReport  `json:"dataRootPrecheck,omitempty"`
+	NextMissingRequirements   []NextMissingRequirement `json:"nextMissingRequirements,omitempty"`
 	CheckComplete             bool                     `json:"checkComplete"`
 	MarkdownChecklistPath     string                   `json:"markdownChecklistPath,omitempty"`
 	JSONChecklistPath         string                   `json:"jsonChecklistPath,omitempty"`
@@ -56,6 +57,7 @@ func NewChecklistReportWithDimensions(generatedAt time.Time, visualDir string, o
 		report.MarkdownChecklistPath = filepath.Join(outputDir, "visual-capture-checklist.md")
 		report.JSONChecklistPath = filepath.Join(outputDir, "visual-capture-checklist.json")
 	}
+	report.NextMissingRequirements = BuildNextMissingRequirements(report)
 	return report
 }
 
@@ -124,6 +126,25 @@ func MarkdownChecklist(report ChecklistReport) string {
 	builder.WriteString("\n## Evidence chain requirements\n\n")
 	for _, item := range report.EvidenceChainRequirements {
 		builder.WriteString("- " + item + "\n")
+	}
+	if len(report.NextMissingRequirements) > 0 {
+		builder.WriteString("\n## Next Missing Requirements\n\n")
+		builder.WriteString("Fix these items before claiming A-batch desktop OCR evidence is ready.\n\n")
+		for _, item := range report.NextMissingRequirements {
+			builder.WriteString("- `" + item.Area + "` " + item.Title + ": " + item.Missing + "\n")
+			if item.SourceKind != "" {
+				builder.WriteString("  - sourceKind: `" + item.SourceKind + "`\n")
+			}
+			if item.StepID != "" {
+				builder.WriteString("  - step: `" + item.StepID + "`\n")
+			}
+			if item.RecommendedVisualFile != "" {
+				builder.WriteString("  - recommended visual file: `" + item.RecommendedVisualFile + "`\n")
+			}
+			if item.RecommendedAction != "" {
+				builder.WriteString("  - action: " + item.RecommendedAction + "\n")
+			}
+		}
 	}
 	builder.WriteString("\n## Required visual evidence\n\n")
 	matched := map[string]string{}
