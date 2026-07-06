@@ -54,7 +54,32 @@ function Save-Url {
         [Parameter(Mandatory = $true)][string]$OutFile
     )
     New-Item -ItemType Directory -Force -Path ([System.IO.Path]::GetDirectoryName($OutFile)) | Out-Null
-    Invoke-WebRequest -Uri $Url -Headers (Get-GitHubHeaders) -OutFile $OutFile
+    $partialPath = "$OutFile.part"
+    $lastError = $null
+    for ($attempt = 1; $attempt -le 5; $attempt++) {
+        Remove-Item -LiteralPath $partialPath -Force -ErrorAction SilentlyContinue
+        try {
+            Invoke-WebRequest -Uri $Url -Headers (Get-GitHubHeaders) -OutFile $partialPath
+            if (-not (Test-Path -LiteralPath $partialPath -PathType Leaf)) {
+                throw "download did not produce an output file"
+            }
+            if ((Get-Item -LiteralPath $partialPath).Length -le 0) {
+                throw "download produced an empty output file"
+            }
+            Move-Item -LiteralPath $partialPath -Destination $OutFile -Force
+            return
+        } catch {
+            $lastError = $_
+            Remove-Item -LiteralPath $partialPath -Force -ErrorAction SilentlyContinue
+            if ($attempt -ge 5) {
+                break
+            }
+            $delaySeconds = [int][Math]::Min(60, 5 * [Math]::Pow(2, $attempt - 1))
+            Write-Warning "Download failed for $Url (attempt $attempt/5): $($_.Exception.Message). Retrying in ${delaySeconds}s."
+            Start-Sleep -Seconds $delaySeconds
+        }
+    }
+    throw "Failed to download $Url after 5 attempts: $($lastError.Exception.Message)"
 }
 
 function Select-Release {
@@ -700,7 +725,7 @@ $report = [pscustomobject]@{
     RequireContentVerification = [bool]$RequireContentVerification
     OcrDesktopEvidenceRequested = -not [string]::IsNullOrWhiteSpace($OcrDesktopEvidenceVisualDir)
     GeneratedAt = (Get-Date).ToUniversalTime().ToString("o")
-    Results = @($results)
+    Results = [object[]]$results.ToArray()
 }
 $reportPath = Join-Path $DownloadDir "release-artifact-verification.json"
 $report | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath $reportPath -Encoding UTF8
