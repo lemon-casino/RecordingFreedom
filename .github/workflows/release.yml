@@ -72,6 +72,16 @@ jobs:
         working-directory: ${{ env.APP_DIR }}/frontend
         run: npm run test:e2e
 
+      - name: Upload frontend e2e failure report
+        if: failure()
+        uses: actions/upload-artifact@v5
+        with:
+          name: recordingfreedom-release-gate-frontend-e2e-${{ github.run_id }}
+          path: |
+            ${{ env.APP_DIR }}/frontend/playwright-report
+            ${{ env.APP_DIR }}/frontend/test-results
+          if-no-files-found: ignore
+
       - name: Clean frontend e2e artifacts before Go tests
         working-directory: ${{ env.APP_DIR }}
         run: rm -rf frontend/test-results frontend/playwright-report

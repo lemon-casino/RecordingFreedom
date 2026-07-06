@@ -984,7 +984,18 @@ function App() {
     currentSettingsRef.current = settingsWithPreferencePatch(currentSettingsRef.current, patch)
     persistedSettingsRef.current = settingsWithPreferencePatch(persistedSettingsRef.current, patch)
   }
-  const commitSettingsPreferencePatch = (patch: SettingsPreferencesPatch) => {
+  const completeSettingsPreferencePatch = (patch: SettingsPreferencesPatch): SettingsPreferencesPatch => {
+    if (patch.ocrTranslation === undefined) return patch
+    return {
+      ...patch,
+      ocrTranslation: normalizeOcrTranslationSettings({
+        ...(currentSettingsRef.current?.ocr.translation ?? ocrTranslation),
+        ...patch.ocrTranslation,
+      }),
+    }
+  }
+  const commitSettingsPreferencePatch = (rawPatch: SettingsPreferencesPatch) => {
+    const patch = completeSettingsPreferencePatch(rawPatch)
     markLocalPreferenceIntent()
     const token = preferencePatchTokenRef.current + 1
     preferencePatchTokenRef.current = token
