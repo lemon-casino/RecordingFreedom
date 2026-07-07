@@ -19,8 +19,8 @@ import type {ExcalidrawImperativeAPI} from '@excalidraw/excalidraw/types'
 import '@excalidraw/excalidraw/index.css'
 import {copyByLocale} from './i18n'
 import {defaultSettings, normalizeLocale, normalizeTheme, type AppSettings, type LocaleCode, type ScreenshotItem, type ThemeCode, type WhiteboardTool} from './services/mockBackend'
-import {hideAnnotationOverlay, hideScreenshotAnnotationOverlay, loadAnnotationCapture, loadScreenshotAnnotationCapture, loadSettings, openOcrResult, patchWhiteboardSettings, queueRecognizeScreenshot, queueRecognizeWhiteboard, reselectAnnotationRegion, reselectScreenshotAnnotationRegion, saveAnnotationCapture, saveScreenshotAnnotationCapture, setAnnotationOverlayHitRegions, showFloatingPanel, subscribeOcrJobEvents, subscribeSettingsChanged, type AnnotationCapture, type AnnotationOverlayState, type CapsuleWindowHitRegion, type OcrJobUpdate, type OcrResult, type ScreenshotWhiteboardContext} from './services/recorderBackend'
-import {resolveFloatingPanelPlacement} from './components/floating/floatingPosition'
+import {hideAnnotationOverlay, hideScreenshotAnnotationOverlay, loadAnnotationCapture, loadScreenshotAnnotationCapture, loadSettings, openOcrResult, patchWhiteboardSettings, queueRecognizeScreenshot, queueRecognizeWhiteboard, reselectAnnotationRegion, reselectScreenshotAnnotationRegion, saveAnnotationCapture, saveScreenshotAnnotationCapture, setAnnotationOverlayHitRegions, subscribeOcrJobEvents, subscribeSettingsChanged, type AnnotationCapture, type AnnotationOverlayState, type CapsuleWindowHitRegion, type OcrJobUpdate, type OcrResult, type ScreenshotWhiteboardContext} from './services/recorderBackend'
+import {showOcrResultFloatingPanel} from './components/floating/ocrResultPanel'
 
 const annotationTools: Array<{tool: WhiteboardTool; icon: typeof PenLine; label: 'select' | 'pen' | 'arrow' | 'line' | 'rectangle' | 'ellipse' | 'text' | 'eraser'}> = [
   {tool: 'selection', icon: MousePointer2, label: 'select'},
@@ -34,8 +34,6 @@ const annotationTools: Array<{tool: WhiteboardTool; icon: typeof PenLine; label:
 ]
 
 const maxPendingAnnotationElementEvents = 512
-const annotationOcrPanelSize = {width: 380, height: 420, maxHeight: 420, minWidth: 340}
-
 type AnnotationElementEvent = {
   type: 'element-created' | 'element-updated' | 'element-deleted'
   clientSequence: number
@@ -514,27 +512,7 @@ function AnnotationOverlayWindow() {
       setOcrResult(result)
       const token = floatingPanelTokenRef.current + 1
       floatingPanelTokenRef.current = token
-      const placement = await resolveFloatingPanelPlacement(anchorElement, {
-        dockSide: 'none',
-        width: annotationOcrPanelSize.width,
-        height: annotationOcrPanelSize.height,
-        maxHeight: annotationOcrPanelSize.maxHeight,
-        minWidth: annotationOcrPanelSize.minWidth,
-      })
-      await showFloatingPanel({
-        kind: 'ocr-result',
-        anchor: placement.anchor,
-        bounds: placement.bounds,
-        dockSide: 'none',
-        width: placement.bounds.width,
-        height: placement.bounds.height,
-        minWidth: annotationOcrPanelSize.minWidth,
-        maxHeight: annotationOcrPanelSize.maxHeight,
-        token,
-        screenId: placement.screenId,
-        direction: placement.direction,
-        contextId: result.id,
-      })
+      await showOcrResultFloatingPanel(anchorElement, {resultId: result.id, token})
     } catch (error) {
       console.error('Failed to open annotation OCR result:', error)
       setOcrMessage(readableAnnotationError(error) || copy.whiteboard.ocrStatusFailed)

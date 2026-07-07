@@ -490,6 +490,24 @@ func (s *RecordingFreedomService) PatchScreenshotItem(req ScreenshotItemPatchReq
 		return ScreenshotHistoryResult{}, err
 	}
 	s.emitScreenshotHistoryChanged(items)
+	var pinState ScreenshotPinState
+	for _, item := range items {
+		if item.ID != id {
+			continue
+		}
+		s.screenshotMu.Lock()
+		if s.screenshotPinState.Visible && s.screenshotPinState.Item.ID == id {
+			s.screenshotPinState.Item = item
+			s.screenshotPinState.Fixed = item.Fixed
+			pinState = s.screenshotPinState
+		}
+		s.screenshotMu.Unlock()
+		break
+	}
+	if pinState.Visible {
+		s.broadcastScreenshotPinState(pinState)
+		s.emitScreenshotPin(pinState)
+	}
 	return ScreenshotHistoryResult{Items: items}, nil
 }
 
@@ -1269,11 +1287,11 @@ func managedScreenshotPath(s *RecordingFreedomService, path string) (string, err
 	if s == nil {
 		return "", errors.New("screenshot service is not initialized")
 	}
-	dir, err := s.screenshotDir()
-	if err != nil {
-		return "", err
+	raw := strings.TrimSpace(path)
+	if raw == "" {
+		return "", errors.New("screenshot path is required")
 	}
-	target, err := filepath.Abs(path)
+	dir, err := s.screenshotDir()
 	if err != nil {
 		return "", err
 	}
@@ -1281,17 +1299,73 @@ func managedScreenshotPath(s *RecordingFreedomService, path string) (string, err
 	if err != nil {
 		return "", err
 	}
+	candidates := []string{raw}
+	if !filepath.IsAbs(raw) {
+		clean := filepath.Clean(raw)
+		if clean == "." || clean == ".." || strings.HasPrefix(clean, ".."+string(filepath.Separator)) {
+			return "", fmt.Errorf("screenshot path %q must stay inside %q", path, root)
+		}
+		dataDir := filepath.Dir(root)
+		appRoot := filepath.Dir(dataDir)
+		candidates = []string{
+			filepath.Join(root, clean),
+			filepath.Join(root, filepath.Base(clean)),
+			filepath.Join(dataDir, clean),
+			filepath.Join(appRoot, clean),
+		}
+	}
+	var firstValid string
+	var firstExisting string
+	var firstExistingDir string
+	for _, candidate := range candidates {
+		target, ok, err := managedScreenshotCandidate(root, candidate)
+		if err != nil {
+			return "", err
+		}
+		if !ok {
+			continue
+		}
+		if firstValid == "" {
+			firstValid = target
+		}
+		if _, err := os.Stat(target); err == nil {
+			firstExisting = target
+			break
+		}
+		if firstExistingDir == "" {
+			if info, err := os.Stat(filepath.Dir(target)); err == nil && info.IsDir() {
+				firstExistingDir = target
+			}
+		}
+	}
+	if firstExisting != "" {
+		return firstExisting, nil
+	}
+	if firstExistingDir != "" {
+		return firstExistingDir, nil
+	}
+	if firstValid != "" {
+		return firstValid, nil
+	}
+	return "", fmt.Errorf("screenshot path %q must stay inside %q", path, root)
+}
+
+func managedScreenshotCandidate(root string, candidate string) (string, bool, error) {
+	target, err := filepath.Abs(candidate)
+	if err != nil {
+		return "", false, err
+	}
 	rel, err := filepath.Rel(root, target)
 	if err != nil {
-		return "", err
+		return "", false, err
 	}
 	if rel == "." || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) || filepath.IsAbs(rel) {
-		return "", fmt.Errorf("screenshot path %q must stay inside %q", path, root)
+		return "", false, nil
 	}
 	if strings.ToLower(filepath.Ext(target)) != ".png" {
-		return "", fmt.Errorf("screenshot path %q must be a PNG", path)
+		return "", false, fmt.Errorf("screenshot path %q must be a PNG", candidate)
 	}
-	return target, nil
+	return target, true, nil
 }
 
 func uniqueScreenshotFilePaths(item ScreenshotItem) []string {

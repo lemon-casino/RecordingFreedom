@@ -2695,7 +2695,13 @@ export async function openScreenshotDirectory(id: string): Promise<ScreenshotIte
   } catch (error) {
     if (isWailsDesktopRuntime()) throw error
     console.info('Using browser screenshot directory fallback:', error)
-    return loadBrowserScreenshotHistory().find((item) => item.id === id) ?? null
+    const item = loadBrowserScreenshotHistory().find((entry) => entry.id === id) ?? null
+    ;(window as Window & {__RF_LAST_OPEN_SCREENSHOT_DIRECTORY__?: {id: string; path?: string; at: string}}).__RF_LAST_OPEN_SCREENSHOT_DIRECTORY__ = {
+      id,
+      path: item?.path,
+      at: new Date().toISOString(),
+    }
+    return item
   }
 }
 
@@ -2714,6 +2720,17 @@ export async function patchScreenshotItem(id: string, patch: {pinned?: boolean; 
       }
       : item)
     saveBrowserScreenshotHistory(next)
+    const pinned = fromBrowserScreenshotPinState(safeJSON(window.localStorage?.getItem(browserScreenshotPinStateKey)))
+    if (pinned.item?.id === id) {
+      const updated = next.find((item) => item.id === id)
+      const state = {
+        ...pinned,
+        item: updated,
+        fixed: updated?.fixed === true,
+      }
+      window.localStorage?.setItem(browserScreenshotPinStateKey, JSON.stringify(state))
+      window.dispatchEvent(new CustomEvent(browserScreenshotPinEvent, {detail: state}))
+    }
     return next
   }
 }

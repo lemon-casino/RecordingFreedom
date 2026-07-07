@@ -104,6 +104,42 @@ func TestScreenshotHistoryPreservesReadyOCRStateAndClearsStaleNone(t *testing.T)
 	}
 }
 
+func TestOpenScreenshotDirectoryResolvesRelativeHistoryPath(t *testing.T) {
+	service := NewRecordingFreedomService()
+	service.appData = appdata.NewService(t.TempDir())
+	dir := mustScreenshotDir(t, service)
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatalf("MkdirAll() error = %v", err)
+	}
+	if err := service.saveScreenshotHistory([]ScreenshotItem{{
+		ID:        "relative-shot",
+		Path:      filepath.Join("data", "screenshots", "relative-shot.png"),
+		CreatedAt: "2026-07-04T00:00:00Z",
+		Width:     420,
+		Height:    260,
+		Mode:      "region",
+	}}); err != nil {
+		t.Fatalf("saveScreenshotHistory() error = %v", err)
+	}
+
+	var opened string
+	originalOpenPath := openPath
+	openPath = func(path string) error {
+		opened = path
+		return nil
+	}
+	t.Cleanup(func() {
+		openPath = originalOpenPath
+	})
+
+	if _, err := service.OpenScreenshotDirectory(ScreenshotImageRequest{ID: "relative-shot"}); err != nil {
+		t.Fatalf("OpenScreenshotDirectory() error = %v", err)
+	}
+	if opened != dir {
+		t.Fatalf("opened path = %q, want %q", opened, dir)
+	}
+}
+
 func TestPatchScreenshotItemDoesNotPersistPinnedHistoryState(t *testing.T) {
 	service := NewRecordingFreedomService()
 	service.appData = appdata.NewService(t.TempDir())
@@ -118,6 +154,7 @@ func TestPatchScreenshotItemDoesNotPersistPinnedHistoryState(t *testing.T) {
 	if err := service.saveScreenshotHistory([]ScreenshotItem{shot}); err != nil {
 		t.Fatalf("saveScreenshotHistory() error = %v", err)
 	}
+	service.screenshotPinState = ScreenshotPinState{Visible: true, Item: shot, Fixed: false}
 
 	fixed := true
 	result, err := service.PatchScreenshotItem(ScreenshotItemPatchRequest{ID: "shot", Fixed: &fixed})
@@ -133,6 +170,9 @@ func TestPatchScreenshotItemDoesNotPersistPinnedHistoryState(t *testing.T) {
 	if !result.Items[0].Fixed {
 		t.Fatalf("fixed screenshot was not marked fixed")
 	}
+	if pinnedState := service.LoadPinnedScreenshot(); !pinnedState.Fixed || !pinnedState.Item.Fixed {
+		t.Fatalf("pinned state after fixed patch = %#v, want fixed current item", pinnedState)
+	}
 
 	pinned := false
 	result, err = service.PatchScreenshotItem(ScreenshotItemPatchRequest{ID: "shot", Pinned: &pinned})
@@ -141,6 +181,9 @@ func TestPatchScreenshotItemDoesNotPersistPinnedHistoryState(t *testing.T) {
 	}
 	if result.Items[0].Pinned || result.Items[0].Fixed {
 		t.Fatalf("cleared screenshot state = pinned %v fixed %v, want both false", result.Items[0].Pinned, result.Items[0].Fixed)
+	}
+	if pinnedState := service.LoadPinnedScreenshot(); pinnedState.Fixed || pinnedState.Item.Fixed {
+		t.Fatalf("pinned state after clear patch = %#v, want unfixed current item", pinnedState)
 	}
 }
 

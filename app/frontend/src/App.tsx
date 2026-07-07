@@ -77,6 +77,7 @@ import {
 } from './services/mockBackend'
 import {assistRegionSelection, beginScreenshotAnnotationOverlay, cancelOcrModelDownload, cancelRegionSelector, cancelSelectedRegion, captureScreenshot, completeAnnotationRegionSelection, completeRegionSelection, completeScreenshotRegionSelection, completeScrollingScreenshotSelection, completeFloatingSelect, deleteScreenshotItem, exportRecordingPackage, getFloatingPanelState, getFloatingSelectState, getOcrModelDownloads, getOcrStatus, getSourceState, hideFloatingPanel, hideFloatingSelect, hidePinnedScreenshot, hidePipOverlay, hideRegionFrame, hideScreenIndicator, hideSettingsWindow, installOcrModelPackage, isWailsDesktopRuntime, listScreenshots, loadBootstrap, loadPinnedScreenshot, loadSettings, logClientEvent, openOcrResult, openRecordingPackage, openScreenshotDirectory, openScreenshotInWhiteboard, openVideoDirectory, patchAudioState, patchCameraState, patchScreenshotItem, patchSettingsPreferences, patchShortcutSettings, patchSourceState, patchWhiteboardSettings, pauseRecording, preflightAudioOnlyRecording, preflightRecording, previewExportRecordingPackage, queueRecognizePinnedScreenshot, queueRecognizeScreenshot, quitApplication, readAnnotationPreviewImage, readPipPreviewImage, readOcrResultImage, recoverRecordingPackage, refreshOcrModelCatalog, removeOcrModel, restoreCapsuleWindow, resumeRecording, saveSettings, setActiveOcrModel, setCapsuleWindowExpanded, setCapsuleWindowHitRegions, setDataRoot, setFloatingPanelHitRegions, setFloatingSelectHitRegions, showAnnotationOverlay, showAnnotationRegionSelector, showFloatingPanel, showFloatingSelect, showPinnedScreenshot, showPipOverlay, showRegionSelector, showScreenIndicator, showScreenshotRegionSelector, showWhiteboardWindow, snapCapsuleWindowToEdge, startAudioOnlyRecording, startMicrophoneLevelMonitor, startOcrModelDownload, startRecording, startScrollingScreenshot, stopMicrophoneLevelMonitor, stopRecording, subscribeAudioLevel, subscribeAudioState, subscribeCapsuleDockSide, subscribeCapsuleWindowMoveEnded, subscribeFloatingPanelChanged, subscribeFloatingSelectChanged, subscribeFloatingSelectChosen, subscribeOcrJobEvents, subscribeOcrModelDownloadEvents, subscribeRecordingStatus, subscribeRegionSelection, subscribeScreenshotCaptured, subscribeScreenshotHistoryChanged, subscribeScreenshotPin, subscribeSettingsChanged, subscribeShortcutTriggered, subscribeSourceStateChanged, subscribeWhiteboardVisibility, translateOcr, updatePipOverlay, updateScreenshotRegionSelection, updateSelectedRegion, type AudioControlState, type AudioLevelUpdate, type AudioStatePatch, type CapsuleWindowDockSide, type CapsuleWindowExpandDirection, type CapsuleWindowHitRegion, type FloatingPanelKind, type FloatingPanelState, type FloatingSelectOption, type FloatingSelectState, type OcrBlock, type OcrModelDownloadSnapshot, type OcrModelInfo, type OcrResult, type OcrStatus, type OcrTranslationResult, type PIPOverlayCamera, type PIPOverlayState, type RecordingExportPlan, type RecordingRecovery, type RecordingStatusUpdate, type RegionSelectionSession, type RegionSmartCandidate, type ScreenshotPinState, type SettingsPreferencesPatch, type ShortcutSettingsPatch, type SourceControlState, type WhiteboardSettingsPatch, type WhiteboardVisibilityUpdate} from './services/recorderBackend'
 import {resolveFloatingPanelPlacement, resolveFloatingSelectPlacement} from './components/floating/floatingPosition'
+import {ocrPanelContext, ocrResultPanelExpandedSize, ocrResultPanelSize, parseOcrPanelContext, showOcrResultFloatingPanel} from './components/floating/ocrResultPanel'
 
 const AnnotationOverlayWindow = lazy(() => import('./AnnotationOverlayWindow'))
 const AnnotationRenderWindow = lazy(() => import('./AnnotationRenderWindow'))
@@ -110,12 +111,11 @@ type ActivePanel = 'source' | 'audio' | 'camera' | 'language' | 'board'
 const floatingPanelStandardSize = {width: 320, height: 340, maxHeight: 340, minWidth: 300}
 const floatingPanelCompactSize = {width: 260, height: 120, maxHeight: 120, minWidth: 240}
 const floatingPanelSettingsSize = {width: 340, height: 340, maxHeight: 340, minWidth: 320}
-const floatingPanelOcrResultSize = {width: 380, height: 420, maxHeight: 420, minWidth: 340}
-const floatingPanelOcrResultExpandedSize = {width: 560, height: 620, maxHeight: 620, minWidth: 500}
+const floatingPanelOcrResultSize = ocrResultPanelSize
+const floatingPanelOcrResultExpandedSize = ocrResultPanelExpandedSize
 const floatingSelectMinWidth = 180
 const floatingSelectMaxWidth = 280
 const floatingSelectMaxHeight = 220
-const ocrPanelAutoTranslatePrefix = 'translate:'
 
 const floatingPanelSizes: Record<FloatingPanelKind, {width: number; height: number; maxHeight: number; minWidth?: number}> = {
   source: floatingPanelStandardSize,
@@ -126,22 +126,6 @@ const floatingPanelSizes: Record<FloatingPanelKind, {width: number; height: numb
   settings: floatingPanelSettingsSize,
   close: {width: 340, height: 170, maxHeight: 170, minWidth: 320},
   'ocr-result': floatingPanelOcrResultSize,
-}
-
-function ocrPanelContext(resultId: string, autoTranslate = false) {
-  const clean = resultId.trim()
-  return autoTranslate ? `${ocrPanelAutoTranslatePrefix}${clean}` : clean
-}
-
-function parseOcrPanelContext(contextId: string | undefined) {
-  const clean = (contextId ?? '').trim()
-  if (clean.startsWith(ocrPanelAutoTranslatePrefix)) {
-    return {
-      resultId: clean.slice(ocrPanelAutoTranslatePrefix.length).trim(),
-      autoTranslate: true,
-    }
-  }
-  return {resultId: clean, autoTranslate: false}
 }
 
 function normalizePipPreset(value: PIPPreset): PIPPreset {
@@ -5239,7 +5223,11 @@ function ScreenshotHistoryRow({
             <small className={`screenshot-ocr-status ${item.ocrStatus}`}>{screenshotOcrStatusText(item, copy)}</small>
           </span>
         </button>
-        <div className="screenshot-history-actions">
+        <div
+          className="screenshot-history-actions"
+          onPointerDown={(event) => event.stopPropagation()}
+          onClick={(event) => event.stopPropagation()}
+        >
           <button type="button" className={item.ocrStatus === 'ready' ? 'selected' : ''} disabled={ocrBusy} aria-label={screenshotOcrPrimaryTitle(item, copy)} title={screenshotOcrPrimaryTitle(item, copy)} onClick={(event) => handleAction(() => onOpenOcr(item, event.currentTarget))}>
             <FileText size={15} />
           </button>
@@ -5593,30 +5581,26 @@ function ScreenshotPinWindow() {
       queuePinnedOcr()
       return
     }
-    const size = floatingPanelSizes['ocr-result']
     const token = floatingTokenRef.current + 1
     floatingTokenRef.current = token
-    const placement = await resolveFloatingPanelPlacement(anchorElement, {
-      dockSide: 'none',
-      width: size.width,
-      height: size.height,
-      maxHeight: size.maxHeight,
-      minWidth: size.minWidth,
-    })
-    await showFloatingPanel({
-      kind: 'ocr-result',
-      anchor: placement.anchor,
-      bounds: placement.bounds,
-      dockSide: 'none',
-      width: placement.bounds.width,
-      height: placement.bounds.height,
-      minWidth: size.minWidth,
-      maxHeight: size.maxHeight,
-      token,
-      screenId: placement.screenId,
-      direction: placement.direction,
-      contextId: item.ocrResultId,
-    })
+    await showOcrResultFloatingPanel(anchorElement, {resultId: item.ocrResultId, token})
+  }
+
+  const togglePinnedFixed = () => {
+    if (!item) return
+    const nextFixed = !(pinState?.fixed === true)
+    void patchScreenshotItem(item.id, {fixed: nextFixed})
+      .then((items) => {
+        const updated = items.find((entry) => entry.id === item.id) ?? {...item, fixed: nextFixed}
+        setPinState((current) => current?.item?.id === item.id
+          ? {
+            ...current,
+            item: updated,
+            fixed: updated.fixed,
+          }
+          : current)
+      })
+      .catch((error) => setOcrMessage(readableError(error) || copy.screenshot.ocrStatusFailed))
   }
 
   const copyPinnedOcrText = () => {
@@ -5681,7 +5665,7 @@ function ScreenshotPinWindow() {
           <button type="button" disabled={!ocrReady || !ocrResult?.plainText.trim()} aria-label={copy.screenshot.translateText} title={copy.screenshot.translateText} onClick={translatePinnedOcrText}>
             <Languages size={15} />
           </button>
-          <button type="button" aria-label={pinState.fixed ? copy.screenshot.fixed : copy.screenshot.pin} title={pinState.fixed ? copy.screenshot.fixed : copy.screenshot.pin}>
+          <button type="button" aria-label={pinState.fixed ? copy.screenshot.unfix : copy.screenshot.fix} title={pinState.fixed ? copy.screenshot.unfix : copy.screenshot.fix} onClick={togglePinnedFixed}>
             {pinState.fixed ? <Lock size={15} /> : <Pin size={15} />}
           </button>
           <button type="button" aria-label={copy.common.close} title={copy.common.close} onClick={() => void hidePinnedScreenshot()}>

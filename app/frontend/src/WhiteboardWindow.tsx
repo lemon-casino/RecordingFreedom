@@ -26,8 +26,8 @@ import type {ExcalidrawImperativeAPI} from '@excalidraw/excalidraw/types'
 import '@excalidraw/excalidraw/index.css'
 import {copyByLocale, type RecorderCopy} from './i18n'
 import {defaultSettings, normalizeLocale, normalizeTheme, type AppSettings, type LocaleCode, type ThemeCode, type WhiteboardStrokeWidth, type WhiteboardTool} from './services/mockBackend'
-import {consumeScreenshotWhiteboardContext, hideWhiteboardWindow, loadSettings, loadWhiteboardScene, openOcrResult, patchWhiteboardSettings, queueRecognizeWhiteboard, saveWhiteboardExport, saveWhiteboardScene, saveWhiteboardSnapshot, showFloatingPanel, subscribeOcrJobEvents, subscribeScreenshotWhiteboardContext, subscribeSettingsChanged, translateOcr, type OcrBlock, type OcrResult, type OcrTranslationResult, type ScreenshotWhiteboardContext} from './services/recorderBackend'
-import {resolveFloatingPanelPlacement} from './components/floating/floatingPosition'
+import {consumeScreenshotWhiteboardContext, hideWhiteboardWindow, loadSettings, loadWhiteboardScene, openOcrResult, patchWhiteboardSettings, queueRecognizeWhiteboard, saveWhiteboardExport, saveWhiteboardScene, saveWhiteboardSnapshot, subscribeOcrJobEvents, subscribeScreenshotWhiteboardContext, subscribeSettingsChanged, translateOcr, type OcrBlock, type OcrResult, type OcrTranslationResult, type ScreenshotWhiteboardContext} from './services/recorderBackend'
+import {showOcrResultFloatingPanel} from './components/floating/ocrResultPanel'
 
 type SaveState = 'ready' | 'dirty' | 'saving' | 'saved' | 'failed'
 type WhiteboardWindowGlobal = Window & {__RF_SCREENSHOT_WHITEBOARD__?: ScreenshotWhiteboardContext}
@@ -49,7 +49,6 @@ const whiteboardTools: Array<{tool: WhiteboardTool; icon: typeof PenLine; labelK
 ]
 
 const strokeWidths: WhiteboardStrokeWidth[] = ['thin', 'medium', 'bold']
-const whiteboardOcrPanelSize = {width: 380, height: 420, maxHeight: 420, minWidth: 340}
 const whiteboardPNGContentPrefix = 'data:image/png;base64,'
 
 function WhiteboardWindow() {
@@ -402,27 +401,7 @@ function WhiteboardWindow() {
       setOcrResult(result)
       const token = floatingPanelTokenRef.current + 1
       floatingPanelTokenRef.current = token
-      const placement = await resolveFloatingPanelPlacement(anchorElement, {
-        dockSide: 'none',
-        width: whiteboardOcrPanelSize.width,
-        height: whiteboardOcrPanelSize.height,
-        maxHeight: whiteboardOcrPanelSize.maxHeight,
-        minWidth: whiteboardOcrPanelSize.minWidth,
-      })
-      await showFloatingPanel({
-        kind: 'ocr-result',
-        anchor: placement.anchor,
-        bounds: placement.bounds,
-        dockSide: 'none',
-        width: placement.bounds.width,
-        height: placement.bounds.height,
-        minWidth: whiteboardOcrPanelSize.minWidth,
-        maxHeight: whiteboardOcrPanelSize.maxHeight,
-        token,
-        screenId: placement.screenId,
-        direction: placement.direction,
-        contextId: result.id,
-      })
+      await showOcrResultFloatingPanel(anchorElement, {resultId: result.id, token})
     } catch (error) {
       console.error('Failed to open whiteboard OCR result:', error)
       holdStatusText(readableError(error) || copy.whiteboard.ocrStatusFailed)

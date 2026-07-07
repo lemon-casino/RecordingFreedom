@@ -165,7 +165,13 @@ test('screenshot history exposes folder action and keeps delete behind swipe con
     visible: true,
     itemId: 'history-shot',
   })
-  await expect(page.getByRole('button', {name: 'Open containing folder'})).toBeVisible()
+  await page.getByRole('button', {name: 'Open containing folder'}).click()
+  await expect.poll(async () => page.evaluate(() => (window as Window & {
+    __RF_LAST_OPEN_SCREENSHOT_DIRECTORY__?: {id?: string; path?: string}
+  }).__RF_LAST_OPEN_SCREENSHOT_DIRECTORY__ ?? null)).toMatchObject({
+    id: 'history-shot',
+    path: 'browser-preview/data/screenshots/history-shot.png',
+  })
   await expect(page.getByRole('button', {name: 'Delete screenshot'})).toHaveCount(0)
   await revealScreenshotDelete(row, page)
   await row.getByRole('button', {name: 'Delete screenshot'}).click()
@@ -227,6 +233,13 @@ test('screenshot history pin action opens a real pinned image window state', asy
   await pinPage.goto('/#/screenshot-pin')
   await expect(pinPage.locator('.screenshot-pin-shell.empty')).toHaveCount(0)
   await expect(pinPage.locator('.screenshot-pin-shell img')).toHaveAttribute('src', /data:image\//)
+  await pinPage.getByRole('button', {name: 'Fix'}).click()
+  await expect(pinPage.locator('.screenshot-pin-shell')).toHaveClass(/fixed/)
+  await expect(pinPage.getByRole('button', {name: 'Unfix'})).toBeVisible()
+  await expect.poll(async () => pinPage.evaluate((key) => {
+    const history = JSON.parse(window.localStorage.getItem(key) || '[]')
+    return history.find((item: {id?: string; fixed?: boolean}) => item.id === 'pin-shot')?.fixed === true
+  }, browserScreenshotHistoryKey)).toBe(true)
   await pinPage.close()
 })
 
