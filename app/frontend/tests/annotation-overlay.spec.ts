@@ -119,21 +119,18 @@ test('recording annotation overlay queues background OCR and shows positioned te
   await expect(page.locator('.annotation-ocr-status')).toContainText('Board text recognized')
   await page.getByRole('button', {name: 'View board OCR result'}).click()
 
-  await expect.poll(async () => readAnnotationOcrSceneState(page)).toMatchObject({
-    positionTextCount: 1,
-    firstPositionText: {
-      x: 120,
-      y: 120,
-      width: 300,
-      height: 48,
-      text: 'RecordingFreedom',
-    },
-  })
-
-  await page.getByRole('button', {name: 'View board OCR result'}).click()
+  const ocrLayer = page.locator('.annotation-overlay-canvas .ocr-position-text-layer.annotation')
+  await expect(ocrLayer.locator('.ocr-position-text-button')).toHaveCount(1)
+  const firstText = ocrLayer.locator('.ocr-position-text-button').filter({hasText: 'RecordingFreedom'}).first()
+  await expect(firstText).toBeVisible()
+  await firstText.click()
+  await expect(ocrLayer.locator('.ocr-position-text-button').filter({hasText: 'Text copied'})).toHaveCount(1)
   await expect.poll(async () => readAnnotationOcrSceneState(page)).toMatchObject({
     positionTextCount: 0,
   })
+
+  await page.getByRole('button', {name: 'View board OCR result'}).click()
+  await expect(ocrLayer.locator('.ocr-position-text-button')).toHaveCount(0)
 })
 
 test('screenshot annotation overlay saves into screenshot history on explicit save', async ({page}) => {

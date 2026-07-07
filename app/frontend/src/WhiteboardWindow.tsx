@@ -20,13 +20,15 @@ import {
   Undo2,
   X,
 } from 'lucide-react'
-import {useCallback, useEffect, useMemo, useRef, useState} from 'react'
-import {Excalidraw, exportToBlob, exportToSvg, serializeAsJSON} from '@excalidraw/excalidraw'
+import {useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties} from 'react'
+import {Excalidraw, exportToBlob, exportToSvg, sceneCoordsToViewportCoords, serializeAsJSON} from '@excalidraw/excalidraw'
 import type {ExcalidrawImperativeAPI} from '@excalidraw/excalidraw/types'
 import '@excalidraw/excalidraw/index.css'
 import {copyByLocale, type RecorderCopy} from './i18n'
 import {defaultSettings, normalizeLocale, normalizeTheme, type AppSettings, type LocaleCode, type ThemeCode, type WhiteboardStrokeWidth, type WhiteboardTool} from './services/mockBackend'
 import {consumeScreenshotWhiteboardContext, hideWhiteboardWindow, loadSettings, loadWhiteboardScene, openOcrResult, patchWhiteboardSettings, queueRecognizeWhiteboard, saveWhiteboardExport, saveWhiteboardScene, saveWhiteboardSnapshot, subscribeOcrJobEvents, subscribeScreenshotWhiteboardContext, subscribeSettingsChanged, translateOcr, type OcrBlock, type OcrResult, type OcrTranslationResult, type ScreenshotWhiteboardContext} from './services/recorderBackend'
+import {OcrPositionTextLayer, countOcrPositionTextBlocks} from './components/ocr/OcrPositionTextLayer'
+import {writeClipboardText} from './utils/clipboard'
 
 type SaveState = 'ready' | 'dirty' | 'saving' | 'saved' | 'failed'
 type WhiteboardWindowGlobal = Window & {__RF_SCREENSHOT_WHITEBOARD__?: ScreenshotWhiteboardContext}
@@ -68,9 +70,13 @@ function WhiteboardWindow() {
   const [ocrTranslationBusy, setOcrTranslationBusy] = useState(false)
   const [ocrBlocksVisible, setOcrBlocksVisible] = useState(false)
   const [ocrPositionTextVisible, setOcrPositionTextVisible] = useState(false)
+  const [ocrHoveredBlockId, setOcrHoveredBlockId] = useState('')
+  const [ocrCopiedBlockId, setOcrCopiedBlockId] = useState('')
+  const [ocrOverlayStyle, setOcrOverlayStyle] = useState<CSSProperties | undefined>(undefined)
   const [ocrSourceId, setOcrSourceId] = useState('')
   const [selectedImageElementId, setSelectedImageElementId] = useState('')
   const apiRef = useRef<ExcalidrawImperativeAPI | null>(null)
+  const whiteboardCanvasRef = useRef<HTMLElement | null>(null)
   const settingsRef = useRef<AppSettings>(defaultSettings)
   const pendingImportedSceneRef = useRef<ReturnType<typeof screenshotScene> | null>(null)
   const lastSceneRef = useRef('')
@@ -96,6 +102,32 @@ function WhiteboardWindow() {
     statusHoldUntilRef.current = Date.now() + holdMs
     setStatusText(message)
   }, [])
+
+  const refreshOcrOverlayPlacement = useCallback(() => {
+    const api = apiRef.current
+    const anchor = ocrImageAnchorRef.current ?? selectedImageRef.current
+    const canvas = whiteboardCanvasRef.current
+    if (!api || !anchor || !canvas) {
+      setOcrOverlayStyle(undefined)
+      return
+    }
+    setOcrOverlayStyle(whiteboardOcrOverlayStyle(api, canvas, anchor))
+  }, [])
+
+  const copyOcrPositionText = useCallback((block: OcrBlock, blockId: string) => {
+    const text = block.text.trim()
+    if (!text) {
+      holdStatusText(copy.screenshot.copyTextEmpty)
+      return
+    }
+    void writeClipboardText(text)
+      .then(() => {
+        setOcrCopiedBlockId(blockId)
+        holdStatusText(copy.screenshot.copiedText)
+        window.setTimeout(() => setOcrCopiedBlockId((current) => current === blockId ? '' : current), 1200)
+      })
+      .catch((error) => holdStatusText(readableError(error) || copy.screenshot.copyTextEmpty))
+  }, [copy, holdStatusText])
 
   useEffect(() => {
     document.body.classList.add('rf-whiteboard-window')
@@ -160,6 +192,29 @@ function WhiteboardWindow() {
     ocrSourceIdRef.current = ocrSourceId
   }, [ocrSourceId])
 
+  useLayoutEffect(() => {
+    if (!ocrPositionTextVisible) {
+      setOcrOverlayStyle(undefined)
+      return
+    }
+    refreshOcrOverlayPlacement()
+    const frame = window.requestAnimationFrame(refreshOcrOverlayPlacement)
+    return () => window.cancelAnimationFrame(frame)
+  }, [ocrPositionTextVisible, ocrResult?.id, selectedImageElementId, refreshOcrOverlayPlacement])
+
+  useEffect(() => {
+    if (!ocrPositionTextVisible) return
+    const update = () => refreshOcrOverlayPlacement()
+    const canvas = whiteboardCanvasRef.current
+    const observer = typeof ResizeObserver !== 'undefined' && canvas ? new ResizeObserver(update) : null
+    observer?.observe(canvas as Element)
+    window.addEventListener('resize', update)
+    return () => {
+      observer?.disconnect()
+      window.removeEventListener('resize', update)
+    }
+  }, [ocrPositionTextVisible, refreshOcrOverlayPlacement])
+
   useEffect(() => subscribeOcrJobEvents((event) => {
     if (event.sourceKind !== 'whiteboard' && event.sourceKind !== 'whiteboard-selection') return
     const currentSourceId = ocrSourceIdRef.current
@@ -183,6 +238,8 @@ function WhiteboardWindow() {
         setOcrTranslationBusy(false)
         setOcrBlocksVisible(false)
         setOcrPositionTextVisible(false)
+        setOcrHoveredBlockId('')
+        setOcrCopiedBlockId('')
         removeOcrBlockElements(apiRef.current, scheduleSave)
         removeOcrPositionTextElements(apiRef.current, scheduleSave)
       }
@@ -307,13 +364,17 @@ function WhiteboardWindow() {
       const selectedImage = selectedWhiteboardImageFromScene(elements, appState, files)
       selectedImageRef.current = selectedImage
       setSelectedImageElementId(selectedImage?.elementId ?? '')
+      if (selectedImage && ocrImageAnchorRef.current?.elementId === selectedImage.elementId) {
+        ocrImageAnchorRef.current = selectedImage
+      }
+      if (ocrPositionTextVisible) window.requestAnimationFrame(refreshOcrOverlayPlacement)
       if (Date.now() < screenshotImportGuardUntilRef.current && !sceneHasImageElement(elements)) return
       const sceneJson = (serializeAsJSON as any)(elements, appState, files, 'local')
       scheduleSave(sceneJson)
     } catch (error) {
       console.error('Failed to serialize whiteboard scene:', error)
     }
-  }, [scheduleSave])
+  }, [ocrPositionTextVisible, refreshOcrOverlayPlacement, scheduleSave])
 
   const saveNow = () => {
     void saveScene(currentSceneJSON(), {snapshot: true})
@@ -329,6 +390,8 @@ function WhiteboardWindow() {
     setOcrTranslationBusy(false)
     setOcrBlocksVisible(false)
     setOcrPositionTextVisible(false)
+    setOcrHoveredBlockId('')
+    setOcrCopiedBlockId('')
     ocrImageAnchorRef.current = null
     removeOcrBlockElements(apiRef.current, scheduleSave)
     removeOcrPositionTextElements(apiRef.current, scheduleSave)
@@ -369,6 +432,8 @@ function WhiteboardWindow() {
     setOcrTranslationBusy(false)
     setOcrBlocksVisible(false)
     setOcrPositionTextVisible(false)
+    setOcrHoveredBlockId('')
+    setOcrCopiedBlockId('')
     ocrImageAnchorRef.current = selected
     removeOcrBlockElements(apiRef.current, scheduleSave)
     removeOcrPositionTextElements(apiRef.current, scheduleSave)
@@ -405,8 +470,9 @@ function WhiteboardWindow() {
       const result = ocrResult?.id === ocrResultId ? ocrResult : await openOcrResult(ocrResultId)
       setOcrResult(result)
       if (ocrPositionTextVisible) {
-        removeOcrPositionTextElements(apiRef.current, scheduleSave)
         setOcrPositionTextVisible(false)
+        setOcrHoveredBlockId('')
+        setOcrCopiedBlockId('')
         holdStatusText(copy.whiteboard.ocrBlocksHidden)
         return
       }
@@ -419,16 +485,18 @@ function WhiteboardWindow() {
         insertOcrText()
         return
       }
-      const elements = buildOcrPositionTextElements(result, anchor)
-      if (elements.length === 0) {
+      const blockCount = countOcrPositionTextBlocks(result)
+      if (blockCount === 0) {
         holdStatusText(copy.screenshot.ocrNoText)
         return
       }
-      const current = removeOcrPositionTextElementsFromList(api.getSceneElements())
-      api.updateScene({elements: [...current, ...elements] as any})
-      persistApiSceneSoon(api, scheduleSave)
+      ocrImageAnchorRef.current = anchor
+      removeOcrPositionTextElements(api, scheduleSave)
       setOcrPositionTextVisible(true)
-      holdStatusText(copy.screenshot.ocrBlocks(elements.length))
+      setOcrHoveredBlockId('')
+      setOcrCopiedBlockId('')
+      window.requestAnimationFrame(refreshOcrOverlayPlacement)
+      holdStatusText(copy.screenshot.ocrBlocks(blockCount))
     } catch (error) {
       console.error('Failed to open whiteboard OCR result:', error)
       holdStatusText(readableError(error) || copy.whiteboard.ocrStatusFailed)
@@ -789,7 +857,7 @@ function WhiteboardWindow() {
           </button>
         </div>
       </section>
-      <section className="whiteboard-canvas" aria-label={copy.whiteboard.title}>
+      <section ref={whiteboardCanvasRef} className="whiteboard-canvas" aria-label={copy.whiteboard.title}>
         <Excalidraw
           initialData={initialData}
           langCode={locale}
@@ -810,6 +878,7 @@ function WhiteboardWindow() {
             }
           }}
           onChange={onSceneChange as any}
+          onScrollChange={() => refreshOcrOverlayPlacement()}
           UIOptions={{
             canvasActions: {
               export: false,
@@ -824,6 +893,19 @@ function WhiteboardWindow() {
           }}
           renderTopRightUI={() => null}
         />
+        {ocrPositionTextVisible && ocrResult && ocrOverlayStyle && (
+          <OcrPositionTextLayer
+            copy={copy}
+            result={ocrResult}
+            translationResult={ocrTranslationResult}
+            hoveredBlockId={ocrHoveredBlockId}
+            copiedBlockId={ocrCopiedBlockId}
+            onHover={setOcrHoveredBlockId}
+            onCopy={copyOcrPositionText}
+            className="whiteboard"
+            style={ocrOverlayStyle}
+          />
+        )}
       </section>
       <footer className={`whiteboard-status ${saveState}`}>
         <span>{statusText || copy.whiteboard.ready}</span>
@@ -977,6 +1059,36 @@ function sceneHasImageElement(elements: readonly unknown[]) {
 
 function selectedWhiteboardImageElement(api: ExcalidrawImperativeAPI) {
   return selectedWhiteboardImageFromScene(api.getSceneElements(), api.getAppState(), api.getFiles())
+}
+
+function whiteboardOcrOverlayStyle(api: ExcalidrawImperativeAPI, canvas: HTMLElement, anchor: SelectedWhiteboardImage): CSSProperties | undefined {
+  const appState = api.getAppState() as {
+    scrollX?: number
+    scrollY?: number
+    zoom?: {value?: number}
+  }
+  const rect = canvas.getBoundingClientRect()
+  const zoomValue = Number.isFinite(appState.zoom?.value) ? appState.zoom?.value as number : 1
+  const viewportState = {
+    zoom: {value: zoomValue},
+    offsetLeft: rect.left,
+    offsetTop: rect.top,
+    scrollX: Number.isFinite(appState.scrollX) ? appState.scrollX as number : 0,
+    scrollY: Number.isFinite(appState.scrollY) ? appState.scrollY as number : 0,
+  }
+  const topLeft = sceneCoordsToViewportCoords({sceneX: anchor.x, sceneY: anchor.y}, viewportState as any)
+  const bottomRight = sceneCoordsToViewportCoords({sceneX: anchor.x + anchor.width, sceneY: anchor.y + anchor.height}, viewportState as any)
+  const width = Math.max(1, bottomRight.x - topLeft.x)
+  const height = Math.max(1, bottomRight.y - topLeft.y)
+  return {
+    position: 'absolute',
+    left: topLeft.x - rect.left,
+    top: topLeft.y - rect.top,
+    width,
+    height,
+    minHeight: 0,
+    maxHeight: 'none',
+  }
 }
 
 function selectedWhiteboardImageFromScene(elements: readonly unknown[], appState: unknown, files: unknown): SelectedWhiteboardImage | null {
@@ -1173,64 +1285,6 @@ function buildOcrTranslationTextElements(result: OcrResult, translation: OcrTran
           resultId: result.id,
           blockId: block.id,
           source: block.text,
-        },
-      },
-    }]
-  })
-}
-
-function buildOcrPositionTextElements(result: OcrResult, anchor: SelectedWhiteboardImage) {
-  const now = Date.now()
-  return result.blocks.flatMap((block, index) => {
-    const text = block.text.trim()
-    if (!text) return []
-    const bounds = ocrBlockBounds(block)
-    if (!bounds) return []
-    const x = anchor.x + (bounds.x / Math.max(1, result.width)) * anchor.width
-    const y = anchor.y + (bounds.y / Math.max(1, result.height)) * anchor.height
-    const width = Math.max(28, (bounds.width / Math.max(1, result.width)) * anchor.width)
-    const height = Math.max(18, (bounds.height / Math.max(1, result.height)) * anchor.height)
-    const fontSize = Math.max(10, Math.min(24, Math.round(height * 0.66)))
-    return [{
-      id: `rf-ocr-position-text-${safeElementId(result.id)}-${safeElementId(block.id || String(index))}-${now}-${index}`,
-      type: 'text',
-      x,
-      y,
-      width,
-      height,
-      angle: 0,
-      strokeColor: '#111827',
-      backgroundColor: 'transparent',
-      fillStyle: 'solid',
-      strokeWidth: 1,
-      strokeStyle: 'solid',
-      roughness: 0,
-      opacity: 100,
-      groupIds: [],
-      frameId: null,
-      roundness: null,
-      seed: 6000 + index,
-      version: 1,
-      versionNonce: 7000 + index,
-      isDeleted: false,
-      boundElements: null,
-      updated: now,
-      link: null,
-      locked: false,
-      text,
-      originalText: text,
-      fontSize,
-      fontFamily: 1,
-      textAlign: 'center',
-      verticalAlign: 'middle',
-      baseline: Math.round(fontSize * 1.18),
-      containerId: null,
-      lineHeight: 1.18,
-      customData: {
-        recordingFreedomOcr: {
-          kind: 'position-text',
-          resultId: result.id,
-          blockId: block.id,
         },
       },
     }]

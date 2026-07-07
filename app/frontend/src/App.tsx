@@ -78,6 +78,8 @@ import {
 import {assistRegionSelection, beginScreenshotAnnotationOverlay, cancelOcrModelDownload, cancelRegionSelector, cancelSelectedRegion, captureScreenshot, completeAnnotationRegionSelection, completeRegionSelection, completeScreenshotRegionSelection, completeScrollingScreenshotSelection, completeFloatingSelect, deleteScreenshotItem, exportRecordingPackage, getFloatingPanelState, getFloatingSelectState, getOcrModelDownloads, getOcrStatus, getSourceState, hideFloatingPanel, hideFloatingSelect, hidePinnedScreenshot, hidePipOverlay, hideRegionFrame, hideScreenIndicator, hideSettingsWindow, installOcrModelPackage, isWailsDesktopRuntime, listScreenshots, loadBootstrap, loadPinnedScreenshot, loadSettings, logClientEvent, openOcrResult, openRecordingPackage, openScreenshotDirectory, openScreenshotInWhiteboard, openVideoDirectory, patchAudioState, patchCameraState, patchScreenshotItem, patchSettingsPreferences, patchShortcutSettings, patchSourceState, patchWhiteboardSettings, pauseRecording, preflightAudioOnlyRecording, preflightRecording, previewExportRecordingPackage, queueRecognizePinnedScreenshot, queueRecognizeScreenshot, quitApplication, readAnnotationPreviewImage, readPipPreviewImage, readOcrResultImage, recoverRecordingPackage, refreshOcrModelCatalog, removeOcrModel, restoreCapsuleWindow, resumeRecording, saveSettings, setActiveOcrModel, setCapsuleWindowExpanded, setCapsuleWindowHitRegions, setDataRoot, setFloatingPanelHitRegions, setFloatingSelectHitRegions, showAnnotationOverlay, showAnnotationRegionSelector, showFloatingPanel, showFloatingSelect, showPinnedScreenshot, showPipOverlay, showRegionSelector, showScreenIndicator, showScreenshotRegionSelector, showWhiteboardWindow, snapCapsuleWindowToEdge, startAudioOnlyRecording, startMicrophoneLevelMonitor, startOcrModelDownload, startRecording, startScrollingScreenshot, stopMicrophoneLevelMonitor, stopRecording, subscribeAudioLevel, subscribeAudioState, subscribeCapsuleDockSide, subscribeCapsuleWindowMoveEnded, subscribeFloatingPanelChanged, subscribeFloatingSelectChanged, subscribeFloatingSelectChosen, subscribeOcrJobEvents, subscribeOcrModelDownloadEvents, subscribeRecordingStatus, subscribeRegionSelection, subscribeScreenshotCaptured, subscribeScreenshotHistoryChanged, subscribeScreenshotPin, subscribeSettingsChanged, subscribeShortcutTriggered, subscribeSourceStateChanged, subscribeWhiteboardVisibility, translateOcr, updatePipOverlay, updateScreenshotRegionSelection, updateSelectedRegion, type AudioControlState, type AudioLevelUpdate, type AudioStatePatch, type CapsuleWindowDockSide, type CapsuleWindowExpandDirection, type CapsuleWindowHitRegion, type FloatingPanelKind, type FloatingPanelState, type FloatingSelectOption, type FloatingSelectState, type OcrBlock, type OcrModelDownloadSnapshot, type OcrModelInfo, type OcrResult, type OcrStatus, type OcrTranslationResult, type PIPOverlayCamera, type PIPOverlayState, type RecordingExportPlan, type RecordingRecovery, type RecordingStatusUpdate, type RegionSelectionSession, type RegionSmartCandidate, type ScreenshotPinState, type SettingsPreferencesPatch, type ShortcutSettingsPatch, type SourceControlState, type WhiteboardSettingsPatch, type WhiteboardVisibilityUpdate} from './services/recorderBackend'
 import {resolveFloatingPanelPlacement, resolveFloatingSelectPlacement} from './components/floating/floatingPosition'
 import {ocrPanelContext, ocrResultPanelExpandedSize, ocrResultPanelSize, parseOcrPanelContext} from './components/floating/ocrResultPanel'
+import {OcrPositionTextLayer, ocrBlockPolygonPoints, ocrBlockStableId} from './components/ocr/OcrPositionTextLayer'
+import {writeClipboardText} from './utils/clipboard'
 
 const AnnotationOverlayWindow = lazy(() => import('./AnnotationOverlayWindow'))
 const AnnotationRenderWindow = lazy(() => import('./AnnotationRenderWindow'))
@@ -2585,6 +2587,9 @@ function App() {
 
   const openScreenshotFolder = (item: ScreenshotItem) => {
     void openScreenshotDirectory(item.id)
+      .then((opened) => {
+        if (opened) setScreenshotMessage(copy.screenshot.openFolder)
+      })
       .catch((error) => {
         console.error('Failed to open screenshot directory:', error)
         setScreenshotMessage(readableError(error))
@@ -4216,6 +4221,9 @@ function FloatingPanelWindow() {
 
   const openScreenshotFolder = (item: ScreenshotItem) => {
     void openScreenshotDirectory(item.id)
+      .then((opened) => {
+        if (opened) setScreenshotMessage(copy.screenshot.openFolder)
+      })
       .catch((error) => {
         console.error('Failed to open floating screenshot directory:', error)
         setScreenshotMessage(readableError(error))
@@ -4912,71 +4920,6 @@ function OcrResultPanel({
   )
 }
 
-function OcrPositionTextLayer({
-  copy,
-  result,
-  translationResult = null,
-  hoveredBlockId,
-  copiedBlockId,
-  onHover,
-  onCopy,
-  className = '',
-  style,
-}: {
-  copy: RecorderCopy
-  result: OcrResult
-  translationResult?: OcrTranslationResult | null
-  hoveredBlockId: string
-  copiedBlockId: string
-  onHover: (blockId: string) => void
-  onCopy: (block: OcrBlock, blockId: string) => void
-  className?: string
-  style?: CSSProperties
-}) {
-  const translatedByBlockId = new Map((translationResult?.blocks ?? [])
-    .map((block) => [block.blockId, block.translated.trim()] as const)
-    .filter(([, translated]) => Boolean(translated)))
-  const blockButtons = result.blocks.map((block, index) => {
-    const blockId = ocrBlockStableId(block, index)
-    const bounds = ocrBlockBoundsPercent(block, result.width, result.height)
-    if (!bounds) return null
-    const copied = copiedBlockId === blockId
-    const translated = translatedByBlockId.get(block.id) || translatedByBlockId.get(blockId) || ''
-    const label = translated || block.text.trim() || copy.screenshot.ocrNoText
-    const displayBlock = translated ? {...block, text: translated} : block
-    const buttonStyle = {
-      left: `${bounds.left}%`,
-      top: `${bounds.top}%`,
-      width: `${bounds.width}%`,
-    } satisfies CSSProperties
-    return (
-      <button
-        type="button"
-        key={blockId}
-        className={`ocr-position-text-button ${translated ? 'translated' : ''} ${blockId === hoveredBlockId ? 'active' : ''} ${copied ? 'copied' : ''}`.trim()}
-        style={buttonStyle}
-        aria-label={`${copy.screenshot.copyText}: ${label}`}
-        title={copied ? copy.screenshot.copiedText : label}
-        data-ocr-block-id={blockId}
-        onPointerEnter={() => onHover(blockId)}
-        onPointerLeave={() => onHover('')}
-        onFocus={() => onHover(blockId)}
-        onBlur={() => onHover('')}
-        onClick={() => onCopy(displayBlock, blockId)}
-      >
-        <span>{copied ? copy.screenshot.copiedText : label}</span>
-      </button>
-    )
-  }).filter(Boolean)
-
-  if (blockButtons.length === 0) return null
-  return (
-    <div className={`ocr-position-text-layer ${className}`.trim()} style={style} aria-label={copy.screenshot.ocrBlocks(result.blocks.length)}>
-      {blockButtons}
-    </div>
-  )
-}
-
 function FloatingSelectWindow() {
   const rootRef = useRef<HTMLElement | null>(null)
   const [selectState, setSelectState] = useState<FloatingSelectState>(() => ({
@@ -5293,37 +5236,6 @@ function shouldUseFloatingPanelWindows() {
   return isWailsDesktopRuntime() || (window as Window & {__RF_FORCE_FLOATING_PANEL_WINDOWS__?: boolean}).__RF_FORCE_FLOATING_PANEL_WINDOWS__ === true
 }
 
-function ocrBlockPolygonPoints(block: OcrBlock) {
-  if (block.box.length === 0) return ''
-  return block.box.map((point) => `${point.x},${point.y}`).join(' ')
-}
-
-function ocrBlockStableId(block: OcrBlock, index: number) {
-  if (block.id) return block.id
-  const boxKey = block.box.map((point) => `${Math.round(point.x)}:${Math.round(point.y)}`).join('|')
-  return `block-${index}-${block.lineIndex}-${boxKey}-${block.text}`
-}
-
-function ocrBlockBoundsPercent(block: OcrBlock, resultWidth: number, resultHeight: number) {
-  if (!Number.isFinite(resultWidth) || !Number.isFinite(resultHeight) || resultWidth <= 0 || resultHeight <= 0 || block.box.length === 0) {
-    return null
-  }
-  const xs = block.box.map((point) => point.x).filter(Number.isFinite)
-  const ys = block.box.map((point) => point.y).filter(Number.isFinite)
-  if (xs.length === 0 || ys.length === 0) return null
-  const minX = clampNumber(Math.min(...xs), 0, resultWidth)
-  const maxX = clampNumber(Math.max(...xs), 0, resultWidth)
-  const minY = clampNumber(Math.min(...ys), 0, resultHeight)
-  const maxY = clampNumber(Math.max(...ys), 0, resultHeight)
-  if (maxX <= minX || maxY <= minY) return null
-  return {
-    left: (minX / resultWidth) * 100,
-    top: (minY / resultHeight) * 100,
-    width: Math.max(4, ((maxX - minX) / resultWidth) * 100),
-    height: Math.max(8, ((maxY - minY) / resultHeight) * 100),
-  }
-}
-
 async function copyOcrResultText(result: OcrResult, copy: RecorderCopy) {
   const text = result.plainText.trim()
   if (!text) return copy.screenshot.copyTextEmpty
@@ -5408,30 +5320,6 @@ function useContainedImageLayerStyle(containerRef: RefObject<HTMLElement | null>
   }, [containerRef, imageHeight, imageWidth])
 
   return style
-}
-
-async function writeClipboardText(text: string) {
-  if (navigator.clipboard?.writeText) {
-    try {
-      await navigator.clipboard.writeText(text)
-      return
-    } catch {
-      // Some desktop webviews expose clipboard but reject without focus; fall back to a temporary selection.
-    }
-  }
-  const textarea = document.createElement('textarea')
-  textarea.value = text
-  textarea.setAttribute('readonly', 'true')
-  textarea.style.position = 'fixed'
-  textarea.style.left = '-9999px'
-  textarea.style.top = '0'
-  document.body.appendChild(textarea)
-  textarea.select()
-  try {
-    if (!document.execCommand('copy')) throw new Error('clipboard copy failed')
-  } finally {
-    document.body.removeChild(textarea)
-  }
 }
 
 function ScreenIndicatorWindow() {

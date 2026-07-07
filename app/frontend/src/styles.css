@@ -1536,15 +1536,19 @@ body.rf-recorder-window .select-menu-list {
   min-height: 18px;
   padding: 2px 6px;
   overflow: hidden;
-  border: 1px solid rgba(255, 255, 255, 0.34);
+  border: 1px solid rgba(255, 255, 255, 0.72);
   border-radius: 6px;
-  background: rgba(8, 13, 18, 0.76);
+  background: rgba(8, 13, 18, 0.92);
   color: #ffffff;
-  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.28);
+  box-shadow:
+    0 6px 18px rgba(0, 0, 0, 0.36),
+    0 0 0 1px rgba(0, 0, 0, 0.22);
   cursor: pointer;
-  font-size: 10px;
+  font-size: 11px;
+  font-weight: 700;
   line-height: 1.2;
   text-align: left;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.72);
   pointer-events: auto;
   --wails-draggable: no-drag;
 }
@@ -1559,8 +1563,8 @@ body.rf-recorder-window .select-menu-list {
 .ocr-position-text-button:hover,
 .ocr-position-text-button:focus-visible,
 .ocr-position-text-button.active {
-  border-color: rgba(17, 183, 167, 0.76);
-  background: rgba(13, 32, 34, 0.88);
+  border-color: rgba(38, 240, 217, 0.94);
+  background: rgba(7, 43, 45, 0.96);
   outline: none;
 }
 
@@ -3156,6 +3160,7 @@ body.rf-annotation-render-window {
 }
 
 .whiteboard-canvas {
+  position: relative;
   min-width: 0;
   min-height: 0;
   overflow: hidden;
@@ -3166,6 +3171,26 @@ body.rf-annotation-render-window {
   clip-path: inset(0 round var(--whiteboard-canvas-radius));
   contain: paint;
   --wails-draggable: no-drag;
+}
+
+.whiteboard-canvas > .ocr-position-text-layer.whiteboard,
+.annotation-overlay-canvas > .ocr-position-text-layer.annotation {
+  z-index: 5;
+  overflow: visible;
+  pointer-events: none;
+}
+
+.annotation-overlay-canvas > .ocr-position-text-layer.annotation {
+  z-index: 2;
+}
+
+.whiteboard-canvas > .ocr-position-text-layer.whiteboard .ocr-position-text-button,
+.annotation-overlay-canvas > .ocr-position-text-layer.annotation .ocr-position-text-button {
+  min-height: 22px;
+  padding: 3px 7px;
+  border-radius: 7px;
+  background: rgba(6, 10, 16, 0.94);
+  color: #ffffff;
 }
 
 .whiteboard-canvas .excalidraw {

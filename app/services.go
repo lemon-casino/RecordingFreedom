@@ -801,6 +801,9 @@ func defaultOpenFileLocation(path string) error {
 	if info.IsDir() {
 		return openPath(absoluteTarget)
 	}
+	if runtime.GOOS == "windows" {
+		return openPath(filepath.Dir(absoluteTarget))
+	}
 	var command string
 	var args []string
 	switch runtime.GOOS {

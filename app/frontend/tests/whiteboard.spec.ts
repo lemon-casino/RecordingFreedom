@@ -254,21 +254,18 @@ test('whiteboard selected image OCR shows positioned text on its exported image'
   }, readyEvent)
 
   await page.getByRole('button', {name: 'View board OCR result'}).click()
-  await expect.poll(async () => readWhiteboardOcrSceneState(page)).toMatchObject({
-    positionTextCount: 2,
-    firstPositionText: {
-      x: 32,
-      y: 18,
-      width: 128,
-      height: 36,
-      text: 'RecordingFreedom',
-    },
-  })
-
-  await page.getByRole('button', {name: 'View board OCR result'}).click()
+  const ocrLayer = page.locator('.whiteboard-canvas .ocr-position-text-layer.whiteboard')
+  await expect(ocrLayer.locator('.ocr-position-text-button')).toHaveCount(2)
+  const firstText = ocrLayer.locator('.ocr-position-text-button').filter({hasText: 'RecordingFreedom'}).first()
+  await expect(firstText).toBeVisible()
+  await firstText.click()
+  await expect(ocrLayer.locator('.ocr-position-text-button').filter({hasText: 'Text copied'})).toHaveCount(1)
   await expect.poll(async () => readWhiteboardOcrSceneState(page)).toMatchObject({
     positionTextCount: 0,
   })
+
+  await page.getByRole('button', {name: 'View board OCR result'}).click()
+  await expect(ocrLayer.locator('.ocr-position-text-button')).toHaveCount(0)
 })
 
 test('whiteboard selected image OCR positions real worker smoke evidence text on selected image', async ({page}) => {
@@ -338,15 +335,11 @@ test('whiteboard selected image OCR positions real worker smoke evidence text on
   }, readyEvent)
 
   await page.getByRole('button', {name: 'View board OCR result'}).click()
+  const ocrLayer = page.locator('.whiteboard-canvas .ocr-position-text-layer.whiteboard')
+  await expect(ocrLayer.locator('.ocr-position-text-button')).toHaveCount(2)
+  await expect(ocrLayer.locator('.ocr-position-text-button').first()).toContainText('RecordingFreedom')
   await expect.poll(async () => readWhiteboardOcrSceneState(page)).toMatchObject({
-    positionTextCount: 2,
-    firstPositionText: {
-      x: 11,
-      y: 21,
-      width: 228,
-      height: 50,
-      text: 'RecordingFreedom',
-    },
+    positionTextCount: 0,
   })
 })
 
