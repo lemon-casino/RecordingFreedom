@@ -451,7 +451,7 @@ test('whiteboard selected image OCR result panel renders real worker smoke evide
   await floatingPage.close()
 })
 
-test('whiteboard translated OCR text overlays the selected image positions after explicit provider configuration', async ({page}) => {
+test('whiteboard translated OCR text inserts as scene text after explicit provider configuration', async ({page}) => {
   await openWhiteboardWithSettings(page, 'en', 'mountain-green', undefined, selectedImageWhiteboardScene(), true)
 
   const selectedImageButton = page.getByRole('button', {name: 'Recognize selected image'})
