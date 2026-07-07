@@ -619,7 +619,17 @@ func (s *RecordingFreedomService) patchScreenshotOCRState(itemID string, status 
 		break
 	}
 	if !updated {
-		return fmt.Errorf("screenshot %q was not found", itemID)
+		item, itemErr := s.screenshotItemByID(itemID)
+		if itemErr != nil || strings.TrimSpace(item.Path) == "" {
+			return fmt.Errorf("screenshot %q was not found", itemID)
+		}
+		item.OCRStatus = normalizeScreenshotOCRStatus(status)
+		item.OCRResultID = strings.TrimSpace(resultID)
+		item.OCRModelID = strings.TrimSpace(modelID)
+		item.OCRLanguage = strings.TrimSpace(language)
+		item.OCRUpdatedAt = now
+		item.OCRError = strings.TrimSpace(message)
+		items = append([]ScreenshotItem{item}, items...)
 	}
 	if err := s.saveScreenshotHistory(items); err != nil {
 		return err

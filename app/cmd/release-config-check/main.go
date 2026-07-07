@@ -121,7 +121,7 @@ var releaseConfigChecks = []configCheck{
 			"floating OCR result panel renders real worker smoke evidence coordinates",
 			"screenshot history ready item opens OCR result floating panel with real worker evidence",
 			"screenshot history translates ready OCR text through the configured provider",
-			"pinned screenshot window restores OCR highlight and result floating panel after resize",
+			"pinned screenshot window restores OCR highlight without opening result panel after resize",
 			"pinned screenshot window renders real worker smoke evidence after resize",
 			"Translation provider is not configured",
 			"Translation copied",

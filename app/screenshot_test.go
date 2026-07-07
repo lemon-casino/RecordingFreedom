@@ -144,6 +144,69 @@ func TestOpenScreenshotDirectoryResolvesRelativeHistoryPath(t *testing.T) {
 	}
 }
 
+func TestOpenScreenshotDirectoryFallsBackToDiskFileWhenHistoryIsMissing(t *testing.T) {
+	service := NewRecordingFreedomService()
+	service.appData = appdata.NewService(t.TempDir())
+	dir := mustScreenshotDir(t, service)
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatalf("MkdirAll() error = %v", err)
+	}
+	id := "screenshot-20260707-035550.340613800"
+	shotPath := filepath.Join(dir, id+".png")
+	if err := writePNG(shotPath, image.NewRGBA(image.Rect(0, 0, 8, 6))); err != nil {
+		t.Fatalf("writePNG() error = %v", err)
+	}
+
+	var opened string
+	originalOpenFileLocation := openFileLocation
+	openFileLocation = func(path string) error {
+		opened = path
+		return nil
+	}
+	t.Cleanup(func() {
+		openFileLocation = originalOpenFileLocation
+	})
+
+	item, err := service.OpenScreenshotDirectory(ScreenshotImageRequest{ID: id})
+	if err != nil {
+		t.Fatalf("OpenScreenshotDirectory() error = %v", err)
+	}
+	if item.ID != id || item.Width != 8 || item.Height != 6 {
+		t.Fatalf("fallback item = %#v, want disk screenshot metadata", item)
+	}
+	if opened != shotPath {
+		t.Fatalf("opened path = %q, want %q", opened, shotPath)
+	}
+}
+
+func TestPatchScreenshotOCRStateRecoversDiskScreenshotWhenHistoryIsMissing(t *testing.T) {
+	service := NewRecordingFreedomService()
+	service.appData = appdata.NewService(t.TempDir())
+	dir := mustScreenshotDir(t, service)
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatalf("MkdirAll() error = %v", err)
+	}
+	id := "screenshot-20260707-035550.340613800"
+	shotPath := filepath.Join(dir, id+".png")
+	if err := writePNG(shotPath, image.NewRGBA(image.Rect(0, 0, 10, 7))); err != nil {
+		t.Fatalf("writePNG() error = %v", err)
+	}
+
+	if err := service.patchScreenshotOCRState(id, "ready", "ocr-result-recovered", "ppocrv6-medium-zh-en", "zh-en", ""); err != nil {
+		t.Fatalf("patchScreenshotOCRState() error = %v", err)
+	}
+	items, err := service.loadScreenshotHistory()
+	if err != nil {
+		t.Fatalf("loadScreenshotHistory() error = %v", err)
+	}
+	if len(items) != 1 {
+		t.Fatalf("history len = %d, want 1", len(items))
+	}
+	if items[0].ID != id || items[0].Path != shotPath || items[0].OCRStatus != "ready" || items[0].OCRResultID != "ocr-result-recovered" {
+		t.Fatalf("recovered history item = %#v", items[0])
+	}
+}
+
 func TestPatchScreenshotItemDoesNotPersistPinnedHistoryState(t *testing.T) {
 	service := NewRecordingFreedomService()
 	service.appData = appdata.NewService(t.TempDir())

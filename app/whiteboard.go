@@ -82,6 +82,7 @@ func (s *RecordingFreedomService) ShowWhiteboardWindow() error {
 	if s.whiteboardWindow == nil {
 		return errors.New("whiteboard window is not configured")
 	}
+	_ = s.HideFloatingPanel(0)
 	s.whiteboardMu.Lock()
 	s.whiteboardVisible = true
 	s.whiteboardMu.Unlock()

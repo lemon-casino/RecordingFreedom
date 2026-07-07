@@ -566,6 +566,17 @@ test('screenshot history ready item opens OCR result floating panel with real wo
     }
   })).toEqual({width: 560, height: 620})
   await floatingPage.close()
+
+  await row.getByRole('button', {name: 'Annotate in whiteboard'}).click()
+  await expect.poll(async () => page.evaluate(() => {
+    const panelState = (window as Window & {
+      __RF_FLOATING_PANEL__?: {visible?: boolean; kind?: string}
+    }).__RF_FLOATING_PANEL__
+    return {
+      visible: panelState?.visible === true,
+      kind: panelState?.kind ?? '',
+    }
+  })).toEqual({visible: false, kind: 'ocr-result'})
 })
 
 test('screenshot history translates ready OCR text through the configured provider', async ({page}) => {
@@ -622,7 +633,7 @@ test('screenshot history translates ready OCR text through the configured provid
   await floatingPage.close()
 })
 
-test('pinned screenshot window restores OCR highlight and result floating panel after resize', async ({page}) => {
+test('pinned screenshot window restores OCR highlight without opening result panel after resize', async ({page}) => {
   await openRecorderShell(page, {
     ocrTranslation: true,
     screenshotHistory: [{
@@ -695,6 +706,7 @@ test('pinned screenshot window restores OCR highlight and result floating panel 
   await expect(overlay.locator('polygon').nth(1)).toHaveClass(/active/)
 
   await pinPage.getByRole('button', {name: 'View OCR result'}).first().click()
+  await expect(pinPage.locator('.screenshot-pin-canvas .ocr-position-text-button')).toHaveCount(2)
   await expect.poll(async () => pinPage.evaluate(() => {
     const panel = (window as Window & {
       __RF_FLOATING_PANEL__?: {visible?: boolean; kind?: string; contextId?: string}
@@ -705,9 +717,9 @@ test('pinned screenshot window restores OCR highlight and result floating panel 
       contextId: panel?.contextId ?? '',
     }
   })).toEqual({
-    visible: true,
-    kind: 'ocr-result',
-    contextId: 'ocr-result-pin-ready-shot',
+    visible: false,
+    kind: '',
+    contextId: '',
   })
   await pinPage.close()
 })

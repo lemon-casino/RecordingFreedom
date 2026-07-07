@@ -427,6 +427,7 @@ func (s *RecordingFreedomService) showScreenshotAnnotationOverlay(canvasBounds a
 	if canvasBounds.Width <= 0 || canvasBounds.Height <= 0 {
 		return AnnotationOverlayState{}, errors.New("screenshot annotation bounds are empty")
 	}
+	_ = s.HideFloatingPanel(0)
 	windowBounds := annotationOverlayWindowBounds(canvasBounds)
 	state := AnnotationOverlayState{
 		Mode:         annotationOverlayModeScreenshot,
@@ -1202,7 +1203,66 @@ func (s *RecordingFreedomService) screenshotItemByID(id string) (ScreenshotItem,
 			return item, nil
 		}
 	}
+	if item, ok := s.screenshotItemFromActiveContext(id); ok {
+		return item, nil
+	}
+	if item, ok := s.screenshotItemFromDiskID(id); ok {
+		return item, nil
+	}
 	return ScreenshotItem{}, fmt.Errorf("screenshot %q was not found", id)
+}
+
+func (s *RecordingFreedomService) screenshotItemFromActiveContext(id string) (ScreenshotItem, bool) {
+	s.screenshotMu.Lock()
+	candidates := []ScreenshotItem{
+		s.screenshotAnnotation.Item,
+		s.whiteboardScreenshot.Item,
+		s.screenshotPinState.Item,
+	}
+	s.screenshotMu.Unlock()
+	for _, item := range candidates {
+		if strings.TrimSpace(item.ID) == id && strings.TrimSpace(item.Path) != "" {
+			return item, true
+		}
+	}
+	return ScreenshotItem{}, false
+}
+
+func (s *RecordingFreedomService) screenshotItemFromDiskID(id string) (ScreenshotItem, bool) {
+	if id == "." || id == ".." || strings.ContainsAny(id, `/\`) {
+		return ScreenshotItem{}, false
+	}
+	dir, err := s.screenshotDir()
+	if err != nil {
+		return ScreenshotItem{}, false
+	}
+	path := filepath.Join(dir, id+".png")
+	info, err := os.Stat(path)
+	if err != nil || info.IsDir() {
+		return ScreenshotItem{}, false
+	}
+	width, height := 0, 0
+	if file, openErr := os.Open(path); openErr == nil {
+		if config, _, decodeErr := image.DecodeConfig(file); decodeErr == nil {
+			width = config.Width
+			height = config.Height
+		}
+		_ = file.Close()
+	}
+	thumbPath := filepath.Join(dir, "thumbnails", id+".png")
+	if _, err := os.Stat(thumbPath); err != nil {
+		thumbPath = ""
+	}
+	return ScreenshotItem{
+		ID:            id,
+		Path:          path,
+		ThumbnailPath: thumbPath,
+		CreatedAt:     info.ModTime().UTC().Format(time.RFC3339Nano),
+		Width:         width,
+		Height:        height,
+		Mode:          "region",
+		OCRStatus:     "none",
+	}, true
 }
 
 func (s *RecordingFreedomService) loadScreenshotHistory() ([]ScreenshotItem, error) {

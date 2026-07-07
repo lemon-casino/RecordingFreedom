@@ -1482,7 +1482,7 @@ func workflowFixture(name string) string {
 		builder.WriteString("floating OCR result panel renders real worker smoke evidence coordinates\n")
 		builder.WriteString("screenshot history ready item opens OCR result floating panel with real worker evidence\n")
 		builder.WriteString("screenshot history translates ready OCR text through the configured provider\n")
-		builder.WriteString("pinned screenshot window restores OCR highlight and result floating panel after resize\n")
+		builder.WriteString("pinned screenshot window restores OCR highlight without opening result panel after resize\n")
 		builder.WriteString("pinned screenshot window renders real worker smoke evidence after resize\n")
 		builder.WriteString("Translation provider is not configured\n")
 		builder.WriteString("Translation copied\n")
