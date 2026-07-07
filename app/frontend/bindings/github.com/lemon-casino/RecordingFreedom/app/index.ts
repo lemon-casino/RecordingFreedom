@@ -67,6 +67,7 @@ export type {
     ScreenshotItemPatchRequest,
     ScreenshotPinEvent,
     ScreenshotPinState,
+    ScreenshotPinnedItem,
     ScreenshotWhiteboardContext,
     SettingsPreferencesPatchRequest,
     ShortcutSettingsPatchRequest,

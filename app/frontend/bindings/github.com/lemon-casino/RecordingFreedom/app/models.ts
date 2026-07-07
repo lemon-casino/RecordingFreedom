@@ -501,7 +501,7 @@ export interface ScreenshotPinEvent {
     "item"?: ScreenshotItem;
     "dataUrl"?: string;
     "fixed": boolean;
-    "pins"?: ScreenshotPinnedItem[];
+    "pins"?: ScreenshotPinnedItem[] | null;
 }
 
 export interface ScreenshotPinState {
@@ -509,7 +509,7 @@ export interface ScreenshotPinState {
     "item"?: ScreenshotItem;
     "dataUrl"?: string;
     "fixed": boolean;
-    "pins"?: ScreenshotPinnedItem[];
+    "pins"?: ScreenshotPinnedItem[] | null;
 }
 
 export interface ScreenshotPinnedItem {
