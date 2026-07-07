@@ -57,7 +57,7 @@ test('screenshot tools hide window and focused-window capture modes', async ({pa
   await expect(page.getByRole('button', {name: /Focused window/})).toHaveCount(0)
 })
 
-test('screenshot history delete requires left swipe confirmation', async ({page}) => {
+test('screenshot history delete requires right swipe confirmation', async ({page}) => {
   await openRecorderShell(page, {
     screenshotHistory: [
       {
@@ -165,6 +165,8 @@ test('screenshot history exposes folder action and keeps delete behind swipe con
     visible: true,
     itemId: 'history-shot',
   })
+  await row.locator('.screenshot-history-main').hover()
+  await expect(row.locator('.screenshot-history-thumbnail img')).toHaveAttribute('src', /^data:image\//)
   await page.getByRole('button', {name: 'Open containing folder'}).click()
   await expect.poll(async () => page.evaluate(() => (window as Window & {
     __RF_LAST_OPEN_SCREENSHOT_DIRECTORY__?: {id?: string; path?: string}
@@ -198,23 +200,37 @@ test('screenshot history does not show stale pinned state before the user pins a
   await expect(page.getByText('Pinned')).toHaveCount(0)
 })
 
-test('screenshot history pin action opens a real pinned image window state', async ({page}) => {
+test('screenshot history pin action keeps multiple pinned images visible', async ({page}) => {
   await openRecorderShell(page, {
-    screenshotHistory: [{
-      id: 'pin-shot',
-      path: 'browser-preview/data/screenshots/pin-shot.png',
-      thumbnailPath: 'browser-preview/data/screenshots/thumbnails/pin-shot.png',
-      createdAt: '2026-07-04T12:00:00Z',
-      width: 420,
-      height: 260,
-      mode: 'region',
-      pinned: false,
-      fixed: false,
-    }],
+    screenshotHistory: [
+      {
+        id: 'pin-shot',
+        path: 'browser-preview/data/screenshots/pin-shot.png',
+        thumbnailPath: 'browser-preview/data/screenshots/thumbnails/pin-shot.png',
+        createdAt: '2026-07-04T12:00:00Z',
+        width: 420,
+        height: 260,
+        mode: 'region',
+        pinned: false,
+        fixed: false,
+      },
+      {
+        id: 'pin-shot-2',
+        path: 'browser-preview/data/screenshots/pin-shot-2.png',
+        thumbnailPath: 'browser-preview/data/screenshots/thumbnails/pin-shot-2.png',
+        createdAt: '2026-07-04T12:01:00Z',
+        width: 360,
+        height: 240,
+        mode: 'region',
+        pinned: false,
+        fixed: false,
+      },
+    ],
   })
 
   await page.getByRole('button', {name: 'Screenshot / board'}).click()
-  await page.getByRole('button', {name: 'Pin image'}).click()
+  await page.locator('.screenshot-history-row').first().getByRole('button', {name: 'Pin image'}).click()
+  await page.locator('.screenshot-history-row').nth(1).getByRole('button', {name: 'Pin image'}).click()
 
   await expect.poll(async () => page.evaluate((key) => {
     const state = JSON.parse(window.localStorage.getItem(key) || '{}')
@@ -222,23 +238,26 @@ test('screenshot history pin action opens a real pinned image window state', asy
       visible: state.visible === true,
       itemId: state.item?.id ?? '',
       hasImage: typeof state.dataUrl === 'string' && state.dataUrl.startsWith('data:image/'),
+      pinIds: (state.pins ?? []).map((pin: {item?: {id?: string}}) => pin.item?.id),
     }
   }, browserScreenshotPinStateKey)).toEqual({
     visible: true,
-    itemId: 'pin-shot',
+    itemId: 'pin-shot-2',
     hasImage: true,
+    pinIds: ['pin-shot', 'pin-shot-2'],
   })
 
   const pinPage = await page.context().newPage()
   await pinPage.goto('/#/screenshot-pin')
   await expect(pinPage.locator('.screenshot-pin-shell.empty')).toHaveCount(0)
-  await expect(pinPage.locator('.screenshot-pin-shell img')).toHaveAttribute('src', /data:image\//)
+  await expect(pinPage.locator('.screenshot-pin-stack button')).toHaveCount(2)
+  await expect(pinPage.locator('.screenshot-pin-canvas img')).toHaveAttribute('src', /data:image\//)
   await pinPage.getByRole('button', {name: 'Fix'}).click()
   await expect(pinPage.locator('.screenshot-pin-shell')).toHaveClass(/fixed/)
   await expect(pinPage.getByRole('button', {name: 'Unfix'})).toBeVisible()
   await expect.poll(async () => pinPage.evaluate((key) => {
     const history = JSON.parse(window.localStorage.getItem(key) || '[]')
-    return history.find((item: {id?: string; fixed?: boolean}) => item.id === 'pin-shot')?.fixed === true
+    return history.find((item: {id?: string; fixed?: boolean}) => item.id === 'pin-shot-2')?.fixed === true
   }, browserScreenshotHistoryKey)).toBe(true)
   await pinPage.close()
 })
@@ -421,7 +440,7 @@ test('floating OCR result panel renders real worker smoke evidence coordinates',
   )
 })
 
-test('screenshot history ready item opens OCR result floating panel with real worker evidence', async ({page}) => {
+test('screenshot history ready item reuses pinned OCR text layer with real worker evidence', async ({page}) => {
   const resultId = 'ocr-history-smoke-region-result'
   const imageDataUrl = screenshotSvgDataUrl(900, 280, 'RecordingFreedom', '文字识别')
   const smokeResult = {
@@ -511,29 +530,24 @@ test('screenshot history ready item opens OCR result floating panel with real wo
   await page.getByRole('button', {name: 'Screenshot / board'}).click()
   const row = page.locator('.screenshot-history-row').filter({hasText: 'Recognized'})
   await expect(row).toContainText('Recognized')
-  await row.getByRole('button', {name: 'View OCR result'}).click()
+  await expect(row.getByRole('button', {name: 'View OCR result'})).toHaveCount(0)
+  await row.locator('.screenshot-history-main').click()
 
-  await expect.poll(async () => page.evaluate(() => {
-    const panel = (window as Window & {
-      __RF_FLOATING_PANEL__?: {visible?: boolean; kind?: string; contextId?: string; bounds?: {width?: number; height?: number}}
-    }).__RF_FLOATING_PANEL__
+  await expect.poll(async () => page.evaluate((key) => {
+    const state = JSON.parse(window.localStorage.getItem(key) || '{}')
     return {
-      visible: panel?.visible === true,
-      kind: panel?.kind ?? '',
-      contextId: panel?.contextId ?? '',
-      width: panel?.bounds?.width ?? 0,
-      height: panel?.bounds?.height ?? 0,
+      visible: state.visible === true,
+      itemId: state.item?.id ?? '',
+      ocrStatus: state.item?.ocrStatus ?? '',
     }
-  })).toEqual({
+  }, browserScreenshotPinStateKey)).toEqual({
     visible: true,
-    kind: 'ocr-result',
-    contextId: resultId,
-    width: 380,
-    height: 420,
+    itemId: 'screenshot-history-smoke-region',
+    ocrStatus: 'ready',
   })
 
-  const floatingPage = await page.context().newPage()
-  await floatingPage.addInitScript(({settingsKey, screenshotHistoryKey, settings, history, result, image, panel}) => {
+  const pinPage = await page.context().newPage()
+  await pinPage.addInitScript(({settingsKey, screenshotHistoryKey, settings, history, result, image}) => {
     window.localStorage.setItem(settingsKey, JSON.stringify(settings))
     window.localStorage.setItem(screenshotHistoryKey, JSON.stringify(history))
     ;(window as Window & {__RF_OCR_RESULTS__?: Record<string, unknown>}).__RF_OCR_RESULTS__ = {
@@ -547,25 +561,15 @@ test('screenshot history ready item opens OCR result floating panel with real wo
         bytes: image.length,
       },
     }
-    ;(window as Window & {__RF_FLOATING_PANEL__?: unknown}).__RF_FLOATING_PANEL__ = panel
-  }, {...setup, panel: await page.evaluate(() => (window as Window & {__RF_FLOATING_PANEL__?: unknown}).__RF_FLOATING_PANEL__)})
-  await floatingPage.goto('/#/floating-panel')
-  const panel = floatingPage.locator('.floating-panel-shell.panel-ocr-result')
-  await expect(panel).toBeVisible()
-  await expect(panel.locator('.ocr-result-summary')).toContainText('ppocrv5-mobile-zh-en')
-  await expect(panel.locator('.ocr-result-text')).toContainText('RecordingFreedom')
-  await expect(panel.locator('.ocr-preview-frame svg')).toHaveAttribute('viewBox', '0 0 900 280')
-  await expect(panel.locator('.ocr-preview-frame polygon')).toHaveCount(2)
-  await panel.getByRole('button', {name: 'Expand result'}).click()
-  await expect(panel.locator('.ocr-result-panel')).toHaveClass(/expanded/)
-  await expect.poll(async () => floatingPage.evaluate(() => {
-    const panelState = (window as Window & {__RF_FLOATING_PANEL__?: {bounds?: {width?: number; height?: number}}}).__RF_FLOATING_PANEL__
-    return {
-      width: panelState?.bounds?.width ?? 0,
-      height: panelState?.bounds?.height ?? 0,
-    }
-  })).toEqual({width: 560, height: 620})
-  await floatingPage.close()
+  }, setup)
+  await pinPage.goto('/#/screenshot-pin')
+  await expect(pinPage.locator('.screenshot-pin-title')).toContainText('2 text blocks')
+  await pinPage.getByRole('button', {name: 'View OCR result'}).nth(1).click()
+  await expect(pinPage.locator('.screenshot-pin-canvas svg')).toHaveAttribute('viewBox', '0 0 900 280')
+  await expect(pinPage.locator('.screenshot-pin-canvas polygon')).toHaveCount(2)
+  await expect(pinPage.locator('.screenshot-pin-canvas .ocr-position-text-button')).toHaveCount(2)
+  await expect(pinPage.locator('.screenshot-pin-canvas .ocr-position-text-button').first()).toContainText('RecordingFreedom')
+  await pinPage.close()
 
   await row.getByRole('button', {name: 'Annotate in whiteboard'}).click()
   await expect.poll(async () => page.evaluate(() => {
@@ -576,7 +580,7 @@ test('screenshot history ready item opens OCR result floating panel with real wo
       visible: panelState?.visible === true,
       kind: panelState?.kind ?? '',
     }
-  })).toEqual({visible: false, kind: 'ocr-result'})
+  })).toEqual({visible: false, kind: ''})
 })
 
 test('screenshot history translates ready OCR text through the configured provider', async ({page}) => {
@@ -1701,9 +1705,9 @@ async function revealScreenshotDelete(row: Locator, page: Page) {
   expect(box).not.toBeNull()
   if (!box) return
   const y = box.y + box.height / 2
-  await page.mouse.move(box.x + box.width * 0.48, y)
+  await page.mouse.move(box.x + box.width * 0.24, y)
   await page.mouse.down()
-  await page.mouse.move(box.x + 14, y, {steps: 8})
+  await page.mouse.move(box.x + box.width * 0.72, y, {steps: 8})
   await page.mouse.up()
 }
 

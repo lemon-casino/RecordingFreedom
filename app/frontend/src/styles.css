@@ -1230,6 +1230,12 @@ body.rf-recorder-window .select-menu-list {
   z-index: 5;
 }
 
+.screenshot-history-row:has(.screenshot-history-main:hover),
+.screenshot-history-row:has(.screenshot-history-main:focus-visible) {
+  z-index: 20;
+  overflow: visible;
+}
+
 .screenshot-history-slide {
   position: relative;
   z-index: 2;
@@ -1245,12 +1251,12 @@ body.rf-recorder-window .select-menu-list {
 }
 
 .screenshot-history-row.delete-open .screenshot-history-slide {
-  box-shadow: 10px 0 22px rgba(0, 0, 0, 0.22);
+  box-shadow: -10px 0 22px rgba(0, 0, 0, 0.22);
 }
 
 .screenshot-history-delete-actions {
   position: absolute;
-  inset: 4px 4px 4px auto;
+  inset: 4px auto 4px 4px;
   z-index: 4;
   display: grid;
   grid-template-columns: 54px 58px;
@@ -1306,6 +1312,7 @@ body.rf-recorder-window .select-menu-list {
 }
 
 .screenshot-history-main {
+  position: relative;
   display: flex;
   align-items: center;
   gap: 9px;
@@ -1318,13 +1325,63 @@ body.rf-recorder-window .select-menu-list {
   background: transparent;
   color: var(--text);
   text-align: left;
+  cursor: pointer;
+}
+
+.screenshot-history-icon {
+  position: relative;
+  flex: 0 0 auto;
+  display: inline-grid;
+  width: 22px;
+  height: 22px;
+  place-items: center;
+}
+
+.screenshot-history-thumbnail {
+  position: absolute;
+  left: 0;
+  bottom: calc(100% + 9px);
+  z-index: 30;
+  display: grid;
+  width: 148px;
+  height: 94px;
+  place-items: center;
+  overflow: hidden;
+  border: 1px solid var(--line-strong);
+  border-radius: 14px;
+  background: var(--panel-strong);
+  box-shadow: var(--shadow-panel);
+  color: var(--muted);
+  font-size: 10px;
+  line-height: 1.2;
+  opacity: 0;
+  pointer-events: none;
+  transform: translateY(6px) scale(0.96);
+  transition: opacity 120ms ease, transform 120ms ease;
+}
+
+.screenshot-history-thumbnail img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.screenshot-history-thumbnail > span {
+  padding: 8px;
+  text-align: center;
+}
+
+.screenshot-history-main:hover .screenshot-history-thumbnail,
+.screenshot-history-main:focus-visible .screenshot-history-thumbnail {
+  opacity: 1;
+  transform: translateY(0) scale(1);
 }
 
 .screenshot-history-main:hover {
   background: rgba(255, 255, 255, 0.07);
 }
 
-.screenshot-history-main span {
+.screenshot-history-main > span:not(.screenshot-history-icon) {
   display: grid;
   min-width: 0;
   gap: 1px;
@@ -3943,6 +4000,66 @@ body.rf-annotation-overlay-window {
   color: var(--muted);
 }
 
+.screenshot-pin-content {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 8px;
+  min-width: 0;
+  min-height: 0;
+}
+
+.screenshot-pin-shell.multi .screenshot-pin-content {
+  grid-template-columns: 148px minmax(0, 1fr);
+}
+
+.screenshot-pin-stack {
+  display: grid;
+  align-content: start;
+  gap: 8px;
+  min-width: 0;
+  min-height: 0;
+  overflow: auto;
+  padding: 2px;
+  --wails-draggable: no-drag;
+}
+
+.screenshot-pin-stack button {
+  display: grid;
+  gap: 5px;
+  min-width: 0;
+  padding: 5px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: color-mix(in srgb, var(--panel) 82%, rgba(255, 255, 255, 0.05));
+  color: var(--muted);
+  text-align: left;
+  cursor: pointer;
+  --wails-draggable: no-drag;
+}
+
+.screenshot-pin-stack button:hover,
+.screenshot-pin-stack button.selected {
+  border-color: var(--accent-border);
+  background: var(--accent-option);
+  color: var(--accent-readable);
+}
+
+.screenshot-pin-stack img,
+.screenshot-pin-stack svg {
+  width: 100%;
+  aspect-ratio: 16 / 10;
+  border-radius: 10px;
+  background: rgba(0, 0, 0, 0.18);
+  object-fit: cover;
+}
+
+.screenshot-pin-stack span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 10.5px;
+}
+
 .screenshot-pin-canvas {
   position: relative;
   display: grid;
@@ -3953,6 +4070,10 @@ body.rf-annotation-overlay-window {
   border-radius: 18px;
   background: rgba(0, 0, 0, 0.28);
   box-shadow: var(--shadow-panel);
+}
+
+.screenshot-pin-shell.multi .screenshot-pin-canvas {
+  min-height: 240px;
 }
 
 .screenshot-pin-canvas img,

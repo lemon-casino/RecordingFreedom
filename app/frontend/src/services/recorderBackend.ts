@@ -216,6 +216,13 @@ export type ScreenshotPinState = {
   item?: ScreenshotItem
   dataUrl?: string
   fixed: boolean
+  pins?: ScreenshotPinnedItem[]
+}
+
+export type ScreenshotPinnedItem = {
+  item: ScreenshotItem
+  dataUrl?: string
+  fixed: boolean
 }
 
 export type ScreenshotWhiteboardContext = {
@@ -2721,13 +2728,9 @@ export async function patchScreenshotItem(id: string, patch: {pinned?: boolean; 
       : item)
     saveBrowserScreenshotHistory(next)
     const pinned = fromBrowserScreenshotPinState(safeJSON(window.localStorage?.getItem(browserScreenshotPinStateKey)))
-    if (pinned.item?.id === id) {
+    if (screenshotPinStateContains(pinned, id)) {
       const updated = next.find((item) => item.id === id)
-      const state = {
-        ...pinned,
-        item: updated,
-        fixed: updated?.fixed === true,
-      }
+      const state = updated ? updateBrowserScreenshotPinStateItem(pinned, updated) : removeBrowserScreenshotPinStateItem(pinned, id)
       window.localStorage?.setItem(browserScreenshotPinStateKey, JSON.stringify(state))
       window.dispatchEvent(new CustomEvent(browserScreenshotPinEvent, {detail: state}))
     }
@@ -2745,8 +2748,8 @@ export async function deleteScreenshotItem(id: string): Promise<ScreenshotItem[]
     const next = loadBrowserScreenshotHistory().filter((item) => item.id !== id)
     saveBrowserScreenshotHistory(next)
     const pinned = fromBrowserScreenshotPinState(safeJSON(window.localStorage?.getItem(browserScreenshotPinStateKey)))
-    if (pinned.item?.id === id) {
-      const state = {visible: false, fixed: false}
+    if (screenshotPinStateContains(pinned, id)) {
+      const state = removeBrowserScreenshotPinStateItem(pinned, id)
       window.localStorage?.setItem(browserScreenshotPinStateKey, JSON.stringify(state))
       window.dispatchEvent(new CustomEvent(browserScreenshotPinEvent, {detail: state}))
     }
@@ -2761,12 +2764,12 @@ export async function showPinnedScreenshot(id: string): Promise<ScreenshotPinSta
     if (isWailsDesktopRuntime()) throw error
     console.info('Using browser screenshot pin fallback:', error)
     const item = loadBrowserScreenshotHistory().find((entry) => entry.id === id)
-    const state = fromBrowserScreenshotPinState({
-      visible: Boolean(item),
+    const current = fromBrowserScreenshotPinState(safeJSON(window.localStorage?.getItem(browserScreenshotPinStateKey)))
+    const state = item ? appendBrowserScreenshotPinStateItem(current, {
       item,
       dataUrl: browserScreenshotDataUrl(item),
-      fixed: item?.fixed === true,
-    })
+      fixed: item.fixed === true,
+    }) : fromBrowserScreenshotPinState({visible: false, fixed: false})
     window.localStorage?.setItem(browserScreenshotPinStateKey, JSON.stringify(state))
     window.dispatchEvent(new CustomEvent(browserScreenshotPinEvent, {detail: state}))
     return state
@@ -3877,11 +3880,23 @@ function fromBoundScreenshotImage(result: BoundScreenshotImageResult): Screensho
 }
 
 function fromBoundScreenshotPinState(state: Partial<BoundScreenshotPinState> | undefined): ScreenshotPinState {
-  return {
+  return normalizeScreenshotPinState({
     visible: state?.visible === true,
     item: state?.item ? fromBoundScreenshotItem(state.item) : undefined,
     dataUrl: state?.dataUrl,
     fixed: state?.fixed === true,
+    pins: Array.isArray(state?.pins) ? state.pins.map(fromBoundScreenshotPinnedItem).filter((pin): pin is ScreenshotPinnedItem => Boolean(pin)) : undefined,
+  })
+}
+
+function fromBoundScreenshotPinnedItem(pin: unknown): ScreenshotPinnedItem | null {
+  const record = pin && typeof pin === 'object' ? pin as {item?: BoundScreenshotItem; dataUrl?: string; fixed?: boolean} : {}
+  const item = record.item ? fromBoundScreenshotItem(record.item) : null
+  if (!item) return null
+  return {
+    item,
+    dataUrl: typeof record.dataUrl === 'string' ? record.dataUrl : browserScreenshotDataUrl(item),
+    fixed: record.fixed === true || item.fixed === true,
   }
 }
 
@@ -4962,12 +4977,85 @@ function browserRectContainsPoint(rect: RegionSelectionSession['bounds'], point:
 function fromBrowserScreenshotPinState(value: unknown): ScreenshotPinState {
   const record = value && typeof value === 'object' ? value as Partial<ScreenshotPinState> : {}
   const item = fromBrowserScreenshotItem(record.item)
-  return {
+  const pins = Array.isArray(record.pins)
+    ? record.pins.map(fromBrowserScreenshotPinnedItem).filter((pin): pin is ScreenshotPinnedItem => Boolean(pin))
+    : undefined
+  return normalizeScreenshotPinState({
     visible: record.visible === true,
     item: item ?? undefined,
     dataUrl: typeof record.dataUrl === 'string' ? record.dataUrl : browserScreenshotDataUrl(item),
     fixed: record.fixed === true,
+    pins,
+  })
+}
+
+function fromBrowserScreenshotPinnedItem(value: unknown): ScreenshotPinnedItem | null {
+  const record = value && typeof value === 'object' ? value as Partial<ScreenshotPinnedItem> : {}
+  const item = fromBrowserScreenshotItem(record.item)
+  if (!item) return null
+  return {
+    item,
+    dataUrl: typeof record.dataUrl === 'string' ? record.dataUrl : browserScreenshotDataUrl(item),
+    fixed: record.fixed === true || item.fixed === true,
   }
+}
+
+function normalizeScreenshotPinState(state: ScreenshotPinState): ScreenshotPinState {
+  const pins = normalizeScreenshotPins(state.pins ?? (state.item ? [{
+    item: state.item,
+    dataUrl: state.dataUrl,
+    fixed: state.fixed,
+  }] : []))
+  if (pins.length === 0) {
+    return {visible: false, fixed: false, pins: []}
+  }
+  const active = pins[pins.length - 1]
+  return {
+    visible: state.visible === true,
+    item: active.item,
+    dataUrl: active.dataUrl,
+    fixed: active.fixed,
+    pins,
+  }
+}
+
+function normalizeScreenshotPins(pins: ScreenshotPinnedItem[]) {
+  const next: ScreenshotPinnedItem[] = []
+  const seen = new Set<string>()
+  for (const pin of pins) {
+    const item = pin.item
+    if (!item?.id || seen.has(item.id)) continue
+    seen.add(item.id)
+    next.push({
+      item,
+      dataUrl: pin.dataUrl || browserScreenshotDataUrl(item),
+      fixed: pin.fixed === true || item.fixed === true,
+    })
+  }
+  return next
+}
+
+function appendBrowserScreenshotPinStateItem(state: ScreenshotPinState, pin: ScreenshotPinnedItem): ScreenshotPinState {
+  const pins = normalizeScreenshotPins([...(state.pins ?? []), pin])
+    .filter((entry) => entry.item.id !== pin.item.id)
+  pins.push(pin)
+  return normalizeScreenshotPinState({visible: true, fixed: pin.fixed, pins})
+}
+
+function updateBrowserScreenshotPinStateItem(state: ScreenshotPinState, item: ScreenshotItem): ScreenshotPinState {
+  const pins = normalizeScreenshotPins(state.pins ?? []).map((pin) => pin.item.id === item.id
+    ? {...pin, item, fixed: item.fixed === true}
+    : pin)
+  return normalizeScreenshotPinState({...state, visible: pins.length > 0, pins})
+}
+
+function removeBrowserScreenshotPinStateItem(state: ScreenshotPinState, id: string): ScreenshotPinState {
+  const pins = normalizeScreenshotPins(state.pins ?? []).filter((pin) => pin.item.id !== id)
+  return normalizeScreenshotPinState({...state, visible: pins.length > 0, pins})
+}
+
+function screenshotPinStateContains(state: ScreenshotPinState, id: string) {
+  return state.item?.id === id || (state.pins ?? []).some((pin) => pin.item.id === id)
 }
 
 function fromBrowserScreenshotWhiteboardContext(value: unknown): ScreenshotWhiteboardContext {

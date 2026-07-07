@@ -75,7 +75,7 @@ import {
   fallbackCapabilities,
   fallbackStorageStatus,
 } from './services/mockBackend'
-import {assistRegionSelection, beginScreenshotAnnotationOverlay, cancelOcrModelDownload, cancelRegionSelector, cancelSelectedRegion, captureScreenshot, completeAnnotationRegionSelection, completeRegionSelection, completeScreenshotRegionSelection, completeScrollingScreenshotSelection, completeFloatingSelect, deleteScreenshotItem, exportRecordingPackage, getFloatingPanelState, getFloatingSelectState, getOcrModelDownloads, getOcrStatus, getSourceState, hideFloatingPanel, hideFloatingSelect, hidePinnedScreenshot, hidePipOverlay, hideRegionFrame, hideScreenIndicator, hideSettingsWindow, installOcrModelPackage, isWailsDesktopRuntime, listScreenshots, loadBootstrap, loadPinnedScreenshot, loadSettings, logClientEvent, openOcrResult, openRecordingPackage, openScreenshotDirectory, openScreenshotInWhiteboard, openVideoDirectory, patchAudioState, patchCameraState, patchScreenshotItem, patchSettingsPreferences, patchShortcutSettings, patchSourceState, patchWhiteboardSettings, pauseRecording, preflightAudioOnlyRecording, preflightRecording, previewExportRecordingPackage, queueRecognizePinnedScreenshot, queueRecognizeScreenshot, quitApplication, readAnnotationPreviewImage, readPipPreviewImage, readOcrResultImage, recoverRecordingPackage, refreshOcrModelCatalog, removeOcrModel, restoreCapsuleWindow, resumeRecording, saveSettings, setActiveOcrModel, setCapsuleWindowExpanded, setCapsuleWindowHitRegions, setDataRoot, setFloatingPanelHitRegions, setFloatingSelectHitRegions, showAnnotationOverlay, showAnnotationRegionSelector, showFloatingPanel, showFloatingSelect, showPinnedScreenshot, showPipOverlay, showRegionSelector, showScreenIndicator, showScreenshotRegionSelector, showWhiteboardWindow, snapCapsuleWindowToEdge, startAudioOnlyRecording, startMicrophoneLevelMonitor, startOcrModelDownload, startRecording, startScrollingScreenshot, stopMicrophoneLevelMonitor, stopRecording, subscribeAudioLevel, subscribeAudioState, subscribeCapsuleDockSide, subscribeCapsuleWindowMoveEnded, subscribeFloatingPanelChanged, subscribeFloatingSelectChanged, subscribeFloatingSelectChosen, subscribeOcrJobEvents, subscribeOcrModelDownloadEvents, subscribeRecordingStatus, subscribeRegionSelection, subscribeScreenshotCaptured, subscribeScreenshotHistoryChanged, subscribeScreenshotPin, subscribeSettingsChanged, subscribeShortcutTriggered, subscribeSourceStateChanged, subscribeWhiteboardVisibility, translateOcr, updatePipOverlay, updateScreenshotRegionSelection, updateSelectedRegion, type AudioControlState, type AudioLevelUpdate, type AudioStatePatch, type CapsuleWindowDockSide, type CapsuleWindowExpandDirection, type CapsuleWindowHitRegion, type FloatingPanelKind, type FloatingPanelState, type FloatingSelectOption, type FloatingSelectState, type OcrBlock, type OcrModelDownloadSnapshot, type OcrModelInfo, type OcrResult, type OcrStatus, type OcrTranslationResult, type PIPOverlayCamera, type PIPOverlayState, type RecordingExportPlan, type RecordingRecovery, type RecordingStatusUpdate, type RegionSelectionSession, type RegionSmartCandidate, type ScreenshotPinState, type SettingsPreferencesPatch, type ShortcutSettingsPatch, type SourceControlState, type WhiteboardSettingsPatch, type WhiteboardVisibilityUpdate} from './services/recorderBackend'
+import {assistRegionSelection, beginScreenshotAnnotationOverlay, cancelOcrModelDownload, cancelRegionSelector, cancelSelectedRegion, captureScreenshot, completeAnnotationRegionSelection, completeRegionSelection, completeScreenshotRegionSelection, completeScrollingScreenshotSelection, completeFloatingSelect, deleteScreenshotItem, exportRecordingPackage, getFloatingPanelState, getFloatingSelectState, getOcrModelDownloads, getOcrStatus, getSourceState, hideFloatingPanel, hideFloatingSelect, hidePinnedScreenshot, hidePipOverlay, hideRegionFrame, hideScreenIndicator, hideSettingsWindow, installOcrModelPackage, isWailsDesktopRuntime, listScreenshots, loadBootstrap, loadPinnedScreenshot, loadSettings, logClientEvent, openOcrResult, openRecordingPackage, openScreenshotDirectory, openScreenshotInWhiteboard, openVideoDirectory, patchAudioState, patchCameraState, patchScreenshotItem, patchSettingsPreferences, patchShortcutSettings, patchSourceState, patchWhiteboardSettings, pauseRecording, preflightAudioOnlyRecording, preflightRecording, previewExportRecordingPackage, queueRecognizePinnedScreenshot, queueRecognizeScreenshot, quitApplication, readAnnotationPreviewImage, readPipPreviewImage, readOcrResultImage, readScreenshotImage, recoverRecordingPackage, refreshOcrModelCatalog, removeOcrModel, restoreCapsuleWindow, resumeRecording, saveSettings, setActiveOcrModel, setCapsuleWindowExpanded, setCapsuleWindowHitRegions, setDataRoot, setFloatingPanelHitRegions, setFloatingSelectHitRegions, showAnnotationOverlay, showAnnotationRegionSelector, showFloatingPanel, showFloatingSelect, showPinnedScreenshot, showPipOverlay, showRegionSelector, showScreenIndicator, showScreenshotRegionSelector, showWhiteboardWindow, snapCapsuleWindowToEdge, startAudioOnlyRecording, startMicrophoneLevelMonitor, startOcrModelDownload, startRecording, startScrollingScreenshot, stopMicrophoneLevelMonitor, stopRecording, subscribeAudioLevel, subscribeAudioState, subscribeCapsuleDockSide, subscribeCapsuleWindowMoveEnded, subscribeFloatingPanelChanged, subscribeFloatingSelectChanged, subscribeFloatingSelectChosen, subscribeOcrJobEvents, subscribeOcrModelDownloadEvents, subscribeRecordingStatus, subscribeRegionSelection, subscribeScreenshotCaptured, subscribeScreenshotHistoryChanged, subscribeScreenshotPin, subscribeSettingsChanged, subscribeShortcutTriggered, subscribeSourceStateChanged, subscribeWhiteboardVisibility, translateOcr, updatePipOverlay, updateScreenshotRegionSelection, updateSelectedRegion, type AudioControlState, type AudioLevelUpdate, type AudioStatePatch, type CapsuleWindowDockSide, type CapsuleWindowExpandDirection, type CapsuleWindowHitRegion, type FloatingPanelKind, type FloatingPanelState, type FloatingSelectOption, type FloatingSelectState, type OcrBlock, type OcrModelDownloadSnapshot, type OcrModelInfo, type OcrResult, type OcrStatus, type OcrTranslationResult, type PIPOverlayCamera, type PIPOverlayState, type RecordingExportPlan, type RecordingRecovery, type RecordingStatusUpdate, type RegionSelectionSession, type RegionSmartCandidate, type ScreenshotPinnedItem, type ScreenshotPinState, type SettingsPreferencesPatch, type ShortcutSettingsPatch, type SourceControlState, type WhiteboardSettingsPatch, type WhiteboardVisibilityUpdate} from './services/recorderBackend'
 import {resolveFloatingPanelPlacement, resolveFloatingSelectPlacement} from './components/floating/floatingPosition'
 import {ocrPanelContext, ocrResultPanelExpandedSize, ocrResultPanelSize, parseOcrPanelContext} from './components/floating/ocrResultPanel'
 import {OcrPositionTextLayer, ocrBlockPolygonPoints, ocrBlockStableId} from './components/ocr/OcrPositionTextLayer'
@@ -2652,23 +2652,6 @@ function App() {
       })
   }
 
-  const openScreenshotOcrResult = (item: ScreenshotItem, anchorElement?: Element) => {
-    if (!item.ocrResultId || item.ocrStatus !== 'ready') {
-      queueScreenshotOcr(item)
-      return
-    }
-    if (shouldUseFloatingPanelWindows() && anchorElement) {
-      void openFloatingPanelFromAnchor('ocr-result', anchorElement, ocrPanelContext(item.ocrResultId))
-      return
-    }
-    void openOcrResult(item.ocrResultId)
-      .then((result) => setScreenshotMessage(result.plainText ? copy.screenshot.ocrBlocks(result.blocks.length) : copy.screenshot.ocrNoText))
-      .catch((error) => {
-        console.error('Failed to open screenshot OCR result:', error)
-        setScreenshotMessage(readableError(error) || copy.screenshot.ocrStatusFailed)
-      })
-  }
-
   const copyScreenshotOcrText = (item: ScreenshotItem) => {
     if (!item.ocrResultId || item.ocrStatus !== 'ready') {
       queueScreenshotOcr(item)
@@ -3453,26 +3436,21 @@ function App() {
                   <small>{screenshotMessage || copy.screenshot.historyDetail}</small>
                 </div>
                 <div className="screenshot-history-list">
-                  {screenshots.length > 0 ? screenshots.slice(0, 6).map((item) => {
-                    const ocrBusy = screenshotOcrBusy(item)
-                    return (
-                      <ScreenshotHistoryRow
-                        key={item.id}
-                        item={item}
-                        copy={copy}
-                        ocrBusy={ocrBusy}
-                        onOpen={openScreenshotPreview}
-                        onOpenOcr={openScreenshotOcrResult}
-                        onCopyOcr={copyScreenshotOcrText}
-                        onTranslateOcr={translateScreenshotOcrText}
-                        onOpenFolder={openScreenshotFolder}
-                        onAnnotate={annotateScreenshot}
-                        onPin={pinScreenshot}
-                        onToggleFixed={toggleScreenshotFixed}
-                        onDelete={deleteScreenshot}
-                      />
-                    )
-                  }) : (
+                  {screenshots.length > 0 ? screenshots.slice(0, 6).map((item) => (
+                    <ScreenshotHistoryRow
+                      key={item.id}
+                      item={item}
+                      copy={copy}
+                      onOpen={openScreenshotPreview}
+                      onCopyOcr={copyScreenshotOcrText}
+                      onTranslateOcr={translateScreenshotOcrText}
+                      onOpenFolder={openScreenshotFolder}
+                      onAnnotate={annotateScreenshot}
+                      onPin={pinScreenshot}
+                      onToggleFixed={toggleScreenshotFixed}
+                      onDelete={deleteScreenshot}
+                    />
+                  )) : (
                     <div className="source-empty">
                       <ImageIcon size={18} />
                       <span>{copy.screenshot.empty}</span>
@@ -4117,34 +4095,6 @@ function FloatingPanelWindow() {
       })
   }
 
-  const openScreenshotOcrResult = (item: ScreenshotItem) => {
-    if (!item.ocrResultId || item.ocrStatus !== 'ready') {
-      queueScreenshotOcr(item)
-      return
-    }
-    setOcrResultExpanded(false)
-    const size = floatingPanelSizes['ocr-result']
-    const token = panelState.token + 1
-    void showFloatingPanel({
-      kind: 'ocr-result',
-      anchor: panelState.anchor,
-      bounds: {
-        ...panelState.bounds,
-        width: size.width,
-        height: size.height,
-      },
-      dockSide: panelState.dockSide,
-      width: size.width,
-      height: size.height,
-      minWidth: size.minWidth,
-      maxHeight: size.maxHeight,
-      token,
-      screenId: panelState.screenId,
-      direction: panelState.direction,
-      contextId: ocrPanelContext(item.ocrResultId),
-    })
-  }
-
   const resizeOcrResultPanel = (expanded: boolean) => {
     setOcrResultExpanded(expanded)
     if (panelState.kind !== 'ocr-result' || !panelState.visible) return
@@ -4486,26 +4436,21 @@ function FloatingPanelWindow() {
             <small>{screenshotMessage || copy.screenshot.historyDetail}</small>
           </div>
           <div className="screenshot-history-list">
-            {screenshots.length > 0 ? screenshots.slice(0, 6).map((item) => {
-              const ocrBusy = screenshotOcrBusy(item)
-              return (
-                <ScreenshotHistoryRow
-                  key={item.id}
-                  item={item}
-                  copy={copy}
-                  ocrBusy={ocrBusy}
-                  onOpen={openScreenshotPreview}
-                  onOpenOcr={openScreenshotOcrResult}
-                  onCopyOcr={copyScreenshotOcrText}
-                  onTranslateOcr={translateScreenshotOcrText}
-                  onOpenFolder={openScreenshotFolder}
-                  onAnnotate={annotateScreenshot}
-                  onPin={pinScreenshot}
-                  onToggleFixed={toggleScreenshotFixed}
-                  onDelete={deleteScreenshot}
-                />
-              )
-            }) : (
+            {screenshots.length > 0 ? screenshots.slice(0, 6).map((item) => (
+              <ScreenshotHistoryRow
+                key={item.id}
+                item={item}
+                copy={copy}
+                onOpen={openScreenshotPreview}
+                onCopyOcr={copyScreenshotOcrText}
+                onTranslateOcr={translateScreenshotOcrText}
+                onOpenFolder={openScreenshotFolder}
+                onAnnotate={annotateScreenshot}
+                onPin={pinScreenshot}
+                onToggleFixed={toggleScreenshotFixed}
+                onDelete={deleteScreenshot}
+              />
+            )) : (
               <div className="source-empty"><ImageIcon size={18} /><span>{copy.screenshot.empty}</span></div>
             )}
           </div>
@@ -5022,9 +4967,7 @@ const screenshotDeleteRevealWidth = 116
 function ScreenshotHistoryRow({
   item,
   copy,
-  ocrBusy,
   onOpen,
-  onOpenOcr,
   onCopyOcr,
   onTranslateOcr,
   onOpenFolder,
@@ -5035,9 +4978,7 @@ function ScreenshotHistoryRow({
 }: {
   item: ScreenshotItem
   copy: RecorderCopy
-  ocrBusy: boolean
   onOpen: (item: ScreenshotItem) => void
-  onOpenOcr: (item: ScreenshotItem, anchorElement?: Element) => void
   onCopyOcr: (item: ScreenshotItem) => void
   onTranslateOcr: (item: ScreenshotItem, anchorElement?: Element) => void
   onOpenFolder: (item: ScreenshotItem) => void
@@ -5048,9 +4989,31 @@ function ScreenshotHistoryRow({
 }) {
   const [deleteOpen, setDeleteOpen] = useState(false)
   const [dragOffset, setDragOffset] = useState<number | null>(null)
+  const [previewDataUrl, setPreviewDataUrl] = useState('')
+  const [previewError, setPreviewError] = useState('')
   const dragRef = useRef<{pointerId: number; startX: number; startY: number; base: number; captured: boolean} | null>(null)
   const suppressClickUntilRef = useRef(0)
-  const offset = dragOffset ?? (deleteOpen ? -screenshotDeleteRevealWidth : 0)
+  const previewRequestRef = useRef('')
+  const offset = dragOffset ?? (deleteOpen ? screenshotDeleteRevealWidth : 0)
+
+  const loadPreview = () => {
+    if (previewDataUrl || previewRequestRef.current === item.id) return
+    previewRequestRef.current = item.id
+    setPreviewError('')
+    void readScreenshotImage(item.id, true)
+      .then((image) => {
+        if (previewRequestRef.current !== item.id) return
+        if (image.available && image.dataUrl) {
+          setPreviewDataUrl(image.dataUrl)
+          return
+        }
+        setPreviewError(screenshotDisplayName(item))
+      })
+      .catch((error) => {
+        if (previewRequestRef.current !== item.id) return
+        setPreviewError(readableError(error) || screenshotDisplayName(item))
+      })
+  }
 
   const suppressNextClick = () => {
     suppressClickUntilRef.current = Date.now() + 260
@@ -5064,7 +5027,7 @@ function ScreenshotHistoryRow({
       pointerId: event.pointerId,
       startX: event.clientX,
       startY: event.clientY,
-      base: deleteOpen ? -screenshotDeleteRevealWidth : 0,
+      base: deleteOpen ? screenshotDeleteRevealWidth : 0,
       captured: false,
     }
   }
@@ -5081,7 +5044,7 @@ function ScreenshotHistoryRow({
         event.currentTarget.setPointerCapture?.(event.pointerId)
         drag.captured = true
       }
-      setDragOffset(Math.max(-screenshotDeleteRevealWidth, Math.min(0, drag.base + deltaX)))
+      setDragOffset(Math.max(0, Math.min(screenshotDeleteRevealWidth, drag.base + deltaX)))
     }
   }
 
@@ -5089,10 +5052,10 @@ function ScreenshotHistoryRow({
     const drag = dragRef.current
     if (!drag || drag.pointerId !== event.pointerId) return
     const deltaX = event.clientX - drag.startX
-    const finalOffset = Math.max(-screenshotDeleteRevealWidth, Math.min(0, drag.base + deltaX))
+    const finalOffset = Math.max(0, Math.min(screenshotDeleteRevealWidth, drag.base + deltaX))
     const moved = Math.abs(deltaX) > 7 || Math.abs(event.clientY - drag.startY) > 7
     if (moved) suppressNextClick()
-    setDeleteOpen(deltaX > 32 ? false : finalOffset < -screenshotDeleteRevealWidth * 0.44)
+    setDeleteOpen(deltaX < -32 ? false : finalOffset > screenshotDeleteRevealWidth * 0.44)
     setDragOffset(null)
     dragRef.current = null
     if (drag.captured) event.currentTarget.releasePointerCapture?.(event.pointerId)
@@ -5160,8 +5123,23 @@ function ScreenshotHistoryRow({
         </button>
       </div>
       <div className="screenshot-history-slide" style={{transform: `translateX(${offset}px)`}}>
-        <button type="button" className="screenshot-history-main" onClick={handleOpen}>
-          <ImageIcon size={17} />
+        <button
+          type="button"
+          className="screenshot-history-main"
+          onPointerEnter={loadPreview}
+          onFocus={loadPreview}
+          onClick={handleOpen}
+        >
+          <span className="screenshot-history-icon">
+            <ImageIcon size={17} />
+            <span className={`screenshot-history-thumbnail ${previewDataUrl ? 'loaded' : ''}`} aria-hidden="true">
+              {previewDataUrl ? (
+                <img src={previewDataUrl} alt="" draggable={false} />
+              ) : (
+                <span>{previewError || screenshotDisplayName(item)}</span>
+              )}
+            </span>
+          </span>
           <span>
             <strong>{screenshotDisplayName(item)}</strong>
             <small>{screenshotMeta(item, copy)}</small>
@@ -5173,9 +5151,6 @@ function ScreenshotHistoryRow({
           onPointerDown={(event) => event.stopPropagation()}
           onClick={(event) => event.stopPropagation()}
         >
-          <button type="button" className={item.ocrStatus === 'ready' ? 'selected' : ''} disabled={ocrBusy} aria-label={screenshotOcrPrimaryTitle(item, copy)} title={screenshotOcrPrimaryTitle(item, copy)} onClick={(event) => handleAction(() => onOpenOcr(item, event.currentTarget))}>
-            <FileText size={15} />
-          </button>
           <button type="button" disabled={item.ocrStatus !== 'ready'} aria-label={copy.screenshot.copyText} title={copy.screenshot.copyText} onClick={() => handleAction(onCopyOcr)}>
             <CopyIcon size={15} />
           </button>
@@ -5347,9 +5322,44 @@ function ScreenIndicatorWindow() {
   )
 }
 
+function screenshotPinItems(state: ScreenshotPinState | undefined): ScreenshotPinnedItem[] {
+  const sourcePins = state?.pins?.length
+    ? state.pins
+    : state?.item
+      ? [{item: state.item, dataUrl: state.dataUrl, fixed: state.fixed}]
+      : []
+  const seen = new Set<string>()
+  const pins: ScreenshotPinnedItem[] = []
+  for (const pin of sourcePins) {
+    if (!pin.item?.id || seen.has(pin.item.id)) continue
+    seen.add(pin.item.id)
+    pins.push({
+      item: pin.item,
+      dataUrl: pin.dataUrl,
+      fixed: pin.fixed === true || pin.item.fixed === true,
+    })
+  }
+  return pins
+}
+
+function screenshotPinStateWithPins(current: ScreenshotPinState | undefined, pins: ScreenshotPinnedItem[]): ScreenshotPinState {
+  const normalized = screenshotPinItems({visible: pins.length > 0, fixed: false, pins})
+  if (normalized.length === 0) return {visible: false, fixed: false, pins: []}
+  const active = normalized[normalized.length - 1]
+  return {
+    ...(current ?? {}),
+    visible: true,
+    item: active.item,
+    dataUrl: active.dataUrl,
+    fixed: active.fixed,
+    pins: normalized,
+  }
+}
+
 function ScreenshotPinWindow() {
   const pinWindow = window as Window & {__RF_SCREENSHOT_PIN__?: ScreenshotPinState}
   const [pinState, setPinState] = useState<ScreenshotPinState | undefined>(pinWindow.__RF_SCREENSHOT_PIN__)
+  const [selectedPinId, setSelectedPinId] = useState('')
   const [locale, setLocale] = useState<LocaleCode>(navigator.language.toLowerCase().startsWith('zh') ? 'zh-CN' : 'en')
   const [theme, setTheme] = useState<ThemeCode>('night-teal')
   const [translationSettings, setTranslationSettings] = useState<AppSettings['ocr']['translation']>(defaultSettings.ocr.translation)
@@ -5358,9 +5368,13 @@ function ScreenshotPinWindow() {
   const [highlightOcr, setHighlightOcr] = useState(false)
   const [hoveredBlockId, setHoveredBlockId] = useState('')
   const [copiedBlockId, setCopiedBlockId] = useState('')
-  const itemRef = useRef<ScreenshotItem | undefined>(pinState?.item)
+  const pins = useMemo(() => screenshotPinItems(pinState), [pinState])
+  const activePin = pins.find((pin) => pin.item.id === selectedPinId) ?? pins[pins.length - 1]
+  const itemRef = useRef<ScreenshotItem | undefined>(activePin?.item)
   const copy = copyByLocale[locale]
-  const item = pinState?.item
+  const item = activePin?.item
+  const activeDataUrl = activePin?.dataUrl || pinState?.dataUrl || ''
+  const activeFixed = activePin?.fixed === true
   const ocrBusy = item ? screenshotOcrBusy(item) : false
   const ocrReady = item?.ocrStatus === 'ready' && Boolean(item.ocrResultId) && Boolean(ocrResult)
   const ocrStatusText = item ? screenshotOcrStatusText(item, copy) : ''
@@ -5375,6 +5389,16 @@ function ScreenshotPinWindow() {
     document.body.classList.add('rf-screenshot-pin-window')
     return () => document.body.classList.remove('rf-screenshot-pin-window')
   }, [])
+
+  useEffect(() => {
+    if (pins.length === 0) {
+      if (selectedPinId) setSelectedPinId('')
+      return
+    }
+    if (!selectedPinId || !pins.some((pin) => pin.item.id === selectedPinId)) {
+      setSelectedPinId(pins[pins.length - 1].item.id)
+    }
+  }, [pins, selectedPinId])
 
   useEffect(() => {
     void Promise.all([loadSettings(), loadPinnedScreenshot()])
@@ -5395,14 +5419,16 @@ function ScreenshotPinWindow() {
     })
     const unsubscribeHistory = subscribeScreenshotHistoryChanged((items) => {
       setPinState((current) => {
-        if (!current?.item) return current
-        const updated = items.find((entry) => entry.id === current.item?.id)
-        if (!updated) return current
-        return {
-          ...current,
-          item: updated,
-          fixed: updated.fixed,
-        }
+        const currentPins = screenshotPinItems(current)
+        if (currentPins.length === 0) return current
+        let changed = false
+        const nextPins = currentPins.map((pin) => {
+          const updated = items.find((entry) => entry.id === pin.item.id)
+          if (!updated) return pin
+          changed = true
+          return {...pin, item: updated, fixed: updated.fixed}
+        })
+        return changed ? screenshotPinStateWithPins(current, nextPins) : current
       })
     })
     const unsubscribeOcr = subscribeOcrJobEvents((event) => {
@@ -5479,17 +5505,13 @@ function ScreenshotPinWindow() {
 
   const togglePinnedFixed = () => {
     if (!item) return
-    const nextFixed = !(pinState?.fixed === true)
+    const nextFixed = !activeFixed
     void patchScreenshotItem(item.id, {fixed: nextFixed})
       .then((items) => {
         const updated = items.find((entry) => entry.id === item.id) ?? {...item, fixed: nextFixed}
-        setPinState((current) => current?.item?.id === item.id
-          ? {
-            ...current,
-            item: updated,
-            fixed: updated.fixed,
-          }
-          : current)
+        setPinState((current) => screenshotPinStateWithPins(current, screenshotPinItems(current).map((pin) => pin.item.id === item.id
+          ? {...pin, item: updated, fixed: updated.fixed}
+          : pin)))
       })
       .catch((error) => setOcrMessage(readableError(error) || copy.screenshot.ocrStatusFailed))
   }
@@ -5525,7 +5547,7 @@ function ScreenshotPinWindow() {
       .catch(() => setOcrMessage(copy.screenshot.copyTextEmpty))
   }
 
-  if (!pinState?.visible || !pinState.dataUrl || !item) {
+  if (!pinState?.visible || !activeDataUrl || !item) {
     return (
       <main className="screenshot-pin-shell empty" data-theme={theme}>
         <span>{copy.screenshot.empty}</span>
@@ -5534,7 +5556,7 @@ function ScreenshotPinWindow() {
   }
 
   return (
-    <main className={`screenshot-pin-shell ${pinState.fixed ? 'fixed' : ''}`} data-theme={theme}>
+    <main className={`screenshot-pin-shell ${activeFixed ? 'fixed' : ''} ${pins.length > 1 ? 'multi' : ''}`} data-theme={theme}>
       <section className="screenshot-pin-toolbar">
         <span className="screenshot-pin-title">
           <ImageIcon size={15} />
@@ -5556,55 +5578,73 @@ function ScreenshotPinWindow() {
           <button type="button" disabled={!ocrReady || !ocrResult?.plainText.trim()} aria-label={copy.screenshot.translateText} title={copy.screenshot.translateText} onClick={translatePinnedOcrText}>
             <Languages size={15} />
           </button>
-          <button type="button" aria-label={pinState.fixed ? copy.screenshot.unfix : copy.screenshot.fix} title={pinState.fixed ? copy.screenshot.unfix : copy.screenshot.fix} onClick={togglePinnedFixed}>
-            {pinState.fixed ? <Lock size={15} /> : <Pin size={15} />}
+          <button type="button" aria-label={activeFixed ? copy.screenshot.unfix : copy.screenshot.fix} title={activeFixed ? copy.screenshot.unfix : copy.screenshot.fix} onClick={togglePinnedFixed}>
+            {activeFixed ? <Lock size={15} /> : <Pin size={15} />}
           </button>
           <button type="button" aria-label={copy.common.close} title={copy.common.close} onClick={() => void hidePinnedScreenshot()}>
             <X size={16} />
           </button>
         </div>
       </section>
-      <div className="screenshot-pin-canvas" ref={pinCanvasRef}>
-        <img src={pinState.dataUrl} alt={copy.screenshot.pinned} draggable={false} />
-        {highlightOcr && ocrResult && ocrReady && ocrResult.blocks.length > 0 && (
-          <svg viewBox={`0 0 ${Math.max(1, ocrResult.width)} ${Math.max(1, ocrResult.height)}`} preserveAspectRatio="xMidYMid meet" aria-label={copy.screenshot.ocrBlocks(ocrResult.blocks.length)}>
-            {ocrResult.blocks.map((block, index) => {
-              const blockId = ocrBlockStableId(block, index)
-              return (
-                <polygon
-                  key={blockId}
-                  points={ocrBlockPolygonPoints(block)}
-                  className={`${blockId === hoveredBlockId ? 'active' : ''} ${blockId === copiedBlockId ? 'copied' : ''}`.trim()}
-                  tabIndex={0}
-                  role="button"
-                  aria-label={block.text || copy.screenshot.ocrNoText}
-                  onPointerEnter={() => setHoveredBlockId(blockId)}
-                  onPointerLeave={() => setHoveredBlockId('')}
-                  onFocus={() => setHoveredBlockId(blockId)}
-                  onBlur={() => setHoveredBlockId('')}
-                  onClick={() => copyPinnedBlockText(block, blockId)}
-                  onKeyDown={(event) => {
-                    if (event.key !== 'Enter' && event.key !== ' ') return
-                    event.preventDefault()
-                    copyPinnedBlockText(block, blockId)
-                  }}
-                />
-              )
-            })}
-          </svg>
+      <div className="screenshot-pin-content">
+        {pins.length > 1 && (
+          <aside className="screenshot-pin-stack" aria-label={copy.screenshot.pinned}>
+            {pins.map((pin) => (
+              <button
+                key={pin.item.id}
+                type="button"
+                className={pin.item.id === item.id ? 'selected' : ''}
+                title={screenshotDisplayName(pin.item)}
+                onClick={() => setSelectedPinId(pin.item.id)}
+              >
+                {pin.dataUrl ? <img src={pin.dataUrl} alt="" draggable={false} /> : <ImageIcon size={18} />}
+                <span>{screenshotDisplayName(pin.item)}</span>
+              </button>
+            ))}
+          </aside>
         )}
-        {highlightOcr && ocrResult && ocrReady && ocrResult.blocks.length > 0 && (
-          <OcrPositionTextLayer
-            copy={copy}
-            result={ocrResult}
-            hoveredBlockId={hoveredBlockId}
-            copiedBlockId={copiedBlockId}
-            onHover={setHoveredBlockId}
-            onCopy={copyPinnedBlockText}
-            className="pin"
-            style={pinImageLayerStyle}
-          />
-        )}
+        <div className="screenshot-pin-canvas" ref={pinCanvasRef}>
+          <img src={activeDataUrl} alt={copy.screenshot.pinned} draggable={false} />
+          {highlightOcr && ocrResult && ocrReady && ocrResult.blocks.length > 0 && (
+            <svg viewBox={`0 0 ${Math.max(1, ocrResult.width)} ${Math.max(1, ocrResult.height)}`} preserveAspectRatio="xMidYMid meet" aria-label={copy.screenshot.ocrBlocks(ocrResult.blocks.length)}>
+              {ocrResult.blocks.map((block, index) => {
+                const blockId = ocrBlockStableId(block, index)
+                return (
+                  <polygon
+                    key={blockId}
+                    points={ocrBlockPolygonPoints(block)}
+                    className={`${blockId === hoveredBlockId ? 'active' : ''} ${blockId === copiedBlockId ? 'copied' : ''}`.trim()}
+                    tabIndex={0}
+                    role="button"
+                    aria-label={block.text || copy.screenshot.ocrNoText}
+                    onPointerEnter={() => setHoveredBlockId(blockId)}
+                    onPointerLeave={() => setHoveredBlockId('')}
+                    onFocus={() => setHoveredBlockId(blockId)}
+                    onBlur={() => setHoveredBlockId('')}
+                    onClick={() => copyPinnedBlockText(block, blockId)}
+                    onKeyDown={(event) => {
+                      if (event.key !== 'Enter' && event.key !== ' ') return
+                      event.preventDefault()
+                      copyPinnedBlockText(block, blockId)
+                    }}
+                  />
+                )
+              })}
+            </svg>
+          )}
+          {highlightOcr && ocrResult && ocrReady && ocrResult.blocks.length > 0 && (
+            <OcrPositionTextLayer
+              copy={copy}
+              result={ocrResult}
+              hoveredBlockId={hoveredBlockId}
+              copiedBlockId={copiedBlockId}
+              onHover={setHoveredBlockId}
+              onCopy={copyPinnedBlockText}
+              className="pin"
+              style={pinImageLayerStyle}
+            />
+          )}
+        </div>
       </div>
     </main>
   )

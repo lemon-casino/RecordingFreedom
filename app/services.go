@@ -755,6 +755,11 @@ func defaultOpenPath(path string) error {
 	if _, err := os.Stat(absoluteTarget); err != nil {
 		return fmt.Errorf("cannot open %q: %w", absoluteTarget, err)
 	}
+	if runtime.GOOS == "windows" {
+		if err := openWindowsPath(absoluteTarget); err == nil {
+			return nil
+		}
+	}
 	var command string
 	var args []string
 	switch runtime.GOOS {
@@ -802,7 +807,16 @@ func defaultOpenFileLocation(path string) error {
 		return openPath(absoluteTarget)
 	}
 	if runtime.GOOS == "windows" {
-		return openPath(filepath.Dir(absoluteTarget))
+		selectFile := exec.Command("explorer.exe", "/select,"+absoluteTarget)
+		configureBackgroundCommand(selectFile)
+		if err := selectFile.Start(); err == nil {
+			return nil
+		}
+		parent := filepath.Dir(absoluteTarget)
+		if err := openWindowsPath(parent); err == nil {
+			return nil
+		}
+		return openPath(parent)
 	}
 	var command string
 	var args []string

@@ -501,11 +501,19 @@ export interface ScreenshotPinEvent {
     "item"?: ScreenshotItem;
     "dataUrl"?: string;
     "fixed": boolean;
+    "pins"?: ScreenshotPinnedItem[];
 }
 
 export interface ScreenshotPinState {
     "visible": boolean;
     "item"?: ScreenshotItem;
+    "dataUrl"?: string;
+    "fixed": boolean;
+    "pins"?: ScreenshotPinnedItem[];
+}
+
+export interface ScreenshotPinnedItem {
+    "item": ScreenshotItem;
     "dataUrl"?: string;
     "fixed": boolean;
 }

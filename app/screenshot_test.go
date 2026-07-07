@@ -254,6 +254,32 @@ func TestPatchScreenshotItemDoesNotPersistPinnedHistoryState(t *testing.T) {
 	}
 }
 
+func TestScreenshotPinStateKeepsMultiplePinsAndActiveLatest(t *testing.T) {
+	first := ScreenshotItem{ID: "pin-one", Path: "one.png", Width: 120, Height: 80}
+	second := ScreenshotItem{ID: "pin-two", Path: "two.png", Width: 160, Height: 90}
+
+	state := appendScreenshotPinStateItem(ScreenshotPinState{}, ScreenshotPinnedItem{Item: first, DataURL: "data:image/png;base64,one"})
+	state = appendScreenshotPinStateItem(state, ScreenshotPinnedItem{Item: second, DataURL: "data:image/png;base64,two"})
+	if !state.Visible || state.Item.ID != "pin-two" || len(state.Pins) != 2 {
+		t.Fatalf("multi pin state = %#v, want two pins with latest active", state)
+	}
+
+	first.Fixed = true
+	state = updateScreenshotPinStateItem(state, first)
+	if !state.Pins[0].Fixed || state.Pins[1].Item.ID != "pin-two" || state.Item.ID != "pin-two" {
+		t.Fatalf("updated multi pin state = %#v, want first fixed and latest still active", state)
+	}
+
+	state = removeScreenshotPinStateItem(state, "pin-two")
+	if !state.Visible || state.Item.ID != "pin-one" || len(state.Pins) != 1 {
+		t.Fatalf("state after removing active = %#v, want first pin still visible", state)
+	}
+	state = removeScreenshotPinStateItem(state, "pin-one")
+	if state.Visible || len(state.Pins) != 0 {
+		t.Fatalf("state after removing all = %#v, want hidden empty state", state)
+	}
+}
+
 func TestDeleteScreenshotItemRemovesHistoryAndFiles(t *testing.T) {
 	service := NewRecordingFreedomService()
 	service.appData = appdata.NewService(t.TempDir())

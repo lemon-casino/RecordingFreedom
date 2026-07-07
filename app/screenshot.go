@@ -96,8 +96,15 @@ type ScreenshotImageResult struct {
 }
 
 type ScreenshotPinState struct {
-	Visible bool           `json:"visible"`
-	Item    ScreenshotItem `json:"item,omitempty"`
+	Visible bool                   `json:"visible"`
+	Item    ScreenshotItem         `json:"item,omitempty"`
+	DataURL string                 `json:"dataUrl,omitempty"`
+	Fixed   bool                   `json:"fixed"`
+	Pins    []ScreenshotPinnedItem `json:"pins,omitempty"`
+}
+
+type ScreenshotPinnedItem struct {
+	Item    ScreenshotItem `json:"item"`
 	DataURL string         `json:"dataUrl,omitempty"`
 	Fixed   bool           `json:"fixed"`
 }
@@ -113,10 +120,11 @@ type ScreenshotCapturedEvent struct {
 }
 
 type ScreenshotPinEvent struct {
-	Visible bool           `json:"visible"`
-	Item    ScreenshotItem `json:"item,omitempty"`
-	DataURL string         `json:"dataUrl,omitempty"`
-	Fixed   bool           `json:"fixed"`
+	Visible bool                   `json:"visible"`
+	Item    ScreenshotItem         `json:"item,omitempty"`
+	DataURL string                 `json:"dataUrl,omitempty"`
+	Fixed   bool                   `json:"fixed"`
+	Pins    []ScreenshotPinnedItem `json:"pins,omitempty"`
 }
 
 type screenshotHistoryStore struct {
@@ -497,9 +505,8 @@ func (s *RecordingFreedomService) PatchScreenshotItem(req ScreenshotItemPatchReq
 			continue
 		}
 		s.screenshotMu.Lock()
-		if s.screenshotPinState.Visible && s.screenshotPinState.Item.ID == id {
-			s.screenshotPinState.Item = item
-			s.screenshotPinState.Fixed = item.Fixed
+		if s.screenshotPinState.Visible && screenshotPinStateContains(s.screenshotPinState, id) {
+			s.screenshotPinState = updateScreenshotPinStateItem(s.screenshotPinState, item)
 			pinState = s.screenshotPinState
 		}
 		s.screenshotMu.Unlock()
@@ -587,13 +594,23 @@ func (s *RecordingFreedomService) DeleteScreenshotItem(id string) (ScreenshotHis
 	s.emitScreenshotHistoryChanged(remaining)
 	s.screenshotMu.Lock()
 	clearWhiteboardContext := s.whiteboardScreenshot.Item.ID == id
-	pinnedDeleted := s.screenshotPinState.Visible && s.screenshotPinState.Item.ID == id
+	pinState := s.screenshotPinState
+	pinnedDeleted := pinState.Visible && screenshotPinStateContains(pinState, id)
 	if clearWhiteboardContext {
 		s.whiteboardScreenshot = ScreenshotWhiteboardContext{}
 	}
+	if pinnedDeleted {
+		s.screenshotPinState = removeScreenshotPinStateItem(pinState, id)
+		pinState = s.screenshotPinState
+	}
 	s.screenshotMu.Unlock()
 	if pinnedDeleted {
-		_ = s.HidePinnedScreenshot()
+		if pinState.Visible {
+			s.broadcastScreenshotPinState(pinState)
+			s.emitScreenshotPin(pinState)
+		} else {
+			_ = s.HidePinnedScreenshot()
+		}
 	}
 	s.logEvent("screenshot", "delete", map[string]string{"id": id, "path": removed.Path})
 	return ScreenshotHistoryResult{Items: remaining}, nil
@@ -614,19 +631,19 @@ func (s *RecordingFreedomService) ShowPinnedScreenshot(id string) (ScreenshotPin
 	if !imageResult.Available {
 		return ScreenshotPinState{}, fmt.Errorf("screenshot %q image is unavailable", item.ID)
 	}
-	state := ScreenshotPinState{
-		Visible: true,
+	pin := ScreenshotPinnedItem{
 		Item:    item,
 		DataURL: imageResult.DataURL,
 		Fixed:   item.Fixed,
 	}
 	s.screenshotMu.Lock()
+	state := appendScreenshotPinStateItem(s.screenshotPinState, pin)
 	s.screenshotPinState = state
 	s.screenshotMu.Unlock()
 	s.screenshotPinWindow.SetAlwaysOnTop(true)
-	s.screenshotPinWindow.SetBounds(screenshotPinWindowBounds(item))
+	s.screenshotPinWindow.SetBounds(screenshotPinWindowBoundsForPins(state.Pins))
 	s.screenshotPinWindow.Show()
-	s.screenshotPinWindow.SetBounds(screenshotPinWindowBounds(item))
+	s.screenshotPinWindow.SetBounds(screenshotPinWindowBoundsForPins(state.Pins))
 	s.broadcastScreenshotPinState(state)
 	s.emitScreenshotPin(state)
 	return state, nil
@@ -1219,6 +1236,9 @@ func (s *RecordingFreedomService) screenshotItemFromActiveContext(id string) (Sc
 		s.whiteboardScreenshot.Item,
 		s.screenshotPinState.Item,
 	}
+	for _, pin := range s.screenshotPinState.Pins {
+		candidates = append(candidates, pin.Item)
+	}
 	s.screenshotMu.Unlock()
 	for _, item := range candidates {
 		if strings.TrimSpace(item.ID) == id && strings.TrimSpace(item.Path) != "" {
@@ -1606,6 +1626,107 @@ func screenshotPinWindowBounds(item ScreenshotItem) application.Rect {
 	}
 }
 
+func screenshotPinWindowBoundsForPins(pins []ScreenshotPinnedItem) application.Rect {
+	pins = normalizeScreenshotPins(pins)
+	if len(pins) == 0 {
+		return application.Rect{X: 120, Y: 120, Width: 360, Height: 240}
+	}
+	if len(pins) == 1 {
+		return screenshotPinWindowBounds(pins[0].Item)
+	}
+	return application.Rect{
+		X:      120,
+		Y:      120,
+		Width:  760,
+		Height: minInt(720, maxInt(420, 104+len(pins)*220)),
+	}
+}
+
+func appendScreenshotPinStateItem(state ScreenshotPinState, pin ScreenshotPinnedItem) ScreenshotPinState {
+	pins := normalizeScreenshotPins(state.Pins)
+	if len(pins) == 0 && state.Item.ID != "" {
+		pins = append(pins, ScreenshotPinnedItem{Item: state.Item, DataURL: state.DataURL, Fixed: state.Fixed})
+	}
+	next := make([]ScreenshotPinnedItem, 0, len(pins)+1)
+	for _, existing := range pins {
+		if existing.Item.ID != pin.Item.ID {
+			next = append(next, existing)
+		}
+	}
+	next = append(next, pin)
+	return screenshotPinStateFromPins(next)
+}
+
+func updateScreenshotPinStateItem(state ScreenshotPinState, item ScreenshotItem) ScreenshotPinState {
+	pins := normalizeScreenshotPins(state.Pins)
+	if len(pins) == 0 && state.Item.ID != "" {
+		pins = append(pins, ScreenshotPinnedItem{Item: state.Item, DataURL: state.DataURL, Fixed: state.Fixed})
+	}
+	for index := range pins {
+		if pins[index].Item.ID == item.ID {
+			pins[index].Item = item
+			pins[index].Fixed = item.Fixed
+		}
+	}
+	return screenshotPinStateFromPins(pins)
+}
+
+func removeScreenshotPinStateItem(state ScreenshotPinState, id string) ScreenshotPinState {
+	pins := normalizeScreenshotPins(state.Pins)
+	if len(pins) == 0 && state.Item.ID != "" {
+		pins = append(pins, ScreenshotPinnedItem{Item: state.Item, DataURL: state.DataURL, Fixed: state.Fixed})
+	}
+	next := pins[:0]
+	for _, pin := range pins {
+		if pin.Item.ID != id {
+			next = append(next, pin)
+		}
+	}
+	return screenshotPinStateFromPins(next)
+}
+
+func screenshotPinStateContains(state ScreenshotPinState, id string) bool {
+	if state.Item.ID == id {
+		return true
+	}
+	for _, pin := range state.Pins {
+		if pin.Item.ID == id {
+			return true
+		}
+	}
+	return false
+}
+
+func screenshotPinStateFromPins(pins []ScreenshotPinnedItem) ScreenshotPinState {
+	pins = normalizeScreenshotPins(pins)
+	if len(pins) == 0 {
+		return ScreenshotPinState{Visible: false}
+	}
+	active := pins[len(pins)-1]
+	return ScreenshotPinState{
+		Visible: true,
+		Item:    active.Item,
+		DataURL: active.DataURL,
+		Fixed:   active.Fixed,
+		Pins:    pins,
+	}
+}
+
+func normalizeScreenshotPins(pins []ScreenshotPinnedItem) []ScreenshotPinnedItem {
+	normalized := make([]ScreenshotPinnedItem, 0, len(pins))
+	seen := map[string]bool{}
+	for _, pin := range pins {
+		pin.Item.ID = strings.TrimSpace(pin.Item.ID)
+		if pin.Item.ID == "" || seen[pin.Item.ID] {
+			continue
+		}
+		pin.Fixed = pin.Item.Fixed
+		seen[pin.Item.ID] = true
+		normalized = append(normalized, pin)
+	}
+	return normalized
+}
+
 func (s *RecordingFreedomService) broadcastScreenshotPinState(state ScreenshotPinState) {
 	if s.screenshotPinWindow == nil {
 		return
@@ -1657,6 +1778,7 @@ func (s *RecordingFreedomService) emitScreenshotPin(state ScreenshotPinState) {
 		Item:    state.Item,
 		DataURL: state.DataURL,
 		Fixed:   state.Fixed,
+		Pins:    state.Pins,
 	})
 }
 
