@@ -182,6 +182,7 @@ func TestOCROperationLogsPersistSafeDesktopEvidence(t *testing.T) {
 	if snapshot.JobID == "" {
 		t.Fatalf("snapshot = %#v, want job id", snapshot)
 	}
+	waitForOCRJobStatus(t, ocrService.Events(), snapshot.JobID, ocr.ResultStatusFailed)
 	result := ocr.Result{
 		ID:          "ocr-operation-result",
 		SourceKind:  ocr.SourceRegionScreenshot,
@@ -297,6 +298,22 @@ func readSingleRootLog(t *testing.T, root string) string {
 		t.Fatalf("ReadFile(%s) error = %v", matches[0], err)
 	}
 	return string(data)
+}
+
+func waitForOCRJobStatus(t *testing.T, events <-chan ocr.JobEvent, jobID string, status string) ocr.JobEvent {
+	t.Helper()
+	timer := time.NewTimer(3 * time.Second)
+	defer timer.Stop()
+	for {
+		select {
+		case event := <-events:
+			if event.JobID == jobID && event.Status == status {
+				return event
+			}
+		case <-timer.C:
+			t.Fatalf("timed out waiting for OCR job %q status %q", jobID, status)
+		}
+	}
 }
 
 func writeServiceTestPNG(t *testing.T, path string, width int, height int) {
