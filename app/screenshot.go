@@ -548,7 +548,7 @@ func (s *RecordingFreedomService) OpenScreenshotDirectory(req ScreenshotImageReq
 	if err != nil {
 		return ScreenshotItem{}, err
 	}
-	if err := openPath(filepath.Dir(path)); err != nil {
+	if err := openFileLocation(path); err != nil {
 		return ScreenshotItem{}, err
 	}
 	return item, nil

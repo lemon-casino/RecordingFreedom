@@ -741,6 +741,7 @@ func (s *RecordingFreedomService) GetSettings() (settings.Settings, error) {
 }
 
 var openPath = defaultOpenPath
+var openFileLocation = defaultOpenFileLocation
 
 func defaultOpenPath(path string) error {
 	target := strings.TrimSpace(path)
@@ -776,6 +777,46 @@ func defaultOpenPath(path string) error {
 			return fallback.Start()
 		}
 		return err
+	}
+	return nil
+}
+
+func defaultOpenFileLocation(path string) error {
+	target := strings.TrimSpace(path)
+	if target == "" {
+		return errors.New("path is required")
+	}
+	absoluteTarget, err := filepath.Abs(target)
+	if err != nil {
+		return err
+	}
+	info, err := os.Stat(absoluteTarget)
+	if err != nil {
+		parent := filepath.Dir(absoluteTarget)
+		if _, parentErr := os.Stat(parent); parentErr == nil {
+			return openPath(parent)
+		}
+		return fmt.Errorf("cannot open %q: %w", absoluteTarget, err)
+	}
+	if info.IsDir() {
+		return openPath(absoluteTarget)
+	}
+	var command string
+	var args []string
+	switch runtime.GOOS {
+	case "darwin":
+		command = "open"
+		args = []string{"-R", absoluteTarget}
+	case "windows":
+		command = "explorer.exe"
+		args = []string{"/select," + absoluteTarget}
+	default:
+		return openPath(filepath.Dir(absoluteTarget))
+	}
+	cmd := exec.Command(command, args...)
+	configureBackgroundCommand(cmd)
+	if err := cmd.Start(); err != nil {
+		return openPath(filepath.Dir(absoluteTarget))
 	}
 	return nil
 }

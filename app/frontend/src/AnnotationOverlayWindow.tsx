@@ -19,8 +19,7 @@ import type {ExcalidrawImperativeAPI} from '@excalidraw/excalidraw/types'
 import '@excalidraw/excalidraw/index.css'
 import {copyByLocale} from './i18n'
 import {defaultSettings, normalizeLocale, normalizeTheme, type AppSettings, type LocaleCode, type ScreenshotItem, type ThemeCode, type WhiteboardTool} from './services/mockBackend'
-import {hideAnnotationOverlay, hideScreenshotAnnotationOverlay, loadAnnotationCapture, loadScreenshotAnnotationCapture, loadSettings, openOcrResult, patchWhiteboardSettings, queueRecognizeScreenshot, queueRecognizeWhiteboard, reselectAnnotationRegion, reselectScreenshotAnnotationRegion, saveAnnotationCapture, saveScreenshotAnnotationCapture, setAnnotationOverlayHitRegions, subscribeOcrJobEvents, subscribeSettingsChanged, type AnnotationCapture, type AnnotationOverlayState, type CapsuleWindowHitRegion, type OcrJobUpdate, type OcrResult, type ScreenshotWhiteboardContext} from './services/recorderBackend'
-import {showOcrResultFloatingPanel} from './components/floating/ocrResultPanel'
+import {hideAnnotationOverlay, hideScreenshotAnnotationOverlay, loadAnnotationCapture, loadScreenshotAnnotationCapture, loadSettings, openOcrResult, patchWhiteboardSettings, queueRecognizeScreenshot, queueRecognizeWhiteboard, reselectAnnotationRegion, reselectScreenshotAnnotationRegion, saveAnnotationCapture, saveScreenshotAnnotationCapture, setAnnotationOverlayHitRegions, subscribeOcrJobEvents, subscribeSettingsChanged, type AnnotationCapture, type AnnotationOverlayState, type CapsuleWindowHitRegion, type OcrBlock, type OcrJobUpdate, type OcrResult, type ScreenshotWhiteboardContext} from './services/recorderBackend'
 
 const annotationTools: Array<{tool: WhiteboardTool; icon: typeof PenLine; label: 'select' | 'pen' | 'arrow' | 'line' | 'rectangle' | 'ellipse' | 'text' | 'eraser'}> = [
   {tool: 'selection', icon: MousePointer2, label: 'select'},
@@ -65,6 +64,7 @@ function AnnotationOverlayWindow() {
   const [ocrResultId, setOcrResultId] = useState('')
   const [ocrResult, setOcrResult] = useState<OcrResult | null>(null)
   const [ocrMessage, setOcrMessage] = useState('')
+  const [ocrPositionTextVisible, setOcrPositionTextVisible] = useState(false)
   const apiRef = useRef<ExcalidrawImperativeAPI | null>(null)
   const lastSavedSceneRef = useRef('')
   const lastSavedContentSignatureRef = useRef('')
@@ -73,7 +73,6 @@ function AnnotationOverlayWindow() {
   const pendingElementEventsRef = useRef<Map<string, AnnotationElementEvent>>(new Map())
   const clientSequenceRef = useRef(0)
   const ocrSourceRef = useRef<{sourceKind: string; sourceId: string} | null>(null)
-  const floatingPanelTokenRef = useRef(0)
   const capsuleRef = useRef<HTMLElement | null>(null)
   const canvasRef = useRef<HTMLElement | null>(null)
   const copy = copyByLocale[locale]
@@ -178,6 +177,8 @@ function AnnotationOverlayWindow() {
         if (event.result) {
           setOcrResultId(event.result.id)
           setOcrResult(event.result)
+          setOcrPositionTextVisible(false)
+          removeAnnotationOcrPositionTextElements(apiRef.current, scheduleSave)
         }
       } else if (event.status === 'failed') {
         setOcrBusy(false)
@@ -195,6 +196,7 @@ function AnnotationOverlayWindow() {
     setOcrBusy(false)
     setOcrResultId('')
     setOcrResult(null)
+    setOcrPositionTextVisible(false)
     setOcrMessage('')
   }, [overlayKey])
 
@@ -470,7 +472,9 @@ function AnnotationOverlayWindow() {
     setOcrBusy(true)
     setOcrResultId('')
     setOcrResult(null)
+    setOcrPositionTextVisible(false)
     setOcrMessage(copy.whiteboard.ocrPreparing)
+    removeAnnotationOcrPositionTextElements(apiRef.current, scheduleSave)
     try {
       const saved = await saveCurrentAnnotation({force: true})
       if (!saved) throw new Error(copy.whiteboard.saveFailed)
@@ -502,17 +506,33 @@ function AnnotationOverlayWindow() {
     }
   }
 
-  const openAnnotationOcrResult = async (anchorElement: Element) => {
+  const openAnnotationOcrResult = async () => {
     if (!ocrResultId) {
       await queueAnnotationOCR()
       return
     }
     try {
-      const result = await openOcrResult(ocrResultId)
+      const result = ocrResult?.id === ocrResultId ? ocrResult : await openOcrResult(ocrResultId)
       setOcrResult(result)
-      const token = floatingPanelTokenRef.current + 1
-      floatingPanelTokenRef.current = token
-      await showOcrResultFloatingPanel(anchorElement, {resultId: result.id, token})
+      if (ocrPositionTextVisible) {
+        removeAnnotationOcrPositionTextElements(apiRef.current, scheduleSave)
+        setOcrPositionTextVisible(false)
+        setOcrMessage(copy.whiteboard.ocrBlocksHidden)
+        return
+      }
+      const api = apiRef.current
+      if (!api) return
+      const canvas = annotationSnapshotCanvasSize(overlayState)
+      const elements = buildAnnotationOcrPositionTextElements(result, canvas.width, canvas.height)
+      if (elements.length === 0) {
+        setOcrMessage(copy.screenshot.ocrNoText)
+        return
+      }
+      const current = removeAnnotationOcrPositionTextElementsFromList(api.getSceneElements())
+      api.updateScene({elements: [...current, ...elements] as any})
+      persistAnnotationApiSceneSoon(api, scheduleSave)
+      setOcrPositionTextVisible(true)
+      setOcrMessage(copy.screenshot.ocrBlocks(elements.length))
     } catch (error) {
       console.error('Failed to open annotation OCR result:', error)
       setOcrMessage(readableAnnotationError(error) || copy.whiteboard.ocrStatusFailed)
@@ -565,7 +585,7 @@ function AnnotationOverlayWindow() {
         <button type="button" disabled={ocrBusy} aria-label={copy.whiteboard.recognizeText} title={copy.whiteboard.recognizeText} onClick={() => void queueAnnotationOCR()}>
           <FileText size={16} />
         </button>
-        <button type="button" disabled={!canOpenOcrResult} aria-label={copy.whiteboard.openOcrResult} title={copy.whiteboard.openOcrResult} onClick={(event) => void openAnnotationOcrResult(event.currentTarget)}>
+        <button type="button" disabled={!canOpenOcrResult} className={ocrPositionTextVisible ? 'selected' : ''} aria-label={copy.whiteboard.openOcrResult} title={copy.whiteboard.openOcrResult} onClick={() => void openAnnotationOcrResult()}>
           <FileText size={16} />
         </button>
         {ocrMessage && <span className="annotation-ocr-status">{ocrMessage}</span>}
@@ -923,6 +943,111 @@ function transparentAnnotationBoundsElement(width: number, height: number) {
     link: null,
     locked: true,
   }
+}
+
+function removeAnnotationOcrPositionTextElements(api: ExcalidrawImperativeAPI | null, persist: (sceneJson: string, hasElements: boolean, contentSignature: string) => void) {
+  if (!api) return
+  const current = api.getSceneElements()
+  const next = removeAnnotationOcrPositionTextElementsFromList(current)
+  if (next.length === current.length) return
+  api.updateScene({elements: next as any})
+  persistAnnotationApiSceneSoon(api, persist)
+}
+
+function removeAnnotationOcrPositionTextElementsFromList(elements: readonly unknown[]) {
+  return elements.filter((element) => {
+    if (!element || typeof element !== 'object') return true
+    const customData = (element as {customData?: {recordingFreedomOcr?: {kind?: string}}}).customData
+    return customData?.recordingFreedomOcr?.kind !== 'position-text'
+  })
+}
+
+function buildAnnotationOcrPositionTextElements(result: OcrResult, canvasWidth: number, canvasHeight: number) {
+  const now = Date.now()
+  return result.blocks.flatMap((block, index) => {
+    const text = block.text.trim()
+    if (!text) return []
+    const bounds = annotationOcrBlockBounds(block)
+    if (!bounds) return []
+    const x = (bounds.x / Math.max(1, result.width)) * canvasWidth
+    const y = (bounds.y / Math.max(1, result.height)) * canvasHeight
+    const width = Math.max(28, (bounds.width / Math.max(1, result.width)) * canvasWidth)
+    const height = Math.max(18, (bounds.height / Math.max(1, result.height)) * canvasHeight)
+    const fontSize = Math.max(10, Math.min(24, Math.round(height * 0.66)))
+    return [{
+      id: `rf-annotation-ocr-position-text-${safeAnnotationElementId(result.id)}-${safeAnnotationElementId(block.id || String(index))}-${now}-${index}`,
+      type: 'text',
+      x,
+      y,
+      width,
+      height,
+      angle: 0,
+      strokeColor: '#111827',
+      backgroundColor: 'transparent',
+      fillStyle: 'solid',
+      strokeWidth: 1,
+      strokeStyle: 'solid',
+      roughness: 0,
+      opacity: 100,
+      groupIds: [],
+      frameId: null,
+      roundness: null,
+      seed: 8600 + index,
+      version: 1,
+      versionNonce: 8700 + index,
+      isDeleted: false,
+      boundElements: null,
+      updated: now,
+      link: null,
+      locked: false,
+      text,
+      originalText: text,
+      fontSize,
+      fontFamily: 1,
+      textAlign: 'center',
+      verticalAlign: 'middle',
+      baseline: Math.round(fontSize * 1.18),
+      containerId: null,
+      lineHeight: 1.18,
+      customData: {
+        recordingFreedomOcr: {
+          kind: 'position-text',
+          resultId: result.id,
+          blockId: block.id,
+        },
+      },
+    }]
+  })
+}
+
+function annotationOcrBlockBounds(block: OcrBlock) {
+  if (block.box.length === 0) return null
+  const xs = block.box.map((point) => point.x).filter(Number.isFinite)
+  const ys = block.box.map((point) => point.y).filter(Number.isFinite)
+  if (xs.length === 0 || ys.length === 0) return null
+  const left = Math.min(...xs)
+  const top = Math.min(...ys)
+  const right = Math.max(...xs)
+  const bottom = Math.max(...ys)
+  if (right <= left || bottom <= top) return null
+  return {x: left, y: top, width: right - left, height: bottom - top}
+}
+
+function safeAnnotationElementId(value: string) {
+  return value.replace(/[^a-zA-Z0-9_-]+/g, '-').slice(0, 80) || 'ocr'
+}
+
+function persistAnnotationApiSceneSoon(api: ExcalidrawImperativeAPI, persist: (sceneJson: string, hasElements: boolean, contentSignature: string) => void) {
+  window.setTimeout(() => {
+    try {
+      const elements = api.getSceneElements()
+      const files = api.getFiles()
+      const sceneJson = (serializeAsJSON as any)(elements, api.getAppState(), files, 'local')
+      persist(sceneJson, elements.length > 0, annotationContentSignature(elements, files))
+    } catch (error) {
+      console.error('Failed to persist annotation OCR text scene:', error)
+    }
+  }, 0)
 }
 
 function blobToDataURL(blob: Blob) {

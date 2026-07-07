@@ -53,7 +53,7 @@ test('annotation overlay exposes undo and region reselect controls', async ({pag
   })
 })
 
-test('recording annotation overlay queues background OCR and opens result panel', async ({page}) => {
+test('recording annotation overlay queues background OCR and shows positioned text on board', async ({page}) => {
   await openAnnotationOverlay(page)
 
   await page.getByRole('button', {name: 'Recognize board text'}).click()
@@ -119,23 +119,20 @@ test('recording annotation overlay queues background OCR and opens result panel'
   await expect(page.locator('.annotation-ocr-status')).toContainText('Board text recognized')
   await page.getByRole('button', {name: 'View board OCR result'}).click()
 
-  await expect.poll(async () => page.evaluate(() => {
-    const panel = (window as Window & {
-      __RF_FLOATING_PANEL__?: {visible?: boolean; kind?: string; contextId?: string; bounds?: {width?: number; height?: number}}
-    }).__RF_FLOATING_PANEL__
-    return {
-      visible: panel?.visible === true,
-      kind: panel?.kind ?? '',
-      contextId: panel?.contextId ?? '',
-      width: panel?.bounds?.width ?? 0,
-      height: panel?.bounds?.height ?? 0,
-    }
-  })).toEqual({
-    visible: true,
-    kind: 'ocr-result',
-    contextId: 'annotation-ocr-result',
-    width: 380,
-    height: 420,
+  await expect.poll(async () => readAnnotationOcrSceneState(page)).toMatchObject({
+    positionTextCount: 1,
+    firstPositionText: {
+      x: 120,
+      y: 120,
+      width: 300,
+      height: 48,
+      text: 'RecordingFreedom',
+    },
+  })
+
+  await page.getByRole('button', {name: 'View board OCR result'}).click()
+  await expect.poll(async () => readAnnotationOcrSceneState(page)).toMatchObject({
+    positionTextCount: 0,
   })
 })
 
@@ -299,6 +296,27 @@ async function openScreenshotAnnotationOverlay(page: Page) {
     }
   }, {settingsKey: browserSettingsKey, screenshotAnnotationKey: browserScreenshotAnnotationKey, frameInset: annotationFrameInset})
   await page.goto('/#/annotation-overlay')
+}
+
+async function readAnnotationOcrSceneState(page: Page) {
+  return page.evaluate((sceneKey) => {
+    const scene = JSON.parse(window.localStorage.getItem(sceneKey) || '{}')
+    const elements = Array.isArray(scene.elements) ? scene.elements : []
+    const positionTextElements = elements.filter((element: {customData?: {recordingFreedomOcr?: {kind?: string}}}) => {
+      return element.customData?.recordingFreedomOcr?.kind === 'position-text'
+    })
+    const firstPositionText = positionTextElements[0] as {x?: number; y?: number; width?: number; height?: number; text?: string} | undefined
+    return {
+      positionTextCount: positionTextElements.length,
+      firstPositionText: firstPositionText ? {
+        x: Math.round(firstPositionText.x ?? 0),
+        y: Math.round(firstPositionText.y ?? 0),
+        width: Math.round(firstPositionText.width ?? 0),
+        height: Math.round(firstPositionText.height ?? 0),
+        text: firstPositionText.text ?? '',
+      } : null,
+    }
+  }, browserAnnotationSceneKey)
 }
 
 function readyAnnotationOcrEvent() {

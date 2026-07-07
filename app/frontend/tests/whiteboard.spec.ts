@@ -235,24 +235,15 @@ test('whiteboard OCR blocks and recognized text persist after reopen', async ({p
   await reopenedPage.close()
 })
 
-test('whiteboard selected image OCR opens result panel with its exported image', async ({page}) => {
+test('whiteboard selected image OCR shows positioned text on its exported image', async ({page}) => {
   await openWhiteboardWithSettings(page, 'en', 'mountain-green', undefined, selectedImageWhiteboardScene())
   const readyEvent = readyWhiteboardSelectionOcrEvent()
   const result = readyEvent.result
-  const imageDataUrl = screenshotSvgDataUrl(320, 180, 'RecordingFreedom', '文字识别')
-  await page.evaluate(({ocrResult, image}) => {
+  await page.evaluate(({ocrResult}) => {
     ;(window as Window & {__RF_OCR_RESULTS__?: Record<string, unknown>}).__RF_OCR_RESULTS__ = {
       [ocrResult.id]: ocrResult,
     }
-    ;(window as Window & {__RF_OCR_IMAGES__?: Record<string, unknown>}).__RF_OCR_IMAGES__ = {
-      [ocrResult.id]: {
-        available: true,
-        dataUrl: image,
-        path: ocrResult.imagePath,
-        bytes: image.length,
-      },
-    }
-  }, {ocrResult: result, image: imageDataUrl})
+  }, {ocrResult: result})
 
   const selectedImageButton = page.getByRole('button', {name: 'Recognize selected image'})
   await expect(selectedImageButton).toBeEnabled()
@@ -263,64 +254,26 @@ test('whiteboard selected image OCR opens result panel with its exported image',
   }, readyEvent)
 
   await page.getByRole('button', {name: 'View board OCR result'}).click()
-  await expect.poll(async () => page.evaluate(() => {
-    const panel = (window as Window & {
-      __RF_FLOATING_PANEL__?: {visible?: boolean; kind?: string; contextId?: string; bounds?: {width?: number; height?: number}}
-    }).__RF_FLOATING_PANEL__
-    return {
-      visible: panel?.visible === true,
-      kind: panel?.kind ?? '',
-      contextId: panel?.contextId ?? '',
-      width: panel?.bounds?.width ?? 0,
-      height: panel?.bounds?.height ?? 0,
-    }
-  })).toEqual({
-    visible: true,
-    kind: 'ocr-result',
-    contextId: 'whiteboard-selection-result',
-    width: 380,
-    height: 420,
+  await expect.poll(async () => readWhiteboardOcrSceneState(page)).toMatchObject({
+    positionTextCount: 2,
+    firstPositionText: {
+      x: 32,
+      y: 18,
+      width: 128,
+      height: 36,
+      text: 'RecordingFreedom',
+    },
   })
 
-  const settingsRaw = await page.evaluate((settingsKey) => window.localStorage.getItem(settingsKey) || '', browserSettingsKey)
-  const panelState = await page.evaluate(() => (window as Window & {__RF_FLOATING_PANEL__?: unknown}).__RF_FLOATING_PANEL__)
-  const floatingPage = await page.context().newPage()
-  await floatingPage.addInitScript(({settingsKey, settings, ocrResult, image, panel}) => {
-    window.localStorage.setItem(settingsKey, settings)
-    ;(window as Window & {__RF_OCR_RESULTS__?: Record<string, unknown>}).__RF_OCR_RESULTS__ = {
-      [ocrResult.id]: ocrResult,
-    }
-    ;(window as Window & {__RF_OCR_IMAGES__?: Record<string, unknown>}).__RF_OCR_IMAGES__ = {
-      [ocrResult.id]: {
-        available: true,
-        dataUrl: image,
-        path: ocrResult.imagePath,
-        bytes: image.length,
-      },
-    }
-    ;(window as Window & {__RF_FLOATING_PANEL__?: unknown}).__RF_FLOATING_PANEL__ = panel
-  }, {settingsKey: browserSettingsKey, settings: settingsRaw, ocrResult: result, image: imageDataUrl, panel: panelState})
-  await floatingPage.goto('/#/floating-panel')
-
-  const panel = floatingPage.locator('.floating-panel-shell.panel-ocr-result')
-  await expect(panel).toBeVisible()
-  await expect(panel.locator('.ocr-result-summary')).toContainText('ppocrv5-mobile-zh-en')
-  await expect(panel.locator('.ocr-result-text')).toContainText('RecordingFreedom')
-  await expect(panel.locator('.ocr-result-text')).toContainText('文字识别')
-  await expect(panel.locator('.ocr-preview-frame img')).toHaveAttribute('src', /^data:image\/svg\+xml;base64,/)
-  await expect(panel.locator('.ocr-preview-frame svg')).toHaveAttribute('viewBox', '0 0 320 180')
-  await expect(panel.locator('.ocr-preview-frame polygon')).toHaveCount(2)
-  await expect(panel.locator('.ocr-preview-frame polygon').first()).toHaveAttribute(
-    'points',
-    '32,18 160,18 160,54 32,54',
-  )
-  await floatingPage.close()
+  await page.getByRole('button', {name: 'View board OCR result'}).click()
+  await expect.poll(async () => readWhiteboardOcrSceneState(page)).toMatchObject({
+    positionTextCount: 0,
+  })
 })
 
-test('whiteboard selected image OCR result panel renders real worker smoke evidence coordinates', async ({page}) => {
+test('whiteboard selected image OCR positions real worker smoke evidence text on selected image', async ({page}) => {
   await openWhiteboardWithSettings(page, 'en', 'mountain-green', undefined, selectedImageWhiteboardScene())
   const resultId = 'whiteboard-selection-smoke-result'
-  const imageDataUrl = screenshotSvgDataUrl(900, 280, 'RecordingFreedom', '文字识别')
   const smokeResult = {
     id: resultId,
     sourceKind: 'whiteboard-selection',
@@ -370,19 +323,11 @@ test('whiteboard selected image OCR result panel renders real worker smoke evide
     status: 'ready',
     result: smokeResult,
   }
-  await page.evaluate(({ocrResult, image}) => {
+  await page.evaluate(({ocrResult}) => {
     ;(window as Window & {__RF_OCR_RESULTS__?: Record<string, unknown>}).__RF_OCR_RESULTS__ = {
       [ocrResult.id]: ocrResult,
     }
-    ;(window as Window & {__RF_OCR_IMAGES__?: Record<string, unknown>}).__RF_OCR_IMAGES__ = {
-      [ocrResult.id]: {
-        available: true,
-        dataUrl: image,
-        path: ocrResult.imagePath,
-        bytes: image.length,
-      },
-    }
-  }, {ocrResult: smokeResult, image: imageDataUrl})
+  }, {ocrResult: smokeResult})
 
   const selectedImageButton = page.getByRole('button', {name: 'Recognize selected image'})
   await expect(selectedImageButton).toBeEnabled()
@@ -393,62 +338,16 @@ test('whiteboard selected image OCR result panel renders real worker smoke evide
   }, readyEvent)
 
   await page.getByRole('button', {name: 'View board OCR result'}).click()
-  await expect.poll(async () => page.evaluate(() => {
-    const panel = (window as Window & {
-      __RF_FLOATING_PANEL__?: {visible?: boolean; kind?: string; contextId?: string; bounds?: {width?: number; height?: number}}
-    }).__RF_FLOATING_PANEL__
-    return {
-      visible: panel?.visible === true,
-      kind: panel?.kind ?? '',
-      contextId: panel?.contextId ?? '',
-      width: panel?.bounds?.width ?? 0,
-      height: panel?.bounds?.height ?? 0,
-    }
-  })).toEqual({
-    visible: true,
-    kind: 'ocr-result',
-    contextId: resultId,
-    width: 380,
-    height: 420,
+  await expect.poll(async () => readWhiteboardOcrSceneState(page)).toMatchObject({
+    positionTextCount: 2,
+    firstPositionText: {
+      x: 11,
+      y: 21,
+      width: 228,
+      height: 50,
+      text: 'RecordingFreedom',
+    },
   })
-
-  const settingsRaw = await page.evaluate((settingsKey) => window.localStorage.getItem(settingsKey) || '', browserSettingsKey)
-  const panelState = await page.evaluate(() => (window as Window & {__RF_FLOATING_PANEL__?: unknown}).__RF_FLOATING_PANEL__)
-  const floatingPage = await page.context().newPage()
-  await floatingPage.addInitScript(({settingsKey, settings, ocrResult, image, panel}) => {
-    window.localStorage.setItem(settingsKey, settings)
-    ;(window as Window & {__RF_OCR_RESULTS__?: Record<string, unknown>}).__RF_OCR_RESULTS__ = {
-      [ocrResult.id]: ocrResult,
-    }
-    ;(window as Window & {__RF_OCR_IMAGES__?: Record<string, unknown>}).__RF_OCR_IMAGES__ = {
-      [ocrResult.id]: {
-        available: true,
-        dataUrl: image,
-        path: ocrResult.imagePath,
-        bytes: image.length,
-      },
-    }
-    ;(window as Window & {__RF_FLOATING_PANEL__?: unknown}).__RF_FLOATING_PANEL__ = panel
-  }, {settingsKey: browserSettingsKey, settings: settingsRaw, ocrResult: smokeResult, image: imageDataUrl, panel: panelState})
-  await floatingPage.goto('/#/floating-panel')
-
-  const panel = floatingPage.locator('.floating-panel-shell.panel-ocr-result')
-  await expect(panel).toBeVisible()
-  await expect(panel.locator('.ocr-result-summary')).toContainText('ppocrv5-mobile-zh-en')
-  await expect(panel.locator('.ocr-result-text')).toContainText('RecordingFreedom')
-  await expect(panel.locator('.ocr-result-text')).toContainText('文字识别')
-  await expect(panel.locator('.ocr-preview-frame img')).toHaveAttribute('src', /^data:image\/svg\+xml;base64,/)
-  await expect(panel.locator('.ocr-preview-frame svg')).toHaveAttribute('viewBox', '0 0 900 280')
-  await expect(panel.locator('.ocr-preview-frame polygon')).toHaveCount(2)
-  await expect(panel.locator('.ocr-preview-frame polygon').first()).toHaveAttribute(
-    'points',
-    '30.133928571428573,32.083333333333336 669.9776785714286,32.083333333333336 669.9776785714286,109.86111111111113 30.133928571428573,109.86111111111113',
-  )
-  await expect(panel.locator('.ocr-preview-frame polygon').nth(1)).toHaveAttribute(
-    'points',
-    '41.34375,137.08333333333334 330.3080357142857,137.08333333333334 330.3080357142857,234.30555555555557 41.34375,234.30555555555557',
-  )
-  await floatingPage.close()
 })
 
 test('whiteboard translated OCR text inserts as scene text after explicit provider configuration', async ({page}) => {
@@ -745,11 +644,6 @@ function readyWhiteboardSelectionOcrEvent() {
   }
 }
 
-function screenshotSvgDataUrl(width: number, height: number, title: string, subtitle: string) {
-  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}"><rect width="100%" height="100%" fill="#ffffff"/><text x="32" y="58" fill="#111827" font-family="Arial, sans-serif" font-size="34" font-weight="700">${title}</text><text x="32" y="112" fill="#111827" font-family="Arial, sans-serif" font-size="36" font-weight="700">${subtitle}</text></svg>`
-  return `data:image/svg+xml;base64,${Buffer.from(svg, 'utf-8').toString('base64')}`
-}
-
 function failedWhiteboardSelectionOcrEvent() {
   return {
     jobId: 'whiteboard-selection-failed-job',
@@ -834,12 +728,15 @@ async function readWhiteboardOcrSceneState(page: Page) {
     const ocrElements = elements.filter((element: {customData?: {recordingFreedomOcr?: {kind?: string}}}) => element.customData?.recordingFreedomOcr)
     const blockElements = ocrElements.filter((element: {customData?: {recordingFreedomOcr?: {kind?: string}}}) => element.customData?.recordingFreedomOcr?.kind === 'block')
     const textElements = ocrElements.filter((element: {customData?: {recordingFreedomOcr?: {kind?: string}}; text?: string}) => element.customData?.recordingFreedomOcr?.kind === 'text')
+    const positionTextElements = ocrElements.filter((element: {customData?: {recordingFreedomOcr?: {kind?: string}}; text?: string}) => element.customData?.recordingFreedomOcr?.kind === 'position-text')
     const translationElements = ocrElements.filter((element: {customData?: {recordingFreedomOcr?: {kind?: string}}; text?: string}) => element.customData?.recordingFreedomOcr?.kind === 'translation')
     const firstBlock = blockElements[0] as {x?: number; y?: number; width?: number; height?: number; customData?: {recordingFreedomOcr?: {text?: string}}} | undefined
+    const firstPositionText = positionTextElements[0] as {x?: number; y?: number; width?: number; height?: number; text?: string} | undefined
     const firstTranslation = translationElements[0] as {x?: number; y?: number; width?: number; height?: number; text?: string} | undefined
     return {
       blockCount: blockElements.length,
       textCount: textElements.length,
+      positionTextCount: positionTextElements.length,
       translationCount: translationElements.length,
       firstBlock: firstBlock ? {
         x: Math.round(firstBlock.x ?? 0),
@@ -847,6 +744,13 @@ async function readWhiteboardOcrSceneState(page: Page) {
         width: Math.round(firstBlock.width ?? 0),
         height: Math.round(firstBlock.height ?? 0),
         text: firstBlock.customData?.recordingFreedomOcr?.text ?? '',
+      } : null,
+      firstPositionText: firstPositionText ? {
+        x: Math.round(firstPositionText.x ?? 0),
+        y: Math.round(firstPositionText.y ?? 0),
+        width: Math.round(firstPositionText.width ?? 0),
+        height: Math.round(firstPositionText.height ?? 0),
+        text: firstPositionText.text ?? '',
       } : null,
       firstTranslation: firstTranslation ? {
         x: Math.round(firstTranslation.x ?? 0),

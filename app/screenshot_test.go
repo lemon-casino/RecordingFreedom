@@ -111,6 +111,10 @@ func TestOpenScreenshotDirectoryResolvesRelativeHistoryPath(t *testing.T) {
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		t.Fatalf("MkdirAll() error = %v", err)
 	}
+	shotPath := filepath.Join(dir, "relative-shot.png")
+	if err := os.WriteFile(shotPath, []byte("png"), 0o644); err != nil {
+		t.Fatalf("WriteFile() error = %v", err)
+	}
 	if err := service.saveScreenshotHistory([]ScreenshotItem{{
 		ID:        "relative-shot",
 		Path:      filepath.Join("data", "screenshots", "relative-shot.png"),
@@ -123,20 +127,20 @@ func TestOpenScreenshotDirectoryResolvesRelativeHistoryPath(t *testing.T) {
 	}
 
 	var opened string
-	originalOpenPath := openPath
-	openPath = func(path string) error {
+	originalOpenFileLocation := openFileLocation
+	openFileLocation = func(path string) error {
 		opened = path
 		return nil
 	}
 	t.Cleanup(func() {
-		openPath = originalOpenPath
+		openFileLocation = originalOpenFileLocation
 	})
 
 	if _, err := service.OpenScreenshotDirectory(ScreenshotImageRequest{ID: "relative-shot"}); err != nil {
 		t.Fatalf("OpenScreenshotDirectory() error = %v", err)
 	}
-	if opened != dir {
-		t.Fatalf("opened path = %q, want %q", opened, dir)
+	if opened != shotPath {
+		t.Fatalf("opened path = %q, want %q", opened, shotPath)
 	}
 }
 
