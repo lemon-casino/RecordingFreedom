@@ -32,6 +32,7 @@ import {resolveFloatingPanelPlacement} from './components/floating/floatingPosit
 type SaveState = 'ready' | 'dirty' | 'saving' | 'saved' | 'failed'
 type WhiteboardWindowGlobal = Window & {__RF_SCREENSHOT_WHITEBOARD__?: ScreenshotWhiteboardContext}
 type SelectedWhiteboardImage = {elementId: string; fileId: string; dataURL: string; x: number; y: number; width: number; height: number}
+type RecordingFreedomOcrElementKind = 'block' | 'text' | 'translation'
 
 const whiteboardColors = ['#ef4444', '#f59e0b', '#22c55e', '#38bdf8', '#a78bfa', '#f8fafc', '#111827']
 const whiteboardTools: Array<{tool: WhiteboardTool; icon: typeof PenLine; labelKey: keyof AppSettings['whiteboard'] | string}> = [
@@ -327,8 +328,9 @@ function WhiteboardWindow() {
     setOcrTranslationResult(null)
     setOcrTranslationBusy(false)
     setOcrBlocksVisible(false)
-      ocrImageAnchorRef.current = null
-      removeOcrBlockElements(apiRef.current, scheduleSave)
+    ocrImageAnchorRef.current = null
+    removeOcrBlockElements(apiRef.current, scheduleSave)
+    removeOcrTranslationElements(apiRef.current, scheduleSave)
     holdStatusText(copy.whiteboard.ocrPreparing)
     try {
       const snapshotDataUrl = await currentSnapshotDataURL()
@@ -366,6 +368,7 @@ function WhiteboardWindow() {
     setOcrBlocksVisible(false)
     ocrImageAnchorRef.current = selected
     removeOcrBlockElements(apiRef.current, scheduleSave)
+    removeOcrTranslationElements(apiRef.current, scheduleSave)
     holdStatusText(copy.whiteboard.ocrPreparing)
     try {
       const sceneJson = currentSceneJSON()
@@ -467,6 +470,31 @@ function WhiteboardWindow() {
     window.setTimeout(() => holdStatusText(copy.whiteboard.ocrTextInserted), 0)
   }
 
+  const applyOcrTranslationOverlay = (translated: OcrTranslationResult | null) => {
+    const api = apiRef.current
+    const result = ocrResult
+    const text = ocrTranslationPlainText(translated)
+    if (!api || !result || !text) return false
+    const anchor = ocrImageAnchorRef.current ?? selectedImageRef.current
+    if (anchor) {
+      const elements = buildOcrTranslationTextElements(result, translated, anchor)
+      if (elements.length > 0) {
+        const current = removeOcrTranslationElementsFromList(api.getSceneElements())
+        api.updateScene({elements: [...current, ...elements] as any})
+        persistApiSceneSoon(api, scheduleSave)
+        holdStatusText(copy.whiteboard.ocrTranslationInserted)
+        window.setTimeout(() => holdStatusText(copy.whiteboard.ocrTranslationInserted), 0)
+        return true
+      }
+    }
+    const textElement = buildOcrTextElement(result, text, anchor)
+    api.updateScene({elements: [...api.getSceneElements(), textElement] as any})
+    persistApiSceneSoon(api, scheduleSave)
+    holdStatusText(copy.whiteboard.ocrTranslationInserted)
+    window.setTimeout(() => holdStatusText(copy.whiteboard.ocrTranslationInserted), 0)
+    return true
+  }
+
   const translateWhiteboardOcrText = async () => {
     const result = ocrResult
     const text = result?.plainText.trim()
@@ -495,6 +523,7 @@ function WhiteboardWindow() {
         force: false,
       })
       setOcrTranslationResult(translated)
+      applyOcrTranslationOverlay(translated)
       holdStatusText(copy.screenshot.translationReady)
     } catch (error) {
       setOcrTranslationResult(null)
@@ -505,19 +534,9 @@ function WhiteboardWindow() {
   }
 
   const insertOcrTranslationText = () => {
-    const api = apiRef.current
-    const result = ocrResult
-    const text = ocrTranslationPlainText(ocrTranslationResult)
-    if (!api || !result || !text) {
+    if (!applyOcrTranslationOverlay(ocrTranslationResult)) {
       holdStatusText(copy.screenshot.copyTextEmpty)
-      return
     }
-    const anchor = ocrImageAnchorRef.current ?? selectedImageRef.current
-    const textElement = buildOcrTextElement(result, text, anchor)
-    holdStatusText(copy.whiteboard.ocrTranslationInserted)
-    api.updateScene({elements: [...api.getSceneElements(), textElement] as any})
-    persistApiSceneSoon(api, scheduleSave)
-    window.setTimeout(() => holdStatusText(copy.whiteboard.ocrTranslationInserted), 0)
   }
 
   const clearScene = () => {
@@ -987,11 +1006,24 @@ function removeOcrBlockElements(api: ExcalidrawImperativeAPI | null, persist: (s
   persistApiSceneSoon(api, persist)
 }
 
+function removeOcrTranslationElements(api: ExcalidrawImperativeAPI | null, persist: (sceneJson: string) => void) {
+  if (!api) return
+  const current = api.getSceneElements()
+  const next = removeOcrTranslationElementsFromList(current)
+  if (next.length === current.length) return
+  api.updateScene({elements: next as any})
+  persistApiSceneSoon(api, persist)
+}
+
 function removeOcrBlockElementsFromList(elements: readonly unknown[]) {
   return elements.filter((element) => !isRecordingFreedomOcrElement(element, 'block'))
 }
 
-function isRecordingFreedomOcrElement(element: unknown, kind: 'block' | 'text') {
+function removeOcrTranslationElementsFromList(elements: readonly unknown[]) {
+  return elements.filter((element) => !isRecordingFreedomOcrElement(element, 'translation'))
+}
+
+function isRecordingFreedomOcrElement(element: unknown, kind: RecordingFreedomOcrElementKind) {
   if (!element || typeof element !== 'object') return false
   const customData = (element as {customData?: {recordingFreedomOcr?: {kind?: string}}}).customData
   return customData?.recordingFreedomOcr?.kind === kind
@@ -1038,6 +1070,68 @@ function buildOcrBlockElements(result: OcrResult, anchor: SelectedWhiteboardImag
           resultId: result.id,
           blockId: block.id,
           text: block.text,
+        },
+      },
+    }]
+  })
+}
+
+function buildOcrTranslationTextElements(result: OcrResult, translation: OcrTranslationResult | null, anchor: SelectedWhiteboardImage) {
+  const translatedByBlockId = new Map((translation?.blocks ?? [])
+    .map((block) => [block.blockId, block.translated.trim()] as const)
+    .filter(([, translated]) => Boolean(translated)))
+  const now = Date.now()
+  return result.blocks.flatMap((block, index) => {
+    const translated = translatedByBlockId.get(block.id)
+    if (!translated) return []
+    const bounds = ocrBlockBounds(block)
+    if (!bounds) return []
+    const x = anchor.x + (bounds.x / Math.max(1, result.width)) * anchor.width
+    const y = anchor.y + (bounds.y / Math.max(1, result.height)) * anchor.height
+    const width = Math.max(28, (bounds.width / Math.max(1, result.width)) * anchor.width)
+    const height = Math.max(18, (bounds.height / Math.max(1, result.height)) * anchor.height)
+    const fontSize = Math.max(12, Math.min(28, Math.round(height * 0.72)))
+    return [{
+      id: `rf-ocr-translation-${safeElementId(result.id)}-${safeElementId(block.id || String(index))}-${now}-${index}`,
+      type: 'text',
+      x,
+      y,
+      width,
+      height,
+      angle: 0,
+      strokeColor: '#e0f2fe',
+      backgroundColor: 'transparent',
+      fillStyle: 'solid',
+      strokeWidth: 1,
+      strokeStyle: 'solid',
+      roughness: 0,
+      opacity: 100,
+      groupIds: [],
+      frameId: null,
+      roundness: null,
+      seed: 4000 + index,
+      version: 1,
+      versionNonce: 5000 + index,
+      isDeleted: false,
+      boundElements: null,
+      updated: now,
+      link: null,
+      locked: false,
+      text: translated,
+      originalText: translated,
+      fontSize,
+      fontFamily: 1,
+      textAlign: 'center',
+      verticalAlign: 'middle',
+      baseline: Math.round(fontSize * 1.18),
+      containerId: null,
+      lineHeight: 1.18,
+      customData: {
+        recordingFreedomOcr: {
+          kind: 'translation',
+          resultId: result.id,
+          blockId: block.id,
+          source: block.text,
         },
       },
     }]

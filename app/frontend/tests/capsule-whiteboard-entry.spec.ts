@@ -59,36 +59,54 @@ test('screenshot tools hide window and focused-window capture modes', async ({pa
 
 test('screenshot history delete requires left swipe confirmation', async ({page}) => {
   await openRecorderShell(page, {
-    screenshotHistory: [{
-      id: 'delete-confirm-shot',
-      path: 'browser-preview/data/screenshots/delete-confirm-shot.png',
-      thumbnailPath: 'browser-preview/data/screenshots/thumbnails/delete-confirm-shot.png',
-      createdAt: '2026-07-04T12:00:00Z',
-      width: 520,
-      height: 320,
-      mode: 'region',
-      pinned: false,
-      fixed: false,
-      ocrStatus: 'none',
-    }],
+    screenshotHistory: [
+      {
+        id: 'delete-confirm-shot',
+        path: 'browser-preview/data/screenshots/delete-confirm-shot.png',
+        thumbnailPath: 'browser-preview/data/screenshots/thumbnails/delete-confirm-shot.png',
+        createdAt: '2026-07-04T12:00:00Z',
+        width: 520,
+        height: 320,
+        mode: 'region',
+        pinned: false,
+        fixed: false,
+        ocrStatus: 'none',
+      },
+      {
+        id: 'delete-confirm-shot-2',
+        path: 'browser-preview/data/screenshots/delete-confirm-shot-2.png',
+        thumbnailPath: 'browser-preview/data/screenshots/thumbnails/delete-confirm-shot-2.png',
+        createdAt: '2026-07-04T12:01:00Z',
+        width: 520,
+        height: 320,
+        mode: 'region',
+        pinned: false,
+        fixed: false,
+        ocrStatus: 'none',
+      },
+    ],
   })
 
   await page.getByRole('button', {name: 'Screenshot / board'}).click()
   const row = page.locator('.screenshot-history-row').first()
+  const secondRow = page.locator('.screenshot-history-row').nth(1)
   await expect(row).toContainText('Region screenshot')
   await revealScreenshotDelete(row, page)
   await expect(row).toHaveClass(/delete-open/)
+  await expect(row).toHaveClass(/delete-revealed/)
+  await expect(secondRow).not.toHaveClass(/delete-revealed/)
+  await expect(page.getByRole('button', {name: 'Back'})).toHaveCount(1)
   await expect(row.getByRole('button', {name: 'Back'})).toBeVisible()
   await row.getByRole('button', {name: 'Back'}).click()
   await expect(row).not.toHaveClass(/delete-open/)
-  await expect.poll(async () => page.evaluate((key) => JSON.parse(window.localStorage.getItem(key) || '[]').length, browserScreenshotHistoryKey)).toBe(1)
+  await expect.poll(async () => page.evaluate((key) => JSON.parse(window.localStorage.getItem(key) || '[]').length, browserScreenshotHistoryKey)).toBe(2)
   await page.waitForTimeout(180)
 
   await revealScreenshotDelete(row, page)
   await expect(row).toHaveClass(/delete-open/)
   await row.getByRole('button', {name: 'Delete screenshot'}).click()
-  await expect(page.locator('.screenshot-history-list')).toContainText('No screenshot history')
-  await expect.poll(async () => page.evaluate((key) => JSON.parse(window.localStorage.getItem(key) || '[]').length, browserScreenshotHistoryKey)).toBe(0)
+  await expect(page.locator('.screenshot-history-row')).toHaveCount(1)
+  await expect.poll(async () => page.evaluate((key) => JSON.parse(window.localStorage.getItem(key) || '[]').length, browserScreenshotHistoryKey)).toBe(1)
 })
 
 test('capsule whiteboard remains available as a board during audio recording', async ({page}) => {
@@ -136,6 +154,17 @@ test('screenshot history exposes folder action and keeps delete behind swipe con
 
   await page.getByRole('button', {name: 'Screenshot / board'}).click()
   const row = page.locator('.screenshot-history-row').first()
+  await row.locator('.screenshot-history-main').click()
+  await expect.poll(async () => page.evaluate((key) => {
+    const state = JSON.parse(window.localStorage.getItem(key) || '{}')
+    return {
+      visible: state.visible === true,
+      itemId: state.item?.id ?? '',
+    }
+  }, browserScreenshotPinStateKey)).toEqual({
+    visible: true,
+    itemId: 'history-shot',
+  })
   await expect(page.getByRole('button', {name: 'Open containing folder'})).toBeVisible()
   await expect(page.getByRole('button', {name: 'Delete screenshot'})).toHaveCount(0)
   await revealScreenshotDelete(row, page)
@@ -527,29 +556,57 @@ test('screenshot history ready item opens OCR result floating panel with real wo
 })
 
 test('screenshot history translates ready OCR text through the configured provider', async ({page}) => {
+  const screenshotHistory = [{
+    id: 'history-translate-shot',
+    path: 'browser-preview/data/screenshots/history-translate-shot.png',
+    thumbnailPath: 'browser-preview/data/screenshots/thumbnails/history-translate-shot.png',
+    createdAt: '2026-07-04T12:00:00Z',
+    width: 520,
+    height: 320,
+    mode: 'region',
+    pinned: false,
+    fixed: false,
+    ocrStatus: 'ready',
+    ocrResultId: 'ocr-result-history-translate-shot',
+    ocrModelId: 'ppocrv5-mobile-zh-en',
+    ocrLanguage: 'zh-en',
+    ocrUpdatedAt: '2026-07-04T12:01:00Z',
+  }]
+  const settings = browserSettingsWithOcrTranslation(baseBrowserSettings('en', false, false), true)
   await openRecorderShell(page, {
     ocrTranslation: true,
-    screenshotHistory: [{
-      id: 'history-translate-shot',
-      path: 'browser-preview/data/screenshots/history-translate-shot.png',
-      thumbnailPath: 'browser-preview/data/screenshots/thumbnails/history-translate-shot.png',
-      createdAt: '2026-07-04T12:00:00Z',
-      width: 520,
-      height: 320,
-      mode: 'region',
-      pinned: false,
-      fixed: false,
-      ocrStatus: 'ready',
-      ocrResultId: 'ocr-result-history-translate-shot',
-      ocrModelId: 'ppocrv5-mobile-zh-en',
-      ocrLanguage: 'zh-en',
-      ocrUpdatedAt: '2026-07-04T12:01:00Z',
-    }],
+    screenshotHistory,
+  })
+  await page.evaluate(() => {
+    ;(window as Window & {__RF_FORCE_FLOATING_PANEL_WINDOWS__?: boolean}).__RF_FORCE_FLOATING_PANEL_WINDOWS__ = true
   })
 
   await page.getByRole('button', {name: 'Screenshot / board'}).click()
   await page.getByRole('button', {name: 'Translate text'}).click()
-  await expect(page.locator('.screenshot-history-header')).toContainText('Translation copied')
+  await expect.poll(async () => page.evaluate(() => (window as Window & {
+    __RF_FLOATING_PANEL__?: {visible?: boolean; kind?: string; contextId?: string; bounds?: {width?: number; height?: number}}
+  }).__RF_FLOATING_PANEL__ ?? null)).toMatchObject({
+    visible: true,
+    kind: 'ocr-result',
+    contextId: 'translate:ocr-result-history-translate-shot',
+  })
+  const panelState = await page.evaluate(() => (window as Window & {
+    __RF_FLOATING_PANEL__?: {visible?: boolean; kind?: string; contextId?: string; bounds?: {width?: number; height?: number}}
+  }).__RF_FLOATING_PANEL__)
+
+  const floatingPage = await page.context().newPage()
+  await floatingPage.addInitScript(({settingsKey, screenshotHistoryKey, nextSettings, history, panel}) => {
+    window.localStorage.setItem(settingsKey, JSON.stringify(nextSettings))
+    window.localStorage.setItem(screenshotHistoryKey, JSON.stringify(history))
+    ;(window as Window & {__RF_FLOATING_PANEL__?: unknown}).__RF_FLOATING_PANEL__ = panel
+  }, {settingsKey: browserSettingsKey, screenshotHistoryKey: browserScreenshotHistoryKey, nextSettings: settings, history: screenshotHistory, panel: panelState})
+  await floatingPage.goto('/#/floating-panel')
+  const panel = floatingPage.locator('.floating-panel-shell.panel-ocr-result')
+  await expect(panel).toBeVisible()
+  await expect(panel.locator('.ocr-translation-note')).toContainText('Translation ready')
+  await expect(panel.locator('.ocr-preview-frame .ocr-position-text-button.translated')).toHaveCount(2)
+  await expect(panel.locator('.ocr-preview-frame .ocr-position-text-button.translated').first()).toContainText('RecordingFreedom translated')
+  await floatingPage.close()
 })
 
 test('pinned screenshot window restores OCR highlight and result floating panel after resize', async ({page}) => {

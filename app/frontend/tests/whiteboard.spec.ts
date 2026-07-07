@@ -451,7 +451,7 @@ test('whiteboard selected image OCR result panel renders real worker smoke evide
   await floatingPage.close()
 })
 
-test('whiteboard translated OCR text inserts as scene text after explicit provider configuration', async ({page}) => {
+test('whiteboard translated OCR text overlays the selected image positions after explicit provider configuration', async ({page}) => {
   await openWhiteboardWithSettings(page, 'en', 'mountain-green', undefined, selectedImageWhiteboardScene(), true)
 
   const selectedImageButton = page.getByRole('button', {name: 'Recognize selected image'})
@@ -466,16 +466,21 @@ test('whiteboard translated OCR text inserts as scene text after explicit provid
   const translateButton = page.getByRole('button', {name: 'Translate recognized text'})
   await expect(translateButton).toBeEnabled()
   await translateButton.click()
-  await expect(page.locator('.whiteboard-status')).toContainText('Translation ready')
 
   const insertTranslationButton = page.getByRole('button', {name: 'Insert translated text'})
   await expect(insertTranslationButton).toBeEnabled()
-  await insertTranslationButton.click()
-
   await expect.poll(async () => readWhiteboardOcrSceneState(page)).toMatchObject({
     blockCount: 0,
-    textCount: 1,
-    insertedText: 'RecordingFreedom translated\nText recognition translated',
+    textCount: 0,
+    translationCount: 2,
+    firstTranslation: {
+      x: 32,
+      y: 18,
+      width: 128,
+      height: 36,
+      text: 'RecordingFreedom translated',
+    },
+    insertedText: '',
   })
 })
 
@@ -829,16 +834,26 @@ async function readWhiteboardOcrSceneState(page: Page) {
     const ocrElements = elements.filter((element: {customData?: {recordingFreedomOcr?: {kind?: string}}}) => element.customData?.recordingFreedomOcr)
     const blockElements = ocrElements.filter((element: {customData?: {recordingFreedomOcr?: {kind?: string}}}) => element.customData?.recordingFreedomOcr?.kind === 'block')
     const textElements = ocrElements.filter((element: {customData?: {recordingFreedomOcr?: {kind?: string}}; text?: string}) => element.customData?.recordingFreedomOcr?.kind === 'text')
+    const translationElements = ocrElements.filter((element: {customData?: {recordingFreedomOcr?: {kind?: string}}; text?: string}) => element.customData?.recordingFreedomOcr?.kind === 'translation')
     const firstBlock = blockElements[0] as {x?: number; y?: number; width?: number; height?: number; customData?: {recordingFreedomOcr?: {text?: string}}} | undefined
+    const firstTranslation = translationElements[0] as {x?: number; y?: number; width?: number; height?: number; text?: string} | undefined
     return {
       blockCount: blockElements.length,
       textCount: textElements.length,
+      translationCount: translationElements.length,
       firstBlock: firstBlock ? {
         x: Math.round(firstBlock.x ?? 0),
         y: Math.round(firstBlock.y ?? 0),
         width: Math.round(firstBlock.width ?? 0),
         height: Math.round(firstBlock.height ?? 0),
         text: firstBlock.customData?.recordingFreedomOcr?.text ?? '',
+      } : null,
+      firstTranslation: firstTranslation ? {
+        x: Math.round(firstTranslation.x ?? 0),
+        y: Math.round(firstTranslation.y ?? 0),
+        width: Math.round(firstTranslation.width ?? 0),
+        height: Math.round(firstTranslation.height ?? 0),
+        text: firstTranslation.text ?? '',
       } : null,
       insertedText: (textElements[0] as {text?: string} | undefined)?.text ?? '',
     }

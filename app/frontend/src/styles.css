@@ -1225,6 +1225,11 @@ body.rf-recorder-window .select-menu-list {
   --wails-draggable: no-drag;
 }
 
+.screenshot-history-row.delete-open,
+.screenshot-history-row.delete-revealed {
+  z-index: 5;
+}
+
 .screenshot-history-slide {
   position: relative;
   z-index: 2;
@@ -1246,11 +1251,21 @@ body.rf-recorder-window .select-menu-list {
 .screenshot-history-delete-actions {
   position: absolute;
   inset: 4px 4px 4px auto;
-  z-index: 1;
+  z-index: 4;
   display: grid;
   grid-template-columns: 54px 58px;
   gap: 4px;
   width: 116px;
+  opacity: 0;
+  pointer-events: none;
+  visibility: hidden;
+  transition: opacity 120ms ease, visibility 120ms ease;
+}
+
+.screenshot-history-row.delete-revealed .screenshot-history-delete-actions {
+  opacity: 1;
+  pointer-events: auto;
+  visibility: visible;
 }
 
 .screenshot-history-delete-actions button {
@@ -1552,6 +1567,19 @@ body.rf-recorder-window .select-menu-list {
 .ocr-position-text-button.copied {
   border-color: rgba(245, 158, 11, 0.85);
   background: rgba(87, 54, 10, 0.9);
+}
+
+.ocr-position-text-button.translated {
+  border-color: rgba(56, 189, 248, 0.72);
+  background: rgba(10, 37, 52, 0.86);
+  color: #f0fbff;
+}
+
+.ocr-position-text-button.translated:hover,
+.ocr-position-text-button.translated:focus-visible,
+.ocr-position-text-button.translated.active {
+  border-color: rgba(125, 211, 252, 0.92);
+  background: rgba(8, 47, 73, 0.92);
 }
 
 .ocr-preview-frame polygon {
