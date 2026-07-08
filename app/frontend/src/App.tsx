@@ -6542,6 +6542,19 @@ function resizeRegionBounds(bounds: RegionFrameState['bounds'], action: RegionEd
 const minRegionEditorSize = 64
 const regionManualDragThreshold = 6
 
+function regionPurposeClassName(purpose: RegionFrameState['purpose'] | undefined) {
+  switch (purpose) {
+    case 'annotation':
+      return 'region-purpose-annotation'
+    case 'screenshot':
+      return 'region-purpose-screenshot'
+    case 'scrolling-screenshot':
+      return 'region-purpose-scrolling-screenshot'
+    default:
+      return 'region-purpose-capture'
+  }
+}
+
 function RegionOverlayWindow() {
   const overlayWindow = window as Window & {__RF_REGION_SESSION__?: RegionSelectionSession}
   const initialSession = overlayWindow.__RF_REGION_SESSION__
@@ -6577,6 +6590,9 @@ function RegionOverlayWindow() {
   const isAnnotationRegionSelection = session?.purpose === 'annotation'
   const isScreenshotRegionSelection = session?.purpose === 'screenshot'
   const isScrollingScreenshotSelection = session?.purpose === 'scrolling-screenshot'
+  const activePurposeClass = regionPurposeClassName(editFrame?.purpose ?? session?.purpose)
+  const selectionPurposeClass = regionPurposeClassName(session?.purpose)
+  const editPurposeClass = regionPurposeClassName(editFrame?.purpose)
   const sessionCandidates = session?.candidates ?? []
   const visibleAssistCandidate = !isEditingRegion && !isRecordingRegion
     ? selectedRect
@@ -6883,7 +6899,7 @@ function RegionOverlayWindow() {
   return (
     <main
       ref={shellRef}
-      className={`region-overlay-shell ${shellMode}`}
+      className={`region-overlay-shell ${shellMode} ${activePurposeClass}`}
       aria-label={copy.aria.regionOverlay}
       onPointerMove={isEditingRegion ? editDrag.updateEdit : undefined}
       onPointerCancel={isEditingRegion ? editDrag.completeEdit : undefined}
@@ -7020,7 +7036,7 @@ function RegionOverlayWindow() {
       )}
       {!isEditingRegion && !isRecordingRegion && selectedRect && (
         <div
-          className={`region-selection-rect ${invalid ? 'invalid' : ''}`}
+          className={`region-selection-rect ${selectionPurposeClass} ${invalid ? 'invalid' : ''}`}
           style={{
             left: selectedRect.x,
             top: selectedRect.y,
@@ -7039,7 +7055,7 @@ function RegionOverlayWindow() {
       )}
       {recordingRect && (
         <div
-          className="region-recording-frame"
+          className="region-recording-frame region-purpose-capture"
           style={{
             left: recordingRect.x,
             top: recordingRect.y,
@@ -7050,7 +7066,7 @@ function RegionOverlayWindow() {
       )}
       {editableRect && (
         <div
-          className="region-edit-rect"
+          className={`region-edit-rect ${editPurposeClass}`}
           style={{
             left: editableRect.x,
             top: editableRect.y,

@@ -10,6 +10,8 @@ import (
 	"time"
 
 	"github.com/lemon-casino/RecordingFreedom/app/internal/devices"
+	"github.com/lemon-casino/RecordingFreedom/app/internal/recording"
+	"github.com/lemon-casino/RecordingFreedom/app/internal/recpackage"
 	"github.com/wailsapp/wails/v3/pkg/application"
 )
 
@@ -234,6 +236,10 @@ func (s *RecordingFreedomService) CancelRegionSelection() RegionSelectionResult 
 	if s.regionOverlay != nil {
 		s.regionOverlay.Hide()
 	}
+	s.clearRegionFrameState()
+	if session != nil && session.Purpose == regionSelectionPurposeAnnotation {
+		_, _ = s.restoreRecordingRegionFrameIfNeeded()
+	}
 	return result
 }
 
@@ -285,6 +291,7 @@ func (s *RecordingFreedomService) HideRegionFrame() error {
 	if s.regionOverlay != nil {
 		s.regionOverlay.Hide()
 	}
+	s.clearRegionFrameState()
 	return nil
 }
 
@@ -344,6 +351,7 @@ func (s *RecordingFreedomService) showRegionEditorWithPurpose(bounds application
 }
 
 func (s *RecordingFreedomService) broadcastRegionFrameState(state RegionFrameState) {
+	s.setRegionFrameState(state)
 	payload, err := json.Marshal(state)
 	if err != nil {
 		return
@@ -355,6 +363,77 @@ func (s *RecordingFreedomService) broadcastRegionFrameState(state RegionFrameSta
 	if s.regionOverlay != nil {
 		s.regionOverlay.ExecJS(script)
 	}
+}
+
+func (s *RecordingFreedomService) setRegionFrameState(state RegionFrameState) {
+	s.regionMu.Lock()
+	defer s.regionMu.Unlock()
+	s.regionFrameState = state
+	s.regionFrameVisible = state.Bounds.Width > 0 && state.Bounds.Height > 0
+}
+
+func (s *RecordingFreedomService) clearRegionFrameState() {
+	s.regionMu.Lock()
+	defer s.regionMu.Unlock()
+	s.regionFrameState = RegionFrameState{}
+	s.regionFrameVisible = false
+}
+
+func (s *RecordingFreedomService) currentRegionFrameState() (RegionFrameState, bool) {
+	s.regionMu.Lock()
+	defer s.regionMu.Unlock()
+	if !s.regionFrameVisible {
+		return RegionFrameState{}, false
+	}
+	return s.regionFrameState, true
+}
+
+func (s *RecordingFreedomService) restoreRecordingRegionFrameIfNeeded() (RegionFrameState, bool) {
+	if s.recorder == nil {
+		return RegionFrameState{}, false
+	}
+	session, ok := s.recorder.ActiveSession()
+	if !ok || session.RecordingMode != recpackage.RecordingModeScreen || strings.TrimSpace(session.Manifest) == "" {
+		return RegionFrameState{}, false
+	}
+	manifest, err := recpackage.NewService().ReadManifest(session.Manifest)
+	if err != nil {
+		s.logEvent("region-frame", "restore-skipped", map[string]string{"reason": err.Error()})
+		return RegionFrameState{}, false
+	}
+	if manifest.Source.Type != string(recording.SourceRegion) || manifest.Source.Geometry == nil {
+		return RegionFrameState{}, false
+	}
+	geometry := manifest.Source.Geometry
+	if geometry.Width <= 0 || geometry.Height <= 0 {
+		return RegionFrameState{}, false
+	}
+
+	rect := s.selectedRegionDisplayBounds()
+	if rect.Width <= 0 || rect.Height <= 0 {
+		rect = application.Rect{
+			X:      geometry.X,
+			Y:      geometry.Y,
+			Width:  geometry.Width,
+			Height: geometry.Height,
+		}
+	}
+	if rect.Width <= 0 || rect.Height <= 0 {
+		return RegionFrameState{}, false
+	}
+	if err := s.showRegionFrame(rect); err != nil {
+		s.logEvent("region-frame", "restore-failed", map[string]string{"reason": err.Error()})
+		return RegionFrameState{}, false
+	}
+	state, ok := s.currentRegionFrameState()
+	if !ok {
+		return RegionFrameState{}, false
+	}
+	s.logEvent("region-frame", "restore-recording", map[string]string{
+		"sessionId": session.ID,
+		"bounds":    fmt.Sprintf("%d,%d %dx%d", rect.X, rect.Y, rect.Width, rect.Height),
+	})
+	return state, true
 }
 
 func (s *RecordingFreedomService) regionResultFromAbsoluteDIP(absoluteDIP application.Rect) RegionSelectionResult {

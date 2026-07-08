@@ -107,15 +107,21 @@ func (s *RecordingFreedomService) ShowAnnotationOverlay() (AnnotationOverlayStat
 }
 
 func (s *RecordingFreedomService) HideAnnotationOverlay() error {
-	if s.annotationOverlay == nil {
-		return nil
-	}
+	return s.hideAnnotationOverlay(true)
+}
+
+func (s *RecordingFreedomService) hideAnnotationOverlay(restoreRegionFrame bool) error {
 	s.nextAnnotationToken()
 	_, _ = s.annotationHitRegions.Update(CapsuleWindowHitRegionsRequest{Enabled: false})
 	_ = s.applyAnnotationOverlayHitRegions()
-	s.annotationOverlay.Hide()
+	if s.annotationOverlay != nil {
+		s.annotationOverlay.Hide()
+	}
 	s.logEvent("annotation-overlay", "hide", nil)
 	s.emitWhiteboardVisibility(false, "annotation")
+	if restoreRegionFrame {
+		_, _ = s.restoreRecordingRegionFrameIfNeeded()
+	}
 	return nil
 }
 
@@ -209,6 +215,7 @@ func (s *RecordingFreedomService) CompleteAnnotationRegionSelection(req RegionSe
 	if s.regionOverlay != nil {
 		s.regionOverlay.Hide()
 	}
+	s.clearRegionFrameState()
 	s.logEvent("annotation-overlay", "region-selected", map[string]string{
 		"sessionId": recordingSession.ID,
 		"bounds":    fmt.Sprintf("%d,%d %dx%d", absoluteDIP.X, absoluteDIP.Y, absoluteDIP.Width, absoluteDIP.Height),
@@ -228,7 +235,7 @@ func (s *RecordingFreedomService) ReselectAnnotationRegion() (RegionSelectionSes
 		return RegionSelectionSession{}, err
 	}
 	s.clearAnnotationRegionDIP(session.ID)
-	if err := s.HideAnnotationOverlay(); err != nil {
+	if err := s.hideAnnotationOverlay(false); err != nil {
 		return RegionSelectionSession{}, err
 	}
 	selection, err := s.ShowAnnotationRegionSelector()

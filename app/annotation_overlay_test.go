@@ -127,6 +127,82 @@ func TestAnnotationOverlayStateAllowsPausedVideoRecording(t *testing.T) {
 	}
 }
 
+func TestHideAnnotationOverlayRestoresActiveRegionRecordingFrame(t *testing.T) {
+	service := newAnnotationOverlayTestService(t)
+	recordingBounds := applicationRect(120, 90, 800, 450)
+	if _, err := service.recorder.StartRecording(recording.StartRequest{
+		SourceID:   "region:custom",
+		SourceType: recording.SourceRegion,
+		SourceGeometry: &recording.SourceGeometry{
+			X:      recordingBounds.X,
+			Y:      recordingBounds.Y,
+			Width:  recordingBounds.Width,
+			Height: recordingBounds.Height,
+		},
+	}); err != nil {
+		t.Fatalf("StartRecording() error = %v", err)
+	}
+	service.setSelectedRegionDIP(recordingBounds)
+	if err := service.showRegionFrame(recordingBounds); err != nil {
+		t.Fatalf("showRegionFrame() error = %v", err)
+	}
+
+	annotationBounds := applicationRect(180, 130, 320, 240)
+	if _, err := service.showRegionEditorWithPurpose(annotationBounds, regionSelectionPurposeAnnotation); err != nil {
+		t.Fatalf("showRegionEditorWithPurpose() error = %v", err)
+	}
+	state, ok := service.currentRegionFrameState()
+	if !ok || state.Mode != "edit" || state.Purpose != regionSelectionPurposeAnnotation {
+		t.Fatalf("annotation frame state = %#v, visible %v", state, ok)
+	}
+	service.clearRegionFrameState()
+
+	if err := service.HideAnnotationOverlay(); err != nil {
+		t.Fatalf("HideAnnotationOverlay() error = %v", err)
+	}
+	state, ok = service.currentRegionFrameState()
+	if !ok {
+		t.Fatal("recording region frame was not restored")
+	}
+	if state.Mode != "recording" || state.Purpose != regionSelectionPurposeCapture {
+		t.Fatalf("restored frame mode/purpose = %#v, want recording capture", state)
+	}
+	if state.Bounds.X != recordingBounds.X || state.Bounds.Y != recordingBounds.Y || state.Bounds.Width != recordingBounds.Width || state.Bounds.Height != recordingBounds.Height {
+		t.Fatalf("restored frame bounds = %#v, want %#v", state.Bounds, recordingBounds)
+	}
+}
+
+func TestHideAnnotationOverlayDoesNotRestoreFrameForNonRegionRecording(t *testing.T) {
+	service := newAnnotationOverlayTestService(t)
+	staleRegionBounds := applicationRect(50, 60, 640, 360)
+	if _, err := service.recorder.StartRecording(recording.StartRequest{
+		SourceID:   "screen:primary",
+		SourceType: recording.SourceScreen,
+		SourceGeometry: &recording.SourceGeometry{
+			X:      0,
+			Y:      0,
+			Width:  1280,
+			Height: 720,
+		},
+	}); err != nil {
+		t.Fatalf("StartRecording() error = %v", err)
+	}
+	annotationBounds := applicationRect(120, 90, 320, 240)
+	if _, err := service.showRegionEditorWithPurpose(annotationBounds, regionSelectionPurposeAnnotation); err != nil {
+		t.Fatalf("showRegionEditorWithPurpose() error = %v", err)
+	}
+	service.setSelectedRegionDIP(staleRegionBounds)
+	service.clearRegionFrameState()
+
+	if err := service.HideAnnotationOverlay(); err != nil {
+		t.Fatalf("HideAnnotationOverlay() error = %v", err)
+	}
+	state, ok := service.currentRegionFrameState()
+	if ok {
+		t.Fatalf("frame state = %#v, want no restored region frame for screen recording", state)
+	}
+}
+
 func TestAnnotationOverlayStateRejectsNonVideoRecordingModes(t *testing.T) {
 	t.Run("no active recording", func(t *testing.T) {
 		service := newAnnotationOverlayTestService(t)

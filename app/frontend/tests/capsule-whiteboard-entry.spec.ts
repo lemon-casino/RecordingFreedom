@@ -1421,6 +1421,35 @@ test('region overlay uses the same selected-edit right click rule for every sele
   }
 })
 
+test('region overlay uses themed border colors for capture annotation and screenshot frames', async ({page}) => {
+  const settings = baseBrowserSettings('en', false, false)
+  settings.window.theme = 'sky-blue'
+  await page.addInitScript(({settingsKey, settingsValue}) => {
+    window.localStorage.setItem(settingsKey, JSON.stringify(settingsValue))
+  }, {settingsKey: browserSettingsKey, settingsValue: settings})
+  await page.goto('/#/region-overlay')
+
+  for (const scenario of [
+    {purpose: 'capture', color: 'rgb(56, 189, 248)', className: /region-purpose-capture/},
+    {purpose: 'annotation', color: 'rgb(147, 197, 253)', className: /region-purpose-annotation/},
+    {purpose: 'screenshot', color: 'rgb(34, 211, 238)', className: /region-purpose-screenshot/},
+  ] as const) {
+    await page.evaluate((purpose) => {
+      const frame = {
+        bounds: {x: 180, y: 110, width: 280, height: 220},
+        overlayBounds: {x: 0, y: 0, width: 900, height: 620},
+        mode: 'edit',
+        purpose,
+      }
+      ;(window as Window & {__RF_REGION_FRAME__?: unknown}).__RF_REGION_FRAME__ = frame
+      window.dispatchEvent(new CustomEvent('rf-region-frame', {detail: frame}))
+    }, scenario.purpose)
+    const frame = page.locator('.region-edit-rect')
+    await expect(frame).toHaveClass(scenario.className)
+    await expect(frame).toHaveCSS('border-top-color', scenario.color)
+  }
+})
+
 test('dynamic region recognition is shared by capture screenshot scrolling and annotation selectors', async ({page}) => {
   await page.addInitScript(({settingsKey, settings}) => {
     window.localStorage.setItem(settingsKey, JSON.stringify(settings))

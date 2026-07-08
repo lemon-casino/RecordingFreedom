@@ -144,6 +144,8 @@ type RecordingFreedomService struct {
 	annotationRenderBatch    *annotationRenderBatch
 	regionMu                 sync.Mutex
 	regionSession            *RegionSelectionSession
+	regionFrameState         RegionFrameState
+	regionFrameVisible       bool
 	regionElementCacheMu     sync.Mutex
 	regionElementCache       regionElementCandidateCache
 	regionSnapshotMu         sync.Mutex
