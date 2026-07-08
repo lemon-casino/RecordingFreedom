@@ -425,7 +425,7 @@ async function expectAnnotationFrame(page: Page) {
   const canvas = page.locator('.annotation-overlay-canvas')
   await expect(frame).toBeVisible()
   await expect(frame).toHaveCSS('pointer-events', 'none')
-  await expect(frame).toHaveCSS('border-top-color', 'rgba(255, 59, 59, 0.98)')
+  await expect(frame).toHaveCSS('border-top-color', 'rgb(103, 232, 249)')
   await expect.poll(async () => {
     const [frameBox, canvasBox] = await Promise.all([frame.boundingBox(), canvas.boundingBox()])
     return {

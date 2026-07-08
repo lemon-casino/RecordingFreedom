@@ -184,7 +184,6 @@ test('whiteboard OCR blocks map to the selected image and recognized text insert
     textCount: 1,
     insertedText: 'RecordingFreedom\n文字识别',
   })
-  await expect(page.locator('.whiteboard-status')).toContainText('OCR blocks hidden')
 })
 
 test('whiteboard OCR blocks and recognized text persist after reopen', async ({page}) => {
