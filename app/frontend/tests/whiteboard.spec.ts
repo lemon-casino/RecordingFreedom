@@ -140,7 +140,7 @@ test('whiteboard selected image OCR queues its own exported image as whiteboard-
   await expect(page.locator('.whiteboard-status')).toContainText('OCR queued')
 })
 
-test('whiteboard OCR blocks map to the selected image and recognized text inserts as scene text', async ({page}) => {
+test('whiteboard OCR blocks map to the selected image and recognized text inserts as scene text; OCR blocks hidden removes overlays', async ({page}) => {
   await openWhiteboardWithSettings(page, 'en', 'mountain-green', undefined, selectedImageWhiteboardScene())
 
   const selectedImageButton = page.getByRole('button', {name: 'Recognize selected image'})
