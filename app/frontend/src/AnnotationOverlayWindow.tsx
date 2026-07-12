@@ -84,6 +84,7 @@ function AnnotationOverlayWindow() {
   const isScreenshotMode = overlayState?.mode === 'screenshot'
   const overlayKey = annotationOverlayKey(overlayState)
   const canvasBounds = annotationCanvasBounds(overlayState)
+  const toolbarBounds = annotationToolbarBounds(overlayState, canvasBounds)
 
   function resetAnnotationElementTracking(scene: any) {
     elementSignatureRef.current = elementSignatureMap(scene?.elements ?? [])
@@ -585,7 +586,16 @@ function AnnotationOverlayWindow() {
 
   return (
     <main className={`annotation-overlay-shell ${canvasReceivesInput ? 'is-drawing' : 'is-pass-through'}`} data-theme={theme}>
-      <section ref={capsuleRef} className="annotation-capsule" aria-label={copy.whiteboard.title}>
+      <section
+        ref={capsuleRef}
+        className="annotation-capsule"
+        aria-label={copy.whiteboard.title}
+        style={{
+          left: toolbarBounds.x,
+          top: toolbarBounds.y,
+          width: toolbarBounds.width,
+        }}
+      >
         <span className="annotation-capsule-title">{isScreenshotMode ? copy.screenshot.region : copy.whiteboard.open}</span>
         <div className="annotation-tools" role="toolbar" aria-label={copy.whiteboard.title}>
           {annotationTools.map(({tool, icon: Icon, label}) => (
@@ -874,6 +884,25 @@ function annotationCanvasBounds(state: AnnotationOverlayState | null) {
     width: Math.max(1, Math.round(state?.canvasBounds.width ?? window.innerWidth ?? 1)),
     height: Math.max(1, Math.round(state?.canvasBounds.height ?? window.innerHeight ?? 1)),
   }
+}
+
+function annotationToolbarBounds(state: AnnotationOverlayState | null, canvasBounds: {x: number; y: number; width: number; height: number}) {
+  const configured = state?.toolbarBounds
+  if (configured && configured.width > 0 && configured.height > 0) {
+    return {
+      x: Math.round(configured.x),
+      y: Math.round(configured.y),
+      width: Math.max(1, Math.round(configured.width)),
+      height: Math.max(1, Math.round(configured.height)),
+    }
+  }
+  const width = Math.min(720, Math.max(1, window.innerWidth - 16))
+  const height = canvasBounds.width < 720 ? 96 : 48
+  const left = Math.max(8, Math.round((window.innerWidth - width) / 2))
+  const top = state?.toolbarPlacement === 'bottom'
+    ? canvasBounds.y + canvasBounds.height + 8
+    : 8
+  return {x: left, y: top, width, height}
 }
 
 function elementSignatureMap(elements: readonly unknown[]) {

@@ -56,6 +56,8 @@ export interface AnnotationOverlayState {
     "manifestPath"?: string;
     "windowBounds": RegionRect;
     "canvasBounds": RegionRect;
+    "toolbarBounds"?: RegionRect;
+    "toolbarPlacement"?: string;
     "target": recpackage$0.ManifestAnnotationTarget;
     "captureExcluded": boolean;
 }

@@ -436,24 +436,21 @@ func (s *RecordingFreedomService) showScreenshotAnnotationOverlay(canvasBounds a
 		return AnnotationOverlayState{}, errors.New("screenshot annotation bounds are empty")
 	}
 	_ = s.HideFloatingPanel(0)
-	windowBounds := annotationOverlayWindowBounds(canvasBounds)
+	layout := annotationOverlayLayoutForScreens(canvasBounds, s.app.Screen.GetAll())
 	state := AnnotationOverlayState{
-		Mode:         annotationOverlayModeScreenshot,
-		WindowBounds: regionRectFromAppRect(windowBounds),
-		CanvasBounds: RegionRect{
-			X:      annotationOverlayFrameInset,
-			Y:      annotationOverlayFrameInset,
-			Width:  canvasBounds.Width,
-			Height: canvasBounds.Height,
-		},
-		Target:          screenshotAnnotationTargetFromRect(canvasBounds, item),
-		CaptureExcluded: false,
+		Mode:             annotationOverlayModeScreenshot,
+		WindowBounds:     regionRectFromAppRect(layout.WindowBounds),
+		CanvasBounds:     regionRectFromAppRect(layout.CanvasBounds),
+		ToolbarBounds:    regionRectFromAppRect(layout.ToolbarBounds),
+		ToolbarPlacement: layout.ToolbarPlacement,
+		Target:           screenshotAnnotationTargetFromRect(canvasBounds, item),
+		CaptureExcluded:  false,
 	}
 	s.annotationOverlay.SetIgnoreMouseEvents(false)
 	s.annotationOverlay.SetAlwaysOnTop(true)
-	s.annotationOverlay.SetBounds(windowBounds)
+	s.annotationOverlay.SetBounds(layout.WindowBounds)
 	s.annotationOverlay.Show()
-	s.annotationOverlay.SetBounds(windowBounds)
+	s.annotationOverlay.SetBounds(layout.WindowBounds)
 	s.annotationOverlay.Focus()
 	s.broadcastAnnotationOverlayState(state)
 	go s.rebroadcastAnnotationOverlayState(state, s.nextAnnotationToken())

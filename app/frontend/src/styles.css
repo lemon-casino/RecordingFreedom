@@ -3453,13 +3453,17 @@ body.rf-annotation-overlay-window {
 
 .annotation-capsule {
   position: absolute;
-  top: 14px;
-  left: 50%;
+  top: auto;
+  left: auto;
   z-index: 4;
-  display: inline-flex;
+  display: flex;
   align-items: center;
+  align-content: center;
+  flex-wrap: wrap;
   gap: 4px;
-  max-width: min(calc(100vw - 28px), 920px);
+  box-sizing: border-box;
+  min-width: 0;
+  max-width: min(calc(100vw - 16px), 920px);
   min-height: 42px;
   padding: 5px;
   border: 1px solid var(--line);
@@ -3467,7 +3471,6 @@ body.rf-annotation-overlay-window {
   background: var(--capsule-bg);
   box-shadow: var(--shadow-tight), inset 0 1px 0 rgba(255, 255, 255, 0.08);
   backdrop-filter: blur(22px) saturate(150%);
-  transform: translateX(-50%);
   --wails-draggable: drag;
 }
 

@@ -16,21 +16,28 @@ import (
 )
 
 const (
-	maxAnnotationEventBatchBytes = 512 * 1024
-	maxAnnotationEventBatchLines = 512
-	annotationRegionTargetType   = "annotation-region"
-	annotationRegionTargetID     = "annotation:region"
-	annotationOverlayFrameInset  = 10
+	maxAnnotationEventBatchBytes          = 512 * 1024
+	maxAnnotationEventBatchLines          = 512
+	annotationRegionTargetType            = "annotation-region"
+	annotationRegionTargetID              = "annotation:region"
+	annotationOverlayFrameInset           = 10
+	annotationOverlayToolbarGap           = 8
+	annotationOverlayToolbarMinWidth      = 720
+	annotationOverlayToolbarMaxWidth      = 920
+	annotationOverlayToolbarHeight        = 48
+	annotationOverlayToolbarCompactHeight = 96
 )
 
 type AnnotationOverlayState struct {
-	Mode            string                              `json:"mode,omitempty"`
-	PackageDir      string                              `json:"packageDir,omitempty"`
-	ManifestPath    string                              `json:"manifestPath,omitempty"`
-	WindowBounds    RegionRect                          `json:"windowBounds"`
-	CanvasBounds    RegionRect                          `json:"canvasBounds"`
-	Target          recpackage.ManifestAnnotationTarget `json:"target"`
-	CaptureExcluded bool                                `json:"captureExcluded"`
+	Mode             string                              `json:"mode,omitempty"`
+	PackageDir       string                              `json:"packageDir,omitempty"`
+	ManifestPath     string                              `json:"manifestPath,omitempty"`
+	WindowBounds     RegionRect                          `json:"windowBounds"`
+	CanvasBounds     RegionRect                          `json:"canvasBounds"`
+	ToolbarBounds    RegionRect                          `json:"toolbarBounds,omitempty"`
+	ToolbarPlacement string                              `json:"toolbarPlacement,omitempty"`
+	Target           recpackage.ManifestAnnotationTarget `json:"target"`
+	CaptureExcluded  bool                                `json:"captureExcluded"`
 }
 
 type AnnotationCaptureRequest struct {
@@ -49,17 +56,19 @@ type AnnotationCaptureResult struct {
 }
 
 type annotationOverlayDiagnosticEvent struct {
-	SchemaVersion   int                                   `json:"schemaVersion"`
-	Type            string                                `json:"type"`
-	RecordedAt      string                                `json:"recordedAt"`
-	SessionID       string                                `json:"sessionId,omitempty"`
-	RecordingMode   string                                `json:"recordingMode,omitempty"`
-	Status          string                                `json:"status,omitempty"`
-	WindowBounds    RegionRect                            `json:"windowBounds"`
-	CanvasBounds    RegionRect                            `json:"canvasBounds"`
-	Target          recpackage.ManifestAnnotationTarget   `json:"target"`
-	CaptureExcluded bool                                  `json:"captureExcluded"`
-	HitRegions      *annotationOverlayHitRegionDiagnostic `json:"hitRegions,omitempty"`
+	SchemaVersion    int                                   `json:"schemaVersion"`
+	Type             string                                `json:"type"`
+	RecordedAt       string                                `json:"recordedAt"`
+	SessionID        string                                `json:"sessionId,omitempty"`
+	RecordingMode    string                                `json:"recordingMode,omitempty"`
+	Status           string                                `json:"status,omitempty"`
+	WindowBounds     RegionRect                            `json:"windowBounds"`
+	CanvasBounds     RegionRect                            `json:"canvasBounds"`
+	ToolbarBounds    RegionRect                            `json:"toolbarBounds,omitempty"`
+	ToolbarPlacement string                                `json:"toolbarPlacement,omitempty"`
+	Target           recpackage.ManifestAnnotationTarget   `json:"target"`
+	CaptureExcluded  bool                                  `json:"captureExcluded"`
+	HitRegions       *annotationOverlayHitRegionDiagnostic `json:"hitRegions,omitempty"`
 }
 
 type annotationOverlayHitRegionDiagnostic struct {
@@ -408,16 +417,18 @@ func (s *RecordingFreedomService) appendAnnotationOverlayDiagnostic(eventType st
 		eventType = "overlay"
 	}
 	event := annotationOverlayDiagnosticEvent{
-		SchemaVersion:   1,
-		Type:            eventType,
-		RecordedAt:      time.Now().UTC().Format(time.RFC3339Nano),
-		SessionID:       session.ID,
-		RecordingMode:   session.RecordingMode,
-		Status:          string(session.Status),
-		WindowBounds:    state.WindowBounds,
-		CanvasBounds:    state.CanvasBounds,
-		Target:          state.Target,
-		CaptureExcluded: state.CaptureExcluded,
+		SchemaVersion:    1,
+		Type:             eventType,
+		RecordedAt:       time.Now().UTC().Format(time.RFC3339Nano),
+		SessionID:        session.ID,
+		RecordingMode:    session.RecordingMode,
+		Status:           string(session.Status),
+		WindowBounds:     state.WindowBounds,
+		CanvasBounds:     state.CanvasBounds,
+		ToolbarBounds:    state.ToolbarBounds,
+		ToolbarPlacement: state.ToolbarPlacement,
+		Target:           state.Target,
+		CaptureExcluded:  state.CaptureExcluded,
 	}
 	if hitRegions != nil {
 		event.HitRegions = &annotationOverlayHitRegionDiagnostic{
@@ -510,19 +521,20 @@ func (s *RecordingFreedomService) annotationOverlayState() (AnnotationOverlaySta
 	if !ok {
 		return AnnotationOverlayState{}, errors.New("annotation overlay requires a selected annotation region")
 	}
-	windowBounds := annotationOverlayWindowBounds(canvasBounds)
+	var screens []*application.Screen
+	if s.app != nil {
+		screens = s.app.Screen.GetAll()
+	}
+	layout := annotationOverlayLayoutForScreens(canvasBounds, screens)
 	return AnnotationOverlayState{
-		Mode:         "annotation",
-		PackageDir:   session.PackageDir,
-		ManifestPath: session.Manifest,
-		WindowBounds: regionRectFromAppRect(windowBounds),
-		CanvasBounds: RegionRect{
-			X:      annotationOverlayFrameInset,
-			Y:      annotationOverlayFrameInset,
-			Width:  canvasBounds.Width,
-			Height: canvasBounds.Height,
-		},
-		Target: target,
+		Mode:             "annotation",
+		PackageDir:       session.PackageDir,
+		ManifestPath:     session.Manifest,
+		WindowBounds:     regionRectFromAppRect(layout.WindowBounds),
+		CanvasBounds:     regionRectFromAppRect(layout.CanvasBounds),
+		ToolbarBounds:    regionRectFromAppRect(layout.ToolbarBounds),
+		ToolbarPlacement: layout.ToolbarPlacement,
+		Target:           target,
 	}, nil
 }
 
@@ -536,6 +548,138 @@ func annotationOverlayWindowBounds(canvasBounds application.Rect) application.Re
 		Width:  canvasBounds.Width + annotationOverlayFrameInset*2,
 		Height: canvasBounds.Height + annotationOverlayFrameInset*2,
 	}
+}
+
+type annotationOverlayLayout struct {
+	WindowBounds     application.Rect
+	CanvasBounds     application.Rect
+	ToolbarBounds    application.Rect
+	ToolbarPlacement string
+}
+
+func annotationOverlayLayoutForScreens(canvasBounds application.Rect, screens []*application.Screen) annotationOverlayLayout {
+	legacy := annotationOverlayLayout{
+		WindowBounds: annotationOverlayWindowBounds(canvasBounds),
+		CanvasBounds: application.Rect{
+			X:      annotationOverlayFrameInset,
+			Y:      annotationOverlayFrameInset,
+			Width:  canvasBounds.Width,
+			Height: canvasBounds.Height,
+		},
+		ToolbarPlacement: "top",
+	}
+	if canvasBounds.Width <= 0 || canvasBounds.Height <= 0 || len(screens) == 0 {
+		return legacy
+	}
+
+	workArea, ok := annotationOverlayWorkArea(canvasBounds, screens)
+	if !ok {
+		return legacy
+	}
+
+	toolbarWidth := clampInt(maxInt(canvasBounds.Width, annotationOverlayToolbarMinWidth), annotationOverlayToolbarMinWidth, annotationOverlayToolbarMaxWidth)
+	if availableWidth := workArea.Width - annotationOverlayFrameInset*2; availableWidth > 0 && toolbarWidth > availableWidth {
+		toolbarWidth = availableWidth
+	}
+	if toolbarWidth <= 0 {
+		return legacy
+	}
+	toolbarHeight := annotationOverlayToolbarHeight
+	if toolbarWidth < annotationOverlayToolbarMaxWidth || canvasBounds.Width < annotationOverlayToolbarMinWidth {
+		toolbarHeight = annotationOverlayToolbarCompactHeight
+	}
+
+	windowWidth := maxInt(canvasBounds.Width+annotationOverlayFrameInset*2, toolbarWidth+annotationOverlayFrameInset*2)
+	if workArea.Width > 0 && windowWidth > workArea.Width && canvasBounds.Width+annotationOverlayFrameInset*2 <= workArea.Width {
+		windowWidth = workArea.Width
+	}
+	canvasX := (windowWidth - canvasBounds.Width) / 2
+	if canvasX < annotationOverlayFrameInset {
+		canvasX = annotationOverlayFrameInset
+	}
+	windowX := canvasBounds.X - canvasX
+	if windowWidth <= workArea.Width {
+		windowX = clampInt(windowX, workArea.X, workArea.X+workArea.Width-windowWidth)
+		canvasX = canvasBounds.X - windowX
+	}
+
+	requiredSpace := toolbarHeight + annotationOverlayToolbarGap + annotationOverlayFrameInset*2
+	topSpace := canvasBounds.Y - workArea.Y
+	bottomSpace := workArea.Y + workArea.Height - (canvasBounds.Y + canvasBounds.Height)
+	placement := "top"
+	if topSpace < requiredSpace && bottomSpace >= topSpace {
+		placement = "bottom"
+	}
+
+	toolbarX := (windowWidth - toolbarWidth) / 2
+	if toolbarX < annotationOverlayFrameInset {
+		toolbarX = annotationOverlayFrameInset
+	}
+	windowHeight := 0
+	windowY := 0
+	canvasY := 0
+	toolbarY := 0
+	if placement == "bottom" {
+		canvasY = annotationOverlayFrameInset
+		toolbarY = canvasY + canvasBounds.Height + annotationOverlayFrameInset + annotationOverlayToolbarGap
+		windowHeight = toolbarY + toolbarHeight + annotationOverlayFrameInset
+		windowY = canvasBounds.Y - canvasY
+	} else {
+		toolbarY = annotationOverlayFrameInset
+		canvasY = toolbarY + toolbarHeight + annotationOverlayToolbarGap
+		windowHeight = canvasY + canvasBounds.Height + annotationOverlayFrameInset
+		windowY = canvasBounds.Y - canvasY
+	}
+	if windowHeight <= workArea.Height {
+		windowY = clampInt(windowY, workArea.Y, workArea.Y+workArea.Height-windowHeight)
+		canvasY = canvasBounds.Y - windowY
+		if placement == "bottom" {
+			toolbarY = canvasY + canvasBounds.Height + annotationOverlayFrameInset + annotationOverlayToolbarGap
+		} else {
+			toolbarY = canvasY - toolbarHeight - annotationOverlayToolbarGap
+		}
+	}
+
+	return annotationOverlayLayout{
+		WindowBounds:     application.Rect{X: windowX, Y: windowY, Width: windowWidth, Height: windowHeight},
+		CanvasBounds:     application.Rect{X: canvasX, Y: canvasY, Width: canvasBounds.Width, Height: canvasBounds.Height},
+		ToolbarBounds:    application.Rect{X: toolbarX, Y: toolbarY, Width: toolbarWidth, Height: toolbarHeight},
+		ToolbarPlacement: placement,
+	}
+}
+
+func annotationOverlayWorkArea(canvasBounds application.Rect, screens []*application.Screen) (application.Rect, bool) {
+	centerX := canvasBounds.X + maxInt(1, canvasBounds.Width)/2
+	centerY := canvasBounds.Y + maxInt(1, canvasBounds.Height)/2
+	var best *application.Screen
+	bestArea := 0
+	for _, screen := range screens {
+		if screen == nil || !validAppRect(screen.Bounds) {
+			continue
+		}
+		area := rectIntersectionArea(screen.Bounds, canvasBounds)
+		if area > bestArea {
+			bestArea = area
+			best = screen
+		}
+	}
+	if best == nil {
+		for _, screen := range screens {
+			if screen == nil || !validAppRect(screen.Bounds) || !pointInsideAppRect(centerX, centerY, screen.Bounds) {
+				continue
+			}
+			best = screen
+			break
+		}
+	}
+	if best == nil {
+		return application.Rect{}, false
+	}
+	workArea := best.WorkArea
+	if !validAppRect(workArea) {
+		workArea = best.Bounds
+	}
+	return workArea, validAppRect(workArea)
 }
 
 func (s *RecordingFreedomService) annotationWindowBounds(manifest recpackage.Manifest) application.Rect {

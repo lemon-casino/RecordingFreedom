@@ -149,6 +149,40 @@ test('screenshot annotation overlay saves into screenshot history on explicit sa
   await expect(page.locator('.annotation-save-status')).toContainText('Saved')
 })
 
+test('small screenshot region keeps the complete toolbar outside the capture canvas', async ({page}) => {
+  await openScreenshotAnnotationOverlay(page)
+  await page.setViewportSize({width: 740, height: 214})
+  await page.evaluate(() => {
+    window.dispatchEvent(new CustomEvent('rf-annotation-overlay', {detail: {
+      mode: 'screenshot',
+      windowBounds: {x: 0, y: 0, width: 740, height: 214},
+      canvasBounds: {x: 310, y: 114, width: 120, height: 80},
+      toolbarBounds: {x: 10, y: 10, width: 720, height: 96},
+      toolbarPlacement: 'top',
+      target: {
+        type: 'screenshot-region',
+        id: 'screenshot-small-region-test',
+        geometry: {x: 600, y: 320, width: 120, height: 80},
+      },
+      captureExcluded: false,
+    }}))
+  })
+
+  const capsule = page.locator('.annotation-capsule')
+  const canvas = page.locator('.annotation-overlay-canvas')
+  await expect(capsule).toBeVisible()
+  await expect(capsule.locator('button')).toHaveCount(14)
+  await expect.poll(async () => {
+    const [toolbarBox, canvasBox] = await Promise.all([capsule.boundingBox(), canvas.boundingBox()])
+    const buttons = await capsule.locator('button').evaluateAll((elements) => elements.map((element) => {
+      const box = element.getBoundingClientRect()
+      return {left: box.left, right: box.right, top: box.top, bottom: box.bottom}
+    }))
+    if (!toolbarBox || !canvasBox || toolbarBox.bottom > canvasBox.top) return false
+    return buttons.every((button) => button.left >= 0 && button.right <= 740 && button.top >= 0 && button.bottom <= 214)
+  }).toBe(true)
+})
+
 async function openAnnotationOverlay(page: Page) {
   await page.setViewportSize({width: 1280 + annotationFrameInset * 2, height: 720 + annotationFrameInset * 2})
   await page.addInitScript(({settingsKey, frameInset}) => {

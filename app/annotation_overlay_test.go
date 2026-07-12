@@ -73,6 +73,61 @@ func TestAnnotationOverlayStateUsesActiveVideoRecordingGeometry(t *testing.T) {
 	}
 }
 
+func TestAnnotationOverlayLayoutKeepsCompactToolbarOutsideSmallCanvas(t *testing.T) {
+	screens := []*application.Screen{{
+		Bounds:   applicationRect(0, 0, 1280, 720),
+		WorkArea: applicationRect(0, 0, 1280, 680),
+	}}
+	layout := annotationOverlayLayoutForScreens(applicationRect(600, 320, 120, 80), screens)
+
+	if layout.ToolbarPlacement != "top" {
+		t.Fatalf("toolbar placement = %q, want top", layout.ToolbarPlacement)
+	}
+	if layout.ToolbarBounds.Width < annotationOverlayToolbarMinWidth {
+		t.Fatalf("toolbar width = %d, want at least %d", layout.ToolbarBounds.Width, annotationOverlayToolbarMinWidth)
+	}
+	if layout.ToolbarBounds.Y+layout.ToolbarBounds.Height+annotationOverlayToolbarGap > layout.CanvasBounds.Y {
+		t.Fatalf("toolbar and canvas overlap: toolbar=%#v canvas=%#v", layout.ToolbarBounds, layout.CanvasBounds)
+	}
+	if layout.WindowBounds.Width < layout.ToolbarBounds.Width+annotationOverlayFrameInset*2 || layout.WindowBounds.Height < layout.CanvasBounds.Y+layout.CanvasBounds.Height+annotationOverlayFrameInset {
+		t.Fatalf("window does not contain toolbar and canvas: window=%#v toolbar=%#v canvas=%#v", layout.WindowBounds, layout.ToolbarBounds, layout.CanvasBounds)
+	}
+}
+
+func TestAnnotationOverlayLayoutPlacesToolbarBelowCanvasNearTopEdge(t *testing.T) {
+	screens := []*application.Screen{{
+		Bounds:   applicationRect(0, 0, 1280, 720),
+		WorkArea: applicationRect(0, 0, 1280, 680),
+	}}
+	layout := annotationOverlayLayoutForScreens(applicationRect(600, 8, 120, 80), screens)
+
+	if layout.ToolbarPlacement != "bottom" {
+		t.Fatalf("toolbar placement = %q, want bottom", layout.ToolbarPlacement)
+	}
+	if layout.CanvasBounds.Y+layout.CanvasBounds.Height+annotationOverlayFrameInset+annotationOverlayToolbarGap > layout.ToolbarBounds.Y {
+		t.Fatalf("toolbar and canvas overlap: canvas=%#v toolbar=%#v", layout.CanvasBounds, layout.ToolbarBounds)
+	}
+	if layout.WindowBounds.Y != 0 {
+		t.Fatalf("window y = %d, want 0 for top-edge canvas", layout.WindowBounds.Y)
+	}
+}
+
+func TestAnnotationOverlayLayoutPreservesWideCanvasAcrossDisplayBounds(t *testing.T) {
+	screens := []*application.Screen{{
+		Bounds:   applicationRect(0, 0, 1280, 720),
+		WorkArea: applicationRect(0, 0, 1280, 680),
+	}}
+	canvas := applicationRect(-400, 80, 1800, 500)
+	layout := annotationOverlayLayoutForScreens(canvas, screens)
+
+	if layout.CanvasBounds.Width != canvas.Width || layout.CanvasBounds.Height != canvas.Height {
+		t.Fatalf("canvas size = %dx%d, want original %dx%d", layout.CanvasBounds.Width, layout.CanvasBounds.Height, canvas.Width, canvas.Height)
+	}
+	if layout.WindowBounds.Width < canvas.Width+annotationOverlayFrameInset*2 {
+		t.Fatalf("window width = %d, want room for wide canvas %d", layout.WindowBounds.Width, canvas.Width+annotationOverlayFrameInset*2)
+	}
+}
+
 func TestAnnotationOverlayStateRequiresSelectedAnnotationRegion(t *testing.T) {
 	service := newAnnotationOverlayTestService(t)
 	if _, err := service.recorder.StartRecording(recording.StartRequest{

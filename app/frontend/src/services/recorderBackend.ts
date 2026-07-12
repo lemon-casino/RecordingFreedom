@@ -415,6 +415,8 @@ export type AnnotationOverlayState = {
   manifestPath?: string
   windowBounds: {x: number; y: number; width: number; height: number}
   canvasBounds: {x: number; y: number; width: number; height: number}
+  toolbarBounds?: {x: number; y: number; width: number; height: number}
+  toolbarPlacement?: 'top' | 'bottom'
   target: {
     type: string
     id: string
@@ -3915,6 +3917,8 @@ function fromBoundAnnotationOverlayState(state: BoundAnnotationOverlayState): An
     manifestPath: state.manifestPath,
     windowBounds: fromBoundRegionRect(state.windowBounds),
     canvasBounds: fromBoundRegionRect(state.canvasBounds),
+    toolbarBounds: state.toolbarBounds ? fromBoundRegionRect(state.toolbarBounds) : undefined,
+    toolbarPlacement: state.toolbarPlacement === 'bottom' ? 'bottom' : 'top',
     target: {
       type: state.target.type,
       id: state.target.id,
