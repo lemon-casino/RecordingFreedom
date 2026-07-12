@@ -3382,11 +3382,7 @@ body.rf-annotation-overlay-window {
   pointer-events: none;
   border: 2px solid var(--region-annotation-border);
   border-radius: 7px;
-  box-shadow:
-    0 0 0 1px rgba(255, 255, 255, 0.86),
-    0 0 0 5px var(--region-annotation-border-soft),
-    0 0 22px var(--region-annotation-shadow),
-    inset 0 0 0 1px rgba(255, 255, 255, 0.5);
+  box-shadow: none;
 }
 
 .annotation-overlay-frame .corner {
@@ -3394,7 +3390,7 @@ body.rf-annotation-overlay-window {
   width: 22px;
   height: 22px;
   border-color: #ffffff;
-  filter: drop-shadow(0 0 5px var(--region-annotation-shadow));
+  filter: none;
 }
 
 .annotation-overlay-frame .top-left {
@@ -3447,7 +3443,13 @@ body.rf-annotation-overlay-window {
 }
 
 .annotation-overlay-canvas .excalidraw .layer-ui__wrapper,
-.annotation-overlay-canvas .excalidraw .App-menu {
+.annotation-overlay-canvas .excalidraw .App-menu,
+.annotation-overlay-canvas .excalidraw .App-menu_top,
+.annotation-overlay-canvas .excalidraw .App-menu_bottom,
+.annotation-overlay-canvas .excalidraw .App-menu_left,
+.annotation-overlay-canvas .excalidraw .App-menu_right,
+.annotation-overlay-canvas .excalidraw .toolbar,
+.annotation-overlay-canvas .excalidraw .Island {
   display: none !important;
 }
 
@@ -3469,16 +3471,16 @@ body.rf-annotation-overlay-window {
   border: 1px solid var(--line);
   border-radius: var(--radius-pill);
   background: var(--capsule-bg);
-  box-shadow: var(--shadow-tight), inset 0 1px 0 rgba(255, 255, 255, 0.08);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08);
   backdrop-filter: blur(22px) saturate(150%);
   --wails-draggable: drag;
 }
 
 .annotation-capsule-title {
   flex: 0 0 auto;
-  max-width: 92px;
+  max-width: 80px;
   overflow: hidden;
-  padding: 0 8px;
+  padding: 0 5px;
   color: var(--muted);
   font-size: 11px;
   font-weight: 900;
@@ -3497,13 +3499,14 @@ body.rf-annotation-overlay-window {
 }
 
 .annotation-capsule button {
+  box-sizing: border-box;
   display: inline-flex;
   align-items: center;
   justify-content: center;
   gap: 4px;
-  min-width: 30px;
+  min-width: 32px;
   height: 30px;
-  padding: 0 8px;
+  padding: 0 5px;
   border: 1px solid transparent;
   border-radius: var(--radius-pill);
   background: transparent;
@@ -3524,14 +3527,16 @@ body.rf-annotation-overlay-window {
 }
 
 .annotation-capsule .annotation-save-status {
-  min-width: 76px;
-  padding: 0 10px;
+  min-width: 68px;
+  padding: 0 7px;
 }
 
 .annotation-ocr-status {
-  max-width: 142px;
+  flex: 0 1 100px;
+  min-width: 0;
+  max-width: 100px;
   overflow: hidden;
-  padding: 0 8px;
+  padding: 0 5px;
   color: var(--muted);
   font-size: 10px;
   font-weight: 800;

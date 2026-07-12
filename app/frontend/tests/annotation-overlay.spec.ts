@@ -151,13 +151,13 @@ test('screenshot annotation overlay saves into screenshot history on explicit sa
 
 test('small screenshot region keeps the complete toolbar outside the capture canvas', async ({page}) => {
   await openScreenshotAnnotationOverlay(page)
-  await page.setViewportSize({width: 740, height: 214})
+  await page.setViewportSize({width: 740, height: 156})
   await page.evaluate(() => {
     window.dispatchEvent(new CustomEvent('rf-annotation-overlay', {detail: {
       mode: 'screenshot',
-      windowBounds: {x: 0, y: 0, width: 740, height: 214},
-      canvasBounds: {x: 310, y: 114, width: 120, height: 80},
-      toolbarBounds: {x: 10, y: 10, width: 720, height: 96},
+      windowBounds: {x: 0, y: 0, width: 740, height: 156},
+      canvasBounds: {x: 310, y: 66, width: 120, height: 80},
+      toolbarBounds: {x: 10, y: 10, width: 720, height: 48},
       toolbarPlacement: 'top',
       target: {
         type: 'screenshot-region',
@@ -179,7 +179,7 @@ test('small screenshot region keeps the complete toolbar outside the capture can
       return {left: box.left, right: box.right, top: box.top, bottom: box.bottom}
     }))
     if (!toolbarBox || !canvasBox || toolbarBox.bottom > canvasBox.top) return false
-    return buttons.every((button) => button.left >= 0 && button.right <= 740 && button.top >= 0 && button.bottom <= 214)
+    return buttons.every((button) => button.left >= 0 && button.right <= 740 && button.top >= 0 && button.bottom <= 156)
   }).toBe(true)
 })
 

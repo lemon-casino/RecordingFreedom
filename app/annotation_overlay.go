@@ -16,16 +16,15 @@ import (
 )
 
 const (
-	maxAnnotationEventBatchBytes          = 512 * 1024
-	maxAnnotationEventBatchLines          = 512
-	annotationRegionTargetType            = "annotation-region"
-	annotationRegionTargetID              = "annotation:region"
-	annotationOverlayFrameInset           = 10
-	annotationOverlayToolbarGap           = 8
-	annotationOverlayToolbarMinWidth      = 720
-	annotationOverlayToolbarMaxWidth      = 920
-	annotationOverlayToolbarHeight        = 48
-	annotationOverlayToolbarCompactHeight = 96
+	maxAnnotationEventBatchBytes     = 512 * 1024
+	maxAnnotationEventBatchLines     = 512
+	annotationRegionTargetType       = "annotation-region"
+	annotationRegionTargetID         = "annotation:region"
+	annotationOverlayFrameInset      = 10
+	annotationOverlayToolbarGap      = 8
+	annotationOverlayToolbarMinWidth = 720
+	annotationOverlayToolbarMaxWidth = 920
+	annotationOverlayToolbarHeight   = 48
 )
 
 type AnnotationOverlayState struct {
@@ -585,9 +584,6 @@ func annotationOverlayLayoutForScreens(canvasBounds application.Rect, screens []
 		return legacy
 	}
 	toolbarHeight := annotationOverlayToolbarHeight
-	if toolbarWidth < annotationOverlayToolbarMaxWidth || canvasBounds.Width < annotationOverlayToolbarMinWidth {
-		toolbarHeight = annotationOverlayToolbarCompactHeight
-	}
 
 	windowWidth := maxInt(canvasBounds.Width+annotationOverlayFrameInset*2, toolbarWidth+annotationOverlayFrameInset*2)
 	if workArea.Width > 0 && windowWidth > workArea.Width && canvasBounds.Width+annotationOverlayFrameInset*2 <= workArea.Width {
