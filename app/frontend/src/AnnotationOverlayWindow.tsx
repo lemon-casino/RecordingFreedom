@@ -346,7 +346,7 @@ function AnnotationOverlayWindow() {
   const applySettings = (settings: AppSettings) => {
     setLocale(normalizeLocale(settings.locale))
     setTheme(normalizeTheme(settings.window.theme))
-    setActiveToolState(settings.whiteboard.lastTool)
+    setActiveToolState(annotationTools.some(({tool}) => tool === settings.whiteboard.lastTool) ? settings.whiteboard.lastTool : 'freedraw')
     setStrokeColor(settings.whiteboard.lastStrokeColor || '#ef4444')
     setStrokeWidth(settings.whiteboard.lastStrokeWidth)
     setOpacity(normalizeOpacity(settings.whiteboard.lastOpacity))
@@ -653,7 +653,7 @@ function AnnotationOverlayWindow() {
     <main className={`annotation-overlay-shell ${canvasReceivesInput ? 'is-drawing' : 'is-pass-through'}`} data-theme={theme}>
       <div
         ref={capsuleRef}
-        className="annotation-toolbar-stack"
+        className={`annotation-toolbar-stack ${overlayState?.toolbarPlacement === 'bottom' ? 'is-bottom' : 'is-top'}`}
         style={{
           left: toolbarBounds.x,
           top: toolbarBounds.y,
@@ -1033,18 +1033,23 @@ function annotationCanvasBounds(state: AnnotationOverlayState | null) {
 }
 
 function annotationToolbarBounds(state: AnnotationOverlayState | null, canvasBounds: {x: number; y: number; width: number; height: number}) {
+  const viewportWidth = Math.max(1, Math.round(window.innerWidth || canvasBounds.width || 1))
+  const edgePadding = 8
+  const maxWidth = Math.max(1, viewportWidth - edgePadding * 2)
   const configured = state?.toolbarBounds
   if (configured && configured.width > 0 && configured.height > 0) {
+    const width = Math.min(maxWidth, Math.max(1, Math.round(configured.width)))
+    const maxLeft = Math.max(edgePadding, viewportWidth - width - edgePadding)
     return {
-      x: Math.round(configured.x),
+      x: Math.min(maxLeft, Math.max(edgePadding, Math.round(configured.x))),
       y: Math.round(configured.y),
-      width: Math.max(1, Math.round(configured.width)),
+      width,
       height: Math.max(1, Math.round(configured.height)),
     }
   }
-  const width = Math.min(720, Math.max(1, window.innerWidth - 16))
+  const width = Math.min(720, maxWidth)
   const height = canvasBounds.width < 720 ? 96 : 48
-  const left = Math.max(8, Math.round((window.innerWidth - width) / 2))
+  const left = Math.max(edgePadding, Math.round((viewportWidth - width) / 2))
   const top = state?.toolbarPlacement === 'bottom'
     ? canvasBounds.y + canvasBounds.height + 8
     : 8

@@ -5186,8 +5186,10 @@ function normalizeWhiteboardTool(value: unknown): AppSettings['whiteboard']['las
     value === 'arrow' ||
     value === 'line' ||
     value === 'rectangle' ||
+    value === 'diamond' ||
     value === 'ellipse' ||
     value === 'text' ||
+    value === 'image' ||
     value === 'eraser'
     ? value
     : 'freedraw'

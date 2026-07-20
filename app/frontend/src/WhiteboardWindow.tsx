@@ -2,6 +2,7 @@ import {
   ArrowUpRight,
   ClipboardCopy,
   Circle,
+  Diamond,
   Download,
   Eraser,
   Eye,
@@ -45,8 +46,10 @@ const whiteboardTools: Array<{tool: WhiteboardTool; icon: typeof PenLine; labelK
   {tool: 'arrow', icon: ArrowUpRight, labelKey: 'arrow'},
   {tool: 'line', icon: Minus, labelKey: 'line'},
   {tool: 'rectangle', icon: RectangleHorizontal, labelKey: 'rectangle'},
+  {tool: 'diamond', icon: Diamond, labelKey: 'diamond'},
   {tool: 'ellipse', icon: Circle, labelKey: 'ellipse'},
   {tool: 'text', icon: Type, labelKey: 'text'},
+  {tool: 'image', icon: ImageIcon, labelKey: 'image'},
   {tool: 'eraser', icon: Eraser, labelKey: 'eraser'},
 ]
 

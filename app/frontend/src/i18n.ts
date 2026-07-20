@@ -306,8 +306,10 @@ export type RecorderCopy = {
     arrow: string
     line: string
     rectangle: string
+    diamond: string
     ellipse: string
     text: string
+    image: string
     eraser: string
     strokeColor: string
     strokeWidth: string
@@ -815,8 +817,10 @@ const zhCN: RecorderCopy = {
     arrow: '箭头',
     line: '直线',
     rectangle: '矩形',
+    diamond: '菱形',
     ellipse: '圆形',
     text: '文字',
+    image: '插入图片',
     eraser: '橡皮',
     strokeColor: '颜色',
     strokeWidth: '线宽',
@@ -1455,8 +1459,10 @@ const en: RecorderCopy = {
     arrow: 'Arrow',
     line: 'Line',
     rectangle: 'Rectangle',
+    diamond: 'Diamond',
     ellipse: 'Ellipse',
     text: 'Text',
+    image: 'Insert image',
     eraser: 'Eraser',
     strokeColor: 'Color',
     strokeWidth: 'Stroke',

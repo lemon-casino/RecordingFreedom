@@ -3238,7 +3238,6 @@ body.rf-annotation-render-window {
 }
 
 .whiteboard-tools button.selected,
-.whiteboard-style-group button.selected,
 .whiteboard-width-group button.selected {
   border-color: var(--accent-border);
   background: var(--teal-soft);
@@ -3246,6 +3245,9 @@ body.rf-annotation-render-window {
 }
 
 .whiteboard-style-group button.selected {
+  border-color: var(--accent-border);
+  background: var(--swatch);
+  color: inherit;
   box-shadow:
     0 0 0 2px rgba(255, 255, 255, 0.2),
     0 0 0 4px var(--accent-border-soft);
@@ -3320,6 +3322,17 @@ body.rf-annotation-render-window {
 .whiteboard-canvas .excalidraw .App {
   overflow: hidden;
   border-radius: inherit;
+}
+
+.whiteboard-canvas .excalidraw .layer-ui__wrapper,
+.whiteboard-canvas .excalidraw .App-menu,
+.whiteboard-canvas .excalidraw .App-menu_top,
+.whiteboard-canvas .excalidraw .App-menu_bottom,
+.whiteboard-canvas .excalidraw .App-menu_left,
+.whiteboard-canvas .excalidraw .App-menu_right,
+.whiteboard-canvas .excalidraw .toolbar,
+.whiteboard-canvas .excalidraw .Island {
+  display: none !important;
 }
 
 .whiteboard-status {
@@ -3462,7 +3475,13 @@ body.rf-annotation-overlay-window {
   gap: 6px;
   min-width: 0;
   max-width: min(calc(100vw - 16px), 920px);
+  box-sizing: border-box;
+  width: min(100%, calc(100vw - 16px));
   --wails-draggable: no-drag;
+}
+
+.annotation-toolbar-stack.is-bottom {
+  flex-direction: column-reverse;
 }
 
 .annotation-capsule {
@@ -3531,6 +3550,7 @@ body.rf-annotation-overlay-window {
   box-sizing: border-box;
   width: 100%;
   min-width: 0;
+  overflow: visible;
   padding: 7px;
   border: 1px solid rgba(255, 255, 255, 0.34);
   border-radius: 18px;
@@ -3582,13 +3602,16 @@ body.rf-annotation-overlay-window {
 .annotation-opacity-group:hover,
 .annotation-style-select:hover,
 .annotation-width-group button.selected,
-.annotation-style-group button.selected {
+.annotation-style-group button:hover {
   border-color: var(--accent-border);
   background: var(--teal-soft);
   color: var(--accent-readable);
 }
 
 .annotation-style-group button.selected {
+  border-color: var(--accent-border);
+  background: var(--swatch);
+  color: inherit;
   box-shadow:
     0 0 0 2px rgba(255, 255, 255, 0.2),
     0 0 0 4px var(--accent-border-soft);
@@ -3623,7 +3646,10 @@ body.rf-annotation-overlay-window {
 .annotation-style-select {
   display: inline-flex;
   align-items: center;
+  flex: 1 1 auto;
   gap: 3px;
+  min-width: 0;
+  max-width: 100%;
   padding: 0 5px;
   border: 1px solid transparent;
   border-radius: 8px;
@@ -3634,6 +3660,8 @@ body.rf-annotation-overlay-window {
 }
 
 .annotation-style-select select {
+  min-width: 0;
+  width: auto;
   max-width: 86px;
   height: 22px;
   padding: 0 3px;

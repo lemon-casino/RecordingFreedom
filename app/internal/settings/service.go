@@ -283,7 +283,7 @@ func normalizeWhiteboard(value WhiteboardSettings, defaults WhiteboardSettings) 
 
 func validWhiteboardTool(tool string) bool {
 	switch tool {
-	case "selection", "hand", "freedraw", "laser", "arrow", "line", "rectangle", "ellipse", "text", "eraser":
+	case "selection", "hand", "freedraw", "laser", "arrow", "line", "rectangle", "diamond", "ellipse", "text", "image", "eraser":
 		return true
 	default:
 		return false
