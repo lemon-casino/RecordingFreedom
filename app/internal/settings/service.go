@@ -315,6 +315,7 @@ func DefaultShortcuts() ShortcutSettings {
 		ToggleCamera:    "CmdOrCtrl+Shift+C",
 		OpenWhiteboard:  "CmdOrCtrl+Shift+B",
 		OpenScreenshot:  "CmdOrCtrl+Shift+S",
+		PasteImage:      "CmdOrCtrl+Shift+V",
 	}
 }
 
@@ -337,6 +338,7 @@ func ShortcutBindings(value ShortcutSettings) []ShortcutBinding {
 		{Action: ShortcutActionToggleCamera, Accelerator: normalized.ToggleCamera},
 		{Action: ShortcutActionOpenWhiteboard, Accelerator: normalized.OpenWhiteboard},
 		{Action: ShortcutActionOpenScreenshot, Accelerator: normalized.OpenScreenshot},
+		{Action: ShortcutActionPasteImage, Accelerator: normalized.PasteImage},
 	}
 }
 
@@ -347,6 +349,7 @@ func normalizeShortcuts(value ShortcutSettings, defaults ShortcutSettings) Short
 		ToggleCamera:    shortcutOrDefault(value.ToggleCamera, defaults.ToggleCamera),
 		OpenWhiteboard:  shortcutOrDefault(value.OpenWhiteboard, defaults.OpenWhiteboard),
 		OpenScreenshot:  shortcutOrDefault(value.OpenScreenshot, defaults.OpenScreenshot),
+		PasteImage:      shortcutOrDefault(value.PasteImage, defaults.PasteImage),
 	})
 	if err != nil {
 		return defaults
@@ -377,6 +380,9 @@ func normalizeShortcutValues(value ShortcutSettings) (ShortcutSettings, error) {
 	}
 	if value.OpenScreenshot, err = NormalizeShortcutAccelerator(value.OpenScreenshot); err != nil {
 		return ShortcutSettings{}, fmt.Errorf("%s: %w", ShortcutActionOpenScreenshot, err)
+	}
+	if value.PasteImage, err = NormalizeShortcutAccelerator(value.PasteImage); err != nil {
+		return ShortcutSettings{}, fmt.Errorf("%s: %w", ShortcutActionPasteImage, err)
 	}
 	return value, nil
 }
@@ -427,6 +433,7 @@ func ShortcutBindingsRaw(value ShortcutSettings) []ShortcutBinding {
 		{Action: ShortcutActionToggleCamera, Accelerator: value.ToggleCamera},
 		{Action: ShortcutActionOpenWhiteboard, Accelerator: value.OpenWhiteboard},
 		{Action: ShortcutActionOpenScreenshot, Accelerator: value.OpenScreenshot},
+		{Action: ShortcutActionPasteImage, Accelerator: value.PasteImage},
 	}
 }
 
@@ -442,6 +449,8 @@ func defaultShortcutForAction(defaults ShortcutSettings, action ShortcutAction) 
 		return defaults.OpenWhiteboard
 	case ShortcutActionOpenScreenshot:
 		return defaults.OpenScreenshot
+	case ShortcutActionPasteImage:
+		return defaults.PasteImage
 	default:
 		return ""
 	}
@@ -459,6 +468,8 @@ func setShortcutValue(value ShortcutSettings, action ShortcutAction, accelerator
 		value.OpenWhiteboard = accelerator
 	case ShortcutActionOpenScreenshot:
 		value.OpenScreenshot = accelerator
+	case ShortcutActionPasteImage:
+		value.PasteImage = accelerator
 	}
 	return value
 }
@@ -480,8 +491,8 @@ func NormalizeShortcutAccelerator(value string) (string, error) {
 	if !ok {
 		return "", fmt.Errorf("%q is not a supported key", strings.TrimSpace(parts[len(parts)-1]))
 	}
-	if len(modifiers) == 0 {
-		return "", errors.New("shortcut must include a modifier")
+	if len(modifiers) == 0 && !isFunctionShortcutKey(key) {
+		return "", errors.New("shortcut must include a modifier unless it is a function key")
 	}
 	if len(modifiers) == 1 && modifiers["Shift"] && isPrintableShortcutKey(key) {
 		return "", errors.New("shortcut must include Ctrl, Command, Alt, or Super")
@@ -558,6 +569,15 @@ func shortcutDisplayKey(key string) string {
 
 func isPrintableShortcutKey(key string) bool {
 	return len([]rune(key)) == 1 || key == "Plus" || key == "Space"
+}
+
+func isFunctionShortcutKey(key string) bool {
+	normalized := strings.ToLower(key)
+	if !strings.HasPrefix(normalized, "f") {
+		return false
+	}
+	_, ok := shortcutNamedKeys[normalized]
+	return ok
 }
 
 var shortcutNamedKeys = map[string]struct{}{

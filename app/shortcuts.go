@@ -18,6 +18,7 @@ type ShortcutSettingsPatchRequest struct {
 	ToggleCamera    *string `json:"toggleCamera,omitempty"`
 	OpenWhiteboard  *string `json:"openWhiteboard,omitempty"`
 	OpenScreenshot  *string `json:"openScreenshot,omitempty"`
+	PasteImage      *string `json:"pasteImage,omitempty"`
 }
 
 func (s *RecordingFreedomService) PatchShortcutSettings(patch ShortcutSettingsPatchRequest) (settings.Settings, error) {
@@ -63,6 +64,9 @@ func applyShortcutSettingsPatch(current settings.ShortcutSettings, patch Shortcu
 	if patch.OpenScreenshot != nil {
 		current.OpenScreenshot = strings.TrimSpace(*patch.OpenScreenshot)
 	}
+	if patch.PasteImage != nil {
+		current.PasteImage = strings.TrimSpace(*patch.PasteImage)
+	}
 	return current
 }
 
@@ -73,6 +77,7 @@ func shortcutPatchFields(patch ShortcutSettingsPatchRequest, saved settings.Shor
 		"savedToggleCamera":    saved.ToggleCamera,
 		"savedOpenWhiteboard":  saved.OpenWhiteboard,
 		"savedOpenScreenshot":  saved.OpenScreenshot,
+		"savedPasteImage":      saved.PasteImage,
 	}
 	if patch.ToggleRecording != nil {
 		fields["toggleRecording"] = strings.TrimSpace(*patch.ToggleRecording)
@@ -88,6 +93,9 @@ func shortcutPatchFields(patch ShortcutSettingsPatchRequest, saved settings.Shor
 	}
 	if patch.OpenScreenshot != nil {
 		fields["openScreenshot"] = strings.TrimSpace(*patch.OpenScreenshot)
+	}
+	if patch.PasteImage != nil {
+		fields["pasteImage"] = strings.TrimSpace(*patch.PasteImage)
 	}
 	return fields
 }

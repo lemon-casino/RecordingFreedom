@@ -2,6 +2,7 @@ import {
   AppWindow,
   Camera,
   Check,
+  ClipboardPaste,
   ChevronDown,
   ChevronLeft,
   CircleDot,
@@ -12,11 +13,13 @@ import {
   FlipHorizontal,
   FolderOpen,
   Gauge,
+  Globe2,
   History,
   Image as ImageIcon,
   Languages,
   Lock,
   Maximize2,
+  Minus,
   Minimize2,
   Move,
   MousePointer2,
@@ -75,7 +78,7 @@ import {
   fallbackCapabilities,
   fallbackStorageStatus,
 } from './services/mockBackend'
-import {assistRegionSelection, beginScreenshotAnnotationOverlay, cancelOcrModelDownload, cancelRegionSelector, cancelSelectedRegion, captureScreenshot, completeAnnotationRegionSelection, completeRegionSelection, completeScreenshotRegionSelection, completeScrollingScreenshotSelection, completeFloatingSelect, deleteScreenshotItem, exportRecordingPackage, getFloatingPanelState, getFloatingSelectState, getOcrModelDownloads, getOcrStatus, getSourceState, hideFloatingPanel, hideFloatingSelect, hidePinnedScreenshot, hidePipOverlay, hideRegionFrame, hideScreenIndicator, hideSettingsWindow, installOcrModelPackage, isWailsDesktopRuntime, listScreenshots, loadBootstrap, loadPinnedScreenshot, loadSettings, logClientEvent, openOcrResult, openRecordingPackage, openScreenshotDirectory, openScreenshotInWhiteboard, openVideoDirectory, patchAudioState, patchCameraState, patchScreenshotItem, patchSettingsPreferences, patchShortcutSettings, patchSourceState, patchWhiteboardSettings, pauseRecording, preflightAudioOnlyRecording, preflightRecording, previewExportRecordingPackage, queueRecognizePinnedScreenshot, queueRecognizeScreenshot, quitApplication, readAnnotationPreviewImage, readPipPreviewImage, readOcrResultImage, readScreenshotImage, recoverRecordingPackage, refreshOcrModelCatalog, removeOcrModel, restoreCapsuleWindow, resumeRecording, saveSettings, setActiveOcrModel, setCapsuleWindowExpanded, setCapsuleWindowHitRegions, setDataRoot, setFloatingPanelHitRegions, setFloatingSelectHitRegions, showAnnotationOverlay, showAnnotationRegionSelector, showFloatingPanel, showFloatingSelect, showPinnedScreenshot, showPipOverlay, showRegionSelector, showScreenIndicator, showScreenshotRegionSelector, showWhiteboardWindow, snapCapsuleWindowToEdge, startAudioOnlyRecording, startMicrophoneLevelMonitor, startOcrModelDownload, startRecording, startScrollingScreenshot, stopMicrophoneLevelMonitor, stopRecording, subscribeAudioLevel, subscribeAudioState, subscribeCapsuleDockSide, subscribeCapsuleWindowMoveEnded, subscribeFloatingPanelChanged, subscribeFloatingSelectChanged, subscribeFloatingSelectChosen, subscribeOcrJobEvents, subscribeOcrModelDownloadEvents, subscribeRecordingStatus, subscribeRegionSelection, subscribeScreenshotCaptured, subscribeScreenshotHistoryChanged, subscribeScreenshotPin, subscribeSettingsChanged, subscribeShortcutTriggered, subscribeSourceStateChanged, subscribeWhiteboardVisibility, translateOcr, updatePipOverlay, updateScreenshotRegionSelection, updateSelectedRegion, type AudioControlState, type AudioLevelUpdate, type AudioStatePatch, type CapsuleWindowDockSide, type CapsuleWindowExpandDirection, type CapsuleWindowHitRegion, type FloatingPanelKind, type FloatingPanelState, type FloatingSelectOption, type FloatingSelectState, type OcrBlock, type OcrModelDownloadSnapshot, type OcrModelInfo, type OcrResult, type OcrStatus, type OcrTranslationResult, type PIPOverlayCamera, type PIPOverlayState, type RecordingExportPlan, type RecordingRecovery, type RecordingStatusUpdate, type RegionSelectionSession, type RegionSmartCandidate, type ScreenshotPinnedItem, type ScreenshotPinState, type SettingsPreferencesPatch, type ShortcutSettingsPatch, type SourceControlState, type WhiteboardSettingsPatch, type WhiteboardVisibilityUpdate} from './services/recorderBackend'
+import {assistRegionSelection, beginScreenshotAnnotationOverlay, cancelOcrModelDownload, cancelRegionSelector, cancelSelectedRegion, captureScreenshot, completeAnnotationRegionSelection, completeRegionSelection, completeScreenshotRegionSelection, completeScrollingScreenshotSelection, completeFloatingSelect, deleteScreenshotItem, exportRecordingPackage, getFloatingPanelState, getFloatingSelectState, getOcrModelDownloads, getOcrStatus, getSourceState, hideAnnotationOverlay, hideFloatingPanel, hideFloatingSelect, hidePinnedScreenshot, hidePipOverlay, hideRegionFrame, hideScreenIndicator, hideSettingsWindow, hideWhiteboardWindow, installOcrModelPackage, isWailsDesktopRuntime, listScreenshots, loadBootstrap, loadPinnedScreenshot, loadSettings, logClientEvent, minimizeApplication, openOcrResult, openRecordingPackage, openScreenshotDirectory, openScreenshotInWhiteboard, openVideoDirectory, patchAudioState, patchCameraState, patchScreenshotItem, patchSettingsPreferences, patchShortcutSettings, patchSourceState, patchWhiteboardSettings, pauseRecording, preflightAudioOnlyRecording, preflightRecording, previewExportRecordingPackage, queueRecognizePinnedScreenshot, queueRecognizeScreenshot, quitApplication, readAnnotationPreviewImage, readPipPreviewImage, readOcrResultImage, readScreenshotImage, recoverRecordingPackage, refreshOcrModelCatalog, removeOcrModel, restoreCapsuleWindow, resumeRecording, saveSettings, setActiveOcrModel, setCapsuleWindowExpanded, setCapsuleWindowHitRegions, setDataRoot, setFloatingPanelHitRegions, setFloatingSelectHitRegions, showAnnotationOverlay, showAnnotationRegionSelector, showFloatingPanel, showFloatingSelect, showPinnedScreenshot, showPipOverlay, showRegionSelector, showScreenIndicator, showScreenshotRegionSelector, showWhiteboardWindow, snapCapsuleWindowToEdge, startAudioOnlyRecording, startMicrophoneLevelMonitor, startOcrModelDownload, startRecording, startScrollingScreenshot, stopMicrophoneLevelMonitor, stopRecording, subscribeAudioLevel, subscribeAudioState, subscribeCapsuleDockSide, subscribeCapsuleWindowMoveEnded, subscribeFloatingPanelChanged, subscribeFloatingSelectChanged, subscribeFloatingSelectChosen, subscribeOcrJobEvents, subscribeOcrModelDownloadEvents, subscribeRecordingStatus, subscribeRegionSelection, subscribeScreenshotCaptured, subscribeScreenshotHistoryChanged, subscribeScreenshotPin, subscribeSettingsChanged, subscribeShortcutTriggered, subscribeSourceStateChanged, subscribeWhiteboardVisibility, translateOcr, updatePipOverlay, updateScreenshotRegionSelection, updateSelectedRegion, type AudioControlState, type AudioLevelUpdate, type AudioStatePatch, type CapsuleWindowDockSide, type CapsuleWindowExpandDirection, type CapsuleWindowHitRegion, type FloatingPanelKind, type FloatingPanelState, type FloatingSelectOption, type FloatingSelectState, type OcrBlock, type OcrModelDownloadSnapshot, type OcrModelInfo, type OcrResult, type OcrStatus, type OcrTranslationResult, type PIPOverlayCamera, type PIPOverlayState, type RecordingExportPlan, type RecordingRecovery, type RecordingStatusUpdate, type RegionSelectionSession, type RegionSmartCandidate, type ScreenshotPinnedItem, type ScreenshotPinState, type SettingsPreferencesPatch, type ShortcutSettingsPatch, type SourceControlState, type WhiteboardSettingsPatch, type WhiteboardVisibilityUpdate} from './services/recorderBackend'
 import {resolveFloatingPanelPlacement, resolveFloatingSelectPlacement} from './components/floating/floatingPosition'
 import {ocrPanelContext, ocrResultPanelExpandedSize, ocrResultPanelSize, parseOcrPanelContext} from './components/floating/ocrResultPanel'
 import {OcrPositionTextLayer, ocrBlockPolygonPoints, ocrBlockStableId} from './components/ocr/OcrPositionTextLayer'
@@ -547,6 +550,7 @@ function App() {
     toggleCamera: () => undefined,
     openWhiteboard: () => undefined,
     openScreenshot: () => undefined,
+    pasteImage: () => undefined,
   })
   const currentSettingsRef = useRef<AppSettings | null>(null)
   const persistedSettingsRef = useRef<AppSettings | null>(null)
@@ -2498,7 +2502,7 @@ function App() {
     await showAnnotationRegionSelector()
   }
 
-  const openWhiteboard = () => {
+  const launchWhiteboard = () => {
     setActivePanel(null)
     setSettingsOpen(false)
     setClosePromptOpen(false)
@@ -2521,6 +2525,31 @@ function App() {
         await showWhiteboardWindow()
       }
     })()
+  }
+
+  const toggleWhiteboard = () => {
+    if (whiteboardButtonActive) {
+      const hide = whiteboardVisibility?.mode === 'annotation' ? hideAnnotationOverlay : hideWhiteboardWindow
+      void hide().catch((error) => console.error('Failed to close whiteboard:', error))
+      return
+    }
+    launchWhiteboard()
+  }
+
+  const openWhiteboard = toggleWhiteboard
+
+  const openScreenshotPastePicker = () => {
+    setSettingsOpen(false)
+    setClosePromptOpen(false)
+    setActivePanel(null)
+    void (async () => {
+      await hideFloatingPanel()
+      if (isWailsDesktopRuntime() && capsuleRef.current) {
+        await openFloatingPanelFromAnchor('board', capsuleRef.current)
+        return
+      }
+      setActivePanel('board')
+    })().catch((error) => console.error('Failed to open screenshot paste picker:', error))
   }
 
   const openBoardTools = (anchorElement?: Element) => {
@@ -2604,6 +2633,11 @@ function App() {
         console.error('Failed to open screenshot in whiteboard:', error)
         setScreenshotMessage(readableError(error))
       })
+  }
+
+  const pasteScreenshot = (item: ScreenshotItem) => {
+    setScreenshotMessage(copy.screenshot.paste)
+    annotateScreenshot(item)
   }
 
   const pinScreenshot = (item: ScreenshotItem) => {
@@ -2704,6 +2738,7 @@ function App() {
     toggleCamera: toggleCameraFromShortcut,
     openWhiteboard,
     openScreenshot: beginScreenshotCapture,
+    pasteImage: openScreenshotPastePicker,
   }
 
   useEffect(() => subscribeShortcutTriggered((event) => {
@@ -3090,7 +3125,7 @@ function App() {
               disabled={recordingConfigLocked}
               onClick={(event) => togglePanel('language', event.currentTarget)}
             >
-              <Languages size={18} />
+              <Globe2 size={18} />
             </button>
             <button
               className="icon-button soft"
@@ -3103,6 +3138,16 @@ function App() {
               <Settings size={18} />
             </button>
           </div>
+
+          <button
+            className="icon-button soft minimize-app-button"
+            type="button"
+            aria-label={copy.aria.minimizeApplication}
+            title={copy.aria.minimizeApplication}
+            onClick={() => void minimizeApplication()}
+          >
+            <Minus size={18} />
+          </button>
 
           <button
             className="icon-button close-app-button"
@@ -3446,6 +3491,7 @@ function App() {
                       onTranslateOcr={translateScreenshotOcrText}
                       onOpenFolder={openScreenshotFolder}
                       onAnnotate={annotateScreenshot}
+                      onPaste={pasteScreenshot}
                       onPin={pinScreenshot}
                       onToggleFixed={toggleScreenshotFixed}
                       onDelete={deleteScreenshot}
@@ -3472,7 +3518,7 @@ function App() {
                       setActivePanel(null)
                     }}
                   >
-                    <Languages size={16} />
+                    <Globe2 size={16} />
                     <span><strong>{copy.localeNames[code]}</strong></span>
                     {locale === code && <Check size={16} />}
                   </button>
@@ -4189,6 +4235,11 @@ function FloatingPanelWindow() {
       })
   }
 
+  const pasteScreenshot = (item: ScreenshotItem) => {
+    setScreenshotMessage(copy.screenshot.paste)
+    annotateScreenshot(item)
+  }
+
   const pinScreenshot = (item: ScreenshotItem) => {
     void showPinnedScreenshot(item.id)
       .then(() => listScreenshots())
@@ -4446,6 +4497,7 @@ function FloatingPanelWindow() {
                 onTranslateOcr={translateScreenshotOcrText}
                 onOpenFolder={openScreenshotFolder}
                 onAnnotate={annotateScreenshot}
+                onPaste={pasteScreenshot}
                 onPin={pinScreenshot}
                 onToggleFixed={toggleScreenshotFixed}
                 onDelete={deleteScreenshot}
@@ -4467,7 +4519,7 @@ function FloatingPanelWindow() {
               void saveSettings(nextSettings).then(applyFloatingSettings)
               void hideFloatingPanel(panelState.token)
             }}>
-              <Languages size={16} />
+              <Globe2 size={16} />
               <span><strong>{copy.localeNames[code]}</strong></span>
               {locale === code && <Check size={16} />}
             </button>
@@ -4972,6 +5024,7 @@ function ScreenshotHistoryRow({
   onTranslateOcr,
   onOpenFolder,
   onAnnotate,
+  onPaste,
   onPin,
   onToggleFixed,
   onDelete,
@@ -4983,6 +5036,7 @@ function ScreenshotHistoryRow({
   onTranslateOcr: (item: ScreenshotItem, anchorElement?: Element) => void
   onOpenFolder: (item: ScreenshotItem) => void
   onAnnotate: (item: ScreenshotItem) => void
+  onPaste?: (item: ScreenshotItem) => void
   onPin: (item: ScreenshotItem) => void
   onToggleFixed: (item: ScreenshotItem) => void
   onDelete: (item: ScreenshotItem) => void
@@ -5163,6 +5217,11 @@ function ScreenshotHistoryRow({
           <button type="button" aria-label={copy.screenshot.annotate} title={copy.screenshot.annotate} onClick={() => handleAction(onAnnotate)}>
             <PenLine size={15} />
           </button>
+          {onPaste && (
+            <button type="button" aria-label={copy.screenshot.paste} title={copy.screenshot.paste} onClick={() => handleAction(onPaste)}>
+              <ClipboardPaste size={15} />
+            </button>
+          )}
           <button type="button" aria-label={copy.screenshot.pin} title={copy.screenshot.pin} onClick={() => handleAction(onPin)}>
             <Pin size={15} />
           </button>
@@ -8376,7 +8435,7 @@ function shortcutFromKeyboardEvent(event: KeyboardEvent): string | null {
   if (event.altKey) modifiers.push('OptionOrAlt')
   if (event.shiftKey) modifiers.push('Shift')
   const uniqueModifiers = Array.from(new Set(modifiers))
-  if (uniqueModifiers.length === 0) return null
+  if (uniqueModifiers.length === 0 && !/^F\d{1,2}$/i.test(key)) return null
   if (uniqueModifiers.length === 1 && uniqueModifiers[0] === 'Shift' && isPrintableShortcutKey(key)) return null
   return [...uniqueModifiers, key].join('+')
 }

@@ -181,6 +181,32 @@ test('screenshot history exposes folder action and keeps delete behind swipe con
   await expect.poll(async () => page.evaluate((key) => JSON.parse(window.localStorage.getItem(key) || '[]').length, browserScreenshotHistoryKey)).toBe(0)
 })
 
+test('screenshot history exposes a selective paste action', async ({page}) => {
+  await openRecorderShell(page, {
+    screenshotHistory: [{
+      id: 'paste-shot',
+      path: 'browser-preview/data/screenshots/paste-shot.png',
+      thumbnailPath: 'browser-preview/data/screenshots/thumbnails/paste-shot.png',
+      createdAt: '2026-07-04T12:00:00Z',
+      width: 520,
+      height: 320,
+      mode: 'region',
+      pinned: false,
+      fixed: false,
+    }],
+  })
+
+  await page.getByRole('button', {name: 'Screenshot / board'}).click()
+  const row = page.locator('.screenshot-history-row').first()
+  await expect(row.getByRole('button', {name: 'Paste to whiteboard'})).toBeVisible()
+  await row.getByRole('button', {name: 'Paste to whiteboard'}).click()
+  await expect.poll(async () => page.evaluate(() => {
+    const raw = window.localStorage.getItem('recordingfreedom.screenshots.whiteboard.v1')
+    const context = raw ? JSON.parse(raw) : null
+    return {itemId: context?.item?.id ?? '', hasImage: String(context?.dataUrl ?? '').startsWith('data:image/')}
+  })).toEqual({itemId: 'paste-shot', hasImage: true})
+})
+
 test('screenshot history does not show stale pinned state before the user pins a screenshot', async ({page}) => {
   await openRecorderShell(page, {
     screenshotHistory: [{

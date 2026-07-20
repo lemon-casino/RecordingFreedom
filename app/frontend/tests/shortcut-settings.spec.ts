@@ -22,6 +22,23 @@ test('settings captures and persists shortcut changes', async ({page}) => {
   }, browserSettingsKey)).toBe('CmdOrCtrl+OptionOrAlt+P')
 })
 
+test('settings accepts standalone function keys and exposes paste image shortcut', async ({page}) => {
+  await openRecorderShell(page)
+
+  await page.getByRole('button', {name: 'Open settings'}).click()
+  await expect(page.getByText('Open screenshot paste list', {exact: true})).toBeVisible()
+
+  const recordingShortcut = page.locator('.setting-shortcut').filter({hasText: 'Start / stop recording'})
+  await recordingShortcut.getByRole('button', {name: 'Change'}).click()
+  await recordingShortcut.getByRole('button', {name: 'Listening'}).press('F1')
+
+  await expect(recordingShortcut.locator('kbd')).toHaveText('F1')
+  await expect.poll(async () => page.evaluate((settingsKey) => {
+    const raw = window.localStorage.getItem(settingsKey)
+    return raw ? JSON.parse(raw).shortcuts?.toggleRecording : ''
+  }, browserSettingsKey)).toBe('F1')
+})
+
 test('settings persists start at login toggle', async ({page}) => {
   await openRecorderShell(page)
 

@@ -13,7 +13,7 @@ export type WhiteboardMode = 'board' | 'annotation'
 export type WhiteboardTool = 'selection' | 'hand' | 'freedraw' | 'laser' | 'arrow' | 'line' | 'rectangle' | 'diamond' | 'ellipse' | 'text' | 'image' | 'eraser'
 export type WhiteboardStrokeWidth = 'thin' | 'medium' | 'bold'
 export type WhiteboardCapturePolicy = 'preview-only' | 'export-compose'
-export type ShortcutAction = 'toggleRecording' | 'togglePause' | 'toggleCamera' | 'openWhiteboard' | 'openScreenshot'
+export type ShortcutAction = 'toggleRecording' | 'togglePause' | 'toggleCamera' | 'openWhiteboard' | 'openScreenshot' | 'pasteImage'
 export type OcrTranslationProvider = 'disabled' | 'deepl' | 'openai-compatible'
 
 export type ShortcutSettings = Record<ShortcutAction, string>
@@ -474,13 +474,14 @@ export const fallbackStorageStatus: AppStorageStatus = {
 
 export const localeOptions: LocaleCode[] = ['zh-CN', 'en']
 export const themeOptions: ThemeCode[] = ['night-teal', 'mountain-green', 'sky-blue', 'sunset-yellow', 'ink-purple', 'sage-gray']
-export const shortcutActions: ShortcutAction[] = ['toggleRecording', 'togglePause', 'toggleCamera', 'openWhiteboard', 'openScreenshot']
+export const shortcutActions: ShortcutAction[] = ['toggleRecording', 'togglePause', 'toggleCamera', 'openWhiteboard', 'openScreenshot', 'pasteImage']
 export const defaultShortcuts: ShortcutSettings = {
   toggleRecording: 'CmdOrCtrl+Shift+R',
   togglePause: 'CmdOrCtrl+Shift+P',
   toggleCamera: 'CmdOrCtrl+Shift+C',
   openWhiteboard: 'CmdOrCtrl+Shift+B',
   openScreenshot: 'CmdOrCtrl+Shift+S',
+  pasteImage: 'CmdOrCtrl+Shift+V',
 }
 export const themeSwatches: Record<ThemeCode, string> = {
   'night-teal': '#11b7a7',
@@ -506,6 +507,7 @@ export function normalizeShortcutSettings(value: Partial<ShortcutSettings> | und
     toggleCamera: normalizeShortcutValue(value?.toggleCamera, defaultShortcuts.toggleCamera),
     openWhiteboard: normalizeShortcutValue(value?.openWhiteboard, defaultShortcuts.openWhiteboard),
     openScreenshot: normalizeShortcutValue(value?.openScreenshot, defaultShortcuts.openScreenshot),
+    pasteImage: normalizeShortcutValue(value?.pasteImage, defaultShortcuts.pasteImage),
   }
 }
 

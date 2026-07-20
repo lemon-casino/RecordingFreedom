@@ -1676,6 +1676,23 @@ export async function quitApplication(): Promise<void> {
   }
 }
 
+export async function minimizeApplication(): Promise<void> {
+  if (!isWailsDesktopRuntime()) {
+    const browserWindow = window as Window & {__RF_WINDOW_MINIMIZED__?: boolean}
+    browserWindow.__RF_WINDOW_MINIMIZED__ = true
+    window.dispatchEvent(new Event('rf-window-minimized'))
+    return
+  }
+  try {
+    await WailsWindow.Minimise()
+  } catch (error) {
+    console.info('Using browser minimize fallback:', error)
+    const browserWindow = window as Window & {__RF_WINDOW_MINIMIZED__?: boolean}
+    browserWindow.__RF_WINDOW_MINIMIZED__ = true
+    window.dispatchEvent(new Event('rf-window-minimized'))
+  }
+}
+
 export async function loadBootstrap(): Promise<RecorderBootstrap> {
   try {
     return fromBoundBootstrap(await RecordingFreedomService.Bootstrap())

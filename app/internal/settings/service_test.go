@@ -200,6 +200,24 @@ func TestSaveAndLoadSettings(t *testing.T) {
 	}
 }
 
+func TestValidateShortcutsAllowsFunctionKey(t *testing.T) {
+	shortcuts := DefaultShortcuts()
+	shortcuts.ToggleRecording = "f1"
+
+	normalized, err := ValidateShortcuts(shortcuts)
+	if err != nil {
+		t.Fatalf("ValidateShortcuts() error = %v", err)
+	}
+	if normalized.ToggleRecording != "F1" {
+		t.Fatalf("function shortcut = %q, want F1", normalized.ToggleRecording)
+	}
+
+	shortcuts.ToggleRecording = "A"
+	if _, err := ValidateShortcuts(shortcuts); err == nil {
+		t.Fatal("plain letter shortcut should still require a modifier")
+	}
+}
+
 func TestLoadMigratesLegacyPIPScaleRange(t *testing.T) {
 	root := t.TempDir()
 	service := NewService(appdata.NewService(root))

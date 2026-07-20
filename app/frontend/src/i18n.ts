@@ -54,6 +54,7 @@ export type RecorderCopy = {
     openSettings: string
     openWhiteboard: string
     openLastRecording: string
+    minimizeApplication: string
     closeApplication: string
     recordingMode: string
     menu: (panel: string) => string
@@ -401,6 +402,7 @@ export type RecorderCopy = {
     open: string
     openFolder: string
     annotate: string
+    paste: string
     pin: string
     pinned: string
     fix: string
@@ -514,6 +516,7 @@ const zhCN: RecorderCopy = {
     openSettings: '打开设置',
     openWhiteboard: '打开画板',
     openLastRecording: '打开最近录制内容',
+    minimizeApplication: '最小化窗口',
     closeApplication: '关闭软件',
     recordingMode: '录制模式',
     menu: (panel) => `${panel} 菜单`,
@@ -684,7 +687,7 @@ const zhCN: RecorderCopy = {
     ocrTranslationPrivacyDetail: '开启后，点击翻译会把本次 OCR 文本发送到你配置的翻译服务。',
     shortcuts: '快捷键',
     shortcutSummary: '全局快捷键',
-    shortcutDetail: '点击修改后按下组合键即可保存；普通单字母和仅 Shift 的组合不会生效。',
+    shortcutDetail: '点击修改后按下快捷键即可保存；F1 这类功能键可单独使用，普通单字母和仅 Shift 的组合不会生效。',
     shortcutHint: '按下新的组合键，Esc 取消。',
     shortcutRecord: '修改',
     shortcutRecording: '录入中',
@@ -696,6 +699,7 @@ const zhCN: RecorderCopy = {
       toggleCamera: '开启 / 关闭摄像头',
       openWhiteboard: '打开画板',
       openScreenshot: '区域截图',
+      pasteImage: '呼出截图历史贴图列表',
     },
     recordingBackend: '录制后端',
     recordingBackendDetail: '当前会使用这里显示的原生后端进行真实采集；开始录制前仍会执行预检，阻塞不可用的来源、媒体设备或存储状态。',
@@ -912,6 +916,7 @@ const zhCN: RecorderCopy = {
     open: '打开截图',
     openFolder: '打开所在目录',
     annotate: '在画板中标注',
+    paste: '贴图到画板',
     pin: '钉图',
     pinned: '已钉图',
     fix: '固定',
@@ -1156,6 +1161,7 @@ const en: RecorderCopy = {
     openSettings: 'Open settings',
     openWhiteboard: 'Open whiteboard',
     openLastRecording: 'Open latest recording',
+    minimizeApplication: 'Minimize window',
     closeApplication: 'Close app',
     recordingMode: 'Recording mode',
     menu: (panel) => `${panel} menu`,
@@ -1326,7 +1332,7 @@ const en: RecorderCopy = {
     ocrTranslationPrivacyDetail: 'When enabled, Translate sends this OCR text to your configured translation service.',
     shortcuts: 'Shortcuts',
     shortcutSummary: 'Global shortcuts',
-    shortcutDetail: 'Click change, then press a key combination to save. Plain letters and Shift-only combos are ignored.',
+    shortcutDetail: 'Click change, then press a shortcut to save. Function keys such as F1 can be used alone; plain letters and Shift-only combos are ignored.',
     shortcutHint: 'Press a new key combination. Esc cancels.',
     shortcutRecord: 'Change',
     shortcutRecording: 'Listening',
@@ -1338,6 +1344,7 @@ const en: RecorderCopy = {
       toggleCamera: 'Turn camera on / off',
       openWhiteboard: 'Open whiteboard',
       openScreenshot: 'Region screenshot',
+      pasteImage: 'Open screenshot paste list',
     },
     recordingBackend: 'Recording backend',
     recordingBackendDetail: 'Real capture will use the native backend shown here; preflight still blocks unavailable sources, media devices, or storage before recording starts.',
@@ -1554,6 +1561,7 @@ const en: RecorderCopy = {
     open: 'Open screenshot',
     openFolder: 'Open containing folder',
     annotate: 'Annotate in whiteboard',
+    paste: 'Paste to whiteboard',
     pin: 'Pin image',
     pinned: 'Pinned',
     fix: 'Fix',

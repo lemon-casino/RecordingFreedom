@@ -50,6 +50,17 @@ test('capsule controls are excluded from native drag regions while the grabber r
   await expect(draggableValue(page.getByRole('button', {name: /Region screenshot|区域截图/}))).resolves.toBe('no-drag')
 })
 
+test('capsule exposes a minimize action and a distinct language icon', async ({page}) => {
+  await page.goto('/')
+
+  const languageButton = page.getByRole('button', {name: /Select language|选择语言/})
+  await expect(languageButton.locator('svg')).toHaveClass(/lucide-earth/)
+  await expect(page.getByRole('button', {name: /Minimize window|最小化窗口/})).toBeVisible()
+
+  await page.getByRole('button', {name: /Minimize window|最小化窗口/}).click()
+  await expect.poll(async () => page.evaluate(() => (window as Window & {__RF_WINDOW_MINIMIZED__?: boolean}).__RF_WINDOW_MINIMIZED__)).toBe(true)
+})
+
 async function dockSide(page: Page, input: {
   position: {x: number; y: number}
   size: {width: number; height: number}

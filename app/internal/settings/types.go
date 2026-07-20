@@ -104,6 +104,7 @@ const (
 	ShortcutActionToggleCamera    ShortcutAction = "toggleCamera"
 	ShortcutActionOpenWhiteboard  ShortcutAction = "openWhiteboard"
 	ShortcutActionOpenScreenshot  ShortcutAction = "openScreenshot"
+	ShortcutActionPasteImage      ShortcutAction = "pasteImage"
 )
 
 type ShortcutSettings struct {
@@ -112,6 +113,7 @@ type ShortcutSettings struct {
 	ToggleCamera    string `json:"toggleCamera"`
 	OpenWhiteboard  string `json:"openWhiteboard"`
 	OpenScreenshot  string `json:"openScreenshot"`
+	PasteImage      string `json:"pasteImage"`
 }
 
 type ShortcutBinding struct {

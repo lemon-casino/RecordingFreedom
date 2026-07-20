@@ -82,6 +82,7 @@ export enum ShortcutAction {
     ShortcutActionToggleCamera = "toggleCamera",
     ShortcutActionOpenWhiteboard = "openWhiteboard",
     ShortcutActionOpenScreenshot = "openScreenshot",
+    ShortcutActionPasteImage = "pasteImage",
 };
 
 export interface ShortcutSettings {
@@ -90,6 +91,7 @@ export interface ShortcutSettings {
     "toggleCamera": string;
     "openWhiteboard": string;
     "openScreenshot": string;
+    "pasteImage": string;
 }
 
 export interface SourceSettings {

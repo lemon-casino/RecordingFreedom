@@ -836,6 +836,10 @@ select:disabled {
 }
 
 .close-app-button {
+  order: 8;
+}
+
+.minimize-app-button {
   order: 7;
 }
 

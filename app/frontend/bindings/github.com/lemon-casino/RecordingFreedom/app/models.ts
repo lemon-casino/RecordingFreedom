@@ -543,6 +543,7 @@ export interface ShortcutSettingsPatchRequest {
     "toggleCamera"?: string | null;
     "openWhiteboard"?: string | null;
     "openScreenshot"?: string | null;
+    "pasteImage"?: string | null;
 }
 
 export interface ShortcutTriggeredEvent {
