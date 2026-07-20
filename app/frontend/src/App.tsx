@@ -111,7 +111,7 @@ const countdownOptions = [0, 3, 5, 10]
 const ocrTranslationProviders: AppSettings['ocr']['translation']['provider'][] = ['disabled', 'deepl', 'openai-compatible']
 const ocrTranslationLanguageOptions = ['auto', 'zh-CN', 'en', 'ja', 'ko', 'fr', 'de', 'es']
 const previewPackagePath = 'data/video/recording-preview.rfrec'
-type ActivePanel = 'source' | 'audio' | 'camera' | 'language' | 'board'
+type ActivePanel = 'source' | 'audio' | 'camera' | 'language' | 'board' | 'screenshot-paste'
 
 const floatingPanelStandardSize = {width: 320, height: 340, maxHeight: 340, minWidth: 300}
 const floatingPanelCompactSize = {width: 260, height: 120, maxHeight: 120, minWidth: 240}
@@ -2445,7 +2445,7 @@ function App() {
     })
   }
 
-  const togglePanel = (panel: ActivePanel, anchorElement?: Element) => {
+  const togglePanel = (panel: Exclude<ActivePanel, 'screenshot-paste'>, anchorElement?: Element) => {
     setSettingsOpen(false)
     setClosePromptOpen(false)
     if (isWailsDesktopRuntime() && anchorElement) {
@@ -2545,10 +2545,10 @@ function App() {
     void (async () => {
       await hideFloatingPanel()
       if (isWailsDesktopRuntime() && capsuleRef.current) {
-        await openFloatingPanelFromAnchor('board', capsuleRef.current)
+        await openFloatingPanelFromAnchor('board', capsuleRef.current, 'screenshot-paste')
         return
       }
-      setActivePanel('board')
+      setActivePanel('screenshot-paste')
     })().catch((error) => console.error('Failed to open screenshot paste picker:', error))
   }
 
@@ -3506,6 +3506,41 @@ function App() {
               </div>
             )}
 
+            {activePanel === 'screenshot-paste' && (
+              <div className="menu-stack screenshot-paste-menu">
+                <div className="screenshot-history-header">
+                  <span>
+                    <History size={15} />
+                    <strong>{copy.screenshot.history}</strong>
+                  </span>
+                  <small>{screenshotMessage || copy.screenshot.historyDetail}</small>
+                </div>
+                <div className="screenshot-history-list">
+                  {screenshots.length > 0 ? screenshots.slice(0, 6).map((item) => (
+                    <ScreenshotHistoryRow
+                      key={item.id}
+                      item={item}
+                      copy={copy}
+                      onOpen={openScreenshotPreview}
+                      onCopyOcr={copyScreenshotOcrText}
+                      onTranslateOcr={translateScreenshotOcrText}
+                      onOpenFolder={openScreenshotFolder}
+                      onAnnotate={annotateScreenshot}
+                      onPaste={pasteScreenshot}
+                      onPin={pinScreenshot}
+                      onToggleFixed={toggleScreenshotFixed}
+                      onDelete={deleteScreenshot}
+                    />
+                  )) : (
+                    <div className="source-empty">
+                      <ImageIcon size={18} />
+                      <span>{copy.screenshot.empty}</span>
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+
             {activePanel === 'language' && (
               <div className="menu-grid compact">
                 {localeOptions.map((code) => (
@@ -4325,7 +4360,7 @@ function FloatingPanelWindow() {
 
   const panel = panelState.kind
   return (
-    <main ref={panelRef} className={`floating-panel-shell popover panel-${panel ?? 'empty'} drop-${panelState.direction ?? 'down'}`} role="dialog" aria-label={panel === 'close' ? copy.aria.closeApplication : panel ? copy.aria.menu(panel === 'settings' ? 'language' : panel) : undefined}>
+    <main ref={panelRef} className={`floating-panel-shell popover panel-${panel ?? 'empty'} drop-${panelState.direction ?? 'down'}`} role="dialog" aria-label={panel === 'close' ? copy.aria.closeApplication : panel ? copy.aria.menu(panelState.contextId === 'screenshot-paste' ? 'screenshot-paste' : panel === 'settings' ? 'language' : panel) : undefined}>
       {panel === 'source' && (
         <div className="menu-grid source-menu">
           <div className="mode-toggle" role="group" aria-label={copy.aria.recordingMode}>
@@ -4462,7 +4497,7 @@ function FloatingPanelWindow() {
         </div>
       )}
 
-      {panel === 'board' && (
+      {panel === 'board' && panelState.contextId !== 'screenshot-paste' && (
         <div className="menu-stack board-tools-menu">
           <div className="board-tool-actions">
             <button type="button" className="menu-row selected" onClick={beginScreenshotCapture}>
@@ -4482,6 +4517,35 @@ function FloatingPanelWindow() {
               <span><strong>{copy.whiteboard.open}</strong><small>{formatShortcutForDisplay(settings.shortcuts.openWhiteboard)}</small></span>
             </button>
           </div>
+          <div className="screenshot-history-header">
+            <span><History size={15} /><strong>{copy.screenshot.history}</strong></span>
+            <small>{screenshotMessage || copy.screenshot.historyDetail}</small>
+          </div>
+          <div className="screenshot-history-list">
+            {screenshots.length > 0 ? screenshots.slice(0, 6).map((item) => (
+              <ScreenshotHistoryRow
+                key={item.id}
+                item={item}
+                copy={copy}
+                onOpen={openScreenshotPreview}
+                onCopyOcr={copyScreenshotOcrText}
+                onTranslateOcr={translateScreenshotOcrText}
+                onOpenFolder={openScreenshotFolder}
+                onAnnotate={annotateScreenshot}
+                onPaste={pasteScreenshot}
+                onPin={pinScreenshot}
+                onToggleFixed={toggleScreenshotFixed}
+                onDelete={deleteScreenshot}
+              />
+            )) : (
+              <div className="source-empty"><ImageIcon size={18} /><span>{copy.screenshot.empty}</span></div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {panel === 'board' && panelState.contextId === 'screenshot-paste' && (
+        <div className="menu-stack screenshot-paste-menu">
           <div className="screenshot-history-header">
             <span><History size={15} /><strong>{copy.screenshot.history}</strong></span>
             <small>{screenshotMessage || copy.screenshot.historyDetail}</small>

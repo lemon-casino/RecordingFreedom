@@ -207,6 +207,34 @@ test('screenshot history exposes a selective paste action', async ({page}) => {
   })).toEqual({itemId: 'paste-shot', hasImage: true})
 })
 
+test('screenshot paste shortcut opens only the screenshot history list', async ({page}) => {
+  await openRecorderShell(page, {
+    screenshotHistory: [{
+      id: 'shortcut-paste-shot',
+      path: 'browser-preview/data/screenshots/shortcut-paste-shot.png',
+      thumbnailPath: 'browser-preview/data/screenshots/thumbnails/shortcut-paste-shot.png',
+      createdAt: '2026-07-04T12:00:00Z',
+      width: 520,
+      height: 320,
+      mode: 'region',
+      pinned: false,
+      fixed: false,
+    }],
+  })
+
+  await page.evaluate(() => {
+    window.dispatchEvent(new CustomEvent('rf-shortcut-triggered', {
+      detail: {action: 'pasteImage', accelerator: 'CmdOrCtrl+Shift+V'},
+    }))
+  })
+
+  const pasteDialog = page.getByRole('dialog', {name: 'screenshot-paste menu'})
+  await expect(pasteDialog).toBeVisible()
+  await expect(pasteDialog.getByText('Screenshot history', {exact: true})).toBeVisible()
+  await expect(pasteDialog.locator('.board-tool-actions')).toHaveCount(0)
+  await expect(pasteDialog.getByRole('button', {name: 'Paste to whiteboard'})).toBeVisible()
+})
+
 test('screenshot history does not show stale pinned state before the user pins a screenshot', async ({page}) => {
   await openRecorderShell(page, {
     screenshotHistory: [{

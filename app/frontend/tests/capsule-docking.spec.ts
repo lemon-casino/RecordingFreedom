@@ -17,6 +17,24 @@ test('capsule docking only snaps near external monitor edges', async ({page}) =>
   await expect(dockSide(page, {position: {x: 1920 + 1600 - size.width - 4, y: 240}, size, workAreas})).resolves.toBe('right')
 })
 
+test('capsule docking prefers the owning secondary screen when a window overlaps a monitor seam', async ({page}) => {
+  await page.goto('/')
+
+  const workAreas = [
+    {id: 'primary', x: 0, y: 0, width: 5000, height: 1040},
+    {id: 'secondary', x: 5000, y: 0, width: 1000, height: 900},
+  ]
+  const target = await dockTarget(page, {
+    position: {x: 4350, y: 240},
+    size: {width: 760, height: 96},
+    workAreas,
+    activeScreenId: 'secondary',
+  })
+
+  expect(target.side).toBe('none')
+  expect(target.workArea).toMatchObject({id: 'secondary', x: 5000, width: 1000})
+})
+
 test('capsule docking ignores vertical monitor seams and keeps top or bottom external edges available', async ({page}) => {
   await page.goto('/')
 
@@ -64,14 +82,24 @@ test('capsule exposes a minimize action and a distinct language icon', async ({p
 async function dockSide(page: Page, input: {
   position: {x: number; y: number}
   size: {width: number; height: number}
-  workAreas: Array<{x: number; y: number; width: number; height: number}>
+  workAreas: Array<{id?: string; x: number; y: number; width: number; height: number}>
+  activeScreenId?: string
+}) {
+  return (await dockTarget(page, input)).side
+}
+
+async function dockTarget(page: Page, input: {
+  position: {x: number; y: number}
+  size: {width: number; height: number}
+  workAreas: Array<{id?: string; x: number; y: number; width: number; height: number}>
+  activeScreenId?: string
 }) {
   return page.evaluate((value) => {
     const fn = (window as Window & {
-      __RF_TEST_RESOLVE_CAPSULE_DOCK_TARGET__?: (request: typeof value) => {side: string}
+      __RF_TEST_RESOLVE_CAPSULE_DOCK_TARGET__?: (request: typeof value) => {side: string; workArea: unknown}
     }).__RF_TEST_RESOLVE_CAPSULE_DOCK_TARGET__
-    if (!fn) return 'missing-test-hook'
-    return fn(value).side
+    if (!fn) return {side: 'missing-test-hook', workArea: null}
+    return fn(value)
   }, input)
 }
 

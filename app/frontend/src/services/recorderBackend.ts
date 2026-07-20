@@ -557,6 +557,7 @@ const browserFloatingPanelEvent = 'rf-floating-panel'
 const browserFloatingSelectEvent = 'rf-floating-select'
 const browserFloatingSelectChosenEvent = 'rf-floating-select-chosen'
 const browserSourceStateEvent = 'rf-source-state'
+const browserShortcutTriggeredEvent = 'rf-shortcut-triggered'
 const browserOcrJobEvent = 'rf-ocr-job'
 const browserOcrModelDownloadEvent = 'rf-ocr-model-download'
 const settingsSchemaVersion = 4
@@ -1142,7 +1143,7 @@ export async function setCapsuleWindowExpanded(
       width: expanded ? capsuleWindowWidth : compactCollapsed ? capsuleWindowCompactWidth : capsuleWindowWidth,
       height: expanded ? expandedHeight : capsuleWindowCollapsedHeight,
     }))
-    const workArea = await capsuleWorkAreaForPosition(position, size).catch(() => null)
+    const workArea = await capsuleWorkAreaForWindow(position, size).catch(() => null)
     const dockSide = lastCapsuleDockSide
     const collapsedVisualSize = capsuleCollapsedWindowSize(compactCollapsed, dockSide, workArea)
     const collapsedVisualPosition = capsuleVisibleCollapsedPosition(dockSide, position, size, collapsedVisualSize, workArea)
@@ -1185,11 +1186,11 @@ export async function snapCapsuleWindowToEdge(compactCollapsed = false): Promise
     const position = await WailsWindow.Position()
     const size = await WailsWindow.Size().catch(() => capsuleCollapsedWindowSize(compactCollapsed, lastCapsuleDockSide, null))
     const workAreas = await capsuleWorkAreas().catch(() => [])
-    const workArea = capsuleWorkAreaForPositionFromAreas(position, size, workAreas)
+    const workArea = await capsuleWorkAreaForWindow(position, size, workAreas)
     const currentVisualSize = capsuleCollapsedWindowSize(compactCollapsed, lastCapsuleDockSide, workArea)
     lastCapsuleCollapsedPosition = null
     const currentVisualPosition = capsuleVisibleCollapsedPosition(lastCapsuleDockSide, position, size, currentVisualSize, workArea)
-    const dockTarget = resolveCapsuleDockTarget(currentVisualPosition, currentVisualSize, workAreas)
+    const dockTarget = resolveCapsuleDockTarget(currentVisualPosition, currentVisualSize, workAreas, workArea)
     const dockSide = dockTarget.side
     const targetWorkArea = dockTarget.workArea ?? workArea
     lastCapsuleExpandedDirection = dockSide === 'bottom' ? 'up' : 'down'
@@ -1228,9 +1229,10 @@ function resolveCapsuleDockTarget(
   position: {x: number; y: number},
   size: {width: number; height: number},
   workAreas: CapsuleWorkArea[],
+  preferredWorkArea: CapsuleWorkArea | null = null,
 ): CapsuleDockTarget {
   if (!workAreas.length) return {side: 'none', workArea: null}
-  const activeWorkArea = capsuleWorkAreaForVisualRectFromAreas(position, size, workAreas)
+  const activeWorkArea = preferredWorkArea ?? capsuleWorkAreaForVisualRectFromAreas(position, size, workAreas)
   if (!activeWorkArea) return {side: 'none', workArea: null}
   const vertical = (['left', 'right'] as const)
     .filter((side) => isExternalWorkAreaEdge(side, activeWorkArea, workAreas))
@@ -1252,8 +1254,12 @@ export function __resolveCapsuleDockTargetForTest(input: {
   position: {x: number; y: number}
   size: {width: number; height: number}
   workAreas: CapsuleWorkArea[]
+  activeScreenId?: string
 }) {
-  const target = resolveCapsuleDockTarget(input.position, input.size, input.workAreas)
+  const preferredWorkArea = input.activeScreenId
+    ? input.workAreas.find((area) => area.id === input.activeScreenId) ?? null
+    : null
+  const target = resolveCapsuleDockTarget(input.position, input.size, input.workAreas, preferredWorkArea)
   return {
     side: target.side,
     workArea: target.workArea ? {...target.workArea} : null,
@@ -1267,6 +1273,7 @@ if (import.meta.env.DEV && typeof window !== 'undefined') {
 }
 
 type CapsuleWorkArea = {
+  id?: string
   x: number
   y: number
   width: number
@@ -1288,17 +1295,33 @@ type CapsuleDockCandidate = {
   screenDistance: number
 }
 
-async function capsuleWorkAreaForPosition(
+async function capsuleWorkAreaForWindow(
   position: {x: number; y: number},
   size: {width: number; height: number},
+  candidates?: CapsuleWorkArea[],
 ): Promise<CapsuleWorkArea | null> {
-  return capsuleWorkAreaForPositionFromAreas(position, size, await capsuleWorkAreas())
+  const workAreas = candidates ?? await capsuleWorkAreas()
+  if (!workAreas.length) return null
+  try {
+    const screen = await WailsWindow.GetScreen()
+    const screenId = typeof screen?.ID === 'string' ? screen.ID.trim() : ''
+    if (screenId) {
+      const matchingWorkArea = workAreas.find((area) => area.id === screenId)
+      if (matchingWorkArea) return matchingWorkArea
+    }
+  } catch {
+    // Browser previews and older runtimes do not expose the owning screen.
+  }
+  return capsuleWorkAreaForPositionFromAreas(position, size, workAreas)
 }
 
 async function capsuleWorkAreas(): Promise<CapsuleWorkArea[]> {
   const screens = await Screens.GetAll()
   return screens
-    .map((screen) => normalizeCapsuleWorkArea(screen.WorkArea) ?? normalizeCapsuleWorkArea(screen.Bounds))
+    .map((screen, index) => {
+      const id = typeof screen.ID === 'string' && screen.ID.trim() ? screen.ID.trim() : String(index + 1)
+      return normalizeCapsuleWorkArea(screen.WorkArea, id) ?? normalizeCapsuleWorkArea(screen.Bounds, id)
+    })
     .filter((area): area is CapsuleWorkArea => area !== null)
 }
 
@@ -1335,9 +1358,9 @@ function capsuleWorkAreaForVisualRectFromAreas(
   return capsuleWorkAreaForPositionFromAreas(position, size, candidates)
 }
 
-function normalizeCapsuleWorkArea(rect: {X: number; Y: number; Width: number; Height: number} | undefined): CapsuleWorkArea | null {
+function normalizeCapsuleWorkArea(rect: {X: number; Y: number; Width: number; Height: number} | undefined, id?: string): CapsuleWorkArea | null {
   if (!rect || rect.Width <= 0 || rect.Height <= 0) return null
-  return {x: rect.X, y: rect.Y, width: rect.Width, height: rect.Height}
+  return {id, x: rect.X, y: rect.Y, width: rect.Width, height: rect.Height}
 }
 
 function pointInsideWorkArea(x: number, y: number, area: CapsuleWorkArea) {
@@ -1787,13 +1810,21 @@ export function subscribeAudioState(handler: (event: AudioControlState) => void)
 }
 
 export function subscribeShortcutTriggered(handler: (event: ShortcutTriggeredUpdate) => void): () => void {
+  let disposeDesktop = () => {}
   try {
-    return Events.On('shortcut.triggered', (event) => {
+    disposeDesktop = Events.On('shortcut.triggered', (event) => {
       handler(fromShortcutTriggeredEvent(event.data))
     })
   } catch (error) {
     console.info('Desktop shortcut events unavailable:', error)
-    return () => {}
+  }
+  const onBrowserEvent = (event: Event) => {
+    handler(fromShortcutTriggeredEvent((event as CustomEvent<ShortcutTriggeredUpdate>).detail))
+  }
+  window.addEventListener(browserShortcutTriggeredEvent, onBrowserEvent)
+  return () => {
+    disposeDesktop()
+    window.removeEventListener(browserShortcutTriggeredEvent, onBrowserEvent)
   }
 }
 
