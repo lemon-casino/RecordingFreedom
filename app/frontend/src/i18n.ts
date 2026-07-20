@@ -312,6 +312,47 @@ export type RecorderCopy = {
     strokeColor: string
     strokeWidth: string
     opacity: string
+    styleSettings: string
+    strokeStyle: string
+    fillStyle: string
+    fillColor: string
+    solid: string
+    dashed: string
+    dotted: string
+    hachure: string
+    crossHatch: string
+    transparent: string
+    roundness: string
+    sharp: string
+    round: string
+    roughness: string
+    architect: string
+    artist: string
+    cartoonist: string
+    elbow: string
+    arrowType: string
+    arrowhead: string
+    arrowheadNone: string
+    arrowheadArrow: string
+    arrowheadTriangle: string
+    arrowheadCircle: string
+    arrowheadBar: string
+    arrowheadDiamond: string
+    fontFamily: string
+    fontFamilyVirgil: string
+    fontFamilyHelvetica: string
+    fontFamilyCascadia: string
+    fontFamilyExcalifont: string
+    fontFamilyNunito: string
+    fontFamilyLiberation: string
+    fontSize: string
+    textAlign: string
+    left: string
+    center: string
+    right: string
+    copyImage: string
+    copiedImage: string
+    copyImageFailed: string
     thin: string
     medium: string
     bold: string
@@ -780,6 +821,47 @@ const zhCN: RecorderCopy = {
     strokeColor: '颜色',
     strokeWidth: '线宽',
     opacity: '透明度',
+    styleSettings: '工具细节设置',
+    strokeStyle: '描边样式',
+    fillStyle: '填充样式',
+    fillColor: '填充颜色',
+    solid: '实线',
+    dashed: '虚线',
+    dotted: '点线',
+    hachure: '斜线填充',
+    crossHatch: '交叉填充',
+    transparent: '透明',
+    roundness: '边框样式',
+    sharp: '直角',
+    round: '圆角',
+    roughness: '手绘程度',
+    architect: '规整',
+    artist: '手绘',
+    cartoonist: '夸张手绘',
+    elbow: '折线',
+    arrowType: '箭头线条',
+    arrowhead: '箭头端点',
+    arrowheadNone: '无',
+    arrowheadArrow: '箭头',
+    arrowheadTriangle: '三角',
+    arrowheadCircle: '圆点',
+    arrowheadBar: '横杠',
+    arrowheadDiamond: '菱形',
+    fontFamily: '字体',
+    fontFamilyVirgil: '手写',
+    fontFamilyHelvetica: 'Helvetica',
+    fontFamilyCascadia: 'Cascadia',
+    fontFamilyExcalifont: 'Excalifont',
+    fontFamilyNunito: 'Nunito',
+    fontFamilyLiberation: 'Liberation Sans',
+    fontSize: '字号',
+    textAlign: '对齐',
+    left: '左对齐',
+    center: '居中',
+    right: '右对齐',
+    copyImage: '复制图片',
+    copiedImage: '图片已复制，可直接粘贴',
+    copyImageFailed: '复制图片失败',
     thin: '细',
     medium: '中',
     bold: '粗',
@@ -1379,6 +1461,47 @@ const en: RecorderCopy = {
     strokeColor: 'Color',
     strokeWidth: 'Stroke',
     opacity: 'Opacity',
+    styleSettings: 'Tool detail settings',
+    strokeStyle: 'Stroke style',
+    fillStyle: 'Fill style',
+    fillColor: 'Fill color',
+    solid: 'Solid',
+    dashed: 'Dashed',
+    dotted: 'Dotted',
+    hachure: 'Hachure',
+    crossHatch: 'Cross-hatch',
+    transparent: 'Transparent',
+    roundness: 'Border style',
+    sharp: 'Sharp',
+    round: 'Round',
+    roughness: 'Roughness',
+    architect: 'Architect',
+    artist: 'Artist',
+    cartoonist: 'Cartoonist',
+    elbow: 'Elbow',
+    arrowType: 'Arrow line',
+    arrowhead: 'Arrowhead',
+    arrowheadNone: 'None',
+    arrowheadArrow: 'Arrow',
+    arrowheadTriangle: 'Triangle',
+    arrowheadCircle: 'Circle',
+    arrowheadBar: 'Bar',
+    arrowheadDiamond: 'Diamond',
+    fontFamily: 'Font',
+    fontFamilyVirgil: 'Hand-drawn',
+    fontFamilyHelvetica: 'Helvetica',
+    fontFamilyCascadia: 'Cascadia',
+    fontFamilyExcalifont: 'Excalifont',
+    fontFamilyNunito: 'Nunito',
+    fontFamilyLiberation: 'Liberation Sans',
+    fontSize: 'Font size',
+    textAlign: 'Alignment',
+    left: 'Left',
+    center: 'Center',
+    right: 'Right',
+    copyImage: 'Copy image',
+    copiedImage: 'Image copied; paste it anywhere',
+    copyImageFailed: 'Failed to copy image',
     thin: 'Thin',
     medium: 'Medium',
     bold: 'Bold',

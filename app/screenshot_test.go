@@ -318,6 +318,30 @@ func TestDeleteScreenshotItemRemovesHistoryAndFiles(t *testing.T) {
 	}
 }
 
+func TestDeleteScreenshotItemRemovesHistoryWhenImageIsMissing(t *testing.T) {
+	service := NewRecordingFreedomService()
+	service.appData = appdata.NewService(t.TempDir())
+	missingPath := filepath.Join(t.TempDir(), "old-data-root", "screenshots", "missing.png")
+	if err := service.saveScreenshotHistory([]ScreenshotItem{{
+		ID:        "missing",
+		Path:      missingPath,
+		CreatedAt: "2026-07-04T00:00:02Z",
+		Width:     200,
+		Height:    120,
+		Mode:      "region",
+	}}); err != nil {
+		t.Fatalf("saveScreenshotHistory() error = %v", err)
+	}
+
+	result, err := service.DeleteScreenshotItem("missing")
+	if err != nil {
+		t.Fatalf("DeleteScreenshotItem() error = %v, want stale missing path to be ignored", err)
+	}
+	if len(result.Items) != 0 {
+		t.Fatalf("remaining history = %#v, want empty history", result.Items)
+	}
+}
+
 func TestSaveScreenshotAnnotationCaptureWritesHistoryAndFiles(t *testing.T) {
 	service := NewRecordingFreedomService()
 	service.appData = appdata.NewService(t.TempDir())

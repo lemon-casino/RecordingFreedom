@@ -53,6 +53,28 @@ test('annotation overlay exposes undo and region reselect controls', async ({pag
   })
 })
 
+test('annotation tools expose tool-specific style settings', async ({page}) => {
+  await openAnnotationOverlay(page)
+
+  const tools = page.locator('.annotation-tools')
+  const capsule = page.locator('.annotation-capsule')
+
+  await tools.getByRole('button', {name: 'Rectangle'}).click()
+  await capsule.getByRole('button', {name: 'Tool detail settings'}).click()
+  const shapePanel = capsule.locator('.annotation-style-panel')
+  await expect(shapePanel).toContainText('Fill color')
+  await expect(shapePanel).toContainText('Fill style')
+  await expect(shapePanel).toContainText('Border style')
+  await expect(shapePanel).toContainText('Roughness')
+
+  await tools.getByRole('button', {name: 'Text'}).click()
+  await capsule.getByRole('button', {name: 'Tool detail settings'}).click()
+  const textPanel = capsule.locator('.annotation-style-panel')
+  await expect(textPanel).toContainText('Font')
+  await expect(textPanel).toContainText('Font size')
+  await expect(textPanel).toContainText('Alignment')
+})
+
 test('recording annotation overlay queues background OCR and shows positioned text on board', async ({page}) => {
   await openAnnotationOverlay(page)
 
@@ -171,7 +193,9 @@ test('small screenshot region keeps the complete toolbar outside the capture can
   const capsule = page.locator('.annotation-capsule')
   const canvas = page.locator('.annotation-overlay-canvas')
   await expect(capsule).toBeVisible()
-  await expect(capsule.locator('button')).toHaveCount(14)
+  await expect(capsule.locator('button')).toHaveCount(16)
+  await expect(capsule.getByRole('button', {name: 'Copy image'})).toBeVisible()
+  await expect(capsule.getByRole('button', {name: 'Tool detail settings'})).toBeVisible()
   await expect.poll(async () => {
     const [toolbarBox, canvasBox] = await Promise.all([capsule.boundingBox(), canvas.boundingBox()])
     const buttons = await capsule.locator('button').evaluateAll((elements) => elements.map((element) => {

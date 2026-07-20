@@ -1,20 +1,23 @@
 import {
   ArrowUpRight,
+  ClipboardCopy,
   Circle,
   Eraser,
-  FileText,
+  Eye,
   Minus,
   MousePointer2,
   PenLine,
   RectangleHorizontal,
   RefreshCcw,
   Save,
+  ScanText,
+  Settings2,
   Type,
   Undo2,
   X,
 } from 'lucide-react'
 import {useCallback, useEffect, useLayoutEffect, useRef, useState} from 'react'
-import {Excalidraw, exportToBlob, serializeAsJSON} from '@excalidraw/excalidraw'
+import {Excalidraw, exportToBlob, exportToClipboard, serializeAsJSON} from '@excalidraw/excalidraw'
 import type {ExcalidrawImperativeAPI} from '@excalidraw/excalidraw/types'
 import '@excalidraw/excalidraw/index.css'
 import {copyByLocale} from './i18n'
@@ -22,6 +25,7 @@ import {defaultSettings, normalizeLocale, normalizeTheme, type AppSettings, type
 import {hideAnnotationOverlay, hideScreenshotAnnotationOverlay, loadAnnotationCapture, loadScreenshotAnnotationCapture, loadSettings, openOcrResult, patchWhiteboardSettings, queueRecognizeScreenshot, queueRecognizeWhiteboard, reselectAnnotationRegion, reselectScreenshotAnnotationRegion, saveAnnotationCapture, saveScreenshotAnnotationCapture, setAnnotationOverlayHitRegions, subscribeOcrJobEvents, subscribeSettingsChanged, type AnnotationCapture, type AnnotationOverlayState, type CapsuleWindowHitRegion, type OcrBlock, type OcrJobUpdate, type OcrResult, type ScreenshotWhiteboardContext} from './services/recorderBackend'
 import {OcrPositionTextLayer, countOcrPositionTextBlocks} from './components/ocr/OcrPositionTextLayer'
 import {writeClipboardText} from './utils/clipboard'
+import {AnnotationStyleControls, type AnnotationStyle} from './components/AnnotationStyleControls'
 
 const annotationTools: Array<{tool: WhiteboardTool; icon: typeof PenLine; label: 'select' | 'pen' | 'arrow' | 'line' | 'rectangle' | 'ellipse' | 'text' | 'eraser'}> = [
   {tool: 'selection', icon: MousePointer2, label: 'select'},
@@ -33,6 +37,10 @@ const annotationTools: Array<{tool: WhiteboardTool; icon: typeof PenLine; label:
   {tool: 'text', icon: Type, label: 'text'},
   {tool: 'eraser', icon: Eraser, label: 'eraser'},
 ]
+
+const annotationColors = ['#ef4444', '#f59e0b', '#22c55e', '#38bdf8', '#a78bfa', '#f8fafc', '#111827']
+const annotationStrokeWidths = ['thin', 'medium', 'bold'] as const
+const annotationStyleTools: WhiteboardTool[] = ['freedraw', 'arrow', 'line', 'rectangle', 'ellipse', 'text']
 
 const maxPendingAnnotationElementEvents = 512
 type AnnotationElementEvent = {
@@ -60,6 +68,19 @@ function AnnotationOverlayWindow() {
   const [strokeColor, setStrokeColor] = useState('#ef4444')
   const [strokeWidth, setStrokeWidth] = useState(defaultSettings.whiteboard.lastStrokeWidth)
   const [opacity, setOpacity] = useState(100)
+  const [annotationStylePanelOpen, setAnnotationStylePanelOpen] = useState(false)
+  const [annotationStyle, setAnnotationStyle] = useState<AnnotationStyle>({
+    strokeStyle: 'solid',
+    fillStyle: 'solid',
+    fillColor: 'transparent',
+    roundness: 'round',
+    roughness: 1,
+    arrowType: 'round',
+    arrowhead: 'arrow',
+    fontFamily: 1,
+    fontSize: 20,
+    textAlign: 'left',
+  })
   const [dirty, setDirty] = useState(false)
   const [saving, setSaving] = useState(false)
   const [ocrBusy, setOcrBusy] = useState(false)
@@ -81,6 +102,7 @@ function AnnotationOverlayWindow() {
   const canvasRef = useRef<HTMLElement | null>(null)
   const copy = copyByLocale[locale]
   const canvasReceivesInput = annotationCanvasReceivesInput(activeTool) || ocrPositionTextVisible
+  const showAnnotationStyleControls = annotationStyleTools.includes(activeTool)
   const isScreenshotMode = overlayState?.mode === 'screenshot'
   const overlayKey = annotationOverlayKey(overlayState)
   const canvasBounds = annotationCanvasBounds(overlayState)
@@ -254,6 +276,10 @@ function AnnotationOverlayWindow() {
   }, [locale, theme])
 
   useEffect(() => {
+    setAnnotationStylePanelOpen(false)
+  }, [activeTool])
+
+  useEffect(() => {
     const onState = (event: Event) => {
       const next = (event as CustomEvent<AnnotationOverlayState>).detail
       if (next) setOverlayState(next)
@@ -326,20 +352,31 @@ function AnnotationOverlayWindow() {
     setOpacity(normalizeOpacity(settings.whiteboard.lastOpacity))
   }
 
-  const applyStyle = useCallback((color: string, width: typeof strokeWidth, nextOpacity: number) => {
+  const applyStyle = useCallback((color: string, width: typeof strokeWidth, nextOpacity: number, style: AnnotationStyle) => {
     apiRef.current?.updateScene({
       appState: {
         currentItemStrokeColor: color,
         currentItemStrokeWidthKey: width,
         currentItemOpacity: nextOpacity,
+        currentItemStrokeStyle: style.strokeStyle,
+        currentItemFillStyle: style.fillStyle,
+        currentItemBackgroundColor: style.fillColor,
+        currentItemRoundness: style.roundness,
+        currentItemRoughness: style.roughness,
+        currentItemArrowType: style.arrowType,
+        currentItemStartArrowhead: null,
+        currentItemEndArrowhead: style.arrowhead === 'none' ? null : style.arrowhead,
+        currentItemFontFamily: style.fontFamily,
+        currentItemFontSize: style.fontSize,
+        currentItemTextAlign: style.textAlign,
         viewBackgroundColor: 'transparent',
       },
     } as any)
   }, [])
 
   useEffect(() => {
-    applyStyle(strokeColor, strokeWidth, opacity)
-  }, [applyStyle, opacity, strokeColor, strokeWidth])
+    applyStyle(strokeColor, strokeWidth, opacity, annotationStyle)
+  }, [annotationStyle, applyStyle, opacity, strokeColor, strokeWidth])
 
   const setActiveTool = (tool: WhiteboardTool, persist = true) => {
     setActiveToolState(tool)
@@ -445,7 +482,35 @@ function AnnotationOverlayWindow() {
     })
     resetAnnotationElementTracking(scene)
     apiRef.current?.resetScene()
-    window.setTimeout(() => applyStyle(strokeColor, strokeWidth, opacity), 0)
+    window.setTimeout(() => applyStyle(strokeColor, strokeWidth, opacity, annotationStyle), 0)
+  }
+
+  const updateAnnotationStyle = <K extends keyof AnnotationStyle>(key: K, value: AnnotationStyle[K]) => {
+    setAnnotationStyle((current) => ({...current, [key]: value}))
+  }
+
+  const copyAnnotationImage = async () => {
+    const api = apiRef.current
+    if (!api) {
+      setOcrMessage(copy.whiteboard.copyImageFailed)
+      return
+    }
+    try {
+      await exportToClipboard({
+        elements: api.getSceneElements() as any,
+        appState: {
+          ...api.getAppState(),
+          exportBackground: false,
+          viewBackgroundColor: 'transparent',
+        },
+        files: api.getFiles(),
+        type: 'png',
+      })
+      setOcrMessage(copy.whiteboard.copiedImage)
+    } catch (error) {
+      console.error('Failed to copy annotation image:', error)
+      setOcrMessage(copy.whiteboard.copyImageFailed)
+    }
   }
 
   const reselectRegion = async () => {
@@ -611,6 +676,73 @@ function AnnotationOverlayWindow() {
             </button>
           ))}
         </div>
+        {showAnnotationStyleControls && (
+          <button
+            className={annotationStylePanelOpen ? 'selected' : ''}
+            type="button"
+            aria-label={copy.whiteboard.styleSettings}
+            title={copy.whiteboard.styleSettings}
+            onClick={() => setAnnotationStylePanelOpen((open) => !open)}
+          >
+            <Settings2 size={16} />
+          </button>
+        )}
+        {showAnnotationStyleControls && annotationStylePanelOpen && (
+          <div className="annotation-style-panel" aria-label={copy.whiteboard.styleSettings}>
+            <div className="annotation-style-group" aria-label={copy.whiteboard.strokeColor}>
+              {annotationColors.map((color) => (
+                <button
+                  key={color}
+                  className={strokeColor.toLowerCase() === color ? 'selected' : ''}
+                  type="button"
+                  aria-label={`${copy.whiteboard.strokeColor} ${color}`}
+                  title={color}
+                  style={{'--swatch': color} as any}
+                  onClick={() => {
+                    setStrokeColor(color)
+                    void patchWhiteboardSettings({lastStrokeColor: color})
+                  }}
+                />
+              ))}
+            </div>
+            <div className="annotation-width-group" aria-label={copy.whiteboard.strokeWidth}>
+              {annotationStrokeWidths.map((width) => (
+                <button
+                  key={width}
+                  className={strokeWidth === width ? 'selected' : ''}
+                  type="button"
+                  onClick={() => {
+                    setStrokeWidth(width)
+                    void patchWhiteboardSettings({lastStrokeWidth: width})
+                  }}
+                >
+                  {copy.whiteboard[width]}
+                </button>
+              ))}
+            </div>
+            <label className="annotation-opacity-group" aria-label={copy.whiteboard.opacity} title={copy.whiteboard.opacity}>
+              <span>{opacity}%</span>
+              <input
+                type="range"
+                min={5}
+                max={100}
+                step={5}
+                value={opacity}
+                onChange={(event) => {
+                  const nextOpacity = normalizeOpacity(Number(event.currentTarget.value))
+                  setOpacity(nextOpacity)
+                  void patchWhiteboardSettings({lastOpacity: nextOpacity})
+                }}
+              />
+            </label>
+            <AnnotationStyleControls
+              copy={copy}
+              activeTool={activeTool}
+              style={annotationStyle}
+              onChange={updateAnnotationStyle}
+            />
+          </div>
+        )}
         <button type="button" aria-label={copy.whiteboard.undo} title={copy.whiteboard.undo} onClick={undoAnnotationStep}>
           <Undo2 size={16} />
         </button>
@@ -618,10 +750,13 @@ function AnnotationOverlayWindow() {
           <RefreshCcw size={16} />
         </button>
         <button type="button" disabled={ocrBusy} aria-label={copy.whiteboard.recognizeText} title={copy.whiteboard.recognizeText} onClick={() => void queueAnnotationOCR()}>
-          <FileText size={16} />
+          <ScanText size={16} />
         </button>
         <button type="button" disabled={!canOpenOcrResult} className={ocrPositionTextVisible ? 'selected' : ''} aria-label={copy.whiteboard.openOcrResult} title={copy.whiteboard.openOcrResult} onClick={() => void openAnnotationOcrResult()}>
-          <FileText size={16} />
+          <Eye size={16} />
+        </button>
+        <button type="button" aria-label={copy.whiteboard.copyImage} title={copy.whiteboard.copyImage} onClick={() => void copyAnnotationImage()}>
+          <ClipboardCopy size={16} />
         </button>
         {ocrMessage && <span className="annotation-ocr-status">{ocrMessage}</span>}
         <button className="annotation-save-status" type="button" aria-label={copy.whiteboard.save} title={copy.whiteboard.save} onClick={() => void saveCurrentAnnotation()}>
@@ -653,7 +788,7 @@ function AnnotationOverlayWindow() {
             if (api) {
               window.setTimeout(() => {
                 setActiveTool(activeTool, false)
-                applyStyle(strokeColor, strokeWidth, opacity)
+                applyStyle(strokeColor, strokeWidth, opacity, annotationStyle)
               }, 0)
             }
           }}
@@ -790,6 +925,11 @@ function defaultAnnotationScene(settings: AppSettings) {
       currentItemStrokeColor: settings.whiteboard.lastStrokeColor || '#ef4444',
       currentItemStrokeWidthKey: settings.whiteboard.lastStrokeWidth || 'medium',
       currentItemOpacity: normalizeOpacity(settings.whiteboard.lastOpacity),
+      currentItemBackgroundColor: 'transparent',
+      currentItemRoughness: 1,
+      currentItemFontFamily: 1,
+      currentItemFontSize: 20,
+      currentItemTextAlign: 'left',
     },
     elements: [],
     files: {},
@@ -806,6 +946,11 @@ function screenshotAnnotationScene(settings: AppSettings, context: ScreenshotWhi
       currentItemStrokeColor: settings.whiteboard.lastStrokeColor || '#ef4444',
       currentItemStrokeWidthKey: settings.whiteboard.lastStrokeWidth || 'medium',
       currentItemOpacity: normalizeOpacity(settings.whiteboard.lastOpacity),
+      currentItemBackgroundColor: 'transparent',
+      currentItemRoughness: 1,
+      currentItemFontFamily: 1,
+      currentItemFontSize: 20,
+      currentItemTextAlign: 'left',
     },
     elements: [{
       id: `${fileId}-image`,

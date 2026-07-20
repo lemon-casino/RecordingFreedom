@@ -6754,25 +6754,6 @@ function RegionOverlayWindow() {
     }
   }
 
-  const assistedSelection = async (rect: RegionSelectionSession['bounds'], point: {x: number; y: number}) => {
-    if (!session) return rect
-    try {
-      const result = await assistRegionSelection({
-        sessionId: session.id,
-        purpose: session.purpose,
-        pointerX: point.x,
-        pointerY: point.y,
-        selection: rect,
-        candidates: sessionCandidates,
-      })
-      ;(window as Window & {__RF_LAST_REGION_ASSIST__?: unknown}).__RF_LAST_REGION_ASSIST__ = result
-      return result.best?.bounds ?? rect
-    } catch (error) {
-      console.info('Region assist failed; using manual selection:', error)
-      return rect
-    }
-  }
-
   const requestHoverAssistCandidateForSession = (
     activeSession: RegionSelectionSession | undefined,
     point: {x: number; y: number},
@@ -6992,7 +6973,10 @@ function RegionOverlayWindow() {
           returnToAutoSelection(point)
           return
         }
-        void assistedSelection(rect, point).then((nextRect) => completeSelection(nextRect))
+        // Once the user has dragged past the manual threshold, the drag
+        // rectangle is authoritative. Smart assist is only for a click
+        // without a manual selection.
+        void completeSelection(rect)
       }}
       onContextMenu={(event) => {
         event.preventDefault()

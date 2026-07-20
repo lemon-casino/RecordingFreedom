@@ -1,5 +1,6 @@
 import {
   ArrowUpRight,
+  ClipboardCopy,
   Circle,
   Download,
   Eraser,
@@ -21,7 +22,7 @@ import {
   X,
 } from 'lucide-react'
 import {useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties} from 'react'
-import {Excalidraw, exportToBlob, exportToSvg, sceneCoordsToViewportCoords, serializeAsJSON} from '@excalidraw/excalidraw'
+import {Excalidraw, exportToBlob, exportToClipboard, exportToSvg, sceneCoordsToViewportCoords, serializeAsJSON} from '@excalidraw/excalidraw'
 import type {ExcalidrawImperativeAPI} from '@excalidraw/excalidraw/types'
 import '@excalidraw/excalidraw/index.css'
 import {copyByLocale, type RecorderCopy} from './i18n'
@@ -715,6 +716,30 @@ function WhiteboardWindow() {
     return blobToDataURL(blob)
   }
 
+  const copyWhiteboardImage = async () => {
+    const api = apiRef.current
+    if (!api) {
+      holdStatusText(copy.whiteboard.copyImageFailed)
+      return
+    }
+    try {
+      await exportToClipboard({
+        elements: api.getSceneElements() as any,
+        appState: {
+          ...api.getAppState(),
+          exportBackground: true,
+          viewBackgroundColor: api.getAppState().viewBackgroundColor,
+        },
+        files: api.getFiles(),
+        type: 'png',
+      })
+      holdStatusText(copy.whiteboard.copiedImage)
+    } catch (error) {
+      console.error('Failed to copy whiteboard image:', error)
+      holdStatusText(copy.whiteboard.copyImageFailed)
+    }
+  }
+
   const exportSVG = async () => {
     const api = apiRef.current
     if (!api) return
@@ -812,6 +837,9 @@ function WhiteboardWindow() {
           </button>
           <button type="button" aria-label={copy.whiteboard.save} title={copy.whiteboard.save} onClick={saveNow}>
             <Save size={16} />
+          </button>
+          <button type="button" aria-label={copy.whiteboard.copyImage} title={copy.whiteboard.copyImage} onClick={() => void copyWhiteboardImage()}>
+            <ClipboardCopy size={16} />
           </button>
           <button type="button" disabled={ocrBusy} aria-label={copy.whiteboard.recognizeText} title={copy.whiteboard.recognizeText} onClick={() => void queueCurrentWhiteboardOCR()}>
             <FileText size={16} />

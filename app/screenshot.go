@@ -1460,8 +1460,21 @@ func uniqueScreenshotFilePaths(item ScreenshotItem) []string {
 }
 
 func removeManagedScreenshotFile(s *RecordingFreedomService, path string) error {
+	raw := strings.TrimSpace(path)
+	if raw == "" {
+		return nil
+	}
+	// Screenshot history can outlive a data-root move or a manually removed
+	// image. In that case deleting the history entry must not be blocked by
+	// resolving a stale path against the current screenshot directory.
+	if _, err := os.Stat(raw); errors.Is(err, os.ErrNotExist) {
+		return nil
+	}
 	managed, err := managedScreenshotPath(s, path)
 	if err != nil {
+		if _, statErr := os.Stat(raw); errors.Is(statErr, os.ErrNotExist) {
+			return nil
+		}
 		return err
 	}
 	if err := os.Remove(managed); err != nil && !errors.Is(err, os.ErrNotExist) {

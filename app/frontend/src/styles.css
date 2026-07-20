@@ -3498,6 +3498,144 @@ body.rf-annotation-overlay-window {
   --wails-draggable: no-drag;
 }
 
+.annotation-style-group,
+.annotation-width-group,
+.annotation-opacity-group,
+.annotation-style-controls {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+  padding: 3px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-pill);
+  background: rgba(255, 255, 255, 0.045);
+  --wails-draggable: no-drag;
+}
+
+.annotation-style-panel {
+  flex: 1 0 100%;
+  display: inline-flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 4px;
+  min-width: 0;
+  padding: 3px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.045);
+  --wails-draggable: no-drag;
+}
+
+.annotation-style-group button,
+.annotation-width-group button,
+.annotation-opacity-group,
+.annotation-style-select {
+  height: 28px;
+}
+
+.annotation-style-group button,
+.annotation-width-group button {
+  min-width: 30px;
+  padding: 0 7px;
+  border: 1px solid transparent;
+  border-radius: var(--radius-pill);
+  background: transparent;
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 900;
+  cursor: pointer;
+  --wails-draggable: no-drag;
+}
+
+.annotation-style-group button {
+  width: 19px;
+  min-width: 19px;
+  height: 19px;
+  padding: 0;
+  border-color: rgba(255, 255, 255, 0.16);
+  background: var(--swatch);
+  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.2);
+}
+
+.annotation-style-group-label {
+  padding: 0 3px;
+  color: var(--muted);
+  font-size: 9px;
+  font-weight: 900;
+  white-space: nowrap;
+}
+
+.annotation-width-group button:hover,
+.annotation-opacity-group:hover,
+.annotation-style-select:hover,
+.annotation-width-group button.selected,
+.annotation-style-group button.selected {
+  border-color: var(--accent-border);
+  background: var(--teal-soft);
+  color: var(--accent-readable);
+}
+
+.annotation-style-group button.selected {
+  box-shadow:
+    0 0 0 2px rgba(255, 255, 255, 0.2),
+    0 0 0 4px var(--accent-border-soft);
+}
+
+.annotation-opacity-group {
+  display: inline-flex;
+  gap: 5px;
+  padding: 0 7px;
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 900;
+}
+
+.annotation-opacity-group span {
+  width: 31px;
+  color: var(--text);
+  text-align: right;
+}
+
+.annotation-opacity-group input {
+  width: 55px;
+  accent-color: var(--accent);
+  cursor: pointer;
+}
+
+.annotation-style-controls {
+  flex-wrap: wrap;
+  border-radius: 12px;
+}
+
+.annotation-style-select {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  padding: 0 5px;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  color: var(--muted);
+  font-size: 9px;
+  font-weight: 900;
+  white-space: nowrap;
+}
+
+.annotation-style-select select {
+  max-width: 86px;
+  height: 22px;
+  padding: 0 3px;
+  border: 0;
+  border-radius: 5px;
+  outline: none;
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--text);
+  font-size: 10px;
+  font-weight: 800;
+  cursor: pointer;
+  --wails-draggable: no-drag;
+}
+
 .annotation-capsule button {
   box-sizing: border-box;
   display: inline-flex;
