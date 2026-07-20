@@ -1621,12 +1621,15 @@ function App() {
     let disposed = false
     let settleTimer = 0
     let forceTimer = 0
+    let pointerFallbackTimer = 0
 
     const clearTimers = () => {
       if (settleTimer) window.clearTimeout(settleTimer)
       if (forceTimer) window.clearTimeout(forceTimer)
+      if (pointerFallbackTimer) window.clearTimeout(pointerFallbackTimer)
       settleTimer = 0
       forceTimer = 0
+      pointerFallbackTimer = 0
     }
     const stabilize = (reason: string) => {
       const now = Date.now()
@@ -1693,8 +1696,18 @@ function App() {
       capsuleDragObservedMoveRef.current = false
       capsuleDragStartPointRef.current = null
       if (shouldStabilize) {
-        capsuleDragPendingUntilRef.current = 0
-        stabilize('pointer-end')
+        capsuleDragPendingUntilRef.current = Date.now() + (isWailsDesktopRuntime() ? 900 : 0)
+        if (!isWailsDesktopRuntime()) {
+          capsuleDragPendingUntilRef.current = 0
+          stabilize('pointer-end')
+          return
+        }
+        pointerFallbackTimer = window.setTimeout(() => {
+          pointerFallbackTimer = 0
+          if (disposed || Date.now() > capsuleDragPendingUntilRef.current) return
+          capsuleDragPendingUntilRef.current = 0
+          stabilize('pointer-end')
+        }, 520)
         return
       }
       capsuleDragPendingUntilRef.current = Date.now() + 420
@@ -1706,7 +1719,7 @@ function App() {
         if (capsuleDragCandidateRef.current || dragPending) capsuleDragObservedMoveRef.current = true
         return
       }
-      if (!capsuleDragCandidateRef.current && !capsuleDragObservedMoveRef.current) return
+      if (!capsuleDragCandidateRef.current && !capsuleDragObservedMoveRef.current && !dragPending) return
       capsuleDragCandidateRef.current = false
       capsuleDragObservedMoveRef.current = false
       capsuleDragStartPointRef.current = null

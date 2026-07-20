@@ -1185,8 +1185,11 @@ export async function snapCapsuleWindowToEdge(compactCollapsed = false): Promise
     await restoreCapsuleWindow(false)
     const position = await WailsWindow.Position()
     const size = await WailsWindow.Size().catch(() => capsuleCollapsedWindowSize(compactCollapsed, lastCapsuleDockSide, null))
-    const workAreas = await capsuleWorkAreas().catch(() => [])
+    let workAreas = await capsuleWorkAreas().catch(() => [])
     const workArea = await capsuleWorkAreaForWindow(position, size, workAreas)
+    if (workArea && !workAreas.some((area) => area.id === workArea.id && area.x === workArea.x && area.y === workArea.y)) {
+      workAreas = [...workAreas, workArea]
+    }
     const currentVisualSize = capsuleCollapsedWindowSize(compactCollapsed, lastCapsuleDockSide, workArea)
     lastCapsuleCollapsedPosition = null
     const currentVisualPosition = capsuleVisibleCollapsedPosition(lastCapsuleDockSide, position, size, currentVisualSize, workArea)
@@ -1232,17 +1235,15 @@ function resolveCapsuleDockTarget(
   preferredWorkArea: CapsuleWorkArea | null = null,
 ): CapsuleDockTarget {
   if (!workAreas.length) return {side: 'none', workArea: null}
-  const activeWorkArea = preferredWorkArea ?? capsuleWorkAreaForVisualRectFromAreas(position, size, workAreas)
+  const activeWorkArea = chooseCapsuleWorkArea(position, size, workAreas, preferredWorkArea)
   if (!activeWorkArea) return {side: 'none', workArea: null}
   const vertical = (['left', 'right'] as const)
-    .filter((side) => isExternalWorkAreaEdge(side, activeWorkArea, workAreas))
     .map((side) => capsuleDockCandidate(side, position, size, activeWorkArea))
     .filter((candidate): candidate is CapsuleDockCandidate => candidate !== null)
   vertical.sort(compareCapsuleDockCandidates)
   if (vertical[0]) return {side: vertical[0].side, workArea: vertical[0].workArea}
 
   const horizontal = (['top', 'bottom'] as const)
-    .filter((side) => isExternalWorkAreaEdge(side, activeWorkArea, workAreas))
     .map((side) => capsuleDockCandidate(side, position, size, activeWorkArea))
     .filter((candidate): candidate is CapsuleDockCandidate => candidate !== null)
   horizontal.sort(compareCapsuleDockCandidates)
@@ -1300,19 +1301,38 @@ async function capsuleWorkAreaForWindow(
   size: {width: number; height: number},
   candidates?: CapsuleWorkArea[],
 ): Promise<CapsuleWorkArea | null> {
-  const workAreas = candidates ?? await capsuleWorkAreas()
-  if (!workAreas.length) return null
+  const workAreas = candidates ?? await capsuleWorkAreas().catch(() => [])
+  const owningScreen = await capsuleOwningScreenWorkArea()
+  if (!workAreas.length) return owningScreen
+  return chooseCapsuleWorkArea(position, size, workAreas, owningScreen)
+}
+
+async function capsuleOwningScreenWorkArea(): Promise<CapsuleWorkArea | null> {
   try {
     const screen = await WailsWindow.GetScreen()
     const screenId = typeof screen?.ID === 'string' ? screen.ID.trim() : ''
-    if (screenId) {
-      const matchingWorkArea = workAreas.find((area) => area.id === screenId)
-      if (matchingWorkArea) return matchingWorkArea
-    }
+    const id = screenId || undefined
+    return normalizeCapsuleWorkArea(screen.WorkArea, id) ?? normalizeCapsuleWorkArea(screen.Bounds, id)
   } catch {
     // Browser previews and older runtimes do not expose the owning screen.
+    return null
   }
-  return capsuleWorkAreaForPositionFromAreas(position, size, workAreas)
+}
+
+function chooseCapsuleWorkArea(
+  position: {x: number; y: number},
+  size: {width: number; height: number},
+  workAreas: CapsuleWorkArea[],
+  owningScreen: CapsuleWorkArea | null = null,
+): CapsuleWorkArea | null {
+  const geometricWorkArea = capsuleWorkAreaForVisualRectFromAreas(position, size, workAreas)
+  if (!geometricWorkArea || !owningScreen || owningScreen === geometricWorkArea) return geometricWorkArea
+
+  const geometricOverlap = capsuleWorkAreaOverlapPixels(position, size, geometricWorkArea)
+  const owningScreenOverlap = capsuleWorkAreaOverlapPixels(position, size, owningScreen)
+  const overlapDifference = Math.abs(geometricOverlap - owningScreenOverlap)
+  const tieTolerance = Math.max(4, size.width * size.height * 0.005)
+  return overlapDifference <= tieTolerance ? owningScreen : geometricWorkArea
 }
 
 async function capsuleWorkAreas(): Promise<CapsuleWorkArea[]> {
@@ -1342,20 +1362,28 @@ function capsuleWorkAreaForVisualRectFromAreas(
   candidates: CapsuleWorkArea[],
 ): CapsuleWorkArea | null {
   if (!candidates.length) return null
-  const right = position.x + size.width
-  const bottom = position.y + size.height
   const intersections = candidates
     .map((area) => {
-      const areaRight = area.x + area.width
-      const areaBottom = area.y + area.height
       return {
         area,
-        areaPixels: overlapLength(position.x, right, area.x, areaRight) * overlapLength(position.y, bottom, area.y, areaBottom),
+        areaPixels: capsuleWorkAreaOverlapPixels(position, size, area),
       }
     })
     .sort((a, b) => b.areaPixels - a.areaPixels)
   if (intersections[0]?.areaPixels > 0) return intersections[0].area
   return capsuleWorkAreaForPositionFromAreas(position, size, candidates)
+}
+
+function capsuleWorkAreaOverlapPixels(
+  position: {x: number; y: number},
+  size: {width: number; height: number},
+  area: CapsuleWorkArea,
+) {
+  const right = position.x + size.width
+  const bottom = position.y + size.height
+  const areaRight = area.x + area.width
+  const areaBottom = area.y + area.height
+  return overlapLength(position.x, right, area.x, areaRight) * overlapLength(position.y, bottom, area.y, areaBottom)
 }
 
 function normalizeCapsuleWorkArea(rect: {X: number; Y: number; Width: number; Height: number} | undefined, id?: string): CapsuleWorkArea | null {
@@ -1433,35 +1461,6 @@ function capsuleDockCandidate(
     centerInside: pointInsideWorkAreaOpenEnd(centerX, centerY, workArea),
     screenDistance: distanceToWorkArea(centerX, centerY, workArea),
   }
-}
-
-function isExternalWorkAreaEdge(
-  side: Exclude<CapsuleWindowDockSide, 'none'>,
-  workArea: CapsuleWorkArea,
-  workAreas: CapsuleWorkArea[],
-) {
-  const edgeTolerance = 2
-  const areaRight = workArea.x + workArea.width
-  const areaBottom = workArea.y + workArea.height
-  return !workAreas.some((other) => {
-    if (other === workArea) return false
-    const otherRight = other.x + other.width
-    const otherBottom = other.y + other.height
-    if (side === 'left') {
-      return Math.abs(otherRight - workArea.x) <= edgeTolerance &&
-        overlapLength(workArea.y, areaBottom, other.y, otherBottom) > edgeTolerance
-    }
-    if (side === 'right') {
-      return Math.abs(other.x - areaRight) <= edgeTolerance &&
-        overlapLength(workArea.y, areaBottom, other.y, otherBottom) > edgeTolerance
-    }
-    if (side === 'top') {
-      return Math.abs(otherBottom - workArea.y) <= edgeTolerance &&
-        overlapLength(workArea.x, areaRight, other.x, otherRight) > edgeTolerance
-    }
-    return Math.abs(other.y - areaBottom) <= edgeTolerance &&
-      overlapLength(workArea.x, areaRight, other.x, otherRight) > edgeTolerance
-  })
 }
 
 function compareCapsuleDockCandidates(a: CapsuleDockCandidate, b: CapsuleDockCandidate) {

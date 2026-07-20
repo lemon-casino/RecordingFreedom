@@ -11,13 +11,13 @@ test('capsule docking only snaps near external monitor edges', async ({page}) =>
 
   await expect(dockSide(page, {position: {x: 4, y: 240}, size, workAreas})).resolves.toBe('left')
   await expect(dockSide(page, {position: {x: 80, y: 240}, size, workAreas})).resolves.toBe('none')
-  await expect(dockSide(page, {position: {x: 1920 - size.width + 4, y: 240}, size, workAreas})).resolves.toBe('none')
-  await expect(dockSide(page, {position: {x: 1920 - 20, y: 240}, size, workAreas})).resolves.toBe('none')
-  await expect(dockSide(page, {position: {x: 1920 + 4, y: 240}, size, workAreas})).resolves.toBe('none')
+  await expect(dockSide(page, {position: {x: 1920 - size.width + 4, y: 240}, size, workAreas})).resolves.toBe('right')
+  await expect(dockSide(page, {position: {x: 1920 - 20, y: 240}, size, workAreas})).resolves.toBe('left')
+  await expect(dockSide(page, {position: {x: 1920 + 4, y: 240}, size, workAreas})).resolves.toBe('left')
   await expect(dockSide(page, {position: {x: 1920 + 1600 - size.width - 4, y: 240}, size, workAreas})).resolves.toBe('right')
 })
 
-test('capsule docking prefers the owning secondary screen when a window overlaps a monitor seam', async ({page}) => {
+test('capsule docking follows the drop rectangle when returning from a secondary screen', async ({page}) => {
   await page.goto('/')
 
   const workAreas = [
@@ -25,17 +25,31 @@ test('capsule docking prefers the owning secondary screen when a window overlaps
     {id: 'secondary', x: 5000, y: 0, width: 1000, height: 900},
   ]
   const target = await dockTarget(page, {
-    position: {x: 4350, y: 240},
+    position: {x: 5000 - 760 + 4, y: 240},
     size: {width: 760, height: 96},
     workAreas,
     activeScreenId: 'secondary',
   })
 
-  expect(target.side).toBe('none')
-  expect(target.workArea).toMatchObject({id: 'secondary', x: 5000, width: 1000})
+  expect(target.side).toBe('right')
+  expect(target.workArea).toMatchObject({id: 'primary', x: 0, width: 5000})
 })
 
-test('capsule docking ignores vertical monitor seams and keeps top or bottom external edges available', async ({page}) => {
+test('capsule docking keeps a single-screen right edge inside the work area', async ({page}) => {
+  await page.goto('/')
+
+  const target = await dockTarget(page, {
+    position: {x: 1920 - 760 + 4, y: 240},
+    size: {width: 760, height: 96},
+    workAreas: [{id: 'primary', x: 0, y: 0, width: 1920, height: 1040}],
+    activeScreenId: 'primary',
+  })
+
+  expect(target.side).toBe('right')
+  expect(target.workArea).toMatchObject({id: 'primary', x: 0, width: 1920})
+})
+
+test('capsule docking keeps the selected monitor side at vertical monitor seams', async ({page}) => {
   await page.goto('/')
 
   const workAreas = [
@@ -45,8 +59,8 @@ test('capsule docking ignores vertical monitor seams and keeps top or bottom ext
   const size = {width: 760, height: 96}
 
   await expect(dockSide(page, {position: {x: 500, y: 6}, size, workAreas})).resolves.toBe('top')
-  await expect(dockSide(page, {position: {x: 500, y: 1040 - size.height + 8}, size, workAreas})).resolves.toBe('none')
-  await expect(dockSide(page, {position: {x: 500, y: 1040 + 8}, size, workAreas})).resolves.toBe('none')
+  await expect(dockSide(page, {position: {x: 500, y: 1040 - size.height + 8}, size, workAreas})).resolves.toBe('bottom')
+  await expect(dockSide(page, {position: {x: 500, y: 1040 + 8}, size, workAreas})).resolves.toBe('top')
   await expect(dockSide(page, {position: {x: 500, y: 1040 + 1080 - size.height - 6}, size, workAreas})).resolves.toBe('bottom')
 })
 
