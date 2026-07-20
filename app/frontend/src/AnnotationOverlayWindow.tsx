@@ -98,7 +98,7 @@ function AnnotationOverlayWindow() {
   const pendingElementEventsRef = useRef<Map<string, AnnotationElementEvent>>(new Map())
   const clientSequenceRef = useRef(0)
   const ocrSourceRef = useRef<{sourceKind: string; sourceId: string} | null>(null)
-  const capsuleRef = useRef<HTMLElement | null>(null)
+  const capsuleRef = useRef<HTMLDivElement | null>(null)
   const canvasRef = useRef<HTMLElement | null>(null)
   const copy = copyByLocale[locale]
   const canvasReceivesInput = annotationCanvasReceivesInput(activeTool) || ocrPositionTextVisible
@@ -651,16 +651,16 @@ function AnnotationOverlayWindow() {
 
   return (
     <main className={`annotation-overlay-shell ${canvasReceivesInput ? 'is-drawing' : 'is-pass-through'}`} data-theme={theme}>
-      <section
+      <div
         ref={capsuleRef}
-        className="annotation-capsule"
-        aria-label={copy.whiteboard.title}
+        className="annotation-toolbar-stack"
         style={{
           left: toolbarBounds.x,
           top: toolbarBounds.y,
           width: toolbarBounds.width,
         }}
       >
+      <section className="annotation-capsule" aria-label={copy.whiteboard.title}>
         <span className="annotation-capsule-title">{isScreenshotMode ? copy.screenshot.region : copy.whiteboard.open}</span>
         <div className="annotation-tools" role="toolbar" aria-label={copy.whiteboard.title}>
           {annotationTools.map(({tool, icon: Icon, label}) => (
@@ -687,62 +687,6 @@ function AnnotationOverlayWindow() {
             <Settings2 size={16} />
           </button>
         )}
-        {showAnnotationStyleControls && annotationStylePanelOpen && (
-          <div className="annotation-style-panel" aria-label={copy.whiteboard.styleSettings}>
-            <div className="annotation-style-group" aria-label={copy.whiteboard.strokeColor}>
-              {annotationColors.map((color) => (
-                <button
-                  key={color}
-                  className={strokeColor.toLowerCase() === color ? 'selected' : ''}
-                  type="button"
-                  aria-label={`${copy.whiteboard.strokeColor} ${color}`}
-                  title={color}
-                  style={{'--swatch': color} as any}
-                  onClick={() => {
-                    setStrokeColor(color)
-                    void patchWhiteboardSettings({lastStrokeColor: color})
-                  }}
-                />
-              ))}
-            </div>
-            <div className="annotation-width-group" aria-label={copy.whiteboard.strokeWidth}>
-              {annotationStrokeWidths.map((width) => (
-                <button
-                  key={width}
-                  className={strokeWidth === width ? 'selected' : ''}
-                  type="button"
-                  onClick={() => {
-                    setStrokeWidth(width)
-                    void patchWhiteboardSettings({lastStrokeWidth: width})
-                  }}
-                >
-                  {copy.whiteboard[width]}
-                </button>
-              ))}
-            </div>
-            <label className="annotation-opacity-group" aria-label={copy.whiteboard.opacity} title={copy.whiteboard.opacity}>
-              <span>{opacity}%</span>
-              <input
-                type="range"
-                min={5}
-                max={100}
-                step={5}
-                value={opacity}
-                onChange={(event) => {
-                  const nextOpacity = normalizeOpacity(Number(event.currentTarget.value))
-                  setOpacity(nextOpacity)
-                  void patchWhiteboardSettings({lastOpacity: nextOpacity})
-                }}
-              />
-            </label>
-            <AnnotationStyleControls
-              copy={copy}
-              activeTool={activeTool}
-              style={annotationStyle}
-              onChange={updateAnnotationStyle}
-            />
-          </div>
-        )}
         <button type="button" aria-label={copy.whiteboard.undo} title={copy.whiteboard.undo} onClick={undoAnnotationStep}>
           <Undo2 size={16} />
         </button>
@@ -767,6 +711,63 @@ function AnnotationOverlayWindow() {
           <X size={17} />
         </button>
       </section>
+      {showAnnotationStyleControls && annotationStylePanelOpen && (
+        <section className="annotation-style-capsule" aria-label={copy.whiteboard.styleSettings}>
+          <div className="annotation-style-group" aria-label={copy.whiteboard.strokeColor}>
+            {annotationColors.map((color) => (
+              <button
+                key={color}
+                className={strokeColor.toLowerCase() === color ? 'selected' : ''}
+                type="button"
+                aria-label={`${copy.whiteboard.strokeColor} ${color}`}
+                title={color}
+                style={{'--swatch': color} as any}
+                onClick={() => {
+                  setStrokeColor(color)
+                  void patchWhiteboardSettings({lastStrokeColor: color})
+                }}
+              />
+            ))}
+          </div>
+          <div className="annotation-width-group" aria-label={copy.whiteboard.strokeWidth}>
+            {annotationStrokeWidths.map((width) => (
+              <button
+                key={width}
+                className={strokeWidth === width ? 'selected' : ''}
+                type="button"
+                onClick={() => {
+                  setStrokeWidth(width)
+                  void patchWhiteboardSettings({lastStrokeWidth: width})
+                }}
+              >
+                {copy.whiteboard[width]}
+              </button>
+            ))}
+          </div>
+          <label className="annotation-opacity-group" aria-label={copy.whiteboard.opacity} title={copy.whiteboard.opacity}>
+            <span>{opacity}%</span>
+            <input
+              type="range"
+              min={5}
+              max={100}
+              step={5}
+              value={opacity}
+              onChange={(event) => {
+                const nextOpacity = normalizeOpacity(Number(event.currentTarget.value))
+                setOpacity(nextOpacity)
+                void patchWhiteboardSettings({lastOpacity: nextOpacity})
+              }}
+            />
+          </label>
+          <AnnotationStyleControls
+            copy={copy}
+            activeTool={activeTool}
+            style={annotationStyle}
+            onChange={updateAnnotationStyle}
+          />
+        </section>
+      )}
+      </div>
       <section
         ref={canvasRef}
         className="annotation-overlay-canvas"

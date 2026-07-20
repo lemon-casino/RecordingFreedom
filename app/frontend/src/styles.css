@@ -3453,11 +3453,20 @@ body.rf-annotation-overlay-window {
   display: none !important;
 }
 
-.annotation-capsule {
+.annotation-toolbar-stack {
   position: absolute;
-  top: auto;
-  left: auto;
   z-index: 4;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 6px;
+  min-width: 0;
+  max-width: min(calc(100vw - 16px), 920px);
+  --wails-draggable: no-drag;
+}
+
+.annotation-capsule {
+  position: relative;
   display: flex;
   align-items: center;
   align-content: center;
@@ -3470,8 +3479,9 @@ body.rf-annotation-overlay-window {
   padding: 5px;
   border: 1px solid var(--line);
   border-radius: var(--radius-pill);
-  background: var(--capsule-bg);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08);
+  background: rgba(17, 15, 28, 0.96);
+  border-color: rgba(255, 255, 255, 0.28);
+  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.36), inset 0 1px 0 rgba(255, 255, 255, 0.12);
   backdrop-filter: blur(22px) saturate(150%);
   --wails-draggable: drag;
 }
@@ -3481,7 +3491,7 @@ body.rf-annotation-overlay-window {
   max-width: 80px;
   overflow: hidden;
   padding: 0 5px;
-  color: var(--muted);
+  color: rgba(255, 255, 255, 0.92);
   font-size: 11px;
   font-weight: 900;
   text-overflow: ellipsis;
@@ -3509,21 +3519,23 @@ body.rf-annotation-overlay-window {
   padding: 3px;
   border: 1px solid var(--line);
   border-radius: var(--radius-pill);
-  background: rgba(255, 255, 255, 0.045);
+  background: rgba(255, 255, 255, 0.1);
   --wails-draggable: no-drag;
 }
 
-.annotation-style-panel {
-  flex: 1 0 100%;
+.annotation-style-capsule {
   display: inline-flex;
   align-items: center;
   flex-wrap: wrap;
   gap: 4px;
+  box-sizing: border-box;
+  width: 100%;
   min-width: 0;
-  padding: 3px;
-  border: 1px solid var(--line);
-  border-radius: 12px;
-  background: rgba(255, 255, 255, 0.045);
+  padding: 7px;
+  border: 1px solid rgba(255, 255, 255, 0.34);
+  border-radius: 18px;
+  background: rgba(22, 19, 36, 0.98);
+  box-shadow: 0 10px 26px rgba(0, 0, 0, 0.34), inset 0 1px 0 rgba(255, 255, 255, 0.1);
   --wails-draggable: no-drag;
 }
 
@@ -3560,7 +3572,7 @@ body.rf-annotation-overlay-window {
 
 .annotation-style-group-label {
   padding: 0 3px;
-  color: var(--muted);
+  color: rgba(255, 255, 255, 0.9);
   font-size: 9px;
   font-weight: 900;
   white-space: nowrap;
@@ -3586,7 +3598,7 @@ body.rf-annotation-overlay-window {
   display: inline-flex;
   gap: 5px;
   padding: 0 7px;
-  color: var(--muted);
+  color: rgba(255, 255, 255, 0.9);
   font-size: 10px;
   font-weight: 900;
 }
@@ -3615,7 +3627,7 @@ body.rf-annotation-overlay-window {
   padding: 0 5px;
   border: 1px solid transparent;
   border-radius: 8px;
-  color: var(--muted);
+  color: rgba(255, 255, 255, 0.9);
   font-size: 9px;
   font-weight: 900;
   white-space: nowrap;
@@ -3625,15 +3637,20 @@ body.rf-annotation-overlay-window {
   max-width: 86px;
   height: 22px;
   padding: 0 3px;
-  border: 0;
+  border: 1px solid rgba(255, 255, 255, 0.24);
   border-radius: 5px;
   outline: none;
-  background: rgba(255, 255, 255, 0.08);
-  color: var(--text);
+  background: rgba(255, 255, 255, 0.16);
+  color: #ffffff;
   font-size: 10px;
   font-weight: 800;
   cursor: pointer;
   --wails-draggable: no-drag;
+}
+
+.annotation-style-select select option {
+  background: #211c31;
+  color: #ffffff;
 }
 
 .annotation-capsule button {
@@ -3648,7 +3665,7 @@ body.rf-annotation-overlay-window {
   border: 1px solid transparent;
   border-radius: var(--radius-pill);
   background: transparent;
-  color: var(--muted);
+  color: rgba(255, 255, 255, 0.9);
   font-size: 10px;
   font-weight: 900;
   cursor: pointer;
