@@ -1143,13 +1143,16 @@ export async function setCapsuleWindowExpanded(
       width: expanded ? capsuleWindowWidth : compactCollapsed ? capsuleWindowCompactWidth : capsuleWindowWidth,
       height: expanded ? expandedHeight : capsuleWindowCollapsedHeight,
     }))
-    const workArea = await capsuleWorkAreaForWindow(position, size).catch(() => null)
     const dockSide = lastCapsuleDockSide
-    const collapsedVisualSize = capsuleCollapsedWindowSize(compactCollapsed, dockSide, workArea)
+    const initialVisualSize = capsuleCollapsedVisualSize(compactCollapsed, dockSide, null)
+    const initialVisualPosition = capsuleVisualPositionFromWindow(dockSide, position, size, initialVisualSize)
+    const workArea = await capsuleWorkAreaForWindow(position, size, undefined, initialVisualPosition, initialVisualSize).catch(() => null)
+    const collapsedVisualSize = capsuleCollapsedVisualSize(compactCollapsed, dockSide, workArea)
     const collapsedVisualPosition = capsuleVisibleCollapsedPosition(dockSide, position, size, collapsedVisualSize, workArea)
     if (!expanded) {
-      const collapsedPosition = capsuleReservedWindowPosition(dockSide, collapsedVisualPosition, collapsedVisualSize, collapsedVisualSize, workArea)
-      await setCapsuleWindowBoundsIfChanged(position, size, collapsedPosition, collapsedVisualSize)
+      const collapsedWindowSize = capsuleCollapsedWindowSize(compactCollapsed, dockSide, workArea)
+      const collapsedPosition = capsuleReservedWindowPosition(dockSide, collapsedVisualPosition, collapsedVisualSize, collapsedWindowSize, workArea)
+      await setCapsuleWindowBoundsIfChanged(position, size, collapsedPosition, collapsedWindowSize)
       lastCapsuleCollapsedPosition = null
       return lastCapsuleExpandedDirection
     }
@@ -1186,12 +1189,15 @@ export async function snapCapsuleWindowToEdge(compactCollapsed = false): Promise
     const position = await WailsWindow.Position()
     const size = await WailsWindow.Size().catch(() => capsuleCollapsedWindowSize(compactCollapsed, lastCapsuleDockSide, null))
     let workAreas = await capsuleWorkAreas().catch(() => [])
-    const workArea = await capsuleWorkAreaForWindow(position, size, workAreas)
+    const dockSideBeforeSnap = lastCapsuleDockSide
+    const visualSizeBeforeSnap = capsuleCollapsedVisualSize(compactCollapsed, dockSideBeforeSnap, null)
+    lastCapsuleCollapsedPosition = null
+    const visualPositionBeforeSnap = capsuleVisualPositionFromWindow(dockSideBeforeSnap, position, size, visualSizeBeforeSnap)
+    const workArea = await capsuleWorkAreaForWindow(position, size, workAreas, visualPositionBeforeSnap, visualSizeBeforeSnap)
     if (workArea && !workAreas.some((area) => area.id === workArea.id && area.x === workArea.x && area.y === workArea.y)) {
       workAreas = [...workAreas, workArea]
     }
-    const currentVisualSize = capsuleCollapsedWindowSize(compactCollapsed, lastCapsuleDockSide, workArea)
-    lastCapsuleCollapsedPosition = null
+    const currentVisualSize = capsuleCollapsedVisualSize(compactCollapsed, lastCapsuleDockSide, workArea)
     const currentVisualPosition = capsuleVisibleCollapsedPosition(lastCapsuleDockSide, position, size, currentVisualSize, workArea)
     const dockTarget = resolveCapsuleDockTarget(currentVisualPosition, currentVisualSize, workAreas, workArea)
     const dockSide = dockTarget.side
@@ -1267,10 +1273,25 @@ export function __resolveCapsuleDockTargetForTest(input: {
   }
 }
 
+export function __capsuleCollapsedWindowGeometryForTest(input: {
+  compactCollapsed: boolean
+  dockSide: CapsuleWindowDockSide
+  workArea?: CapsuleWorkArea | null
+}) {
+  return {
+    windowSize: capsuleCollapsedWindowSize(input.compactCollapsed, input.dockSide, input.workArea ?? null),
+    visualSize: capsuleCollapsedVisualSize(input.compactCollapsed, input.dockSide, input.workArea ?? null),
+  }
+}
+
 if (import.meta.env.DEV && typeof window !== 'undefined') {
   ;(window as Window & {
     __RF_TEST_RESOLVE_CAPSULE_DOCK_TARGET__?: typeof __resolveCapsuleDockTargetForTest
+    __RF_TEST_CAPSULE_COLLAPSED_WINDOW_GEOMETRY__?: typeof __capsuleCollapsedWindowGeometryForTest
   }).__RF_TEST_RESOLVE_CAPSULE_DOCK_TARGET__ = __resolveCapsuleDockTargetForTest
+  ;(window as Window & {
+    __RF_TEST_CAPSULE_COLLAPSED_WINDOW_GEOMETRY__?: typeof __capsuleCollapsedWindowGeometryForTest
+  }).__RF_TEST_CAPSULE_COLLAPSED_WINDOW_GEOMETRY__ = __capsuleCollapsedWindowGeometryForTest
 }
 
 type CapsuleWorkArea = {
@@ -1300,11 +1321,13 @@ async function capsuleWorkAreaForWindow(
   position: {x: number; y: number},
   size: {width: number; height: number},
   candidates?: CapsuleWorkArea[],
+  visualPosition = position,
+  visualSize = size,
 ): Promise<CapsuleWorkArea | null> {
   const workAreas = candidates ?? await capsuleWorkAreas().catch(() => [])
   const owningScreen = await capsuleOwningScreenWorkArea()
   if (!workAreas.length) return owningScreen
-  return chooseCapsuleWorkArea(position, size, workAreas, owningScreen)
+  return chooseCapsuleWorkArea(visualPosition, visualSize, workAreas, owningScreen)
 }
 
 async function capsuleOwningScreenWorkArea(): Promise<CapsuleWorkArea | null> {
@@ -1486,6 +1509,25 @@ function capsuleCollapsedWindowSize(
 ) {
   if (isSideDock(dockSide)) {
     const requestedHeight = compactCollapsed ? capsuleWindowSideCompactHeight : capsuleWindowSideHeight
+    const requestedWidth = compactCollapsed ? capsuleWindowSideWidth : capsuleWindowWidth
+    return {
+      width: Math.min(requestedWidth, Math.max(64, workArea?.width ?? requestedWidth)),
+      height: Math.min(requestedHeight, Math.max(capsuleWindowCollapsedHeight, workArea?.height ?? requestedHeight)),
+    }
+  }
+  return {
+    width: compactCollapsed ? capsuleWindowCompactWidth : capsuleWindowWidth,
+    height: capsuleWindowCollapsedHeight,
+  }
+}
+
+function capsuleCollapsedVisualSize(
+  compactCollapsed: boolean,
+  dockSide: CapsuleWindowDockSide,
+  workArea: CapsuleWorkArea | null,
+) {
+  if (isSideDock(dockSide)) {
+    const requestedHeight = compactCollapsed ? capsuleWindowSideCompactHeight : capsuleWindowSideHeight
     return {
       width: Math.min(capsuleWindowSideWidth, Math.max(64, workArea?.width ?? capsuleWindowSideWidth)),
       height: Math.min(requestedHeight, Math.max(capsuleWindowCollapsedHeight, workArea?.height ?? requestedHeight)),
@@ -1526,16 +1568,26 @@ function capsuleVisibleCollapsedPosition(
   workArea: CapsuleWorkArea | null,
 ) {
   if (lastCapsuleCollapsedPosition) return lastCapsuleCollapsedPosition
+  const visualPosition = capsuleVisualPositionFromWindow(dockSide, position, size, visualSize)
+  return clampCapsuleWindowPosition(visualPosition.x, visualPosition.y, visualSize.width, visualSize.height, workArea)
+}
+
+function capsuleVisualPositionFromWindow(
+  dockSide: CapsuleWindowDockSide,
+  position: {x: number; y: number},
+  size: {width: number; height: number},
+  visualSize: {width: number; height: number},
+) {
   if (dockSide === 'left') {
-    return clampCapsuleWindowPosition(position.x, position.y + (size.height - visualSize.height) / 2, visualSize.width, visualSize.height, workArea)
+    return {x: position.x, y: position.y + (size.height - visualSize.height) / 2}
   }
   if (dockSide === 'right') {
-    return clampCapsuleWindowPosition(position.x + size.width - visualSize.width, position.y + (size.height - visualSize.height) / 2, visualSize.width, visualSize.height, workArea)
+    return {x: position.x + size.width - visualSize.width, y: position.y + (size.height - visualSize.height) / 2}
   }
   if (dockSide === 'bottom' || lastCapsuleExpandedDirection === 'up') {
-    return clampCapsuleWindowPosition(position.x + (size.width - visualSize.width) / 2, position.y + size.height - visualSize.height, visualSize.width, visualSize.height, workArea)
+    return {x: position.x + (size.width - visualSize.width) / 2, y: position.y + size.height - visualSize.height}
   }
-  return clampCapsuleWindowPosition(position.x + (size.width - visualSize.width) / 2, position.y, visualSize.width, visualSize.height, workArea)
+  return {x: position.x + (size.width - visualSize.width) / 2, y: position.y}
 }
 
 function capsuleReservedWindowPosition(

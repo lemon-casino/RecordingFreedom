@@ -49,6 +49,32 @@ test('capsule docking keeps a single-screen right edge inside the work area', as
   expect(target.workArea).toMatchObject({id: 'primary', x: 0, width: 1920})
 })
 
+test('idle side docking keeps a wide native host while recording stays compact', async ({page}) => {
+  await page.goto('/')
+
+  const geometry = await page.evaluate(() => {
+    const fn = (window as Window & {
+      __RF_TEST_CAPSULE_COLLAPSED_WINDOW_GEOMETRY__?: (input: {
+        compactCollapsed: boolean
+        dockSide: 'left' | 'right'
+        workArea: {x: number; y: number; width: number; height: number}
+      }) => {windowSize: {width: number; height: number}; visualSize: {width: number; height: number}}
+    }).__RF_TEST_CAPSULE_COLLAPSED_WINDOW_GEOMETRY__
+    if (!fn) return null
+    const workArea = {x: 0, y: 0, width: 1920, height: 1040}
+    return {
+      idle: fn({compactCollapsed: false, dockSide: 'right', workArea}),
+      recording: fn({compactCollapsed: true, dockSide: 'right', workArea}),
+    }
+  })
+
+  expect(geometry).not.toBeNull()
+  expect(geometry?.idle.windowSize).toEqual({width: 760, height: 560})
+  expect(geometry?.idle.visualSize).toEqual({width: 96, height: 560})
+  expect(geometry?.recording.windowSize).toEqual({width: 96, height: 360})
+  expect(geometry?.recording.visualSize).toEqual({width: 96, height: 360})
+})
+
 test('capsule docking keeps the selected monitor side at vertical monitor seams', async ({page}) => {
   await page.goto('/')
 
