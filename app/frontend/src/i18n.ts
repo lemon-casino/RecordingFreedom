@@ -318,6 +318,7 @@ export type RecorderCopy = {
     strokeWidth: string
     opacity: string
     styleSettings: string
+    hideStyleSettings: string
     strokeStyle: string
     fillStyle: string
     fillColor: string
@@ -842,6 +843,7 @@ const zhCN: RecorderCopy = {
     strokeWidth: '线宽',
     opacity: '透明度',
     styleSettings: '工具细节设置',
+    hideStyleSettings: '隐藏工具细节设置',
     strokeStyle: '描边样式',
     fillStyle: '填充样式',
     fillColor: '填充颜色',
@@ -1497,6 +1499,7 @@ const en: RecorderCopy = {
     strokeWidth: 'Stroke',
     opacity: 'Opacity',
     styleSettings: 'Tool detail settings',
+    hideStyleSettings: 'Hide tool detail settings',
     strokeStyle: 'Stroke style',
     fillStyle: 'Fill style',
     fillColor: 'Fill color',

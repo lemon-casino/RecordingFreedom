@@ -36,6 +36,8 @@ test('settings groups themes into dark and light options', async ({page}) => {
 
   await themeMenu.getByRole('option', {name: 'Cloud White'}).click()
   await expect(page.locator('html')).toHaveAttribute('data-theme', 'cloud-white')
+  await expect(page.locator('.record-button')).toHaveCSS('color', 'rgb(185, 28, 28)')
+  await expect(page.locator('.close-app-button')).toHaveCSS('color', 'rgb(185, 28, 28)')
   await expect.poll(async () => page.evaluate((settingsKey) => {
     const raw = window.localStorage.getItem(settingsKey)
     return raw ? JSON.parse(raw).window?.theme : ''

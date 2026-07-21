@@ -5,6 +5,7 @@ import {
   Circle,
   Eraser,
   Eye,
+  EyeOff,
   Minus,
   MousePointer2,
   PenLine,
@@ -779,6 +780,15 @@ function AnnotationOverlayWindow() {
             style={annotationStyle}
             onChange={updateAnnotationStyle}
           />
+          <button
+            className="annotation-style-hide"
+            type="button"
+            aria-label={copy.whiteboard.hideStyleSettings}
+            title={copy.whiteboard.hideStyleSettings}
+            onClick={() => setAnnotationStylePanelOpen(false)}
+          >
+            <EyeOff size={15} />
+          </button>
         </section>
       )}
       </div>

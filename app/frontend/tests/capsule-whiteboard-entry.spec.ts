@@ -46,6 +46,20 @@ test('capsule whiteboard opens board before recording and annotation during vide
   await expect(whiteboardButton).toHaveAttribute('aria-pressed', 'true')
 })
 
+test('light theme keeps the video and audio mode switch readable', async ({page}) => {
+  await openRecorderShell(page, {theme: 'cloud-white'})
+
+  await page.locator('.source-pill').click()
+  const sourceMenu = page.getByRole('dialog', {name: 'source menu'})
+  const modeToggle = sourceMenu.locator('.mode-toggle')
+  await expect.poll(async () => (await modeToggle.boundingBox())?.height ?? 0).toBeLessThan(70)
+  await expect(modeToggle.getByRole('button', {name: 'Video'})).toHaveCSS('color', 'rgb(29, 78, 216)')
+
+  await modeToggle.getByRole('button', {name: 'Audio'}).click()
+  await expect(modeToggle.getByRole('button', {name: 'Audio'})).toHaveCSS('color', 'rgb(29, 78, 216)')
+  await expect(modeToggle.getByRole('button', {name: 'Video'})).toHaveCSS('color', 'rgb(82, 98, 115)')
+})
+
 test('screenshot tools hide window and focused-window capture modes', async ({page}) => {
   await openRecorderShell(page)
 
@@ -1678,7 +1692,7 @@ test('region overlay drops stale hover candidates when the session changes or po
   ))).toBeNull()
 })
 
-async function openRecorderShell(page: Page, options: {locale?: 'zh-CN' | 'en'; microphone?: boolean; systemAudio?: boolean; screenshotHistory?: unknown[]; ocrTranslation?: boolean} = {}) {
+async function openRecorderShell(page: Page, options: {locale?: 'zh-CN' | 'en'; theme?: 'night-teal' | 'cloud-white'; microphone?: boolean; systemAudio?: boolean; screenshotHistory?: unknown[]; ocrTranslation?: boolean} = {}) {
   await page.addInitScript(({settingsKey, screenshotHistoryKey, settings, screenshotHistory}) => {
     window.localStorage.setItem(settingsKey, JSON.stringify(settings))
     if (screenshotHistory) {
@@ -1699,13 +1713,14 @@ async function openRecorderShell(page: Page, options: {locale?: 'zh-CN' | 'en'; 
       options.locale ?? 'en',
       options.microphone === true,
       options.systemAudio === true,
+      options.theme ?? 'night-teal',
     ), options.ocrTranslation === true),
     screenshotHistory: options.screenshotHistory,
   })
   await page.goto('/')
 }
 
-function baseBrowserSettings(locale: 'zh-CN' | 'en', microphone: boolean, systemAudio: boolean) {
+function baseBrowserSettings(locale: 'zh-CN' | 'en', microphone: boolean, systemAudio: boolean, theme: 'night-teal' | 'cloud-white' = 'night-teal') {
   return {
     schemaVersion: 1,
     locale,
@@ -1749,7 +1764,7 @@ function baseBrowserSettings(locale: 'zh-CN' | 'en', microphone: boolean, system
     },
     window: {
       minimizeToTray: true,
-      theme: 'night-teal',
+      theme,
     },
   }
 }

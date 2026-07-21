@@ -25,6 +25,19 @@
   --accent-readable: #d7fffb;
   --red: #f04438;
   --red-soft: rgba(240, 68, 56, 0.18);
+  --danger-readable: #ffd9d6;
+  --danger-hover-readable: #ffffff;
+  --danger-border: rgba(240, 68, 56, 0.2);
+  --danger-border-strong: rgba(240, 68, 56, 0.42);
+  --danger-bg: rgba(240, 68, 56, 0.1);
+  --danger-bg-hover: rgba(240, 68, 56, 0.2);
+  --danger-bg-active: rgba(240, 68, 56, 0.24);
+  --control-bg: rgba(255, 255, 255, 0.035);
+  --control-bg-strong: rgba(255, 255, 255, 0.065);
+  --control-bg-hover: rgba(255, 255, 255, 0.085);
+  --control-bg-subtle: rgba(255, 255, 255, 0.045);
+  --status-warning-readable: #ffe8b6;
+  --status-error-readable: #ffdfdc;
   --amber: #f59e0b;
   --capsule-bg: linear-gradient(180deg, rgba(25, 31, 38, 0.94), rgba(13, 17, 22, 0.92));
   --settings-bg:
@@ -242,8 +255,21 @@
   --muted: #526273;
   --quiet: #8491a1;
   --red: #dc2626;
-  --red-soft: rgba(220, 38, 38, 0.12);
+  --red-soft: rgba(220, 38, 38, 0.16);
   --amber: #d97706;
+  --danger-readable: #b91c1c;
+  --danger-hover-readable: #ffffff;
+  --danger-border: rgba(185, 28, 28, 0.24);
+  --danger-border-strong: rgba(185, 28, 28, 0.48);
+  --danger-bg: rgba(185, 28, 28, 0.1);
+  --danger-bg-hover: rgba(185, 28, 28, 0.18);
+  --danger-bg-active: rgba(185, 28, 28, 0.22);
+  --control-bg: rgba(15, 23, 42, 0.035);
+  --control-bg-strong: #ffffff;
+  --control-bg-hover: rgba(15, 23, 42, 0.07);
+  --control-bg-subtle: rgba(15, 23, 42, 0.045);
+  --status-warning-readable: #a16207;
+  --status-error-readable: #b91c1c;
   --shadow-tight: 0 14px 34px rgba(15, 23, 42, 0.12);
   --shadow-panel: 0 18px 42px rgba(15, 23, 42, 0.16);
   --whiteboard-canvas-bg: #ffffff;
@@ -753,7 +779,7 @@ input:disabled,
   padding: 0 12px;
   border: 1px solid var(--line);
   border-radius: var(--radius-pill);
-  background: rgba(255, 255, 255, 0.055);
+  background: var(--control-bg-strong);
   color: var(--text);
   transition: background 160ms ease, border-color 160ms ease;
   flex: 0 0 auto;
@@ -763,7 +789,7 @@ input:disabled,
 .icon-button:hover,
 .sheet-close:hover {
   border-color: var(--line-strong);
-  background: rgba(255, 255, 255, 0.085);
+  background: var(--control-bg-hover);
 }
 
 .source-pill:disabled,
@@ -781,7 +807,7 @@ select:disabled {
 .source-pill:disabled:hover,
 .menu-row:disabled:hover {
   border-color: var(--line);
-  background: rgba(255, 255, 255, 0.035);
+  background: var(--control-bg-subtle);
 }
 
 .rf-shell.dock-left .source-pill,
@@ -833,7 +859,7 @@ select:disabled {
   padding: 4px;
   border: 1px solid var(--line);
   border-radius: var(--radius-pill);
-  background: rgba(255, 255, 255, 0.04);
+  background: var(--control-bg-subtle);
   flex: 0 0 auto;
 }
 
@@ -860,7 +886,7 @@ select:disabled {
   max-width: 38px;
   height: 38px;
   border-radius: var(--radius-pill);
-  background: rgba(255, 255, 255, 0.035);
+  background: var(--control-bg);
   flex: 0 0 38px;
 }
 
@@ -883,15 +909,15 @@ select:disabled {
 }
 
 .close-app-button {
-  border-color: rgba(240, 68, 56, 0.2);
-  background: rgba(240, 68, 56, 0.1);
-  color: #ffd9d6;
+  border-color: var(--danger-border);
+  background: var(--danger-bg);
+  color: var(--danger-readable);
 }
 
 .close-app-button:hover {
-  border-color: rgba(240, 68, 56, 0.42);
-  background: rgba(240, 68, 56, 0.2);
-  color: #ffffff;
+  border-color: var(--danger-border-strong);
+  background: var(--danger-bg-hover);
+  color: var(--danger-hover-readable);
 }
 
 .icon-button.strong {
@@ -899,7 +925,7 @@ select:disabled {
 }
 
 .icon-button.soft {
-  background: rgba(255, 255, 255, 0.045);
+  background: var(--control-bg-subtle);
 }
 
 .icon-button:disabled {
@@ -913,7 +939,7 @@ select:disabled {
   height: 50px;
   border-radius: var(--radius-pill);
   background: var(--red-soft);
-  color: #ffdfdc;
+  color: var(--danger-readable);
   flex: 0 0 auto;
   order: 2;
 }
@@ -951,15 +977,15 @@ select:disabled {
 .record-button.idle,
 .record-button.ready,
 .record-button.failed {
-  border-color: rgba(240, 68, 56, 0.38);
+  border-color: var(--danger-border-strong);
 }
 
 .record-button.recording,
 .record-button.paused,
 .record-button.stopping {
-  background: rgba(240, 68, 56, 0.24);
-  border-color: rgba(240, 68, 56, 0.5);
-  color: #ffffff;
+  background: var(--danger-bg-active);
+  border-color: var(--danger-border-strong);
+  color: var(--danger-hover-readable);
 }
 
 .record-button.preparing {
@@ -978,7 +1004,7 @@ select:disabled {
   padding: 0 10px;
   border: 1px solid var(--line);
   border-radius: var(--radius-pill);
-  background: rgba(255, 255, 255, 0.045);
+  background: var(--control-bg-subtle);
   font-size: 12px;
   tab-size: 4;
   flex: 0 0 auto;
@@ -1463,7 +1489,7 @@ body.rf-recorder-window .select-menu-list {
   overflow: hidden;
   border: 1px solid var(--line);
   border-radius: 16px;
-  background: rgba(255, 255, 255, 0.045);
+  background: var(--control-bg-subtle);
   touch-action: pan-y;
   --wails-draggable: no-drag;
 }
@@ -1621,7 +1647,7 @@ body.rf-recorder-window .select-menu-list {
 }
 
 .screenshot-history-main:hover {
-  background: rgba(255, 255, 255, 0.07);
+  background: var(--control-bg-hover);
 }
 
 .screenshot-history-main > span:not(.screenshot-history-icon) {
@@ -1652,12 +1678,12 @@ body.rf-recorder-window .select-menu-list {
 }
 
 .screenshot-history-main .screenshot-ocr-status.failed {
-  color: #ffb4ad;
+  color: var(--danger-readable);
 }
 
 .screenshot-history-main .screenshot-ocr-status.queued,
 .screenshot-history-main .screenshot-ocr-status.running {
-  color: #ffd48a;
+  color: var(--status-warning-readable);
 }
 
 .screenshot-history-actions {
@@ -1683,8 +1709,8 @@ body.rf-recorder-window .select-menu-list {
 
 .screenshot-history-actions button:hover,
 .screenshot-history-actions button.selected {
-  border-color: rgba(17, 183, 167, 0.26);
-  background: rgba(17, 183, 167, 0.12);
+  border-color: var(--accent-option-border);
+  background: var(--accent-option);
   color: var(--accent-readable);
 }
 
@@ -1700,9 +1726,9 @@ body.rf-recorder-window .select-menu-list {
 }
 
 .screenshot-history-actions button.danger:hover {
-  border-color: rgba(240, 68, 56, 0.42);
-  background: rgba(240, 68, 56, 0.16);
-  color: #ffe2df;
+  border-color: var(--danger-border-strong);
+  background: var(--danger-bg-hover);
+  color: var(--danger-readable);
 }
 
 .ocr-result-panel {
@@ -1761,7 +1787,7 @@ body.rf-recorder-window .select-menu-list {
   padding: 10px;
   border: 1px solid var(--line);
   border-radius: 14px;
-  background: rgba(255, 255, 255, 0.05);
+  background: var(--control-bg-strong);
   color: var(--text);
   font-size: 12px;
   line-height: 1.55;
@@ -1781,7 +1807,7 @@ body.rf-recorder-window .select-menu-list {
   overflow: hidden;
   border: 1px solid var(--line);
   border-radius: 14px;
-  background: rgba(255, 255, 255, 0.045);
+  background: var(--control-bg-subtle);
 }
 
 .ocr-result-panel.expanded .ocr-preview-frame {
@@ -1947,7 +1973,7 @@ body.rf-recorder-window .select-menu-list {
 }
 
 .ocr-translation-row span {
-  color: var(--quiet);
+  color: var(--muted);
   font-size: 10px;
 }
 
@@ -2022,7 +2048,7 @@ body.rf-recorder-window .select-menu-list {
 
 .source-group-label {
   padding: 2px 8px;
-  color: var(--quiet);
+  color: var(--muted);
   font-size: 10px;
   font-weight: 900;
   letter-spacing: 0;
@@ -2042,7 +2068,7 @@ body.rf-recorder-window .select-menu-list {
   padding: 4px;
   border: 1px solid var(--line);
   border-radius: 18px;
-  background: rgba(255, 255, 255, 0.045);
+  background: var(--control-bg-subtle);
 }
 
 .source-panel-header span {
@@ -2073,7 +2099,7 @@ body.rf-recorder-window .select-menu-list {
   place-items: center;
   border: 1px solid transparent;
   border-radius: var(--radius-pill);
-  background: rgba(255, 255, 255, 0.055);
+  background: var(--control-bg-strong);
   color: var(--muted);
 }
 
@@ -2089,7 +2115,7 @@ body.rf-recorder-window .select-menu-list {
   padding: 3px;
   border: 1px solid var(--line);
   border-radius: var(--radius-pill);
-  background: rgba(255, 255, 255, 0.045);
+  background: var(--control-bg-subtle);
 }
 
 .mode-toggle button {
@@ -2110,9 +2136,9 @@ body.rf-recorder-window .select-menu-list {
 }
 
 .mode-toggle button.selected {
-  border-color: rgba(17, 183, 167, 0.3);
+  border-color: var(--accent-border);
   background: var(--teal-soft);
-  color: #d7fffb;
+  color: var(--accent-readable);
 }
 
 .mode-toggle button:disabled {
@@ -2136,17 +2162,18 @@ body.rf-recorder-window .select-menu-list {
 
 .menu-row:hover,
 .menu-row.selected {
-  border-color: rgba(17, 183, 167, 0.26);
-  background: rgba(17, 183, 167, 0.11);
+  border-color: var(--accent-option-border);
+  background: var(--accent-option);
+  color: var(--accent-readable);
 }
 
 .menu-row:disabled.selected {
-  border-color: rgba(17, 183, 167, 0.2);
-  background: rgba(17, 183, 167, 0.08);
+  border-color: var(--accent-border-soft);
+  background: var(--teal-soft);
 }
 
 .menu-row.queued:not(.selected) {
-  color: rgba(246, 248, 251, 0.78);
+  color: var(--muted);
 }
 
 .menu-row span {
@@ -2174,10 +2201,10 @@ body.rf-recorder-window .select-menu-list {
   height: 24px;
   place-items: center;
   padding: 0 9px;
-  border: 1px solid rgba(17, 183, 167, 0.28);
+  border: 1px solid var(--accent-option-border);
   border-radius: var(--radius-pill);
   background: var(--teal-soft);
-  color: #d7fffb;
+  color: var(--accent-readable);
   font-size: 10px;
   font-weight: 900;
   white-space: nowrap;
@@ -2192,15 +2219,15 @@ body.rf-recorder-window .select-menu-list {
   padding: 8px 10px;
   border: 1px solid var(--line);
   border-radius: 16px;
-  background: rgba(255, 255, 255, 0.04);
+  background: var(--control-bg-subtle);
   color: var(--muted);
   font-size: 12px;
 }
 
 .source-selection-note {
-  border-color: rgba(17, 183, 167, 0.22);
-  background: rgba(17, 183, 167, 0.08);
-  color: #cffffa;
+  border-color: var(--accent-border-soft);
+  background: var(--teal-soft);
+  color: var(--accent-readable);
 }
 
 .audio-mode-summary {
@@ -2316,7 +2343,7 @@ select {
   padding: 0 12px 0 14px;
   border: 1px solid var(--line);
   border-radius: 14px;
-  background: rgba(255, 255, 255, 0.065);
+  background: var(--control-bg-strong);
   color: var(--text);
   transition: background 160ms ease, border-color 160ms ease, color 160ms ease;
   cursor: pointer;
@@ -2353,9 +2380,9 @@ select {
 .select-menu-swatch {
   width: 11px;
   height: 11px;
-  border: 1px solid rgba(255, 255, 255, 0.34);
+  border: 1px solid var(--line-strong);
   border-radius: 50%;
-  box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.055);
+  box-shadow: 0 0 0 2px var(--control-bg-subtle);
   flex: 0 0 auto;
 }
 
@@ -2727,7 +2754,7 @@ input {
   padding: 12px;
   border: 1px solid var(--line);
   border-radius: 16px;
-  background: rgba(255, 255, 255, 0.045);
+  background: var(--control-bg-subtle);
 }
 
 .setting-line.status-available {
@@ -2740,7 +2767,7 @@ input {
 
 .setting-line.status-blocked,
 .setting-line.status-unsupported {
-  border-color: rgba(240, 68, 56, 0.24);
+  border-color: var(--danger-border);
 }
 
 .setting-line span {
@@ -2904,7 +2931,7 @@ input {
   padding: 0 12px;
   border: 1px solid var(--line);
   border-radius: 12px;
-  background: rgba(255, 255, 255, 0.06);
+  background: var(--control-bg-strong);
   font-size: 12px;
 }
 
@@ -2933,7 +2960,7 @@ input {
   padding: 0 12px;
   border: 1px solid var(--line);
   border-radius: 12px;
-  background: rgba(255, 255, 255, 0.055);
+  background: var(--control-bg-strong);
   color: var(--text);
   font-family: inherit;
   font-size: 12px;
@@ -3019,7 +3046,7 @@ input {
 .ocr-translation-grid > .setting-line {
   padding: 8px;
   border-radius: 12px;
-  background: rgba(255, 255, 255, 0.025);
+  background: var(--control-bg);
 }
 
 .ocr-translation-grid > .setting-line > span {
@@ -3053,7 +3080,7 @@ input {
   padding: 9px;
   border: 1px solid var(--line);
   border-radius: 12px;
-  background: rgba(255, 255, 255, 0.035);
+  background: var(--control-bg);
 }
 
 .ocr-model-row.active {
@@ -3082,7 +3109,7 @@ input {
 .ocr-model-row span,
 .ocr-model-row small {
   min-width: 0;
-  color: var(--quiet);
+  color: var(--muted);
   font-size: 9.8px;
   line-height: 1.25;
   overflow-wrap: anywhere;
@@ -3194,9 +3221,9 @@ input {
 }
 
 .close-confirm-primary {
-  border-color: rgba(240, 68, 56, 0.38);
-  background: rgba(240, 68, 56, 0.2);
-  color: #ffdfdc;
+  border-color: var(--danger-border-strong);
+  background: var(--danger-bg-hover);
+  color: var(--danger-readable);
 }
 
 .status-badge.available {
@@ -3208,14 +3235,14 @@ input {
 .status-badge.queued {
   border-color: rgba(245, 158, 11, 0.34);
   background: rgba(245, 158, 11, 0.14);
-  color: #ffe8b6;
+  color: var(--status-warning-readable);
 }
 
 .status-badge.blocked,
 .status-badge.unsupported {
   border-color: rgba(240, 68, 56, 0.34);
   background: var(--red-soft);
-  color: #ffdfdc;
+  color: var(--status-error-readable);
 }
 
 body.rf-whiteboard-window {
@@ -3341,7 +3368,7 @@ body.rf-annotation-render-window {
   padding: 4px;
   border: 1px solid var(--line);
   border-radius: var(--radius-pill);
-  background: rgba(255, 255, 255, 0.045);
+  background: var(--control-bg-subtle);
   --wails-draggable: no-drag;
 }
 
@@ -3435,7 +3462,7 @@ body.rf-annotation-render-window {
 .whiteboard-opacity-group:hover,
 .whiteboard-actions button:hover {
   border-color: var(--line-strong);
-  background: rgba(255, 255, 255, 0.085);
+  background: var(--control-bg-hover);
   color: var(--text);
 }
 
@@ -3446,7 +3473,7 @@ body.rf-annotation-render-window {
 
 .whiteboard-actions button:disabled:hover {
   border-color: rgba(255, 255, 255, 0.08);
-  background: rgba(255, 255, 255, 0.045);
+  background: var(--control-bg-subtle);
   color: var(--muted);
 }
 
@@ -3473,14 +3500,14 @@ body.rf-annotation-render-window {
 }
 
 .whiteboard-actions button.danger {
-  color: #ffd9d6;
+  color: var(--danger-readable);
 }
 
 .whiteboard-actions button.danger:hover,
 .whiteboard-actions button.danger.armed {
-  border-color: rgba(240, 68, 56, 0.42);
-  background: rgba(240, 68, 56, 0.2);
-  color: #ffffff;
+  border-color: var(--danger-border-strong);
+  background: var(--danger-bg-hover);
+  color: var(--danger-hover-readable);
 }
 
 .whiteboard-actions button span {
@@ -3556,7 +3583,7 @@ body.rf-annotation-render-window {
   padding: 0 12px;
   border: 1px solid var(--line);
   border-radius: var(--radius-pill);
-  background: rgba(255, 255, 255, 0.045);
+  background: var(--control-bg-subtle);
   color: var(--muted);
   font-size: 11px;
   font-weight: 800;
@@ -3575,8 +3602,8 @@ body.rf-annotation-render-window {
 }
 
 .whiteboard-status.failed {
-  border-color: rgba(240, 68, 56, 0.36);
-  color: #ffd9d6;
+  border-color: var(--danger-border-strong);
+  color: var(--danger-readable);
 }
 
 body.rf-annotation-overlay-window {
@@ -3892,6 +3919,27 @@ body.rf-annotation-overlay-window {
 .annotation-style-select select option {
   background: #211c31;
   color: #ffffff;
+}
+
+.annotation-style-hide {
+  display: inline-grid;
+  flex: 0 0 auto;
+  width: 28px;
+  height: 28px;
+  margin-left: auto;
+  place-items: center;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--control-bg-subtle);
+  color: var(--muted);
+  cursor: pointer;
+  --wails-draggable: no-drag;
+}
+
+.annotation-style-hide:hover {
+  border-color: var(--accent-border);
+  background: var(--accent-option);
+  color: var(--accent-readable);
 }
 
 .annotation-capsule button {
@@ -5035,7 +5083,8 @@ button:focus-visible,
 select:focus-visible,
 input:focus-visible,
 .switch-row:focus-within {
-  outline: none;
+  outline: 3px solid var(--accent-border-soft);
+  outline-offset: 2px;
 }
 
 button,

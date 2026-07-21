@@ -66,6 +66,10 @@ test('annotation tools expose tool-specific style settings', async ({page}) => {
   await expect(shapePanel).toContainText('Fill style')
   await expect(shapePanel).toContainText('Border style')
   await expect(shapePanel).toContainText('Roughness')
+  await shapePanel.getByRole('button', {name: 'Hide tool detail settings'}).click()
+  await expect(toolbar.locator('.annotation-style-capsule')).toHaveCount(0)
+  await toolbar.getByRole('button', {name: 'Tool detail settings'}).click()
+  await expect(toolbar.locator('.annotation-style-capsule')).toBeVisible()
 
   await tools.getByRole('button', {name: 'Text'}).click()
   await toolbar.getByRole('button', {name: 'Tool detail settings'}).click()
