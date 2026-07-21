@@ -70,6 +70,21 @@ test('settings groups themes into dark and light options', async ({page}) => {
   }, browserSettingsKey)).toBe('cloud-white')
 })
 
+test('settings persists the language selection', async ({page}) => {
+  await openRecorderShell(page)
+
+  await page.getByRole('button', {name: 'Open settings'}).click()
+  const languageRow = page.locator('.setting-control').filter({hasText: 'Language'}).first()
+  await languageRow.locator('.select-menu-button').click()
+  await page.locator('.select-menu-list[role="listbox"]').getByRole('option', {name: '简体中文'}).click()
+
+  await expect(page.locator('html')).toHaveAttribute('lang', 'zh-CN')
+  await expect.poll(async () => page.evaluate((settingsKey) => {
+    const raw = window.localStorage.getItem(settingsKey)
+    return raw ? JSON.parse(raw).locale : ''
+  }, browserSettingsKey)).toBe('zh-CN')
+})
+
 test('settings accepts standalone function keys and exposes paste image shortcut', async ({page}) => {
   await openRecorderShell(page)
 

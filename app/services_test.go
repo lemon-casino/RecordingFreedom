@@ -487,6 +487,7 @@ func TestPatchSettingsPreferencesPersistsRecordingAndTheme(t *testing.T) {
 		syncStartAtLogin = originalSyncStartAtLogin
 	})
 	theme := settings.ThemeSageGray
+	locale := settings.LocaleEN
 	quality := recordingprofile.QualityHigh
 	fps := 60
 	captureCursor := false
@@ -495,6 +496,7 @@ func TestPatchSettingsPreferencesPersistsRecordingAndTheme(t *testing.T) {
 	autoOcr := true
 
 	saved, err := service.PatchSettingsPreferences(SettingsPreferencesPatchRequest{
+		Locale:           &locale,
 		Theme:            &theme,
 		RecordingQuality: &quality,
 		RecordingFPS:     &fps,
@@ -506,7 +508,7 @@ func TestPatchSettingsPreferencesPersistsRecordingAndTheme(t *testing.T) {
 	if err != nil {
 		t.Fatalf("PatchSettingsPreferences() error = %v", err)
 	}
-	if saved.Window.Theme != theme || !saved.Window.StartAtLogin || saved.Recording.Quality != quality || saved.Recording.FPS != fps || saved.Recording.CaptureCursor || saved.Recording.CountdownSeconds != countdown {
+	if saved.Locale != locale || saved.Window.Theme != theme || !saved.Window.StartAtLogin || saved.Recording.Quality != quality || saved.Recording.FPS != fps || saved.Recording.CaptureCursor || saved.Recording.CountdownSeconds != countdown {
 		t.Fatalf("saved preferences = theme %q recording %#v, want patched preferences", saved.Window.Theme, saved.Recording)
 	}
 	if !saved.OCR.AutoRecognizeScreenshots {
@@ -519,7 +521,7 @@ func TestPatchSettingsPreferencesPersistsRecordingAndTheme(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GetSettings() error = %v", err)
 	}
-	if loaded.Window.Theme != theme || !loaded.Window.StartAtLogin || loaded.Recording.Quality != quality || loaded.Recording.FPS != fps || loaded.Recording.CaptureCursor || loaded.Recording.CountdownSeconds != countdown {
+	if loaded.Locale != locale || loaded.Window.Theme != theme || !loaded.Window.StartAtLogin || loaded.Recording.Quality != quality || loaded.Recording.FPS != fps || loaded.Recording.CaptureCursor || loaded.Recording.CountdownSeconds != countdown {
 		t.Fatalf("loaded preferences = theme %q recording %#v, want patched preferences", loaded.Window.Theme, loaded.Recording)
 	}
 	if !loaded.OCR.AutoRecognizeScreenshots {

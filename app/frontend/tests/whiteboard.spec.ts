@@ -3,6 +3,7 @@ import {expect, test, type Page} from '@playwright/test'
 const browserSettingsKey = 'recordingfreedom.settings.v1'
 const browserWhiteboardSceneKey = 'recordingfreedom.whiteboard.scene.v1'
 const browserScreenshotWhiteboardKey = 'recordingfreedom.screenshots.whiteboard.v1'
+const browserScreenshotHistoryKey = 'recordingfreedom.screenshots.history.v1'
 
 type LocaleCode = 'zh-CN' | 'en'
 type ThemeCode = 'night-teal' | 'mountain-green' | 'cloud-white'
@@ -90,6 +91,35 @@ test('whiteboard imports a screenshot context on initial load', async ({page}) =
     hasImageElement: true,
     hasImageFile: true,
   })
+})
+
+test('whiteboard saves, copies, and exports the current board', async ({page}) => {
+  await page.addInitScript(() => {
+    const clipboard = {write: async () => {
+      ;(window as Window & {__RF_CLIPBOARD_IMAGE_WRITTEN__?: boolean}).__RF_CLIPBOARD_IMAGE_WRITTEN__ = true
+    }}
+    Object.defineProperty(navigator, 'clipboard', {configurable: true, value: clipboard})
+    Object.defineProperty(window, 'ClipboardItem', {
+      configurable: true,
+      value: class ClipboardItem {
+        constructor(public readonly data: unknown) {}
+      },
+    })
+  })
+  await openWhiteboardWithSettings(page, 'en', 'mountain-green')
+
+  await page.getByRole('button', {name: 'Save'}).click()
+  await expect(page.locator('.whiteboard-status')).toContainText('Saved')
+  await expect.poll(async () => page.evaluate((historyKey) => JSON.parse(window.localStorage.getItem(historyKey) || '[]').length, browserScreenshotHistoryKey)).toBe(1)
+
+  await page.getByRole('button', {name: 'Copy image'}).click()
+  await expect(page.getByRole('button', {name: 'Copy image'})).toHaveClass(/action-success/)
+  await expect.poll(async () => page.evaluate(() => (window as Window & {__RF_CLIPBOARD_IMAGE_WRITTEN__?: boolean}).__RF_CLIPBOARD_IMAGE_WRITTEN__ === true)).toBe(true)
+
+  for (const label of ['Export PNG', 'Export SVG', 'Export Excalidraw']) {
+    await page.getByRole('button', {name: label}).click()
+    await expect(page.locator('.whiteboard-status')).toContainText('Exported:')
+  }
 })
 
 test('whiteboard imports a screenshot context while the window is already open', async ({page}) => {

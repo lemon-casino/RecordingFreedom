@@ -161,6 +161,7 @@ test('recording annotation overlay queues background OCR and shows positioned te
 })
 
 test('screenshot annotation overlay saves into screenshot history on explicit save', async ({page}) => {
+  await installClipboardImageMock(page)
   await openScreenshotAnnotationOverlay(page)
 
   await expect(page.locator('.annotation-overlay-shell')).toBeVisible()
@@ -168,12 +169,44 @@ test('screenshot annotation overlay saves into screenshot history on explicit sa
   await expect(page.locator('.annotation-save-status')).toContainText('Unsaved')
   await expect.poll(async () => page.evaluate((key) => JSON.parse(window.localStorage.getItem(key) || '[]').length, browserScreenshotHistoryKey)).toBe(0)
 
+  await page.getByRole('button', {name: 'Copy image'}).click()
+  await expect(page.getByRole('button', {name: 'Copy image'})).toHaveClass(/action-success/)
+
   await page.getByRole('button', {name: 'Save'}).click()
 
   await expect.poll(async () => page.evaluate((key) => JSON.parse(window.localStorage.getItem(key) || '[]').length, browserScreenshotHistoryKey)).toBe(1)
   await expect(page.locator('.annotation-save-status')).toContainText('Saved')
   await page.waitForTimeout(350)
   await expect(page.locator('.annotation-save-status')).toContainText('Saved')
+})
+
+test('screenshot annotation toolbar moves without moving the captured canvas', async ({page}) => {
+  await openScreenshotAnnotationOverlay(page)
+
+  const canvas = page.locator('.annotation-overlay-canvas')
+  const capsule = page.locator('.annotation-capsule')
+  const title = page.locator('.annotation-capsule-title')
+  const beforeCanvas = await canvas.boundingBox()
+  const beforeCapsule = await capsule.boundingBox()
+  const titleBox = await title.boundingBox()
+  if (!beforeCanvas || !beforeCapsule || !titleBox) throw new Error('annotation toolbar geometry is unavailable')
+
+  await page.mouse.move(titleBox.x + titleBox.width / 2, titleBox.y + titleBox.height / 2)
+  await page.mouse.down()
+  await page.mouse.move(titleBox.x + titleBox.width / 2 + 80, titleBox.y + titleBox.height / 2 + 20)
+  await page.mouse.up()
+
+  await expect.poll(async () => {
+    const [nextCanvas, nextCapsule] = await Promise.all([canvas.boundingBox(), capsule.boundingBox()])
+    if (!nextCanvas || !nextCapsule) return null
+    return {
+      canvas: {x: Math.round(nextCanvas.x), y: Math.round(nextCanvas.y)},
+      capsule: {x: Math.round(nextCapsule.x), y: Math.round(nextCapsule.y)},
+    }
+  }).toEqual({
+    canvas: {x: Math.round(beforeCanvas.x), y: Math.round(beforeCanvas.y)},
+    capsule: {x: Math.round(beforeCapsule.x + 80), y: Math.round(beforeCapsule.y + 20)},
+  })
 })
 
 test('small screenshot region keeps the complete toolbar outside the capture canvas', async ({page}) => {
@@ -275,6 +308,21 @@ async function openAnnotationOverlay(page: Page) {
     }
   }, {settingsKey: browserSettingsKey, frameInset: annotationFrameInset})
   await page.goto('/#/annotation-overlay')
+}
+
+async function installClipboardImageMock(page: Page) {
+  await page.addInitScript(() => {
+    const clipboard = {write: async () => {
+      ;(window as Window & {__RF_CLIPBOARD_IMAGE_WRITTEN__?: boolean}).__RF_CLIPBOARD_IMAGE_WRITTEN__ = true
+    }}
+    Object.defineProperty(navigator, 'clipboard', {configurable: true, value: clipboard})
+    Object.defineProperty(window, 'ClipboardItem', {
+      configurable: true,
+      value: class ClipboardItem {
+        constructor(public readonly data: unknown) {}
+      },
+    })
+  })
 }
 
 async function openScreenshotAnnotationOverlay(page: Page) {

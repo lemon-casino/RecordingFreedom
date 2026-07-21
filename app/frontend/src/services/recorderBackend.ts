@@ -187,6 +187,7 @@ export type CameraStatePatch = {
 }
 
 export type SettingsPreferencesPatch = {
+  locale?: AppSettings['locale']
   theme?: AppSettings['window']['theme']
   recordingQuality?: AppSettings['recording']['quality']
   recordingFps?: number
@@ -4190,6 +4191,7 @@ function toBoundAudioStatePatch(patch: AudioStatePatch): BoundAudioStatePatchReq
 
 function toBoundSettingsPreferencesPatch(patch: SettingsPreferencesPatch): BoundSettingsPreferencesPatchRequest {
   return {
+    locale: patch.locale as BoundSettingsPreferencesPatchRequest['locale'],
     theme: patch.theme as BoundSettingsPreferencesPatchRequest['theme'],
     recordingQuality: patch.recordingQuality,
     recordingFps: patch.recordingFps,
@@ -4204,6 +4206,7 @@ function toBoundSettingsPreferencesPatch(patch: SettingsPreferencesPatch): Bound
 function applyBrowserSettingsPreferencesPatch(settings: AppSettings, patch: SettingsPreferencesPatch): AppSettings {
   return {
     ...settings,
+    locale: patch.locale ?? settings.locale,
     recording: {
       ...settings.recording,
       quality: patch.recordingQuality ?? settings.recording.quality,

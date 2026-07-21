@@ -31,7 +31,7 @@ import {copyByLocale, type RecorderCopy} from './i18n'
 import {defaultSettings, normalizeLocale, normalizeTheme, type AppSettings, type LocaleCode, type ThemeCode, type WhiteboardStrokeWidth, type WhiteboardTool} from './services/mockBackend'
 import {consumeScreenshotWhiteboardContext, hideWhiteboardWindow, loadSettings, loadWhiteboardScene, openOcrResult, patchWhiteboardSettings, queueRecognizeWhiteboard, saveWhiteboardExport, saveWhiteboardScene, saveWhiteboardSnapshot, subscribeOcrJobEvents, subscribeScreenshotWhiteboardContext, subscribeSettingsChanged, translateOcr, type OcrBlock, type OcrResult, type OcrTranslationResult, type ScreenshotWhiteboardContext} from './services/recorderBackend'
 import {OcrPositionTextLayer, countOcrPositionTextBlocks} from './components/ocr/OcrPositionTextLayer'
-import {writeClipboardText} from './utils/clipboard'
+import {writeClipboardImage, writeClipboardText} from './utils/clipboard'
 
 type SaveState = 'ready' | 'dirty' | 'saving' | 'saved' | 'failed'
 type WhiteboardWindowGlobal = Window & {__RF_SCREENSHOT_WHITEBOARD__?: ScreenshotWhiteboardContext}
@@ -87,6 +87,7 @@ function WhiteboardWindow() {
   const settingsRef = useRef<AppSettings>(defaultSettings)
   const pendingImportedSceneRef = useRef<ReturnType<typeof screenshotScene> | null>(null)
   const lastSceneRef = useRef('')
+  const lastPersistedSceneRef = useRef('')
   const lastScreenshotImportKeyRef = useRef('')
   const screenshotImportGuardUntilRef = useRef(0)
   const ocrSourceIdRef = useRef('')
@@ -167,7 +168,10 @@ function WhiteboardWindow() {
           ? screenshotImport
           : scene.available && scene.sceneJson ? safeParseScene(scene.sceneJson) : null
         setInitialData(parsed ?? defaultScene(settings))
-        if (!screenshot.available && scene.sceneJson) lastSceneRef.current = scene.sceneJson
+        if (!screenshot.available && scene.sceneJson) {
+          lastSceneRef.current = scene.sceneJson
+          lastPersistedSceneRef.current = scene.sceneJson
+        }
         if (screenshotImport) {
           const sceneJson = importedSceneJSON(screenshotImport)
           lastSceneRef.current = sceneJson
@@ -308,15 +312,32 @@ function WhiteboardWindow() {
     applyStyle(strokeColor, strokeWidth, opacity)
   }, [applyStyle, strokeColor, strokeWidth, opacity])
 
+  const waitForWhiteboardApi = async () => {
+    for (let attempt = 0; attempt < 30; attempt += 1) {
+      if (apiRef.current) return apiRef.current
+      await new Promise<void>((resolve) => window.setTimeout(resolve, 16))
+    }
+    return apiRef.current
+  }
+
   const scheduleSave = useCallback((sceneJson: string) => {
     lastSceneRef.current = sceneJson
+    if (sceneJson === lastPersistedSceneRef.current) {
+      if (saveTimerRef.current !== null) {
+        window.clearTimeout(saveTimerRef.current)
+        saveTimerRef.current = null
+      }
+      setSaveState('saved')
+      if (canShowSaveStatus(ocrBusyRef, statusHoldUntilRef)) setStatusText(copy.whiteboard.saved)
+      return
+    }
     setSaveState('dirty')
     if (canShowSaveStatus(ocrBusyRef, statusHoldUntilRef)) setStatusText(copy.whiteboard.unsaved)
     if (saveTimerRef.current !== null) window.clearTimeout(saveTimerRef.current)
     saveTimerRef.current = window.setTimeout(() => {
       void saveScene(sceneJson)
     }, 700)
-  }, [copy.whiteboard.unsaved])
+  }, [copy.whiteboard.saved, copy.whiteboard.unsaved])
 
   const saveScene = async (sceneJson = lastSceneRef.current, options: {snapshot?: boolean} = {}) => {
     if (!sceneJson.trim()) return
@@ -326,6 +347,7 @@ function WhiteboardWindow() {
         ? (await saveWhiteboardSnapshot({sceneJson, snapshotDataUrl: await currentSnapshotDataURL()})).scene
         : await saveWhiteboardScene(sceneJson)
       lastSceneRef.current = sceneJson
+      lastPersistedSceneRef.current = sceneJson
       setSaveState('saved')
       if (canShowSaveStatus(ocrBusyRef, statusHoldUntilRef)) setStatusText(saved.updatedAt ? `${copy.whiteboard.saved} · ${saved.scenePath}` : copy.whiteboard.saved)
     } catch (error) {
@@ -385,7 +407,15 @@ function WhiteboardWindow() {
   }, [ocrPositionTextVisible, refreshOcrOverlayPlacement, scheduleSave])
 
   const saveNow = () => {
-    void saveScene(currentSceneJSON(), {snapshot: true})
+    void (async () => {
+      const api = await waitForWhiteboardApi()
+      if (!api) {
+        setSaveState('failed')
+        setStatusText(copy.whiteboard.saveFailed)
+        return
+      }
+      await saveScene(currentSceneJSON(), {snapshot: true})
+    })()
   }
 
   const queueCurrentWhiteboardOCR = async () => {
@@ -411,6 +441,7 @@ function WhiteboardWindow() {
       const snapshotDataUrl = await currentSnapshotDataURL()
       const saved = await saveWhiteboardSnapshot({sceneJson, snapshotDataUrl})
       lastSceneRef.current = sceneJson
+      lastPersistedSceneRef.current = sceneJson
       setSaveState('saved')
       setOcrSourceId(saved.item.id)
       ocrSourceIdRef.current = saved.item.id
@@ -662,22 +693,13 @@ function WhiteboardWindow() {
   }
 
   const exportPNG = async () => {
-    const api = apiRef.current
+    const api = await waitForWhiteboardApi()
     if (!api) return
     try {
-      const blob = await exportToBlob({
-        elements: api.getSceneElements(),
-        appState: {
-          ...api.getAppState(),
-          exportBackground: true,
-          viewBackgroundColor: api.getAppState().viewBackgroundColor,
-        },
-        files: api.getFiles(),
-        mimeType: 'image/png',
-      } as any)
+      const blob = await currentSnapshotBlob()
       const dataUrl = await blobToDataURL(blob)
       const result = await saveWhiteboardExport({format: 'png', dataUrl})
-      setStatusText(copy.whiteboard.exported(result.outputPath))
+      holdStatusText(copy.whiteboard.exported(result.outputPath), 2400)
     } catch (error) {
       console.error('Failed to export whiteboard PNG:', error)
       setStatusText(copy.whiteboard.exportFailed)
@@ -685,11 +707,13 @@ function WhiteboardWindow() {
   }
 
   const exportExcalidraw = async () => {
+    const api = await waitForWhiteboardApi()
+    if (!api) return
     const sceneJson = currentSceneJSON()
     if (!sceneJson) return
     try {
       const result = await saveWhiteboardExport({format: 'excalidraw', payload: sceneJson})
-      setStatusText(copy.whiteboard.exported(result.outputPath))
+      holdStatusText(copy.whiteboard.exported(result.outputPath), 2400)
     } catch (error) {
       console.error('Failed to export whiteboard scene:', error)
       setStatusText(copy.whiteboard.exportFailed)
@@ -700,21 +724,30 @@ function WhiteboardWindow() {
     const api = apiRef.current
     if (!api) return lastSceneRef.current
     try {
-      return (serializeAsJSON as any)(api.getSceneElements(), api.getAppState(), api.getFiles(), 'local')
+      const sceneJson = (serializeAsJSON as any)(api.getSceneElements(), api.getAppState(), api.getFiles(), 'local')
+      return typeof sceneJson === 'string' && sceneJson.trim() ? sceneJson : fallbackSceneJSON(api)
     } catch (error) {
       console.error('Failed to serialize current whiteboard scene:', error)
-      return lastSceneRef.current
+      return fallbackSceneJSON(api)
     }
   }
 
   const currentSnapshotDataURL = async () => {
+    return blobToDataURL(await currentSnapshotBlob())
+  }
+
+  const currentSnapshotBlob = async () => {
     const api = apiRef.current
     if (!api) throw new Error('whiteboard canvas is not ready')
     const canvasRect = document.querySelector<HTMLElement>('.whiteboard-canvas')?.getBoundingClientRect()
     const width = Math.round(Math.max(640, Math.min(2400, canvasRect?.width ?? 1120)))
     const height = Math.round(Math.max(360, Math.min(1600, canvasRect?.height ?? 720)))
-    const blob = await exportToBlob({
-      elements: api.getSceneElements(),
+    const exportElements = whiteboardSnapshotExportElements(api.getSceneElements())
+    if (exportElements.length === 0) {
+      return createBlankWhiteboardPNG(width, height, api.getAppState().viewBackgroundColor)
+    }
+    return exportToBlob({
+      elements: exportElements as any,
       appState: {
         ...api.getAppState(),
         exportBackground: true,
@@ -726,29 +759,33 @@ function WhiteboardWindow() {
       exportPadding: 0,
       getDimensions: () => ({width, height, scale: 1}),
     } as any)
-    return blobToDataURL(blob)
   }
 
   const copyWhiteboardImage = async () => {
-    const api = apiRef.current
+    const api = await waitForWhiteboardApi()
     setImageCopied(false)
     if (!api) {
       holdStatusText(copy.whiteboard.copyImageFailed)
       return
     }
     try {
-      await exportToClipboard({
-        elements: api.getSceneElements() as any,
-        appState: {
-          ...api.getAppState(),
-          exportBackground: true,
-          viewBackgroundColor: api.getAppState().viewBackgroundColor,
-        },
-        files: api.getFiles(),
-        type: 'png',
-      })
+      const blob = await currentSnapshotBlob()
+      try {
+        await writeClipboardImage(blob)
+      } catch {
+        await exportToClipboard({
+          elements: whiteboardSnapshotExportElements(api.getSceneElements()) as any,
+          appState: {
+            ...api.getAppState(),
+            exportBackground: true,
+            viewBackgroundColor: api.getAppState().viewBackgroundColor,
+          },
+          files: api.getFiles(),
+          type: 'png',
+        })
+      }
       setImageCopied(true)
-      setStatusText(copy.whiteboard.ready)
+      holdStatusText(copy.whiteboard.ready)
     } catch (error) {
       console.error('Failed to copy whiteboard image:', error)
       setImageCopied(false)
@@ -757,17 +794,17 @@ function WhiteboardWindow() {
   }
 
   const exportSVG = async () => {
-    const api = apiRef.current
+    const api = await waitForWhiteboardApi()
     if (!api) return
     try {
       const svg = await exportToSvg({
-        elements: api.getSceneElements(),
+        elements: whiteboardSnapshotExportElements(api.getSceneElements()) as any,
         appState: api.getAppState(),
         files: api.getFiles(),
       } as any)
       const payload = new XMLSerializer().serializeToString(svg)
       const result = await saveWhiteboardExport({format: 'svg', payload})
-      setStatusText(copy.whiteboard.exported(result.outputPath))
+      holdStatusText(copy.whiteboard.exported(result.outputPath), 2400)
     } catch (error) {
       console.error('Failed to export whiteboard SVG:', error)
       setStatusText(copy.whiteboard.exportFailed)
@@ -1096,11 +1133,75 @@ function importedSceneJSON(scene: ReturnType<typeof screenshotScene>) {
   })
 }
 
+function fallbackSceneJSON(api: ExcalidrawImperativeAPI) {
+  return JSON.stringify({
+    type: 'excalidraw',
+    version: 2,
+    source: 'recordingfreedom',
+    elements: api.getSceneElements(),
+    appState: api.getAppState(),
+    files: api.getFiles(),
+  })
+}
+
 function sceneHasImageElement(elements: readonly unknown[]) {
   return elements.some((element) => {
     if (!element || typeof element !== 'object') return false
     return (element as {type?: string; isDeleted?: boolean}).type === 'image' &&
       (element as {isDeleted?: boolean}).isDeleted !== true
+  })
+}
+
+function whiteboardSnapshotExportElements(elements: readonly unknown[], width?: number, height?: number) {
+  const visible = elements.filter((element) => {
+    if (!element || typeof element !== 'object') return false
+    return (element as {isDeleted?: boolean}).isDeleted !== true
+  })
+  if (visible.length > 0 || width === undefined || height === undefined) return visible
+  return [
+    {
+      id: 'rf-whiteboard-snapshot-bounds',
+      type: 'rectangle',
+      x: 0,
+      y: 0,
+      width,
+      height,
+      angle: 0,
+      strokeColor: 'transparent',
+      backgroundColor: 'transparent',
+      fillStyle: 'solid',
+      strokeWidth: 1,
+      strokeStyle: 'solid',
+      roughness: 0,
+      opacity: 0,
+      groupIds: [],
+      frameId: null,
+      roundness: null,
+      seed: 1,
+      version: 1,
+      versionNonce: 1,
+      isDeleted: false,
+      boundElements: null,
+      updated: 1,
+      link: null,
+      locked: true,
+    },
+  ]
+}
+
+function createBlankWhiteboardPNG(width: number, height: number, background: unknown) {
+  const canvas = document.createElement('canvas')
+  canvas.width = Math.max(1, width)
+  canvas.height = Math.max(1, height)
+  const context = canvas.getContext('2d')
+  if (!context) return Promise.reject(new Error('whiteboard canvas is unavailable'))
+  context.fillStyle = typeof background === 'string' && background.trim() ? background : '#ffffff'
+  context.fillRect(0, 0, canvas.width, canvas.height)
+  return new Promise<Blob>((resolve, reject) => {
+    canvas.toBlob((blob) => {
+      if (blob) resolve(blob)
+      else reject(new Error('whiteboard PNG export failed'))
+    }, 'image/png')
   })
 }
 

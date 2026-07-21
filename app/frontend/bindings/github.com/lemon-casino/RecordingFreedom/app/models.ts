@@ -527,6 +527,7 @@ export interface ScreenshotWhiteboardContext {
 }
 
 export interface SettingsPreferencesPatchRequest {
+    "locale"?: settings$0.Locale | null;
     "theme"?: settings$0.Theme | null;
     "recordingQuality"?: string | null;
     "recordingFps"?: number | null;

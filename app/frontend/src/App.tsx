@@ -977,6 +977,7 @@ function App() {
     if (!settings) return settings
     return {
       ...settings,
+      locale: patch.locale ?? settings.locale,
       recording: {
         ...settings.recording,
         quality: patch.recordingQuality ?? settings.recording.quality,
@@ -1000,6 +1001,7 @@ function App() {
     }
   }
   const applyLocalPreferencePatch = (patch: SettingsPreferencesPatch) => {
+    if (patch.locale !== undefined) setLocale(normalizeLocale(patch.locale))
     if (patch.theme !== undefined) setTheme(normalizeTheme(patch.theme))
     if (patch.startAtLogin !== undefined) setStartAtLogin(patch.startAtLogin)
     if (patch.autoOcr !== undefined) setAutoRecognizeScreenshots(patch.autoOcr)
@@ -1028,6 +1030,7 @@ function App() {
     preferencePatchTokenRef.current = token
     applyLocalPreferencePatch(patch)
     void logClientEvent('settings-preferences', 'patch-request', {
+      locale: patch.locale ?? '',
       theme: patch.theme ?? '',
       startAtLogin: patch.startAtLogin ?? '',
       recordingQuality: patch.recordingQuality ?? '',
@@ -1043,6 +1046,7 @@ function App() {
         if (token !== preferencePatchTokenRef.current) return
         localPreferenceIntentUntilRef.current = Date.now() + 3000
         void logClientEvent('settings-preferences', 'patch-success', {
+          locale: settings.locale,
           theme: settings.window.theme,
           startAtLogin: settings.window.startAtLogin,
           recordingQuality: settings.recording.quality,
@@ -2893,7 +2897,7 @@ function App() {
           title={copy.settings.language}
           value={locale}
           options={localeOptions.map((code) => ({value: code, label: copy.localeNames[code]}))}
-          onChange={(value) => setLocale(normalizeLocale(value))}
+          onChange={(value) => commitSettingsPreferencePatch({locale: normalizeLocale(value)})}
         />
         <SettingSelect
           title={copy.settings.theme}

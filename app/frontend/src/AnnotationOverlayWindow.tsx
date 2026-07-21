@@ -18,7 +18,7 @@ import {
   Undo2,
   X,
 } from 'lucide-react'
-import {useCallback, useEffect, useLayoutEffect, useRef, useState} from 'react'
+import {useCallback, useEffect, useLayoutEffect, useRef, useState, type PointerEvent as ReactPointerEvent} from 'react'
 import {Excalidraw, exportToBlob, exportToClipboard, serializeAsJSON} from '@excalidraw/excalidraw'
 import type {ExcalidrawImperativeAPI} from '@excalidraw/excalidraw/types'
 import '@excalidraw/excalidraw/index.css'
@@ -26,7 +26,7 @@ import {copyByLocale} from './i18n'
 import {defaultSettings, normalizeLocale, normalizeTheme, type AppSettings, type LocaleCode, type ScreenshotItem, type ThemeCode, type WhiteboardTool} from './services/mockBackend'
 import {hideAnnotationOverlay, hideScreenshotAnnotationOverlay, loadAnnotationCapture, loadScreenshotAnnotationCapture, loadSettings, openOcrResult, patchWhiteboardSettings, queueRecognizeScreenshot, queueRecognizeWhiteboard, reselectAnnotationRegion, reselectScreenshotAnnotationRegion, saveAnnotationCapture, saveScreenshotAnnotationCapture, setAnnotationOverlayHitRegions, subscribeOcrJobEvents, subscribeSettingsChanged, type AnnotationCapture, type AnnotationOverlayState, type CapsuleWindowHitRegion, type OcrBlock, type OcrJobUpdate, type OcrResult, type ScreenshotWhiteboardContext} from './services/recorderBackend'
 import {OcrPositionTextLayer, countOcrPositionTextBlocks} from './components/ocr/OcrPositionTextLayer'
-import {writeClipboardText} from './utils/clipboard'
+import {writeClipboardImage, writeClipboardText} from './utils/clipboard'
 import {AnnotationStyleControls, type AnnotationStyle} from './components/AnnotationStyleControls'
 
 const annotationTools: Array<{tool: WhiteboardTool; icon: typeof PenLine; label: 'select' | 'pen' | 'arrow' | 'line' | 'rectangle' | 'ellipse' | 'text' | 'eraser'}> = [
@@ -94,6 +94,7 @@ function AnnotationOverlayWindow() {
   const [ocrPositionTextVisible, setOcrPositionTextVisible] = useState(false)
   const [ocrHoveredBlockId, setOcrHoveredBlockId] = useState('')
   const [ocrCopiedBlockId, setOcrCopiedBlockId] = useState('')
+  const [toolbarOffset, setToolbarOffset] = useState({x: 0, y: 0})
   const apiRef = useRef<ExcalidrawImperativeAPI | null>(null)
   const lastSavedSceneRef = useRef('')
   const lastSavedContentSignatureRef = useRef('')
@@ -102,6 +103,7 @@ function AnnotationOverlayWindow() {
   const pendingElementEventsRef = useRef<Map<string, AnnotationElementEvent>>(new Map())
   const clientSequenceRef = useRef(0)
   const ocrSourceRef = useRef<{sourceKind: string; sourceId: string} | null>(null)
+  const toolbarDragRef = useRef<{startX: number; startY: number; offsetX: number; offsetY: number} | null>(null)
   const capsuleRef = useRef<HTMLDivElement | null>(null)
   const canvasRef = useRef<HTMLElement | null>(null)
   const copy = copyByLocale[locale]
@@ -111,6 +113,46 @@ function AnnotationOverlayWindow() {
   const overlayKey = annotationOverlayKey(overlayState)
   const canvasBounds = annotationCanvasBounds(overlayState)
   const toolbarBounds = annotationToolbarBounds(overlayState, canvasBounds)
+
+  const startToolbarDrag = (event: ReactPointerEvent<HTMLElement>) => {
+    const target = event.target as HTMLElement
+    if (target.closest('button, input, select, textarea, .annotation-style-capsule')) return
+    event.preventDefault()
+    toolbarDragRef.current = {
+      startX: event.clientX,
+      startY: event.clientY,
+      offsetX: toolbarOffset.x,
+      offsetY: toolbarOffset.y,
+    }
+  }
+
+  useEffect(() => {
+    const onPointerMove = (event: PointerEvent) => {
+      const drag = toolbarDragRef.current
+      if (!drag) return
+      const nextX = drag.offsetX + event.clientX - drag.startX
+      const nextY = drag.offsetY + event.clientY - drag.startY
+      const minX = 8 - toolbarBounds.x
+      const minY = 8 - toolbarBounds.y
+      const maxX = Math.max(minX, window.innerWidth - toolbarBounds.x - toolbarBounds.width - 8)
+      const maxY = Math.max(minY, window.innerHeight - toolbarBounds.y - toolbarBounds.height - 8)
+      setToolbarOffset({
+        x: Math.round(Math.min(maxX, Math.max(minX, nextX))),
+        y: Math.round(Math.min(maxY, Math.max(minY, nextY))),
+      })
+    }
+    const onPointerUp = () => {
+      toolbarDragRef.current = null
+    }
+    window.addEventListener('pointermove', onPointerMove)
+    window.addEventListener('pointerup', onPointerUp)
+    window.addEventListener('pointercancel', onPointerUp)
+    return () => {
+      window.removeEventListener('pointermove', onPointerMove)
+      window.removeEventListener('pointerup', onPointerUp)
+      window.removeEventListener('pointercancel', onPointerUp)
+    }
+  }, [toolbarBounds.height, toolbarBounds.width, toolbarBounds.x, toolbarBounds.y])
 
   function resetAnnotationElementTracking(scene: any) {
     elementSignatureRef.current = elementSignatureMap(scene?.elements ?? [])
@@ -286,6 +328,7 @@ function AnnotationOverlayWindow() {
 
   useEffect(() => {
     setAnnotationStylePanelOpen(false)
+    setToolbarOffset({x: 0, y: 0})
   }, [activeTool])
 
   useEffect(() => {
@@ -506,16 +549,35 @@ function AnnotationOverlayWindow() {
       return
     }
     try {
-      await exportToClipboard({
-        elements: api.getSceneElements() as any,
+      const canvasSize = annotationSnapshotCanvasSize(overlayState)
+      const exportElements = annotationSnapshotExportElements(api.getSceneElements(), canvasSize.width, canvasSize.height)
+      const blob = await exportToBlob({
+        elements: exportElements as any,
         appState: {
           ...api.getAppState(),
           exportBackground: false,
+          exportScale: 1,
           viewBackgroundColor: 'transparent',
         },
         files: api.getFiles(),
-        type: 'png',
-      })
+        mimeType: 'image/png',
+        exportPadding: 0,
+        getDimensions: () => ({width: canvasSize.width, height: canvasSize.height, scale: 1}),
+      } as any)
+      try {
+        await writeClipboardImage(blob)
+      } catch {
+        await exportToClipboard({
+          elements: exportElements as any,
+          appState: {
+            ...api.getAppState(),
+            exportBackground: false,
+            viewBackgroundColor: 'transparent',
+          },
+          files: api.getFiles(),
+          type: 'png',
+        })
+      }
       setImageCopied(true)
       setOcrMessage(copy.whiteboard.copiedImage)
     } catch (error) {
@@ -671,9 +733,10 @@ function AnnotationOverlayWindow() {
           left: toolbarBounds.x,
           top: toolbarBounds.y,
           width: toolbarBounds.width,
+          transform: `translate(${toolbarOffset.x}px, ${toolbarOffset.y}px)`,
         }}
       >
-      <section className="annotation-capsule" aria-label={copy.whiteboard.title}>
+      <section className="annotation-capsule" aria-label={copy.whiteboard.title} onPointerDown={startToolbarDrag}>
         <span className="annotation-capsule-title">{isScreenshotMode ? copy.screenshot.region : copy.whiteboard.open}</span>
         <div className="annotation-tools" role="toolbar" aria-label={copy.whiteboard.title}>
           {annotationTools.map(({tool, icon: Icon, label}) => (

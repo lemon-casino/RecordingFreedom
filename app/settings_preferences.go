@@ -11,6 +11,7 @@ import (
 )
 
 type SettingsPreferencesPatchRequest struct {
+	Locale           *settings.Locale                       `json:"locale,omitempty"`
 	Theme            *settings.Theme                        `json:"theme,omitempty"`
 	RecordingQuality *string                                `json:"recordingQuality,omitempty"`
 	RecordingFPS     *int                                   `json:"recordingFps,omitempty"`
@@ -43,6 +44,9 @@ func (s *RecordingFreedomService) PatchSettingsPreferences(patch SettingsPrefere
 	}
 	if patch.Theme != nil {
 		currentSettings.Window.Theme = *patch.Theme
+	}
+	if patch.Locale != nil {
+		currentSettings.Locale = *patch.Locale
 	}
 	if patch.RecordingQuality != nil {
 		currentSettings.Recording.Quality = strings.TrimSpace(*patch.RecordingQuality)
@@ -86,6 +90,7 @@ func (s *RecordingFreedomService) PatchSettingsPreferences(patch SettingsPrefere
 		return settings.Settings{}, err
 	}
 	sanitized := sanitizeSettingsForClient(saved)
+	s.refreshTrayLocale(saved.Locale)
 	s.logEvent("settings-preferences", "patch", settingsPreferencesPatchFields(patch, sanitized))
 	s.emitSettingsChanged(sanitized)
 	return sanitized, nil
@@ -93,6 +98,7 @@ func (s *RecordingFreedomService) PatchSettingsPreferences(patch SettingsPrefere
 
 func settingsPreferencesPatchFields(patch SettingsPreferencesPatchRequest, saved settings.Settings) map[string]string {
 	fields := map[string]string{
+		"savedLocale":           string(saved.Locale),
 		"savedTheme":            string(saved.Window.Theme),
 		"savedRecordingQuality": saved.Recording.Quality,
 		"savedRecordingFps":     strconv.Itoa(saved.Recording.FPS),
@@ -100,6 +106,9 @@ func settingsPreferencesPatchFields(patch SettingsPreferencesPatchRequest, saved
 		"savedCountdownSeconds": strconv.Itoa(saved.Recording.CountdownSeconds),
 		"savedStartAtLogin":     strconv.FormatBool(saved.Window.StartAtLogin),
 		"savedAutoOcr":          strconv.FormatBool(saved.OCR.AutoRecognizeScreenshots),
+	}
+	if patch.Locale != nil {
+		fields["locale"] = string(*patch.Locale)
 	}
 	if patch.Theme != nil {
 		fields["theme"] = string(*patch.Theme)

@@ -21,3 +21,13 @@ export async function writeClipboardText(text: string) {
     document.body.removeChild(textarea)
   }
 }
+
+export async function writeClipboardImage(blob: Blob) {
+  const ClipboardItemConstructor = typeof window !== 'undefined' ? window.ClipboardItem : undefined
+  if (!navigator.clipboard?.write || !ClipboardItemConstructor) {
+    throw new Error('image clipboard is unavailable')
+  }
+  await navigator.clipboard.write([
+    new ClipboardItemConstructor({'image/png': blob}),
+  ])
+}
