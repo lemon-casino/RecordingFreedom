@@ -33,6 +33,7 @@
   --radius-pill: 999px;
   --shadow-tight: 0 14px 34px rgba(0, 0, 0, 0.26);
   --shadow-panel: 0 18px 42px rgba(0, 0, 0, 0.34);
+  --whiteboard-canvas-bg: rgba(12, 16, 21, 0.92);
   --floating-panel-width: 320px;
   --floating-panel-max-height: 340px;
   --floating-panel-compact-width: 260px;
@@ -225,6 +226,183 @@
   --region-screenshot-border: #c6d3bf;
   --region-screenshot-border-soft: rgba(198, 211, 191, 0.32);
   --region-screenshot-shadow: rgba(198, 211, 191, 0.38);
+}
+
+:root[data-theme="cloud-white"],
+:root[data-theme="mint-morning"],
+:root[data-theme="sky-day"],
+:root[data-theme="warm-sand"],
+:root[data-theme="lavender-mist"],
+:root[data-theme="apple-green"] {
+  color-scheme: light;
+  --panel: rgba(255, 255, 255, 0.92);
+  --panel-strong: rgba(255, 255, 255, 0.98);
+  --line: rgba(15, 23, 42, 0.12);
+  --line-strong: rgba(15, 23, 42, 0.22);
+  --muted: #526273;
+  --quiet: #8491a1;
+  --red: #dc2626;
+  --red-soft: rgba(220, 38, 38, 0.12);
+  --amber: #d97706;
+  --shadow-tight: 0 14px 34px rgba(15, 23, 42, 0.12);
+  --shadow-panel: 0 18px 42px rgba(15, 23, 42, 0.16);
+  --whiteboard-canvas-bg: #ffffff;
+}
+
+:root[data-theme="cloud-white"] {
+  --bg: #f5f7fa;
+  --text: #17202a;
+  --teal: #2563eb;
+  --teal-soft: rgba(37, 99, 235, 0.12);
+  --accent-border-soft: rgba(37, 99, 235, 0.22);
+  --accent-border: rgba(37, 99, 235, 0.34);
+  --accent-border-strong: rgba(37, 99, 235, 0.52);
+  --accent-hover: rgba(37, 99, 235, 0.18);
+  --accent-option: rgba(37, 99, 235, 0.1);
+  --accent-option-border: rgba(37, 99, 235, 0.24);
+  --accent-gradient-soft: rgba(37, 99, 235, 0.14);
+  --accent-readable: #1d4ed8;
+  --capsule-bg: linear-gradient(180deg, rgba(255, 255, 255, 0.98), rgba(248, 250, 252, 0.96));
+  --settings-bg: linear-gradient(135deg, #f8fafc 0%, #eef2f7 52%, #e2e8f0 100%);
+  --region-capture-border: #2563eb;
+  --region-capture-border-soft: rgba(37, 99, 235, 0.28);
+  --region-capture-shadow: rgba(37, 99, 235, 0.24);
+  --region-annotation-border: #7c3aed;
+  --region-annotation-border-soft: rgba(124, 58, 237, 0.24);
+  --region-annotation-shadow: rgba(124, 58, 237, 0.22);
+  --region-screenshot-border: #d97706;
+  --region-screenshot-border-soft: rgba(217, 119, 6, 0.24);
+  --region-screenshot-shadow: rgba(217, 119, 6, 0.22);
+}
+
+:root[data-theme="mint-morning"] {
+  --bg: #f1faf7;
+  --text: #14312c;
+  --teal: #0f9f8c;
+  --teal-soft: rgba(15, 159, 140, 0.12);
+  --accent-border-soft: rgba(15, 159, 140, 0.22);
+  --accent-border: rgba(15, 159, 140, 0.34);
+  --accent-border-strong: rgba(15, 159, 140, 0.52);
+  --accent-hover: rgba(15, 159, 140, 0.18);
+  --accent-option: rgba(15, 159, 140, 0.1);
+  --accent-option-border: rgba(15, 159, 140, 0.24);
+  --accent-gradient-soft: rgba(15, 159, 140, 0.14);
+  --accent-readable: #087f72;
+  --capsule-bg: linear-gradient(180deg, rgba(255, 255, 255, 0.98), rgba(240, 253, 250, 0.96));
+  --settings-bg: linear-gradient(135deg, #f8fffd 0%, #e9f8f3 52%, #d9f1e9 100%);
+  --region-capture-border: #0f9f8c;
+  --region-capture-border-soft: rgba(15, 159, 140, 0.28);
+  --region-capture-shadow: rgba(15, 159, 140, 0.24);
+  --region-annotation-border: #0e7490;
+  --region-annotation-border-soft: rgba(14, 116, 144, 0.24);
+  --region-annotation-shadow: rgba(14, 116, 144, 0.22);
+  --region-screenshot-border: #d97706;
+  --region-screenshot-border-soft: rgba(217, 119, 6, 0.24);
+  --region-screenshot-shadow: rgba(217, 119, 6, 0.22);
+}
+
+:root[data-theme="sky-day"] {
+  --bg: #eff6ff;
+  --text: #172b4d;
+  --teal: #0284c7;
+  --teal-soft: rgba(2, 132, 199, 0.12);
+  --accent-border-soft: rgba(2, 132, 199, 0.22);
+  --accent-border: rgba(2, 132, 199, 0.34);
+  --accent-border-strong: rgba(2, 132, 199, 0.52);
+  --accent-hover: rgba(2, 132, 199, 0.18);
+  --accent-option: rgba(2, 132, 199, 0.1);
+  --accent-option-border: rgba(2, 132, 199, 0.24);
+  --accent-gradient-soft: rgba(2, 132, 199, 0.14);
+  --accent-readable: #0369a1;
+  --capsule-bg: linear-gradient(180deg, rgba(255, 255, 255, 0.98), rgba(239, 246, 255, 0.96));
+  --settings-bg: linear-gradient(135deg, #f8fbff 0%, #eaf3ff 52%, #dbeafe 100%);
+  --region-capture-border: #0284c7;
+  --region-capture-border-soft: rgba(2, 132, 199, 0.28);
+  --region-capture-shadow: rgba(2, 132, 199, 0.24);
+  --region-annotation-border: #4f46e5;
+  --region-annotation-border-soft: rgba(79, 70, 229, 0.24);
+  --region-annotation-shadow: rgba(79, 70, 229, 0.22);
+  --region-screenshot-border: #d97706;
+  --region-screenshot-border-soft: rgba(217, 119, 6, 0.24);
+  --region-screenshot-shadow: rgba(217, 119, 6, 0.22);
+}
+
+:root[data-theme="warm-sand"] {
+  --bg: #faf7f0;
+  --text: #382a1d;
+  --teal: #b45309;
+  --teal-soft: rgba(180, 83, 9, 0.12);
+  --accent-border-soft: rgba(180, 83, 9, 0.22);
+  --accent-border: rgba(180, 83, 9, 0.34);
+  --accent-border-strong: rgba(180, 83, 9, 0.52);
+  --accent-hover: rgba(180, 83, 9, 0.18);
+  --accent-option: rgba(180, 83, 9, 0.1);
+  --accent-option-border: rgba(180, 83, 9, 0.24);
+  --accent-gradient-soft: rgba(180, 83, 9, 0.14);
+  --accent-readable: #9a3412;
+  --capsule-bg: linear-gradient(180deg, rgba(255, 253, 248, 0.98), rgba(250, 247, 240, 0.96));
+  --settings-bg: linear-gradient(135deg, #fffdf8 0%, #f8f0df 52%, #f2e4c7 100%);
+  --region-capture-border: #b45309;
+  --region-capture-border-soft: rgba(180, 83, 9, 0.28);
+  --region-capture-shadow: rgba(180, 83, 9, 0.24);
+  --region-annotation-border: #be123c;
+  --region-annotation-border-soft: rgba(190, 18, 60, 0.24);
+  --region-annotation-shadow: rgba(190, 18, 60, 0.22);
+  --region-screenshot-border: #d97706;
+  --region-screenshot-border-soft: rgba(217, 119, 6, 0.24);
+  --region-screenshot-shadow: rgba(217, 119, 6, 0.22);
+}
+
+:root[data-theme="lavender-mist"] {
+  --bg: #f7f5fc;
+  --text: #2d2440;
+  --teal: #7c3aed;
+  --teal-soft: rgba(124, 58, 237, 0.12);
+  --accent-border-soft: rgba(124, 58, 237, 0.22);
+  --accent-border: rgba(124, 58, 237, 0.34);
+  --accent-border-strong: rgba(124, 58, 237, 0.52);
+  --accent-hover: rgba(124, 58, 237, 0.18);
+  --accent-option: rgba(124, 58, 237, 0.1);
+  --accent-option-border: rgba(124, 58, 237, 0.24);
+  --accent-gradient-soft: rgba(124, 58, 237, 0.14);
+  --accent-readable: #6d28d9;
+  --capsule-bg: linear-gradient(180deg, rgba(255, 255, 255, 0.98), rgba(247, 245, 252, 0.96));
+  --settings-bg: linear-gradient(135deg, #fdfcff 0%, #f1edfc 52%, #e8e0fa 100%);
+  --region-capture-border: #7c3aed;
+  --region-capture-border-soft: rgba(124, 58, 237, 0.28);
+  --region-capture-shadow: rgba(124, 58, 237, 0.24);
+  --region-annotation-border: #db2777;
+  --region-annotation-border-soft: rgba(219, 39, 119, 0.24);
+  --region-annotation-shadow: rgba(219, 39, 119, 0.22);
+  --region-screenshot-border: #c2410c;
+  --region-screenshot-border-soft: rgba(194, 65, 12, 0.24);
+  --region-screenshot-shadow: rgba(194, 65, 12, 0.22);
+}
+
+:root[data-theme="apple-green"] {
+  --bg: #f3faf1;
+  --text: #1f3320;
+  --teal: #4d9f38;
+  --teal-soft: rgba(77, 159, 56, 0.12);
+  --accent-border-soft: rgba(77, 159, 56, 0.22);
+  --accent-border: rgba(77, 159, 56, 0.34);
+  --accent-border-strong: rgba(77, 159, 56, 0.52);
+  --accent-hover: rgba(77, 159, 56, 0.18);
+  --accent-option: rgba(77, 159, 56, 0.1);
+  --accent-option-border: rgba(77, 159, 56, 0.24);
+  --accent-gradient-soft: rgba(77, 159, 56, 0.14);
+  --accent-readable: #357a28;
+  --capsule-bg: linear-gradient(180deg, rgba(255, 255, 255, 0.98), rgba(243, 250, 241, 0.96));
+  --settings-bg: linear-gradient(135deg, #fbfffa 0%, #eef8eb 52%, #e0f0da 100%);
+  --region-capture-border: #4d9f38;
+  --region-capture-border-soft: rgba(77, 159, 56, 0.28);
+  --region-capture-shadow: rgba(77, 159, 56, 0.24);
+  --region-annotation-border: #0891b2;
+  --region-annotation-border-soft: rgba(8, 145, 178, 0.24);
+  --region-annotation-shadow: rgba(8, 145, 178, 0.22);
+  --region-screenshot-border: #d97706;
+  --region-screenshot-border-soft: rgba(217, 119, 6, 0.24);
+  --region-screenshot-shadow: rgba(217, 119, 6, 0.22);
 }
 
 * {
@@ -2206,9 +2384,9 @@ select {
   min-width: var(--floating-select-min-width);
   overflow: auto;
   padding: 6px;
-  border: 1px solid rgba(199, 210, 221, 0.18);
+  border: 1px solid var(--line-strong);
   border-radius: 16px;
-  background: rgba(17, 22, 28, 0.98);
+  background: var(--panel-strong);
   box-shadow: var(--shadow-panel);
   backdrop-filter: blur(24px) saturate(150%);
   transform: translateZ(0);
@@ -2264,7 +2442,33 @@ select {
 }
 
 .select-menu-option:disabled {
-  color: rgba(146, 162, 181, 0.46);
+  color: var(--quiet);
+  opacity: 0.62;
+  cursor: default;
+}
+
+.select-menu-option.select-menu-group-label {
+  min-height: 26px;
+  margin-top: 4px;
+  padding: 0 10px;
+  border-color: transparent;
+  background: transparent;
+  color: var(--quiet);
+  font-size: 10px;
+  font-weight: 900;
+  letter-spacing: 0.04em;
+  opacity: 1;
+  pointer-events: none;
+}
+
+.select-menu-option.select-menu-group-label:first-child {
+  margin-top: 0;
+}
+
+.select-menu-option.select-menu-group-label:hover {
+  border-color: transparent;
+  background: transparent;
+  color: var(--quiet);
 }
 
 input {
@@ -3291,7 +3495,7 @@ body.rf-annotation-render-window {
   overflow: hidden;
   border: 1px solid var(--line);
   border-radius: var(--whiteboard-canvas-radius);
-  background: rgba(12, 16, 21, 0.92);
+  background: var(--whiteboard-canvas-bg);
   box-shadow: var(--shadow-panel);
   clip-path: inset(0 round var(--whiteboard-canvas-radius));
   contain: paint;
@@ -3781,6 +3985,109 @@ body.rf-annotation-overlay-window {
 
 .annotation-capsule button:active {
   transform: scale(0.96);
+}
+
+:root[data-theme="cloud-white"] .annotation-capsule,
+:root[data-theme="mint-morning"] .annotation-capsule,
+:root[data-theme="sky-day"] .annotation-capsule,
+:root[data-theme="warm-sand"] .annotation-capsule,
+:root[data-theme="lavender-mist"] .annotation-capsule,
+:root[data-theme="apple-green"] .annotation-capsule {
+  border-color: var(--line-strong);
+  background: var(--capsule-bg);
+  box-shadow: var(--shadow-tight), inset 0 1px 0 rgba(255, 255, 255, 0.72);
+}
+
+:root[data-theme="cloud-white"] .annotation-capsule-title,
+:root[data-theme="mint-morning"] .annotation-capsule-title,
+:root[data-theme="sky-day"] .annotation-capsule-title,
+:root[data-theme="warm-sand"] .annotation-capsule-title,
+:root[data-theme="lavender-mist"] .annotation-capsule-title,
+:root[data-theme="apple-green"] .annotation-capsule-title,
+:root[data-theme="cloud-white"] .annotation-style-group-label,
+:root[data-theme="mint-morning"] .annotation-style-group-label,
+:root[data-theme="sky-day"] .annotation-style-group-label,
+:root[data-theme="warm-sand"] .annotation-style-group-label,
+:root[data-theme="lavender-mist"] .annotation-style-group-label,
+:root[data-theme="apple-green"] .annotation-style-group-label,
+:root[data-theme="cloud-white"] .annotation-style-select,
+:root[data-theme="mint-morning"] .annotation-style-select,
+:root[data-theme="sky-day"] .annotation-style-select,
+:root[data-theme="warm-sand"] .annotation-style-select,
+:root[data-theme="lavender-mist"] .annotation-style-select,
+:root[data-theme="apple-green"] .annotation-style-select,
+:root[data-theme="cloud-white"] .annotation-capsule button,
+:root[data-theme="mint-morning"] .annotation-capsule button,
+:root[data-theme="sky-day"] .annotation-capsule button,
+:root[data-theme="warm-sand"] .annotation-capsule button,
+:root[data-theme="lavender-mist"] .annotation-capsule button,
+:root[data-theme="apple-green"] .annotation-capsule button {
+  color: var(--text);
+}
+
+:root[data-theme="cloud-white"] .annotation-style-group,
+:root[data-theme="cloud-white"] .annotation-width-group,
+:root[data-theme="cloud-white"] .annotation-opacity-group,
+:root[data-theme="cloud-white"] .annotation-style-controls,
+:root[data-theme="cloud-white"] .annotation-tools,
+:root[data-theme="mint-morning"] .annotation-style-group,
+:root[data-theme="mint-morning"] .annotation-width-group,
+:root[data-theme="mint-morning"] .annotation-opacity-group,
+:root[data-theme="mint-morning"] .annotation-style-controls,
+:root[data-theme="mint-morning"] .annotation-tools,
+:root[data-theme="sky-day"] .annotation-style-group,
+:root[data-theme="sky-day"] .annotation-width-group,
+:root[data-theme="sky-day"] .annotation-opacity-group,
+:root[data-theme="sky-day"] .annotation-style-controls,
+:root[data-theme="sky-day"] .annotation-tools,
+:root[data-theme="warm-sand"] .annotation-style-group,
+:root[data-theme="warm-sand"] .annotation-width-group,
+:root[data-theme="warm-sand"] .annotation-opacity-group,
+:root[data-theme="warm-sand"] .annotation-style-controls,
+:root[data-theme="warm-sand"] .annotation-tools,
+:root[data-theme="lavender-mist"] .annotation-style-group,
+:root[data-theme="lavender-mist"] .annotation-width-group,
+:root[data-theme="lavender-mist"] .annotation-opacity-group,
+:root[data-theme="lavender-mist"] .annotation-style-controls,
+:root[data-theme="lavender-mist"] .annotation-tools,
+:root[data-theme="apple-green"] .annotation-style-group,
+:root[data-theme="apple-green"] .annotation-width-group,
+:root[data-theme="apple-green"] .annotation-opacity-group,
+:root[data-theme="apple-green"] .annotation-style-controls,
+:root[data-theme="apple-green"] .annotation-tools {
+  background: rgba(15, 23, 42, 0.04);
+}
+
+:root[data-theme="cloud-white"] .annotation-style-capsule,
+:root[data-theme="mint-morning"] .annotation-style-capsule,
+:root[data-theme="sky-day"] .annotation-style-capsule,
+:root[data-theme="warm-sand"] .annotation-style-capsule,
+:root[data-theme="lavender-mist"] .annotation-style-capsule,
+:root[data-theme="apple-green"] .annotation-style-capsule {
+  border-color: var(--line-strong);
+  background: var(--panel-strong);
+  box-shadow: var(--shadow-tight), inset 0 1px 0 rgba(255, 255, 255, 0.72);
+}
+
+:root[data-theme="cloud-white"] .annotation-style-select select,
+:root[data-theme="mint-morning"] .annotation-style-select select,
+:root[data-theme="sky-day"] .annotation-style-select select,
+:root[data-theme="warm-sand"] .annotation-style-select select,
+:root[data-theme="lavender-mist"] .annotation-style-select select,
+:root[data-theme="apple-green"] .annotation-style-select select {
+  border-color: var(--line-strong);
+  background: rgba(15, 23, 42, 0.05);
+  color: var(--text);
+}
+
+:root[data-theme="cloud-white"] .annotation-style-select select option,
+:root[data-theme="mint-morning"] .annotation-style-select select option,
+:root[data-theme="sky-day"] .annotation-style-select select option,
+:root[data-theme="warm-sand"] .annotation-style-select select option,
+:root[data-theme="lavender-mist"] .annotation-style-select select option,
+:root[data-theme="apple-green"] .annotation-style-select select option {
+  background: var(--panel-strong);
+  color: var(--text);
 }
 
 .region-overlay-shell {

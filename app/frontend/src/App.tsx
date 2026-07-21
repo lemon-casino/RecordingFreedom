@@ -51,7 +51,7 @@ import {
   shortcutActions,
   sources,
   systemAudioDevices,
-  themeOptions,
+  themeGroups,
   themeSwatches,
   type AppDataInfo,
   type AppSettings,
@@ -75,6 +75,7 @@ import {
   type ShortcutSettings,
   type ScreenshotItem,
   type ThemeCode,
+  type ThemeGroupCode,
   fallbackCapabilities,
   fallbackStorageStatus,
 } from './services/mockBackend'
@@ -94,6 +95,22 @@ const sourceIcon = {
   region: Crosshair,
   window: AppWindow,
   application: Radio,
+}
+
+function themeSelectOptions(copy: RecorderCopy) {
+  const groups: ThemeGroupCode[] = ['dark', 'light']
+  return groups.flatMap((group) => [
+    {
+      value: `theme-group-${group}`,
+      label: copy.themeGroupNames[group],
+      disabled: true,
+    },
+    ...themeGroups[group].map((code) => ({
+      value: code,
+      label: copy.themeNames[code],
+      swatch: themeSwatches[code],
+    })),
+  ])
 }
 
 const pipPresetOptions: PIPPreset[] = ['bottom-right', 'bottom-left', 'free']
@@ -2881,7 +2898,7 @@ function App() {
         <SettingSelect
           title={copy.settings.theme}
           value={theme}
-          options={themeOptions.map((code) => ({value: code, label: copy.themeNames[code], swatch: themeSwatches[code]}))}
+          options={themeSelectOptions(copy)}
           detail={copy.settings.themeDetail}
           onChange={(value) => commitSettingsPreferencePatch({theme: normalizeTheme(value)})}
         />
@@ -4641,7 +4658,7 @@ function FloatingPanelWindow() {
               setSettings(nextSettings)
               void saveSettings(nextSettings).then(applyFloatingSettings)
             }} />
-            <SettingSelect title={copy.settings.theme} value={theme} options={themeOptions.map((option) => ({value: option, label: copy.themeNames[option], swatch: themeSwatches[option]}))} onChange={(value) => commitSettingsPreferencePatch({theme: normalizeTheme(value)})} />
+            <SettingSelect title={copy.settings.theme} value={theme} options={themeSelectOptions(copy)} onChange={(value) => commitSettingsPreferencePatch({theme: normalizeTheme(value)})} />
             <SettingToggle title={copy.settings.startAtLogin} checked={settings.window.startAtLogin} detail={copy.settings.startAtLoginDetail} onChange={(value) => commitSettingsPreferencePatch({startAtLogin: value})} />
             <SettingToggle title={copy.settings.autoOcr} checked={settings.ocr.autoRecognizeScreenshots} detail={copy.settings.autoOcrDetail} onChange={(value) => commitSettingsPreferencePatch({autoOcr: value})} />
             <OcrTranslationSettingsPanel copy={copy} translation={settings.ocr.translation} onChange={(ocrTranslation) => commitSettingsPreferencePatch({ocrTranslation})} compact />
@@ -5058,35 +5075,44 @@ function FloatingSelectWindow() {
 
   return (
     <main ref={rootRef} className={`floating-select-shell select-menu-list drop-${selectState.direction ?? 'down'}`} role="listbox">
-      {selectState.options.map((option) => (
-        <button
-          key={option.value}
-          type="button"
-          role="option"
-          className={`select-menu-option ${option.value === selectState.value ? 'selected' : ''}`}
-          aria-selected={option.value === selectState.value}
-          disabled={option.disabled}
-          onPointerDown={(event) => {
-            event.preventDefault()
-            event.stopPropagation()
-          }}
-          onClick={() => {
-            if (option.disabled) return
-            void completeFloatingSelect({
-              id: selectState.id ?? '',
-              value: option.value,
-              token: selectState.token,
-              panelToken: selectState.panelToken,
-            })
-          }}
-        >
-          <span className="select-menu-label">
-            {option.swatch && <i className="select-menu-swatch" style={{background: option.swatch}} aria-hidden="true" />}
-            <span>{option.label}</span>
-          </span>
-          {option.value === selectState.value && <Check size={15} />}
-        </button>
-      ))}
+      {selectState.options.map((option) => {
+        const groupHeader = isThemeGroupOption(option)
+        return (
+          <button
+            key={option.value}
+            type="button"
+            role="option"
+            className={`select-menu-option ${groupHeader ? 'select-menu-group-label' : ''} ${option.value === selectState.value ? 'selected' : ''}`}
+            aria-selected={option.value === selectState.value}
+            disabled={option.disabled}
+            onPointerDown={(event) => {
+              event.preventDefault()
+              event.stopPropagation()
+            }}
+            onClick={() => {
+              if (option.disabled) return
+              void completeFloatingSelect({
+                id: selectState.id ?? '',
+                value: option.value,
+                token: selectState.token,
+                panelToken: selectState.panelToken,
+              })
+            }}
+          >
+            {groupHeader ? (
+              <span className="select-menu-group-title">{option.label}</span>
+            ) : (
+              <>
+                <span className="select-menu-label">
+                  {option.swatch && <i className="select-menu-swatch" style={{background: option.swatch}} aria-hidden="true" />}
+                  <span>{option.label}</span>
+                </span>
+                {option.value === selectState.value && <Check size={15} />}
+              </>
+            )}
+          </button>
+        )
+      })}
     </main>
   )
 }
@@ -7345,6 +7371,10 @@ type SelectMenuOption = {
   swatch?: string
 }
 
+function isThemeGroupOption(option: {value: string; disabled?: boolean}) {
+  return option.disabled === true && option.value.startsWith('theme-group-')
+}
+
 function SelectMenu({
   id,
   value,
@@ -7526,30 +7556,39 @@ function SelectMenu({
       </button>
       {open && !isWailsDesktopRuntime() && (
         <div className="select-menu-list" role="listbox" aria-labelledby={id}>
-          {options.map((option) => (
-            <button
-              key={option.value}
-              type="button"
-              role="option"
-              className={`select-menu-option ${option.value === value ? 'selected' : ''}`}
-              aria-selected={option.value === value}
-              disabled={option.disabled}
-              onPointerDown={(event) => {
-                event.preventDefault()
-                event.stopPropagation()
-                selectOption(option)
-              }}
-              onClick={() => {
-                selectOption(option)
-              }}
-            >
-              <span className="select-menu-label">
-                {option.swatch && <i className="select-menu-swatch" style={{background: option.swatch}} aria-hidden="true" />}
-                <span>{option.label}</span>
-              </span>
-              {option.value === value && <Check size={15} />}
-            </button>
-          ))}
+          {options.map((option) => {
+            const groupHeader = isThemeGroupOption(option)
+            return (
+              <button
+                key={option.value}
+                type="button"
+                role="option"
+                className={`select-menu-option ${groupHeader ? 'select-menu-group-label' : ''} ${option.value === value ? 'selected' : ''}`}
+                aria-selected={option.value === value}
+                disabled={option.disabled}
+                onPointerDown={(event) => {
+                  event.preventDefault()
+                  event.stopPropagation()
+                  selectOption(option)
+                }}
+                onClick={() => {
+                  selectOption(option)
+                }}
+              >
+                {groupHeader ? (
+                  <span className="select-menu-group-title">{option.label}</span>
+                ) : (
+                  <>
+                    <span className="select-menu-label">
+                      {option.swatch && <i className="select-menu-swatch" style={{background: option.swatch}} aria-hidden="true" />}
+                      <span>{option.label}</span>
+                    </span>
+                    {option.value === value && <Check size={15} />}
+                  </>
+                )}
+              </button>
+            )
+          })}
         </div>
       )}
     </div>

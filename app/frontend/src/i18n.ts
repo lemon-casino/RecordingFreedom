@@ -11,6 +11,7 @@ import type {
   RecordingState,
   ShortcutAction,
   ThemeCode,
+  ThemeGroupCode,
 } from './services/mockBackend'
 
 export type StatusMessageKey =
@@ -37,6 +38,7 @@ export type SourceSelectionMessageKey = 'regionSelecting' | 'regionSelected' | '
 export type RecorderCopy = {
   localeNames: Record<LocaleCode, string>
   themeNames: Record<ThemeCode, string>
+  themeGroupNames: Record<ThemeGroupCode, string>
   aria: {
     settingsDialog: string
     settingsShell: string
@@ -498,6 +500,16 @@ const zhCN: RecorderCopy = {
     'sunset-yellow': '落晖黄',
     'ink-purple': '烟墨紫',
     'sage-gray': '草木灰',
+    'cloud-white': '云端白',
+    'mint-morning': '薄荷晨光',
+    'sky-day': '晴空蓝',
+    'warm-sand': '暖沙米色',
+    'lavender-mist': '晨雾紫',
+    'apple-green': '青苹果',
+  },
+  themeGroupNames: {
+    dark: '深色主题',
+    light: '浅色主题',
   },
   aria: {
     settingsDialog: '设置',
@@ -608,7 +620,7 @@ const zhCN: RecorderCopy = {
     settingsFile: '设置文件',
     language: '语言',
     theme: '主题',
-    themeDetail: '立即应用到胶囊、设置页和下拉列表，并会在下次启动时保留。',
+    themeDetail: '主题分为深色和浅色，立即应用到胶囊、设置页和下拉列表，并会在下次启动时保留。',
     startAtLogin: '开机自启',
     startAtLoginDetail: '默认关闭。开启后会随系统登录自动启动，并直接最小化到托盘。',
     autoOcr: '截图后自动识别文字',
@@ -1143,6 +1155,16 @@ const en: RecorderCopy = {
     'sunset-yellow': 'Sunset Yellow',
     'ink-purple': 'Ink Purple',
     'sage-gray': 'Sage Gray',
+    'cloud-white': 'Cloud White',
+    'mint-morning': 'Mint Morning',
+    'sky-day': 'Sky Day',
+    'warm-sand': 'Warm Sand',
+    'lavender-mist': 'Lavender Mist',
+    'apple-green': 'Apple Green',
+  },
+  themeGroupNames: {
+    dark: 'Dark themes',
+    light: 'Light themes',
   },
   aria: {
     settingsDialog: 'Settings',
@@ -1253,7 +1275,7 @@ const en: RecorderCopy = {
     settingsFile: 'Settings',
     language: 'Language',
     theme: 'Theme',
-    themeDetail: 'Applies immediately to the capsule, settings, and dropdown menus, and is kept after restart.',
+    themeDetail: 'Themes are grouped into dark and light, apply immediately to the capsule, settings, and dropdown menus, and are kept after restart.',
     startAtLogin: 'Start at login',
     startAtLoginDetail: 'Off by default. When enabled, RecordingFreedom starts on system login and opens minimized to tray.',
     autoOcr: 'Auto OCR after screenshots',

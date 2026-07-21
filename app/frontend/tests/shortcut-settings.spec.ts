@@ -22,6 +22,26 @@ test('settings captures and persists shortcut changes', async ({page}) => {
   }, browserSettingsKey)).toBe('CmdOrCtrl+OptionOrAlt+P')
 })
 
+test('settings groups themes into dark and light options', async ({page}) => {
+  await openRecorderShell(page)
+
+  await page.getByRole('button', {name: 'Open settings'}).click()
+  const themeRow = page.locator('.setting-control').filter({hasText: 'Theme'}).first()
+  await themeRow.locator('.select-menu-button').click()
+
+  const themeMenu = page.locator('.select-menu-list[role="listbox"]')
+  await expect(themeMenu.getByRole('option', {name: 'Dark themes'})).toBeDisabled()
+  await expect(themeMenu.getByRole('option', {name: 'Light themes'})).toBeDisabled()
+  await expect(themeMenu.getByRole('option', {name: 'Cloud White'})).toBeVisible()
+
+  await themeMenu.getByRole('option', {name: 'Cloud White'}).click()
+  await expect(page.locator('html')).toHaveAttribute('data-theme', 'cloud-white')
+  await expect.poll(async () => page.evaluate((settingsKey) => {
+    const raw = window.localStorage.getItem(settingsKey)
+    return raw ? JSON.parse(raw).window?.theme : ''
+  }, browserSettingsKey)).toBe('cloud-white')
+})
+
 test('settings accepts standalone function keys and exposes paste image shortcut', async ({page}) => {
   await openRecorderShell(page)
 

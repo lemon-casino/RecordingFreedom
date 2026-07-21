@@ -2,7 +2,20 @@ export type CaptureSourceType = 'screen' | 'all-screens' | 'region' | 'window' |
 export type RecordingMode = 'video' | 'audio'
 export type RecordingState = 'idle' | 'preparing' | 'recording' | 'paused' | 'stopping' | 'ready' | 'failed'
 export type LocaleCode = 'zh-CN' | 'en'
-export type ThemeCode = 'night-teal' | 'mountain-green' | 'sky-blue' | 'sunset-yellow' | 'ink-purple' | 'sage-gray'
+export type ThemeGroupCode = 'dark' | 'light'
+export type ThemeCode =
+  | 'night-teal'
+  | 'mountain-green'
+  | 'sky-blue'
+  | 'sunset-yellow'
+  | 'ink-purple'
+  | 'sage-gray'
+  | 'cloud-white'
+  | 'mint-morning'
+  | 'sky-day'
+  | 'warm-sand'
+  | 'lavender-mist'
+  | 'apple-green'
 export type CaptureCapabilityStatus = 'available' | 'queued' | 'blocked' | 'unsupported'
 export type CaptureCapabilityPermission = 'not-required' | 'unknown' | 'screen-recording' | 'microphone' | 'camera'
 export type PIPPreset = 'off' | 'bottom-right' | 'bottom-left' | 'free'
@@ -473,7 +486,11 @@ export const fallbackStorageStatus: AppStorageStatus = {
 }
 
 export const localeOptions: LocaleCode[] = ['zh-CN', 'en']
-export const themeOptions: ThemeCode[] = ['night-teal', 'mountain-green', 'sky-blue', 'sunset-yellow', 'ink-purple', 'sage-gray']
+export const themeGroups: Record<ThemeGroupCode, ThemeCode[]> = {
+  dark: ['night-teal', 'mountain-green', 'sky-blue', 'sunset-yellow', 'ink-purple', 'sage-gray'],
+  light: ['cloud-white', 'mint-morning', 'sky-day', 'warm-sand', 'lavender-mist', 'apple-green'],
+}
+export const themeOptions: ThemeCode[] = [...themeGroups.dark, ...themeGroups.light]
 export const shortcutActions: ShortcutAction[] = ['toggleRecording', 'togglePause', 'toggleCamera', 'openWhiteboard', 'openScreenshot', 'pasteImage']
 export const defaultShortcuts: ShortcutSettings = {
   toggleRecording: 'CmdOrCtrl+Shift+R',
@@ -490,6 +507,12 @@ export const themeSwatches: Record<ThemeCode, string> = {
   'sunset-yellow': '#f0b84b',
   'ink-purple': '#a78bfa',
   'sage-gray': '#a7b3a1',
+  'cloud-white': '#2563eb',
+  'mint-morning': '#0f9f8c',
+  'sky-day': '#0284c7',
+  'warm-sand': '#b45309',
+  'lavender-mist': '#7c3aed',
+  'apple-green': '#4d9f38',
 }
 
 export function normalizeLocale(value: unknown): LocaleCode {

@@ -301,7 +301,8 @@ func validLocale(locale Locale) bool {
 
 func validTheme(theme Theme) bool {
 	switch theme {
-	case ThemeNightTeal, ThemeMountainGreen, ThemeSkyBlue, ThemeSunsetYellow, ThemeInkPurple, ThemeSageGray:
+	case ThemeNightTeal, ThemeMountainGreen, ThemeSkyBlue, ThemeSunsetYellow, ThemeInkPurple, ThemeSageGray,
+		ThemeCloudWhite, ThemeMintMorning, ThemeSkyDay, ThemeWarmSand, ThemeLavenderMist, ThemeAppleGreen:
 		return true
 	default:
 		return false

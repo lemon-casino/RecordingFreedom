@@ -5,7 +5,7 @@ const browserWhiteboardSceneKey = 'recordingfreedom.whiteboard.scene.v1'
 const browserScreenshotWhiteboardKey = 'recordingfreedom.screenshots.whiteboard.v1'
 
 type LocaleCode = 'zh-CN' | 'en'
-type ThemeCode = 'night-teal' | 'mountain-green'
+type ThemeCode = 'night-teal' | 'mountain-green' | 'cloud-white'
 
 const cases: Array<{
   name: string
@@ -36,6 +36,16 @@ const cases: Array<{
     penLabel: 'Pen',
     saveLabel: 'Save',
     exportLabel: 'Export PNG',
+  },
+  {
+    name: 'Chinese Cloud White',
+    locale: 'zh-CN',
+    theme: 'cloud-white',
+    title: '画板',
+    subtitle: '录制前和录制中都可使用',
+    penLabel: '画笔',
+    saveLabel: '保存',
+    exportLabel: '导出 PNG',
   },
 ]
 

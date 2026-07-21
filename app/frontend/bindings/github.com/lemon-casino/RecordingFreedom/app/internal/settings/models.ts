@@ -115,6 +115,12 @@ export enum Theme {
     ThemeSunsetYellow = "sunset-yellow",
     ThemeInkPurple = "ink-purple",
     ThemeSageGray = "sage-gray",
+    ThemeCloudWhite = "cloud-white",
+    ThemeMintMorning = "mint-morning",
+    ThemeSkyDay = "sky-day",
+    ThemeWarmSand = "warm-sand",
+    ThemeLavenderMist = "lavender-mist",
+    ThemeAppleGreen = "apple-green",
 };
 
 export interface WhiteboardSettings {

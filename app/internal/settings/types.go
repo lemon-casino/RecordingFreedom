@@ -25,6 +25,12 @@ const (
 	ThemeSunsetYellow  Theme = "sunset-yellow"
 	ThemeInkPurple     Theme = "ink-purple"
 	ThemeSageGray      Theme = "sage-gray"
+	ThemeCloudWhite    Theme = "cloud-white"
+	ThemeMintMorning   Theme = "mint-morning"
+	ThemeSkyDay        Theme = "sky-day"
+	ThemeWarmSand      Theme = "warm-sand"
+	ThemeLavenderMist  Theme = "lavender-mist"
+	ThemeAppleGreen    Theme = "apple-green"
 )
 
 type Settings struct {
