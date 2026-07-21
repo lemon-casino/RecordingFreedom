@@ -299,7 +299,10 @@ function AnnotationOverlayWindow() {
         const parsed = isScreenshotMode
           ? screenshotAnnotationScene(settings, scene as ScreenshotWhiteboardContext, overlayState)
           : scene.available && 'sceneJson' in scene && scene.sceneJson ? safeParseScene(scene.sceneJson) : null
-        const nextInitialData = parsed ?? defaultAnnotationScene(settings)
+        const baseScene = parsed ?? defaultAnnotationScene(settings)
+        const nextInitialData = !isScreenshotMode && overlayState?.sourceImageDataURL
+          ? annotationSceneWithFrozenSource(baseScene, overlayState.sourceImageDataURL, overlayState.canvasBounds)
+          : baseScene
         resetAnnotationElementTracking(nextInitialData)
         setInitialData(nextInitialData)
         const loadedSceneJson = 'sceneJson' in scene ? scene.sceneJson ?? '' : ''
@@ -1024,6 +1027,78 @@ function defaultAnnotationScene(settings: AppSettings) {
   }
 }
 
+function annotationSceneWithFrozenSource(scene: any, dataURL: string, canvasBounds: {width: number; height: number}) {
+  const source = dataURL.trim()
+  if (!source) return scene
+  const elements = Array.isArray(scene?.elements) ? scene.elements : []
+  const files = scene?.files && typeof scene.files === 'object' ? scene.files : {}
+  const sourceElementIds = new Set<string>()
+  const sourceFileIds = new Set<string>()
+  for (const element of elements) {
+    if (!element || typeof element !== 'object') continue
+    const customData = (element as {customData?: {recordingFreedomFrozenSource?: boolean}}).customData
+    if (customData?.recordingFreedomFrozenSource !== true) continue
+    const id = typeof (element as {id?: unknown}).id === 'string' ? (element as {id: string}).id : ''
+    const fileId = typeof (element as {fileId?: unknown}).fileId === 'string' ? (element as {fileId: string}).fileId : ''
+    if (id) sourceElementIds.add(id)
+    if (fileId) sourceFileIds.add(fileId)
+  }
+  const retainedElements = elements.filter((element: {id?: string}) => !sourceElementIds.has(element.id ?? ''))
+  const retainedFiles = Object.fromEntries(Object.entries(files).filter(([id]) => !sourceFileIds.has(id)))
+  const fileId = `rf-frozen-annotation-source-${Date.now()}`
+  const width = Math.max(1, Math.round(canvasBounds.width))
+  const height = Math.max(1, Math.round(canvasBounds.height))
+  return {
+    ...scene,
+    elements: [{
+      id: `${fileId}-image`,
+      type: 'image',
+      x: 0,
+      y: 0,
+      width,
+      height,
+      angle: 0,
+      strokeColor: 'transparent',
+      backgroundColor: 'transparent',
+      fillStyle: 'solid',
+      strokeWidth: 1,
+      strokeStyle: 'solid',
+      roughness: 0,
+      opacity: 100,
+      groupIds: [],
+      frameId: null,
+      roundness: null,
+      seed: 1,
+      version: 1,
+      versionNonce: 1,
+      isDeleted: false,
+      boundElements: null,
+      updated: Date.now(),
+      link: null,
+      locked: true,
+      status: 'saved',
+      fileId,
+      scale: [1, 1],
+      customData: {recordingFreedomFrozenSource: true},
+    }, ...retainedElements],
+    files: {
+      ...retainedFiles,
+      [fileId]: {
+        id: fileId,
+        dataURL: source,
+        mimeType: source.startsWith('data:image/svg+xml')
+          ? 'image/svg+xml'
+          : source.startsWith('data:image/jpeg')
+            ? 'image/jpeg'
+            : source.startsWith('data:image/webp')
+              ? 'image/webp'
+              : 'image/png',
+        created: Date.now(),
+      },
+    },
+  }
+}
+
 function screenshotAnnotationScene(settings: AppSettings, context: ScreenshotWhiteboardContext, overlayState: AnnotationOverlayState | null) {
   if (!context.available || !context.dataUrl) return null
   const canvas = annotationSnapshotCanvasSize(overlayState)
@@ -1107,6 +1182,7 @@ function annotationOverlayKey(state: AnnotationOverlayState | null) {
     geometry.y,
     geometry.width,
     geometry.height,
+    state.sourceImageCapturedAt || state.sourceImageDataURL?.length || 'no-source-image',
   ].join(':')
 }
 

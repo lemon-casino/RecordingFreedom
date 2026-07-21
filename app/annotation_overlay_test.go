@@ -48,6 +48,7 @@ func TestAnnotationOverlayStateUsesActiveVideoRecordingGeometry(t *testing.T) {
 				t.Fatalf("StartRecording() error = %v", err)
 			}
 			service.setAnnotationRegionDIP(session.ID, annotationBounds)
+			service.setAnnotationSourceImage(session.ID, "data:image/png;base64,frozen", "2026-07-21T18:00:00Z")
 
 			state, err := service.annotationOverlayState()
 			if err != nil {
@@ -68,6 +69,9 @@ func TestAnnotationOverlayStateUsesActiveVideoRecordingGeometry(t *testing.T) {
 			}
 			if got := *state.Target.Geometry; got.X != annotationBounds.X || got.Y != annotationBounds.Y || got.Width != annotationBounds.Width || got.Height != annotationBounds.Height {
 				t.Fatalf("target geometry = %#v, want %#v", got, annotationBounds)
+			}
+			if state.SourceImageDataURL != "data:image/png;base64,frozen" || state.SourceImageCapturedAt != "2026-07-21T18:00:00Z" {
+				t.Fatalf("source image = %q captured at %q, want frozen source", state.SourceImageDataURL, state.SourceImageCapturedAt)
 			}
 		})
 	}

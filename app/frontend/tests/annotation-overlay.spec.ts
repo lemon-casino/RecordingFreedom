@@ -122,6 +122,18 @@ test('recording annotation overlay queues background OCR and shows positioned te
     rawSceneId: 'browser-preview/data/video/recording-preview.rfrec',
     rawPriority: 'background',
   })
+  await expect.poll(async () => page.evaluate((sceneKey) => {
+    const scene = JSON.parse(window.localStorage.getItem(sceneKey) || '{}')
+    const elements = Array.isArray(scene.elements) ? scene.elements : []
+    const source = elements.find((element: {customData?: {recordingFreedomFrozenSource?: boolean}}) => element.customData?.recordingFreedomFrozenSource === true) as {fileId?: string} | undefined
+    return {
+      sourceImageCount: elements.filter((element: {customData?: {recordingFreedomFrozenSource?: boolean}}) => element.customData?.recordingFreedomFrozenSource === true).length,
+      sourceFileAvailable: Boolean(source?.fileId && scene.files?.[source.fileId]?.dataURL),
+    }
+  }, browserAnnotationSceneKey)).toEqual({
+    sourceImageCount: 1,
+    sourceFileAvailable: true,
+  })
   await expect(page.locator('.annotation-ocr-status')).toContainText('Board OCR queued')
 
   const readyEvent = readyAnnotationOcrEvent()
@@ -294,6 +306,7 @@ async function openAnnotationOverlay(page: Page) {
         theme: 'night-teal',
       },
     }))
+    const svg = '<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="720"><rect width="1280" height="720" fill="#263238"/><text x="32" y="64" fill="#fff" font-family="Arial" font-size="28">Frozen recording frame</text></svg>'
     ;(window as Window & {__RF_ANNOTATION_OVERLAY__?: unknown}).__RF_ANNOTATION_OVERLAY__ = {
       packageDir: 'browser-preview/data/video/recording-preview.rfrec',
       manifestPath: 'browser-preview/data/video/recording-preview.rfrec/manifest.json',
@@ -305,6 +318,8 @@ async function openAnnotationOverlay(page: Page) {
         geometry: {x: 0, y: 0, width: 1280, height: 720, displayIndex: 1, nativeId: 'display-1'},
       },
       captureExcluded: false,
+      sourceImageDataURL: `data:image/svg+xml;base64,${window.btoa(svg)}`,
+      sourceImageCapturedAt: '2026-07-21T18:00:00.000Z',
     }
   }, {settingsKey: browserSettingsKey, frameInset: annotationFrameInset})
   await page.goto('/#/annotation-overlay')

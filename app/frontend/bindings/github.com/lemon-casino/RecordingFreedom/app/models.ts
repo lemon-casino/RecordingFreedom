@@ -60,6 +60,8 @@ export interface AnnotationOverlayState {
     "toolbarPlacement"?: string;
     "target": recpackage$0.ManifestAnnotationTarget;
     "captureExcluded": boolean;
+    "sourceImageDataUrl"?: string;
+    "sourceImageCapturedAt"?: string;
 }
 
 export interface AnnotationPreviewImageRequest {

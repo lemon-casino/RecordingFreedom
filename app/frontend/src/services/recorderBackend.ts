@@ -424,6 +424,8 @@ export type AnnotationOverlayState = {
     geometry?: {x: number; y: number; width: number; height: number; displayIndex?: number; nativeId?: string}
   }
   captureExcluded: boolean
+  sourceImageDataURL?: string
+  sourceImageCapturedAt?: string
 }
 
 export type AnnotationCapture = {
@@ -4032,6 +4034,8 @@ function fromBoundAnnotationOverlayState(state: BoundAnnotationOverlayState): An
       } : undefined,
     },
     captureExcluded: state.captureExcluded === true,
+    sourceImageDataURL: state.sourceImageDataUrl,
+    sourceImageCapturedAt: state.sourceImageCapturedAt,
   }
 }
 

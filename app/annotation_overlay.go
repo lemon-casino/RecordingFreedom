@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	desktopscreenshot "github.com/kbinani/screenshot"
 	"github.com/lemon-casino/RecordingFreedom/app/internal/recording"
 	"github.com/lemon-casino/RecordingFreedom/app/internal/recpackage"
 	"github.com/wailsapp/wails/v3/pkg/application"
@@ -28,15 +29,17 @@ const (
 )
 
 type AnnotationOverlayState struct {
-	Mode             string                              `json:"mode,omitempty"`
-	PackageDir       string                              `json:"packageDir,omitempty"`
-	ManifestPath     string                              `json:"manifestPath,omitempty"`
-	WindowBounds     RegionRect                          `json:"windowBounds"`
-	CanvasBounds     RegionRect                          `json:"canvasBounds"`
-	ToolbarBounds    RegionRect                          `json:"toolbarBounds,omitempty"`
-	ToolbarPlacement string                              `json:"toolbarPlacement,omitempty"`
-	Target           recpackage.ManifestAnnotationTarget `json:"target"`
-	CaptureExcluded  bool                                `json:"captureExcluded"`
+	Mode                  string                              `json:"mode,omitempty"`
+	PackageDir            string                              `json:"packageDir,omitempty"`
+	ManifestPath          string                              `json:"manifestPath,omitempty"`
+	WindowBounds          RegionRect                          `json:"windowBounds"`
+	CanvasBounds          RegionRect                          `json:"canvasBounds"`
+	ToolbarBounds         RegionRect                          `json:"toolbarBounds,omitempty"`
+	ToolbarPlacement      string                              `json:"toolbarPlacement,omitempty"`
+	Target                recpackage.ManifestAnnotationTarget `json:"target"`
+	CaptureExcluded       bool                                `json:"captureExcluded"`
+	SourceImageDataURL    string                              `json:"sourceImageDataUrl,omitempty"`
+	SourceImageCapturedAt string                              `json:"sourceImageCapturedAt,omitempty"`
 }
 
 type AnnotationCaptureRequest struct {
@@ -224,11 +227,45 @@ func (s *RecordingFreedomService) CompleteAnnotationRegionSelection(req RegionSe
 		s.regionOverlay.Hide()
 	}
 	s.clearRegionFrameState()
+	_ = s.HideFloatingPanel(0)
+	sourceImageDataURL, err := s.captureAnnotationSourceImage(*selection, regionRectFromAppRect(relative))
+	if err != nil {
+		s.clearAnnotationRegionDIP(recordingSession.ID)
+		return AnnotationOverlayState{}, err
+	}
+	s.setAnnotationSourceImage(recordingSession.ID, sourceImageDataURL, time.Now().UTC().Format(time.RFC3339Nano))
+	s.setAnnotationRegionDIP(recordingSession.ID, absoluteDIP)
 	s.logEvent("annotation-overlay", "region-selected", map[string]string{
 		"sessionId": recordingSession.ID,
 		"bounds":    fmt.Sprintf("%d,%d %dx%d", absoluteDIP.X, absoluteDIP.Y, absoluteDIP.Width, absoluteDIP.Height),
 	})
 	return s.ShowAnnotationOverlay()
+}
+
+func (s *RecordingFreedomService) captureAnnotationSourceImage(session RegionSelectionSession, relative RegionRect) (string, error) {
+	captureRect := mapRegionSelectionToCaptureRect(session, relative)
+	if captureRect.Empty() {
+		return "", errors.New("annotation source capture bounds are empty")
+	}
+	capsuleHidden := false
+	if s.capsuleWindow != nil {
+		s.capsuleWindow.Hide()
+		capsuleHidden = true
+	}
+	if capsuleHidden {
+		defer s.restoreCapsuleWindow()
+	}
+	// Let the selector, capsule, and any transient region frame leave the desktop
+	// before taking the one immutable frame used by the annotation canvas/OCR.
+	time.Sleep(140 * time.Millisecond)
+	img, err := desktopscreenshot.CaptureRect(captureRect)
+	if err != nil {
+		return "", err
+	}
+	if img == nil || img.Bounds().Empty() {
+		return "", errors.New("annotation source screenshot is empty")
+	}
+	return screenshotImageDataURL(img)
 }
 
 func (s *RecordingFreedomService) ReselectAnnotationRegion() (RegionSelectionSession, error) {
@@ -525,15 +562,18 @@ func (s *RecordingFreedomService) annotationOverlayState() (AnnotationOverlaySta
 		screens = s.app.Screen.GetAll()
 	}
 	layout := annotationOverlayLayoutForScreens(canvasBounds, screens)
+	sourceImageDataURL, sourceImageCapturedAt := s.annotationSourceImageForSession(session.ID)
 	return AnnotationOverlayState{
-		Mode:             "annotation",
-		PackageDir:       session.PackageDir,
-		ManifestPath:     session.Manifest,
-		WindowBounds:     regionRectFromAppRect(layout.WindowBounds),
-		CanvasBounds:     regionRectFromAppRect(layout.CanvasBounds),
-		ToolbarBounds:    regionRectFromAppRect(layout.ToolbarBounds),
-		ToolbarPlacement: layout.ToolbarPlacement,
-		Target:           target,
+		Mode:                  "annotation",
+		PackageDir:            session.PackageDir,
+		ManifestPath:          session.Manifest,
+		WindowBounds:          regionRectFromAppRect(layout.WindowBounds),
+		CanvasBounds:          regionRectFromAppRect(layout.CanvasBounds),
+		ToolbarBounds:         regionRectFromAppRect(layout.ToolbarBounds),
+		ToolbarPlacement:      layout.ToolbarPlacement,
+		Target:                target,
+		SourceImageDataURL:    sourceImageDataURL,
+		SourceImageCapturedAt: sourceImageCapturedAt,
 	}, nil
 }
 
@@ -774,12 +814,44 @@ func (s *RecordingFreedomService) setAnnotationRegionDIP(sessionID string, bound
 	s.annotationRegionDIP = bounds
 }
 
+func (s *RecordingFreedomService) setAnnotationSourceImage(sessionID, dataURL, capturedAt string) {
+	s.annotationMu.Lock()
+	defer s.annotationMu.Unlock()
+	s.annotationSourceSessionID = sessionID
+	s.annotationSourceDataURL = strings.TrimSpace(dataURL)
+	s.annotationSourceCapturedAt = strings.TrimSpace(capturedAt)
+}
+
+func (s *RecordingFreedomService) annotationSourceImageForSession(sessionID string) (string, string) {
+	s.annotationMu.Lock()
+	defer s.annotationMu.Unlock()
+	if sessionID == "" || s.annotationSourceSessionID != sessionID {
+		return "", ""
+	}
+	return s.annotationSourceDataURL, s.annotationSourceCapturedAt
+}
+
+func (s *RecordingFreedomService) clearAnnotationSourceImage(sessionID string) {
+	s.annotationMu.Lock()
+	defer s.annotationMu.Unlock()
+	if sessionID == "" || s.annotationSourceSessionID == sessionID {
+		s.annotationSourceSessionID = ""
+		s.annotationSourceDataURL = ""
+		s.annotationSourceCapturedAt = ""
+	}
+}
+
 func (s *RecordingFreedomService) clearAnnotationRegionDIP(sessionID string) {
 	s.annotationMu.Lock()
 	defer s.annotationMu.Unlock()
 	if sessionID == "" || s.annotationSessionID == sessionID {
 		s.annotationSessionID = ""
 		s.annotationRegionDIP = application.Rect{}
+		if sessionID == "" || s.annotationSourceSessionID == sessionID {
+			s.annotationSourceSessionID = ""
+			s.annotationSourceDataURL = ""
+			s.annotationSourceCapturedAt = ""
+		}
 	}
 }
 

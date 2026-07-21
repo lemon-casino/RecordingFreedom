@@ -3770,6 +3770,12 @@ body.rf-annotation-overlay-window {
   font-weight: 900;
   text-overflow: ellipsis;
   white-space: nowrap;
+  cursor: grab;
+  --wails-draggable: drag;
+}
+
+.annotation-capsule-title:active {
+  cursor: grabbing;
 }
 
 .annotation-tools {
