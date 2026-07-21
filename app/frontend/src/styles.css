@@ -362,7 +362,7 @@ input:disabled,
   display: grid;
   justify-items: center;
   gap: 10px;
-  width: min(var(--capsule-stage-width, 724px), 100%);
+  width: min(var(--capsule-stage-width, 784px), 100%);
   --wails-draggable: no-drag;
   transition: width 220ms ease;
 }
@@ -383,8 +383,8 @@ input:disabled,
 }
 
 .rf-shell.is-recording-compact {
-  --capsule-stage-width: 400px;
-  --capsule-width: 380px;
+  --capsule-stage-width: 420px;
+  --capsule-width: 420px;
 }
 
 .rf-shell.is-collapsed .recorder-stage {
@@ -405,7 +405,7 @@ input:disabled,
   display: flex;
   align-items: center;
   gap: 6px;
-  width: min(var(--capsule-width, 724px), 100%);
+  width: min(var(--capsule-width, 784px), 100%);
   height: 64px;
   min-height: 64px;
   max-height: 64px;
@@ -678,9 +678,12 @@ select:disabled {
 
 .icon-button {
   width: 38px;
+  min-width: 38px;
+  max-width: 38px;
   height: 38px;
   border-radius: var(--radius-pill);
   background: rgba(255, 255, 255, 0.035);
+  flex: 0 0 38px;
 }
 
 .icon-button:active,
@@ -728,6 +731,7 @@ select:disabled {
 .record-button {
   width: 50px;
   min-width: 50px;
+  max-width: 50px;
   height: 50px;
   border-radius: var(--radius-pill);
   background: var(--red-soft);
@@ -3180,6 +3184,7 @@ body.rf-annotation-render-window {
 .whiteboard-actions button {
   min-width: 32px;
   padding: 0 8px;
+  flex: 0 0 auto;
 }
 
 .whiteboard-tools button span,
@@ -3701,6 +3706,7 @@ body.rf-annotation-overlay-window {
   font-size: 10px;
   font-weight: 900;
   cursor: pointer;
+  flex: 0 0 auto;
   transition: background 160ms ease, border-color 160ms ease, color 160ms ease, transform 120ms ease;
   --wails-draggable: no-drag;
 }
@@ -3719,18 +3725,45 @@ body.rf-annotation-overlay-window {
 }
 
 .annotation-ocr-status {
-  flex: 0 1 100px;
-  min-width: 0;
-  max-width: 100px;
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
   overflow: hidden;
-  padding: 0 5px;
-  color: var(--muted);
-  font-size: 10px;
-  font-weight: 800;
-  line-height: 1;
-  text-overflow: ellipsis;
+  clip: rect(0 0 0 0);
+  clip-path: inset(50%);
   white-space: nowrap;
   --wails-draggable: no-drag;
+}
+
+.annotation-capsule button.action-success,
+.whiteboard-actions button.action-success {
+  position: relative;
+}
+
+.toolbar-action-check {
+  position: absolute;
+  right: 1px;
+  bottom: 1px;
+  display: grid;
+  width: 12px;
+  height: 12px;
+  margin: 0 !important;
+  padding: 0;
+  place-items: center;
+  border: 1px solid rgba(4, 30, 28, 0.72);
+  border-radius: 50%;
+  background: var(--teal);
+  color: #041e1c;
+  pointer-events: none;
+  --wails-draggable: no-drag;
+}
+
+.toolbar-action-check svg {
+  width: 9px;
+  height: 9px;
+  stroke-width: 3;
 }
 
 .annotation-capsule button:hover,

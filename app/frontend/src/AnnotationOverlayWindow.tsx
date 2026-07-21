@@ -1,5 +1,6 @@
 import {
   ArrowUpRight,
+  Check,
   ClipboardCopy,
   Circle,
   Eraser,
@@ -87,6 +88,8 @@ function AnnotationOverlayWindow() {
   const [ocrResultId, setOcrResultId] = useState('')
   const [ocrResult, setOcrResult] = useState<OcrResult | null>(null)
   const [ocrMessage, setOcrMessage] = useState('')
+  const [ocrSucceeded, setOcrSucceeded] = useState(false)
+  const [imageCopied, setImageCopied] = useState(false)
   const [ocrPositionTextVisible, setOcrPositionTextVisible] = useState(false)
   const [ocrHoveredBlockId, setOcrHoveredBlockId] = useState('')
   const [ocrCopiedBlockId, setOcrCopiedBlockId] = useState('')
@@ -194,12 +197,14 @@ function AnnotationOverlayWindow() {
       if (!source || !annotationOcrEventMatches(event, source)) return
       if (event.status === 'queued') {
         setOcrBusy(true)
+        setOcrSucceeded(false)
         setOcrMessage(copy.whiteboard.ocrQueued)
       } else if (event.status === 'running') {
         setOcrBusy(true)
         setOcrMessage(copy.whiteboard.ocrStatusRunning)
       } else if (event.status === 'ready') {
         setOcrBusy(false)
+        setOcrSucceeded(true)
         setOcrMessage(copy.whiteboard.ocrStatusReady)
         if (event.result) {
           setOcrResultId(event.result.id)
@@ -211,6 +216,7 @@ function AnnotationOverlayWindow() {
         }
       } else if (event.status === 'failed') {
         setOcrBusy(false)
+        setOcrSucceeded(false)
         setOcrMessage(event.error || copy.whiteboard.ocrStatusFailed)
       } else if (event.status === 'cancelled') {
         setOcrBusy(false)
@@ -225,6 +231,8 @@ function AnnotationOverlayWindow() {
     setOcrBusy(false)
     setOcrResultId('')
     setOcrResult(null)
+    setOcrSucceeded(false)
+    setImageCopied(false)
     setOcrPositionTextVisible(false)
     setOcrHoveredBlockId('')
     setOcrCopiedBlockId('')
@@ -491,6 +499,7 @@ function AnnotationOverlayWindow() {
 
   const copyAnnotationImage = async () => {
     const api = apiRef.current
+    setImageCopied(false)
     if (!api) {
       setOcrMessage(copy.whiteboard.copyImageFailed)
       return
@@ -506,9 +515,11 @@ function AnnotationOverlayWindow() {
         files: api.getFiles(),
         type: 'png',
       })
+      setImageCopied(true)
       setOcrMessage(copy.whiteboard.copiedImage)
     } catch (error) {
       console.error('Failed to copy annotation image:', error)
+      setImageCopied(false)
       setOcrMessage(copy.whiteboard.copyImageFailed)
     }
   }
@@ -561,6 +572,7 @@ function AnnotationOverlayWindow() {
     setOcrBusy(true)
     setOcrResultId('')
     setOcrResult(null)
+    setOcrSucceeded(false)
     setOcrPositionTextVisible(false)
     setOcrHoveredBlockId('')
     setOcrCopiedBlockId('')
@@ -693,16 +705,18 @@ function AnnotationOverlayWindow() {
         <button type="button" aria-label={copy.whiteboard.reselectRegion} title={copy.whiteboard.reselectRegion} onClick={() => void reselectRegion()}>
           <RefreshCcw size={16} />
         </button>
-        <button type="button" disabled={ocrBusy} aria-label={copy.whiteboard.recognizeText} title={copy.whiteboard.recognizeText} onClick={() => void queueAnnotationOCR()}>
+        <button className={ocrSucceeded ? 'action-success' : ''} type="button" disabled={ocrBusy} aria-label={copy.whiteboard.recognizeText} title={copy.whiteboard.recognizeText} onClick={() => void queueAnnotationOCR()}>
           <ScanText size={16} />
+          {ocrSucceeded && <span className="toolbar-action-check" aria-hidden="true"><Check size={9} /></span>}
         </button>
         <button type="button" disabled={!canOpenOcrResult} className={ocrPositionTextVisible ? 'selected' : ''} aria-label={copy.whiteboard.openOcrResult} title={copy.whiteboard.openOcrResult} onClick={() => void openAnnotationOcrResult()}>
           <Eye size={16} />
         </button>
-        <button type="button" aria-label={copy.whiteboard.copyImage} title={copy.whiteboard.copyImage} onClick={() => void copyAnnotationImage()}>
+        <button className={imageCopied ? 'action-success' : ''} type="button" aria-label={copy.whiteboard.copyImage} title={copy.whiteboard.copyImage} onClick={() => void copyAnnotationImage()}>
           <ClipboardCopy size={16} />
+          {imageCopied && <span className="toolbar-action-check" aria-hidden="true"><Check size={9} /></span>}
         </button>
-        {ocrMessage && <span className="annotation-ocr-status">{ocrMessage}</span>}
+        {ocrMessage && <span className="annotation-ocr-status" role="status" aria-live="polite">{ocrMessage}</span>}
         <button className="annotation-save-status" type="button" aria-label={copy.whiteboard.save} title={copy.whiteboard.save} onClick={() => void saveCurrentAnnotation()}>
           <Save size={16} />
           <span>{saveStatusLabel}</span>

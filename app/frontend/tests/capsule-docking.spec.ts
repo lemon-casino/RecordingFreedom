@@ -7,7 +7,7 @@ test('capsule docking only snaps near external monitor edges', async ({page}) =>
     {x: 0, y: 0, width: 1920, height: 1040},
     {x: 1920, y: 0, width: 1600, height: 900},
   ]
-  const size = {width: 760, height: 96}
+  const size = {width: 820, height: 96}
 
   await expect(dockSide(page, {position: {x: 4, y: 240}, size, workAreas})).resolves.toBe('left')
   await expect(dockSide(page, {position: {x: 80, y: 240}, size, workAreas})).resolves.toBe('none')
@@ -25,8 +25,8 @@ test('capsule docking follows the drop rectangle when returning from a secondary
     {id: 'secondary', x: 5000, y: 0, width: 1000, height: 900},
   ]
   const target = await dockTarget(page, {
-    position: {x: 5000 - 760 + 4, y: 240},
-    size: {width: 760, height: 96},
+    position: {x: 5000 - 820 + 4, y: 240},
+    size: {width: 820, height: 96},
     workAreas,
     activeScreenId: 'secondary',
   })
@@ -39,8 +39,8 @@ test('capsule docking keeps a single-screen right edge inside the work area', as
   await page.goto('/')
 
   const target = await dockTarget(page, {
-    position: {x: 1920 - 760 + 4, y: 240},
-    size: {width: 760, height: 96},
+    position: {x: 1920 - 820 + 4, y: 240},
+    size: {width: 820, height: 96},
     workAreas: [{id: 'primary', x: 0, y: 0, width: 1920, height: 1040}],
     activeScreenId: 'primary',
   })
@@ -69,7 +69,7 @@ test('idle side docking keeps a wide native host while recording stays compact',
   })
 
   expect(geometry).not.toBeNull()
-  expect(geometry?.idle.windowSize).toEqual({width: 760, height: 560})
+  expect(geometry?.idle.windowSize).toEqual({width: 820, height: 560})
   expect(geometry?.idle.visualSize).toEqual({width: 96, height: 560})
   expect(geometry?.recording.windowSize).toEqual({width: 96, height: 360})
   expect(geometry?.recording.visualSize).toEqual({width: 96, height: 360})
@@ -82,7 +82,7 @@ test('capsule docking keeps the selected monitor side at vertical monitor seams'
     {x: 0, y: 0, width: 1920, height: 1040},
     {x: 0, y: 1040, width: 1920, height: 1080},
   ]
-  const size = {width: 760, height: 96}
+  const size = {width: 820, height: 96}
 
   await expect(dockSide(page, {position: {x: 500, y: 6}, size, workAreas})).resolves.toBe('top')
   await expect(dockSide(page, {position: {x: 500, y: 1040 - size.height + 8}, size, workAreas})).resolves.toBe('bottom')

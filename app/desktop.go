@@ -9,7 +9,7 @@ import (
 )
 
 const (
-	capsuleWindowWidth           = 760
+	capsuleWindowWidth           = 820
 	capsuleWindowCollapsedHeight = 96
 	capsuleWindowExpandedHeight  = 600
 )

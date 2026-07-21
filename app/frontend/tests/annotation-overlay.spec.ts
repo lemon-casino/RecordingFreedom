@@ -139,6 +139,7 @@ test('recording annotation overlay queues background OCR and shows positioned te
   }, {eventDetail: readyEvent, image: imageDataUrl})
 
   await expect(page.locator('.annotation-ocr-status')).toContainText('Board text recognized')
+  await expect(page.getByRole('button', {name: 'Recognize board text'}).locator('.toolbar-action-check')).toHaveCount(1)
   await page.getByRole('button', {name: 'View board OCR result'}).click()
 
   const ocrLayer = page.locator('.annotation-overlay-canvas .ocr-position-text-layer.annotation')

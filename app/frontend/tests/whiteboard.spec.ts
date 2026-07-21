@@ -158,6 +158,7 @@ test('whiteboard OCR blocks map to the selected image and recognized text insert
     window.dispatchEvent(new CustomEvent('rf-ocr-job', {detail: eventDetail}))
   }, readyWhiteboardSelectionOcrEvent())
 
+  await expect(selectedImageButton.locator('.toolbar-action-check')).toHaveCount(1)
   const toggleBlocksButton = page.getByRole('button', {name: 'Show / hide OCR blocks'})
   await expect(toggleBlocksButton).toBeEnabled()
   await toggleBlocksButton.click()

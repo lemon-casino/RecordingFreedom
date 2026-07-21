@@ -1,5 +1,6 @@
 import {
   ArrowUpRight,
+  Check,
   ClipboardCopy,
   Circle,
   Diamond,
@@ -70,6 +71,8 @@ function WhiteboardWindow() {
   const [ocrBusy, setOcrBusy] = useState(false)
   const [ocrResultId, setOcrResultId] = useState('')
   const [ocrResult, setOcrResult] = useState<OcrResult | null>(null)
+  const [ocrSuccessAction, setOcrSuccessAction] = useState<'board' | 'image' | null>(null)
+  const [imageCopied, setImageCopied] = useState(false)
   const [ocrTranslationResult, setOcrTranslationResult] = useState<OcrTranslationResult | null>(null)
   const [ocrTranslationBusy, setOcrTranslationBusy] = useState(false)
   const [ocrBlocksVisible, setOcrBlocksVisible] = useState(false)
@@ -252,6 +255,7 @@ function WhiteboardWindow() {
     }
     if (event.status === 'failed') {
       setOcrBusyState(false)
+      setOcrSuccessAction(null)
       holdStatusText(event.error || copy.whiteboard.ocrStatusFailed)
     }
   }), [copy, holdStatusText, setOcrBusyState])
@@ -390,6 +394,7 @@ function WhiteboardWindow() {
     setOcrBusyState(true)
     setOcrResultId('')
     setOcrResult(null)
+    setOcrSuccessAction(null)
     setOcrTranslationResult(null)
     setOcrTranslationBusy(false)
     setOcrBlocksVisible(false)
@@ -400,6 +405,7 @@ function WhiteboardWindow() {
     removeOcrBlockElements(apiRef.current, scheduleSave)
     removeOcrPositionTextElements(apiRef.current, scheduleSave)
     removeOcrTranslationElements(apiRef.current, scheduleSave)
+    setOcrSuccessAction('board')
     holdStatusText(copy.whiteboard.ocrPreparing)
     try {
       const snapshotDataUrl = await currentSnapshotDataURL()
@@ -417,6 +423,7 @@ function WhiteboardWindow() {
     } catch (error) {
       console.error('Failed to queue whiteboard OCR:', error)
       setOcrBusyState(false)
+      setOcrSuccessAction(null)
       holdStatusText(readableError(error) || copy.whiteboard.ocrStatusFailed)
     }
   }
@@ -432,6 +439,7 @@ function WhiteboardWindow() {
     setOcrBusyState(true)
     setOcrResultId('')
     setOcrResult(null)
+    setOcrSuccessAction(null)
     setOcrTranslationResult(null)
     setOcrTranslationBusy(false)
     setOcrBlocksVisible(false)
@@ -442,6 +450,7 @@ function WhiteboardWindow() {
     removeOcrBlockElements(apiRef.current, scheduleSave)
     removeOcrPositionTextElements(apiRef.current, scheduleSave)
     removeOcrTranslationElements(apiRef.current, scheduleSave)
+    setOcrSuccessAction('image')
     holdStatusText(copy.whiteboard.ocrPreparing)
     try {
       const sceneJson = currentSceneJSON()
@@ -461,6 +470,7 @@ function WhiteboardWindow() {
     } catch (error) {
       console.error('Failed to queue selected image OCR:', error)
       setOcrBusyState(false)
+      setOcrSuccessAction(null)
       holdStatusText(readableError(error) || copy.whiteboard.ocrStatusFailed)
     }
   }
@@ -721,6 +731,7 @@ function WhiteboardWindow() {
 
   const copyWhiteboardImage = async () => {
     const api = apiRef.current
+    setImageCopied(false)
     if (!api) {
       holdStatusText(copy.whiteboard.copyImageFailed)
       return
@@ -736,9 +747,11 @@ function WhiteboardWindow() {
         files: api.getFiles(),
         type: 'png',
       })
-      holdStatusText(copy.whiteboard.copiedImage)
+      setImageCopied(true)
+      setStatusText(copy.whiteboard.ready)
     } catch (error) {
       console.error('Failed to copy whiteboard image:', error)
+      setImageCopied(false)
       holdStatusText(copy.whiteboard.copyImageFailed)
     }
   }
@@ -841,16 +854,19 @@ function WhiteboardWindow() {
           <button type="button" aria-label={copy.whiteboard.save} title={copy.whiteboard.save} onClick={saveNow}>
             <Save size={16} />
           </button>
-          <button type="button" aria-label={copy.whiteboard.copyImage} title={copy.whiteboard.copyImage} onClick={() => void copyWhiteboardImage()}>
+          <button className={imageCopied ? 'action-success' : ''} type="button" aria-label={copy.whiteboard.copyImage} title={copy.whiteboard.copyImage} onClick={() => void copyWhiteboardImage()}>
             <ClipboardCopy size={16} />
+            {imageCopied && <span className="toolbar-action-check" aria-hidden="true"><Check size={9} /></span>}
           </button>
-          <button type="button" disabled={ocrBusy} aria-label={copy.whiteboard.recognizeText} title={copy.whiteboard.recognizeText} onClick={() => void queueCurrentWhiteboardOCR()}>
+          <button className={ocrSuccessAction === 'board' && !ocrBusy ? 'action-success' : ''} type="button" disabled={ocrBusy} aria-label={copy.whiteboard.recognizeText} title={copy.whiteboard.recognizeText} onClick={() => void queueCurrentWhiteboardOCR()}>
             <FileText size={16} />
             <span>OCR</span>
+            {ocrSuccessAction === 'board' && !ocrBusy && <span className="toolbar-action-check" aria-hidden="true"><Check size={9} /></span>}
           </button>
-          <button type="button" disabled={ocrBusy || !selectedImageElementId} aria-label={copy.whiteboard.recognizeSelectedImage} title={selectedImageElementId ? copy.whiteboard.recognizeSelectedImage : copy.whiteboard.noImageSelection} onClick={() => void queueSelectedImageOCR()}>
+          <button className={ocrSuccessAction === 'image' && !ocrBusy ? 'action-success' : ''} type="button" disabled={ocrBusy || !selectedImageElementId} aria-label={copy.whiteboard.recognizeSelectedImage} title={selectedImageElementId ? copy.whiteboard.recognizeSelectedImage : copy.whiteboard.noImageSelection} onClick={() => void queueSelectedImageOCR()}>
             <ImageIcon size={16} />
             <span>OCR</span>
+            {ocrSuccessAction === 'image' && !ocrBusy && <span className="toolbar-action-check" aria-hidden="true"><Check size={9} /></span>}
           </button>
           <button type="button" disabled={!ocrResultId} className={ocrPositionTextVisible ? 'selected' : ''} aria-label={copy.whiteboard.openOcrResult} title={copy.whiteboard.openOcrResult} onClick={() => void openWhiteboardOcrResult()}>
             <Eye size={16} />
