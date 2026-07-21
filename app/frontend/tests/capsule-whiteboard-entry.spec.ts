@@ -60,6 +60,31 @@ test('light theme keeps the video and audio mode switch readable', async ({page}
   await expect(modeToggle.getByRole('button', {name: 'Video'})).toHaveCSS('color', 'rgb(82, 98, 115)')
 })
 
+test('floating source panel keeps video and audio controls compact', async ({page}) => {
+  await openRecorderShell(page)
+
+  await page.locator('.source-pill').click()
+  const sourceMenu = page.getByRole('dialog', {name: 'source menu'})
+  await sourceMenu.evaluate((element) => {
+    element.classList.add('floating-panel-shell')
+    Object.assign((element as HTMLElement).style, {
+      position: 'fixed',
+      inset: '5px',
+      display: 'flex',
+      flexDirection: 'column',
+      height: '340px',
+      maxHeight: 'none',
+    })
+  })
+
+  const modeToggle = sourceMenu.locator('.mode-toggle')
+  await expect.poll(async () => (await modeToggle.boundingBox())?.height ?? 0).toBeLessThan(70)
+
+  await modeToggle.getByRole('button', {name: 'Audio'}).click()
+  const audioSummary = sourceMenu.locator('.audio-mode-summary')
+  await expect.poll(async () => (await audioSummary.boundingBox())?.height ?? 0).toBeLessThan(80)
+})
+
 test('screenshot tools hide window and focused-window capture modes', async ({page}) => {
   await openRecorderShell(page)
 

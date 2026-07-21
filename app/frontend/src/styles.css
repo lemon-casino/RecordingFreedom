@@ -38,6 +38,7 @@
   --control-bg-subtle: rgba(255, 255, 255, 0.045);
   --status-warning-readable: #ffe8b6;
   --status-error-readable: #ffdfdc;
+  --status-warning-border: rgba(245, 158, 11, 0.24);
   --amber: #f59e0b;
   --capsule-bg: linear-gradient(180deg, rgba(25, 31, 38, 0.94), rgba(13, 17, 22, 0.92));
   --settings-bg:
@@ -270,6 +271,7 @@
   --control-bg-subtle: rgba(15, 23, 42, 0.045);
   --status-warning-readable: #a16207;
   --status-error-readable: #b91c1c;
+  --status-warning-border: rgba(161, 98, 7, 0.28);
   --shadow-tight: 0 14px 34px rgba(15, 23, 42, 0.12);
   --shadow-panel: 0 18px 42px rgba(15, 23, 42, 0.16);
   --whiteboard-canvas-bg: #ffffff;
@@ -1392,6 +1394,13 @@ body.rf-recorder-window .select-menu-list {
   overflow: hidden;
 }
 
+/* Keep compact source controls at their intrinsic height inside the fixed
+ * floating panel. Otherwise the grid auto tracks stretch vertically. */
+.floating-panel-shell.panel-source > .source-menu {
+  align-content: start;
+  grid-auto-rows: max-content;
+}
+
 .floating-panel-shell .source-list-scroll {
   max-height: calc(100vh - 92px);
 }
@@ -2274,7 +2283,7 @@ body.rf-recorder-window .select-menu-list {
   height: 22px;
   border: 1px solid var(--line);
   border-radius: var(--radius-pill);
-  background: rgba(255, 255, 255, 0.08);
+  background: var(--control-bg-subtle);
 }
 
 .switch-row i::after {
@@ -2299,8 +2308,8 @@ body.rf-recorder-window .select-menu-list {
 }
 
 .switch-row input:disabled + i {
-  border-color: rgba(255, 255, 255, 0.08);
-  background: rgba(255, 255, 255, 0.04);
+  border-color: var(--line);
+  background: var(--control-bg);
 }
 
 .field-label {
@@ -2737,7 +2746,7 @@ input {
   width: 74px;
   height: 36px;
   border-radius: var(--radius-pill);
-  background: rgba(255, 255, 255, 0.06);
+  background: var(--control-bg-strong);
 }
 
 .settings-list {
@@ -2762,7 +2771,7 @@ input {
 }
 
 .setting-line.status-queued {
-  border-color: rgba(245, 158, 11, 0.24);
+  border-color: var(--status-warning-border);
 }
 
 .setting-line.status-blocked,
@@ -2812,7 +2821,7 @@ input {
   padding: 12px;
   border: 1px solid var(--line);
   border-radius: 16px;
-  background: rgba(255, 255, 255, 0.035);
+  background: var(--control-bg);
 }
 
 .export-plan-timeline-header {
@@ -2853,7 +2862,7 @@ input {
   overflow: hidden;
   border: 1px solid var(--line);
   border-radius: 12px;
-  background: rgba(255, 255, 255, 0.045);
+  background: var(--control-bg-subtle);
 }
 
 .export-plan-segment.has-preview {
@@ -3024,9 +3033,9 @@ input {
 }
 
 .setting-action.danger {
-  border-color: rgba(240, 68, 56, 0.35);
-  background: rgba(240, 68, 56, 0.12);
-  color: var(--text);
+  border-color: var(--danger-border);
+  background: var(--danger-bg);
+  color: var(--danger-readable);
 }
 
 .ocr-model-settings {

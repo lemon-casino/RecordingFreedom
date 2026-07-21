@@ -38,6 +38,32 @@ test('settings groups themes into dark and light options', async ({page}) => {
   await expect(page.locator('html')).toHaveAttribute('data-theme', 'cloud-white')
   await expect(page.locator('.record-button')).toHaveCSS('color', 'rgb(185, 28, 28)')
   await expect(page.locator('.close-app-button')).toHaveCSS('color', 'rgb(185, 28, 28)')
+  const lightSettingsStyles = await page.evaluate(() => {
+    const root = getComputedStyle(document.documentElement)
+    const selectButtons = Array.from(document.querySelectorAll('.settings-sheet .setting-control .select-menu-button'))
+      .map((element) => {
+        const style = getComputedStyle(element)
+        return {text: element.textContent?.trim() ?? '', color: style.color, background: style.backgroundColor}
+      })
+    const labels = Array.from(document.querySelectorAll('.settings-sheet .setting-control > span'))
+      .map((element) => getComputedStyle(element).color)
+    return {
+      text: root.getPropertyValue('--text').trim(),
+      selectButtons,
+      labels,
+    }
+  })
+  expect(lightSettingsStyles.text).toBe('#17202a')
+  expect(lightSettingsStyles.selectButtons.map(({text}) => text)).toEqual(expect.arrayContaining(['English', 'Cloud White', 'Off', 'Balanced', '30 FPS']))
+  expect(lightSettingsStyles.selectButtons.every(({color, background}) => color === 'rgb(23, 32, 42)' && background === 'rgb(255, 255, 255)')).toBe(true)
+  expect(lightSettingsStyles.labels.every((color) => color === 'rgb(82, 98, 115)')).toBe(true)
+  const qualityRow = page.locator('.settings-sheet .setting-control').filter({hasText: 'Quality'}).first()
+  await qualityRow.locator('.select-menu-button').click()
+  const qualityMenu = qualityRow.locator('.select-menu-list')
+  await expect(qualityMenu).toHaveCSS('background-color', 'rgba(255, 255, 255, 0.98)')
+  await expect(qualityMenu.getByRole('option', {name: 'Balanced'})).toHaveCSS('color', 'rgb(29, 78, 216)')
+  await expect(qualityMenu.getByRole('option', {name: 'High'})).toHaveCSS('color', 'rgb(23, 32, 42)')
+  await page.keyboard.press('Escape')
   await expect.poll(async () => page.evaluate((settingsKey) => {
     const raw = window.localStorage.getItem(settingsKey)
     return raw ? JSON.parse(raw).window?.theme : ''
