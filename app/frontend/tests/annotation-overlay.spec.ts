@@ -318,7 +318,9 @@ async function openAnnotationOverlay(page: Page) {
         geometry: {x: 0, y: 0, width: 1280, height: 720, displayIndex: 1, nativeId: 'display-1'},
       },
       captureExcluded: false,
-      sourceImageDataURL: `data:image/svg+xml;base64,${window.btoa(svg)}`,
+      // Match the exact JSON field emitted by the Go desktop window. The UI
+      // normalizes this binding spelling to its sourceImageDataURL property.
+      sourceImageDataUrl: `data:image/svg+xml;base64,${window.btoa(svg)}`,
       sourceImageCapturedAt: '2026-07-21T18:00:00.000Z',
     }
   }, {settingsKey: browserSettingsKey, frameInset: annotationFrameInset})

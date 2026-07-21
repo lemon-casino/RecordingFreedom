@@ -236,8 +236,9 @@ func (s *RecordingFreedomService) CompleteAnnotationRegionSelection(req RegionSe
 	s.setAnnotationSourceImage(recordingSession.ID, sourceImageDataURL, time.Now().UTC().Format(time.RFC3339Nano))
 	s.setAnnotationRegionDIP(recordingSession.ID, absoluteDIP)
 	s.logEvent("annotation-overlay", "region-selected", map[string]string{
-		"sessionId": recordingSession.ID,
-		"bounds":    fmt.Sprintf("%d,%d %dx%d", absoluteDIP.X, absoluteDIP.Y, absoluteDIP.Width, absoluteDIP.Height),
+		"sessionId":        recordingSession.ID,
+		"bounds":           fmt.Sprintf("%d,%d %dx%d", absoluteDIP.X, absoluteDIP.Y, absoluteDIP.Width, absoluteDIP.Height),
+		"sourceImageBytes": fmt.Sprint(len(sourceImageDataURL)),
 	})
 	return s.ShowAnnotationOverlay()
 }

@@ -24,7 +24,7 @@ import type {ExcalidrawImperativeAPI} from '@excalidraw/excalidraw/types'
 import '@excalidraw/excalidraw/index.css'
 import {copyByLocale} from './i18n'
 import {defaultSettings, normalizeLocale, normalizeTheme, type AppSettings, type LocaleCode, type ScreenshotItem, type ThemeCode, type WhiteboardTool} from './services/mockBackend'
-import {hideAnnotationOverlay, hideScreenshotAnnotationOverlay, loadAnnotationCapture, loadScreenshotAnnotationCapture, loadSettings, openOcrResult, patchWhiteboardSettings, queueRecognizeScreenshot, queueRecognizeWhiteboard, reselectAnnotationRegion, reselectScreenshotAnnotationRegion, saveAnnotationCapture, saveScreenshotAnnotationCapture, setAnnotationOverlayHitRegions, subscribeOcrJobEvents, subscribeSettingsChanged, type AnnotationCapture, type AnnotationOverlayState, type CapsuleWindowHitRegion, type OcrBlock, type OcrJobUpdate, type OcrResult, type ScreenshotWhiteboardContext} from './services/recorderBackend'
+import {hideAnnotationOverlay, hideScreenshotAnnotationOverlay, loadAnnotationCapture, loadScreenshotAnnotationCapture, loadSettings, logClientEvent, openOcrResult, patchWhiteboardSettings, queueRecognizeScreenshot, queueRecognizeWhiteboard, reselectAnnotationRegion, reselectScreenshotAnnotationRegion, saveAnnotationCapture, saveScreenshotAnnotationCapture, setAnnotationOverlayHitRegions, subscribeOcrJobEvents, subscribeSettingsChanged, type AnnotationCapture, type AnnotationOverlayState, type CapsuleWindowHitRegion, type OcrBlock, type OcrJobUpdate, type OcrResult, type ScreenshotWhiteboardContext} from './services/recorderBackend'
 import {OcrPositionTextLayer, countOcrPositionTextBlocks} from './components/ocr/OcrPositionTextLayer'
 import {writeClipboardImage, writeClipboardText} from './utils/clipboard'
 import {AnnotationStyleControls, type AnnotationStyle} from './components/AnnotationStyleControls'
@@ -61,8 +61,21 @@ type AnnotationSaveOutcome =
   | {kind: 'annotation'; capture: AnnotationCapture}
   | {kind: 'screenshot'; item: ScreenshotItem}
 
+type DesktopAnnotationOverlayState = AnnotationOverlayState & {
+  sourceImageDataUrl?: string
+}
+
+function normalizeDesktopAnnotationOverlayState(value: unknown): AnnotationOverlayState | null {
+  if (!value || typeof value !== 'object') return null
+  const state = value as DesktopAnnotationOverlayState
+  return {
+    ...state,
+    sourceImageDataURL: state.sourceImageDataURL ?? state.sourceImageDataUrl,
+  }
+}
+
 function AnnotationOverlayWindow() {
-  const [overlayState, setOverlayState] = useState<AnnotationOverlayState | null>(() => (window as any).__RF_ANNOTATION_OVERLAY__ ?? null)
+  const [overlayState, setOverlayState] = useState<AnnotationOverlayState | null>(() => normalizeDesktopAnnotationOverlayState((window as any).__RF_ANNOTATION_OVERLAY__))
   const [locale, setLocale] = useState<LocaleCode>('zh-CN')
   const [theme, setTheme] = useState<ThemeCode>('night-teal')
   const [initialData, setInitialData] = useState<any | null>(null)
@@ -103,6 +116,7 @@ function AnnotationOverlayWindow() {
   const pendingElementEventsRef = useRef<Map<string, AnnotationElementEvent>>(new Map())
   const clientSequenceRef = useRef(0)
   const ocrSourceRef = useRef<{sourceKind: string; sourceId: string} | null>(null)
+  const sourceImageLoadedLogRef = useRef('')
   const toolbarDragRef = useRef<{startX: number; startY: number; offsetX: number; offsetY: number} | null>(null)
   const capsuleRef = useRef<HTMLDivElement | null>(null)
   const canvasRef = useRef<HTMLElement | null>(null)
@@ -336,7 +350,7 @@ function AnnotationOverlayWindow() {
 
   useEffect(() => {
     const onState = (event: Event) => {
-      const next = (event as CustomEvent<AnnotationOverlayState>).detail
+      const next = normalizeDesktopAnnotationOverlayState((event as CustomEvent<unknown>).detail)
       if (next) setOverlayState(next)
     }
     window.addEventListener('rf-annotation-overlay', onState)
@@ -885,6 +899,19 @@ function AnnotationOverlayWindow() {
           }}
           onChange={((elements: readonly unknown[], appState: unknown, files: unknown) => {
             try {
+              const frozenSourceLoaded = elements.some((element) => (
+                Boolean(element)
+                && typeof element === 'object'
+                && (element as {customData?: {recordingFreedomFrozenSource?: boolean}}).customData?.recordingFreedomFrozenSource === true
+              ))
+              if (!isScreenshotMode && overlayState?.sourceImageDataURL && frozenSourceLoaded && sourceImageLoadedLogRef.current !== overlayKey) {
+                sourceImageLoadedLogRef.current = overlayKey
+                void logClientEvent('annotation-overlay', 'source-image-loaded', {
+                  dataUrlBytes: overlayState.sourceImageDataURL.length,
+                  canvasWidth: canvasBounds.width,
+                  canvasHeight: canvasBounds.height,
+                })
+              }
               trackAnnotationElementEvents(elements)
               const sceneJson = (serializeAsJSON as any)(elements, appState, files, 'local')
               scheduleSave(sceneJson, elements.length > 0, annotationContentSignature(elements, files))
