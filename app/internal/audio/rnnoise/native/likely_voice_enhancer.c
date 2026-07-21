@@ -17,6 +17,14 @@ struct LikelyVoiceEnhancer {
     int frame_size;
     float output_gain;
     float speech_gain;
+    float noise_floor;
+    float voice_presence;
+    float noise_gain;
+    float highpass_input;
+    float highpass_output;
+    float presence_lowpass;
+    int voice_hold_frames;
+    int analyzed_frames;
     float* pending;
     int pending_count;
     float* output_queue;
@@ -98,7 +106,11 @@ static void process_pending_frame(LikelyVoiceEnhancer* enhancer) {
     float vad = 1.0f;
 
     for (int index = 0; index < frame_size; index += 1) {
-        enhancer->rn_in[index] = clamp_float(enhancer->pending[index], -1.0f, 1.0f) * 32768.0f;
+        const float input = clamp_float(enhancer->pending[index], -1.0f, 1.0f);
+        const float highpass = input - enhancer->highpass_input + 0.9883f * enhancer->highpass_output;
+        enhancer->highpass_input = input;
+        enhancer->highpass_output = highpass;
+        enhancer->rn_in[index] = highpass * 32768.0f;
     }
 
     if (enhancer->rnnoise) {
@@ -118,22 +130,57 @@ static void process_pending_frame(LikelyVoiceEnhancer* enhancer) {
     }
     rms = sqrtf(rms / (float)frame_size);
 
+    const float noise_candidate = clamp_float(rms, 0.0005f, 0.030f);
+    if (enhancer->noise_floor <= 0.0f) {
+        enhancer->noise_floor = noise_candidate;
+    } else {
+        float noise_learning_rate = 0.003f;
+        if (enhancer->analyzed_frames < 50) {
+            noise_learning_rate = noise_candidate > enhancer->noise_floor ? 0.12f : 0.25f;
+        } else if (vad < 0.55f || rms < enhancer->noise_floor * 1.5f) {
+            noise_learning_rate = noise_candidate > enhancer->noise_floor ? 0.025f : 0.12f;
+        } else if (noise_candidate < enhancer->noise_floor) {
+            noise_learning_rate = 0.08f;
+        }
+        enhancer->noise_floor += (noise_candidate - enhancer->noise_floor) * noise_learning_rate;
+    }
+    enhancer->noise_floor = clamp_float(enhancer->noise_floor, 0.0005f, 0.030f);
+    enhancer->analyzed_frames += 1;
+
+    const float signal_to_noise = rms / enhancer->noise_floor;
+    const float vad_score = clamp_float((vad - 0.50f) / 0.35f, 0.0f, 1.0f);
+    const float snr_score = clamp_float((signal_to_noise - 1.20f) / 1.80f, 0.0f, 1.0f);
+    float desired_voice_presence = vad_score * (0.15f + 0.85f * snr_score);
+    if (desired_voice_presence > 0.60f || (vad > 0.75f && signal_to_noise > 1.50f)) {
+        enhancer->voice_hold_frames = 24;
+    } else if (enhancer->voice_hold_frames > 0) {
+        enhancer->voice_hold_frames -= 1;
+        desired_voice_presence = fmaxf(desired_voice_presence, 0.68f);
+    }
+    const float voice_smoothing = desired_voice_presence > enhancer->voice_presence ? 0.34f : 0.045f;
+    enhancer->voice_presence += (desired_voice_presence - enhancer->voice_presence) * voice_smoothing;
+    enhancer->voice_presence = clamp_float(enhancer->voice_presence, 0.0f, 1.0f);
+
     float desired_speech_gain = 1.0f;
-    if (vad > 0.45f && rms > 0.003f) {
-        desired_speech_gain = clamp_float(0.10f / rms, 1.0f, 2.8f);
+    if (enhancer->voice_presence > 0.50f && signal_to_noise > 1.50f && rms > 0.003f) {
+        desired_speech_gain = clamp_float(0.10f / rms, 1.0f, 2.0f);
     }
-    enhancer->speech_gain = enhancer->speech_gain * 0.92f + desired_speech_gain * 0.08f;
+    const float speech_smoothing = desired_speech_gain > enhancer->speech_gain ? 0.10f : 0.05f;
+    enhancer->speech_gain += (desired_speech_gain - enhancer->speech_gain) * speech_smoothing;
 
-    float noise_attenuation = 1.0f;
-    if (vad < 0.25f) {
-        noise_attenuation = 0.35f;
-    } else if (vad < 0.60f) {
-        noise_attenuation = 0.35f + ((vad - 0.25f) / 0.35f) * 0.65f;
-    }
+    const float voice_power = enhancer->voice_presence * enhancer->voice_presence;
+    const float desired_noise_gain = 0.16f + 0.84f * voice_power;
+    const float noise_smoothing = desired_noise_gain > enhancer->noise_gain ? 0.45f : 0.08f;
+    enhancer->noise_gain += (desired_noise_gain - enhancer->noise_gain) * noise_smoothing;
+    enhancer->noise_gain = clamp_float(enhancer->noise_gain, 0.16f, 1.0f);
 
-    const float total_gain = enhancer->output_gain * enhancer->speech_gain * noise_attenuation;
+    const float total_gain = enhancer->output_gain * enhancer->speech_gain * enhancer->noise_gain;
+    const float presence_boost = 0.18f * enhancer->voice_presence;
     for (int index = 0; index < frame_size; index += 1) {
-        enhancer->rn_out[index] = soft_limit(enhancer->rn_out[index] * total_gain);
+        const float leveled = enhancer->rn_out[index] * total_gain;
+        enhancer->presence_lowpass += 0.145f * (leveled - enhancer->presence_lowpass);
+        const float focused = leveled + presence_boost * (leveled - enhancer->presence_lowpass);
+        enhancer->rn_out[index] = soft_limit(focused);
     }
     append_output_frame(enhancer, enhancer->rn_out);
 }
@@ -193,6 +240,7 @@ LikelyVoiceEnhancer* likely_voice_enhancer_create(int sample_rate, int channels,
     enhancer->frame_size = rnnoise_get_frame_size();
     enhancer->output_gain = clamp_float(output_gain > 0.0f ? output_gain : 1.0f, 0.25f, 3.5f);
     enhancer->speech_gain = 1.0f;
+    enhancer->noise_gain = 1.0f;
     enhancer->pending = (float*)calloc((size_t)enhancer->frame_size, sizeof(float));
     enhancer->rn_in = (float*)calloc((size_t)enhancer->frame_size, sizeof(float));
     enhancer->rn_out = (float*)calloc((size_t)enhancer->frame_size, sizeof(float));
@@ -237,6 +285,14 @@ void likely_voice_enhancer_reset(LikelyVoiceEnhancer* enhancer) {
     enhancer->output_offset = 0;
     enhancer->output_count = enhancer->frame_size;
     enhancer->speech_gain = 1.0f;
+    enhancer->noise_floor = 0.0f;
+    enhancer->voice_presence = 0.0f;
+    enhancer->noise_gain = 1.0f;
+    enhancer->highpass_input = 0.0f;
+    enhancer->highpass_output = 0.0f;
+    enhancer->presence_lowpass = 0.0f;
+    enhancer->voice_hold_frames = 0;
+    enhancer->analyzed_frames = 0;
     if (enhancer->pending) {
         memset(enhancer->pending, 0, (size_t)enhancer->frame_size * sizeof(float));
     }

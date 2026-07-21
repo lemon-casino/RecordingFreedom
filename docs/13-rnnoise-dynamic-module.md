@@ -35,6 +35,17 @@ RNNoise C source
 - macOS/Linux provider 使用 `dlopen` / `dlsym`，对应 Wails 平台本来就需要 `CGO_ENABLED=1`。
 - `audio.Enhancer` 和 `recording.NativeBackendRuntime` 继续只依赖 `audio.NoiseSuppressor`，不会关心模块来自 DLL、dylib 还是 so。
 
+## 人声聚焦处理
+
+启用 RNNoise 后，原生模块会在基础神经网络降噪之外继续处理麦克风中的持续风扇噪声：
+
+- 先用 90 Hz 高通滤波削弱风扇电机、桌面振动和气流产生的低频轰鸣。
+- 根据 RNNoise VAD 与残余信噪比自适应学习噪声底，避免把稳定风扇声误判成人声后再次放大。
+- 使用快速开启、缓慢释放和人声保持时间，减少吞字和词尾被截断。
+- 只在确认人声后进行自动增益和轻量存在感增强，非人声阶段最多额外衰减约 16 dB。
+
+该处理仍然只作用于麦克风，不会修改系统音频。动态模块测试使用稳定风扇合成信号验证噪声衰减，同时检查纯人声保留和风扇背景下的人声突出度。
+
 ## CI / Release 门禁
 
 Release 和 CI 必须执行：
