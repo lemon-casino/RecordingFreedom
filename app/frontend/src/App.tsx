@@ -5017,6 +5017,7 @@ function OcrResultPanel({
 
 function FloatingSelectWindow() {
   const rootRef = useRef<HTMLElement | null>(null)
+  const [theme, setTheme] = useState<ThemeCode>('night-teal')
   const [selectState, setSelectState] = useState<FloatingSelectState>(() => ({
     visible: false,
     anchor: {x: 0, y: 0, width: 0, height: 0},
@@ -5028,6 +5029,30 @@ function FloatingSelectWindow() {
   useEffect(() => {
     document.body.classList.add('rf-floating-select-window')
     return () => document.body.classList.remove('rf-floating-select-window')
+  }, [])
+
+  useEffect(() => {
+    document.documentElement.dataset.theme = theme
+  }, [theme])
+
+  useEffect(() => {
+    let cancelled = false
+    let receivedSettingsEvent = false
+    void loadSettings()
+      .then((settings) => {
+        if (!cancelled && !receivedSettingsEvent) {
+          setTheme(normalizeTheme(settings.window.theme))
+        }
+      })
+      .catch((error) => console.info('Floating select settings unavailable:', error))
+    const unsubscribe = subscribeSettingsChanged((settings) => {
+      receivedSettingsEvent = true
+      if (!cancelled) setTheme(normalizeTheme(settings.window.theme))
+    })
+    return () => {
+      cancelled = true
+      unsubscribe()
+    }
   }, [])
 
   useEffect(() => {

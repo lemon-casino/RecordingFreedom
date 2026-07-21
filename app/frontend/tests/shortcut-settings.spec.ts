@@ -70,6 +70,75 @@ test('settings groups themes into dark and light options', async ({page}) => {
   }, browserSettingsKey)).toBe('cloud-white')
 })
 
+test('desktop floating settings selects inherit every active theme palette', async ({page}) => {
+  const themes = [
+    'night-teal',
+    'mountain-green',
+    'sky-blue',
+    'sunset-yellow',
+    'ink-purple',
+    'sage-gray',
+    'cloud-white',
+    'mint-morning',
+    'sky-day',
+    'warm-sand',
+    'lavender-mist',
+    'apple-green',
+  ]
+  await page.addInitScript(({settingsKey}) => {
+    const theme = new URLSearchParams(window.location.search).get('theme') ?? 'night-teal'
+    window.localStorage.setItem(settingsKey, JSON.stringify({
+      schemaVersion: 1,
+      window: {theme},
+    }))
+    ;(window as Window & {__RF_FLOATING_SELECT__?: unknown}).__RF_FLOATING_SELECT__ = {
+      visible: true,
+      id: 'settings-quality',
+      anchor: {x: 0, y: 0, width: 220, height: 40},
+      bounds: {x: 0, y: 0, width: 240, height: 90},
+      value: 'balanced',
+      options: [
+        {value: 'balanced', label: 'Balanced'},
+        {value: 'high', label: 'High'},
+      ],
+      token: 1,
+      direction: 'down',
+    }
+  }, {settingsKey: browserSettingsKey})
+
+  for (const theme of themes) {
+    await page.goto(`/?theme=${theme}#/floating-select`)
+    await expect(page.locator('html')).toHaveAttribute('data-theme', theme)
+    const menu = page.locator('.floating-select-shell.select-menu-list')
+    await expect(menu).toBeVisible()
+
+    const palette = await page.evaluate(() => {
+      const resolveColor = (property: 'color' | 'backgroundColor', value: string) => {
+        const probe = document.createElement('div')
+        probe.style[property] = value
+        document.body.appendChild(probe)
+        const resolved = getComputedStyle(probe)[property]
+        probe.remove()
+        return resolved
+      }
+      const menuElement = document.querySelector<HTMLElement>('.floating-select-shell.select-menu-list')!
+      const selectedOption = document.querySelector<HTMLElement>('.select-menu-option.selected')!
+      const regularOption = document.querySelector<HTMLElement>('.select-menu-option:not(.selected)')!
+      return {
+        menuBackground: getComputedStyle(menuElement).backgroundColor,
+        selectedText: getComputedStyle(selectedOption).color,
+        regularText: getComputedStyle(regularOption).color,
+        expectedMenuBackground: resolveColor('backgroundColor', 'var(--panel-strong)'),
+        expectedSelectedText: resolveColor('color', 'var(--accent-readable)'),
+        expectedRegularText: resolveColor('color', 'var(--text)'),
+      }
+    })
+    expect(palette.menuBackground, `${theme} dropdown surface`).toBe(palette.expectedMenuBackground)
+    expect(palette.selectedText, `${theme} selected option`).toBe(palette.expectedSelectedText)
+    expect(palette.regularText, `${theme} option text`).toBe(palette.expectedRegularText)
+  }
+})
+
 test('settings persists the language selection', async ({page}) => {
   await openRecorderShell(page)
 
