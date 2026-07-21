@@ -3751,7 +3751,7 @@ body.rf-annotation-overlay-window {
   border-color: rgba(255, 255, 255, 0.28);
   box-shadow: 0 12px 30px rgba(0, 0, 0, 0.36), inset 0 1px 0 rgba(255, 255, 255, 0.12);
   backdrop-filter: blur(22px) saturate(150%);
-  --wails-draggable: no-drag;
+  --wails-draggable: drag;
   touch-action: none;
   cursor: grab;
 }

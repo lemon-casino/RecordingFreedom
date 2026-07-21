@@ -58,9 +58,17 @@ test('annotation tools expose tool-specific style settings', async ({page}) => {
 
   const tools = page.locator('.annotation-tools')
   const toolbar = page.locator('.annotation-toolbar-stack')
+  const detailButton = toolbar.getByRole('button', {name: 'Tool detail settings', exact: true})
+
+  await tools.getByRole('button', {name: 'Select'}).click()
+  await expect(detailButton).toBeVisible()
+  await detailButton.click()
+  await expect(toolbar.locator('.annotation-style-capsule')).toBeVisible()
+  await expect(toolbar.locator('.annotation-opacity-group')).toBeVisible()
+  await toolbar.getByRole('button', {name: 'Hide tool detail settings'}).click()
 
   await tools.getByRole('button', {name: 'Rectangle'}).click()
-  await toolbar.getByRole('button', {name: 'Tool detail settings', exact: true}).click()
+  await detailButton.click()
   const shapePanel = toolbar.locator('.annotation-style-capsule')
   await expect(shapePanel).toContainText('Fill color')
   await expect(shapePanel).toContainText('Fill style')
@@ -192,33 +200,25 @@ test('screenshot annotation overlay saves into screenshot history on explicit sa
   await expect(page.locator('.annotation-save-status')).toContainText('Saved')
 })
 
-test('screenshot annotation toolbar moves without moving the captured canvas', async ({page}) => {
+test('screenshot annotation uses native window drag so the captured canvas follows the toolbar', async ({page}) => {
   await openScreenshotAnnotationOverlay(page)
 
   const canvas = page.locator('.annotation-overlay-canvas')
   const capsule = page.locator('.annotation-capsule')
-  const title = page.locator('.annotation-capsule-title')
   const beforeCanvas = await canvas.boundingBox()
   const beforeCapsule = await capsule.boundingBox()
-  const titleBox = await title.boundingBox()
-  if (!beforeCanvas || !beforeCapsule || !titleBox) throw new Error('annotation toolbar geometry is unavailable')
+  if (!beforeCanvas || !beforeCapsule) throw new Error('annotation toolbar geometry is unavailable')
 
-  await page.mouse.move(titleBox.x + titleBox.width / 2, titleBox.y + titleBox.height / 2)
-  await page.mouse.down()
-  await page.mouse.move(titleBox.x + titleBox.width / 2 + 80, titleBox.y + titleBox.height / 2 + 20)
-  await page.mouse.up()
+  await expect.poll(async () => capsule.evaluate((element) => getComputedStyle(element).getPropertyValue('--wails-draggable').trim())).toBe('drag')
+  await expect.poll(async () => capsule.getByRole('button', {name: 'Save'}).evaluate((element) => getComputedStyle(element).getPropertyValue('--wails-draggable').trim())).toBe('no-drag')
+  await expect(page.locator('.annotation-toolbar-stack')).toHaveCSS('transform', 'none')
 
-  await expect.poll(async () => {
-    const [nextCanvas, nextCapsule] = await Promise.all([canvas.boundingBox(), capsule.boundingBox()])
-    if (!nextCanvas || !nextCapsule) return null
-    return {
-      canvas: {x: Math.round(nextCanvas.x), y: Math.round(nextCanvas.y)},
-      capsule: {x: Math.round(nextCapsule.x), y: Math.round(nextCapsule.y)},
-    }
-  }).toEqual({
-    canvas: {x: Math.round(beforeCanvas.x), y: Math.round(beforeCanvas.y)},
-    capsule: {x: Math.round(beforeCapsule.x + 80), y: Math.round(beforeCapsule.y + 20)},
-  })
+  const afterCanvas = await canvas.boundingBox()
+  const afterCapsule = await capsule.boundingBox()
+  expect(afterCanvas).toEqual(beforeCanvas)
+  expect(afterCapsule).toEqual(beforeCapsule)
+  expect(Math.round(afterCanvas!.x - afterCapsule!.x)).toBe(Math.round(beforeCanvas.x - beforeCapsule.x))
+  expect(Math.round(afterCanvas!.y - afterCapsule!.y)).toBe(Math.round(beforeCanvas.y - beforeCapsule.y))
 })
 
 test('small screenshot region keeps the complete toolbar outside the capture canvas', async ({page}) => {

@@ -18,7 +18,7 @@ import {
   Undo2,
   X,
 } from 'lucide-react'
-import {useCallback, useEffect, useLayoutEffect, useRef, useState, type PointerEvent as ReactPointerEvent} from 'react'
+import {useCallback, useEffect, useLayoutEffect, useRef, useState} from 'react'
 import {Excalidraw, exportToBlob, exportToClipboard, serializeAsJSON} from '@excalidraw/excalidraw'
 import type {ExcalidrawImperativeAPI} from '@excalidraw/excalidraw/types'
 import '@excalidraw/excalidraw/index.css'
@@ -42,7 +42,6 @@ const annotationTools: Array<{tool: WhiteboardTool; icon: typeof PenLine; label:
 
 const annotationColors = ['#ef4444', '#f59e0b', '#22c55e', '#38bdf8', '#a78bfa', '#f8fafc', '#111827']
 const annotationStrokeWidths = ['thin', 'medium', 'bold'] as const
-const annotationStyleTools: WhiteboardTool[] = ['freedraw', 'arrow', 'line', 'rectangle', 'ellipse', 'text']
 
 const maxPendingAnnotationElementEvents = 512
 type AnnotationElementEvent = {
@@ -107,7 +106,6 @@ function AnnotationOverlayWindow() {
   const [ocrPositionTextVisible, setOcrPositionTextVisible] = useState(false)
   const [ocrHoveredBlockId, setOcrHoveredBlockId] = useState('')
   const [ocrCopiedBlockId, setOcrCopiedBlockId] = useState('')
-  const [toolbarOffset, setToolbarOffset] = useState({x: 0, y: 0})
   const apiRef = useRef<ExcalidrawImperativeAPI | null>(null)
   const lastSavedSceneRef = useRef('')
   const lastSavedContentSignatureRef = useRef('')
@@ -117,56 +115,14 @@ function AnnotationOverlayWindow() {
   const clientSequenceRef = useRef(0)
   const ocrSourceRef = useRef<{sourceKind: string; sourceId: string} | null>(null)
   const sourceImageLoadedLogRef = useRef('')
-  const toolbarDragRef = useRef<{startX: number; startY: number; offsetX: number; offsetY: number} | null>(null)
   const capsuleRef = useRef<HTMLDivElement | null>(null)
   const canvasRef = useRef<HTMLElement | null>(null)
   const copy = copyByLocale[locale]
   const canvasReceivesInput = annotationCanvasReceivesInput(activeTool) || ocrPositionTextVisible
-  const showAnnotationStyleControls = annotationStyleTools.includes(activeTool)
   const isScreenshotMode = overlayState?.mode === 'screenshot'
   const overlayKey = annotationOverlayKey(overlayState)
   const canvasBounds = annotationCanvasBounds(overlayState)
   const toolbarBounds = annotationToolbarBounds(overlayState, canvasBounds)
-
-  const startToolbarDrag = (event: ReactPointerEvent<HTMLElement>) => {
-    const target = event.target as HTMLElement
-    if (target.closest('button, input, select, textarea, .annotation-style-capsule')) return
-    event.preventDefault()
-    toolbarDragRef.current = {
-      startX: event.clientX,
-      startY: event.clientY,
-      offsetX: toolbarOffset.x,
-      offsetY: toolbarOffset.y,
-    }
-  }
-
-  useEffect(() => {
-    const onPointerMove = (event: PointerEvent) => {
-      const drag = toolbarDragRef.current
-      if (!drag) return
-      const nextX = drag.offsetX + event.clientX - drag.startX
-      const nextY = drag.offsetY + event.clientY - drag.startY
-      const minX = 8 - toolbarBounds.x
-      const minY = 8 - toolbarBounds.y
-      const maxX = Math.max(minX, window.innerWidth - toolbarBounds.x - toolbarBounds.width - 8)
-      const maxY = Math.max(minY, window.innerHeight - toolbarBounds.y - toolbarBounds.height - 8)
-      setToolbarOffset({
-        x: Math.round(Math.min(maxX, Math.max(minX, nextX))),
-        y: Math.round(Math.min(maxY, Math.max(minY, nextY))),
-      })
-    }
-    const onPointerUp = () => {
-      toolbarDragRef.current = null
-    }
-    window.addEventListener('pointermove', onPointerMove)
-    window.addEventListener('pointerup', onPointerUp)
-    window.addEventListener('pointercancel', onPointerUp)
-    return () => {
-      window.removeEventListener('pointermove', onPointerMove)
-      window.removeEventListener('pointerup', onPointerUp)
-      window.removeEventListener('pointercancel', onPointerUp)
-    }
-  }, [toolbarBounds.height, toolbarBounds.width, toolbarBounds.x, toolbarBounds.y])
 
   function resetAnnotationElementTracking(scene: any) {
     elementSignatureRef.current = elementSignatureMap(scene?.elements ?? [])
@@ -345,7 +301,6 @@ function AnnotationOverlayWindow() {
 
   useEffect(() => {
     setAnnotationStylePanelOpen(false)
-    setToolbarOffset({x: 0, y: 0})
   }, [activeTool])
 
   useEffect(() => {
@@ -750,10 +705,9 @@ function AnnotationOverlayWindow() {
           left: toolbarBounds.x,
           top: toolbarBounds.y,
           width: toolbarBounds.width,
-          transform: `translate(${toolbarOffset.x}px, ${toolbarOffset.y}px)`,
         }}
       >
-      <section className="annotation-capsule" aria-label={copy.whiteboard.title} onPointerDown={startToolbarDrag}>
+      <section className="annotation-capsule" aria-label={copy.whiteboard.title}>
         <span className="annotation-capsule-title">{isScreenshotMode ? copy.screenshot.region : copy.whiteboard.open}</span>
         <div className="annotation-tools" role="toolbar" aria-label={copy.whiteboard.title}>
           {annotationTools.map(({tool, icon: Icon, label}) => (
@@ -769,17 +723,15 @@ function AnnotationOverlayWindow() {
             </button>
           ))}
         </div>
-        {showAnnotationStyleControls && (
-          <button
-            className={annotationStylePanelOpen ? 'selected' : ''}
-            type="button"
-            aria-label={copy.whiteboard.styleSettings}
-            title={copy.whiteboard.styleSettings}
-            onClick={() => setAnnotationStylePanelOpen((open) => !open)}
-          >
-            <Settings2 size={16} />
-          </button>
-        )}
+        <button
+          className={annotationStylePanelOpen ? 'selected' : ''}
+          type="button"
+          aria-label={copy.whiteboard.styleSettings}
+          title={copy.whiteboard.styleSettings}
+          onClick={() => setAnnotationStylePanelOpen((open) => !open)}
+        >
+          <Settings2 size={16} />
+        </button>
         <button type="button" aria-label={copy.whiteboard.undo} title={copy.whiteboard.undo} onClick={undoAnnotationStep}>
           <Undo2 size={16} />
         </button>
@@ -806,7 +758,7 @@ function AnnotationOverlayWindow() {
           <X size={17} />
         </button>
       </section>
-      {showAnnotationStyleControls && annotationStylePanelOpen && (
+      {annotationStylePanelOpen && (
         <section className="annotation-style-capsule" aria-label={copy.whiteboard.styleSettings}>
           <div className="annotation-style-group" aria-label={copy.whiteboard.strokeColor}>
             {annotationColors.map((color) => (
