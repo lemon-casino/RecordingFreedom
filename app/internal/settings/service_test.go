@@ -28,8 +28,8 @@ func TestLoadMissingSettingsReturnsDefaults(t *testing.T) {
 	if got.Audio.Microphone {
 		t.Fatal("default settings should keep microphone disabled until the user enables it")
 	}
-	if got.Audio.NoiseSuppression {
-		t.Fatal("default settings should keep microphone noise suppression disabled until the user enables it")
+	if !got.Audio.NoiseSuppression {
+		t.Fatal("default settings should enable the RNNoise voice-focus preference")
 	}
 	if got.Recording != recordingprofile.Default() {
 		t.Fatalf("default recording profile = %#v, want %#v", got.Recording, recordingprofile.Default())
@@ -258,6 +258,70 @@ func TestLoadMigratesLegacyPIPScaleRange(t *testing.T) {
 	}
 	if loaded.Camera.PIP.Scale != pip.MaximumScale {
 		t.Fatalf("legacy max scale = %v, want migrated max %v", loaded.Camera.PIP.Scale, pip.MaximumScale)
+	}
+}
+
+func TestLoadEnablesRNNoiseVoiceFocusOnceForPreV6Settings(t *testing.T) {
+	root := t.TempDir()
+	service := NewService(appdata.NewService(root))
+	path, err := service.Path()
+	if err != nil {
+		t.Fatalf("Path() error = %v", err)
+	}
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		t.Fatalf("MkdirAll() error = %v", err)
+	}
+	legacy := `{
+  "schemaVersion": 5,
+  "locale": "zh-CN",
+  "audio": {
+    "microphone": true,
+    "noiseSuppression": false,
+    "microphoneGain": 1
+  }
+}`
+	if err := os.WriteFile(path, []byte(legacy), 0o644); err != nil {
+		t.Fatalf("WriteFile() error = %v", err)
+	}
+
+	loaded, err := service.Load()
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+	if loaded.SchemaVersion != SchemaVersion || !loaded.Audio.NoiseSuppression {
+		t.Fatalf("migrated settings = %#v, want schema v%d with RNNoise enabled", loaded.Audio, SchemaVersion)
+	}
+}
+
+func TestLoadPreservesExplicitRNNoiseOffInV6Settings(t *testing.T) {
+	root := t.TempDir()
+	service := NewService(appdata.NewService(root))
+	path, err := service.Path()
+	if err != nil {
+		t.Fatalf("Path() error = %v", err)
+	}
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		t.Fatalf("MkdirAll() error = %v", err)
+	}
+	current := `{
+  "schemaVersion": 6,
+  "locale": "zh-CN",
+  "audio": {
+    "microphone": true,
+    "noiseSuppression": false,
+    "microphoneGain": 1
+  }
+}`
+	if err := os.WriteFile(path, []byte(current), 0o644); err != nil {
+		t.Fatalf("WriteFile() error = %v", err)
+	}
+
+	loaded, err := service.Load()
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+	if loaded.Audio.NoiseSuppression {
+		t.Fatalf("RNNoise preference = true, want explicit v6 off preserved")
 	}
 }
 

@@ -543,7 +543,7 @@ export const systemAudioDevices = mediaInventory.systemAudio
 export const cameraDevices = mediaInventory.cameras
 
 export const defaultSettings: AppSettings = {
-  schemaVersion: 4,
+  schemaVersion: 6,
   locale: 'zh-CN',
   source: {
     lastSourceType: 'screen',
@@ -562,7 +562,7 @@ export const defaultSettings: AppSettings = {
     systemDeviceId: 'system-audio:default',
     microphone: false,
     microphoneDeviceId: 'microphone:browser-preview',
-    noiseSuppression: false,
+    noiseSuppression: true,
     microphoneGain: 1,
   },
   camera: {

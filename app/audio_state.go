@@ -28,7 +28,7 @@ func audioStateFromSettings(audio settings.AudioSettings) AudioState {
 		SystemDeviceID:     audio.SystemDeviceID,
 		Microphone:         audio.Microphone,
 		MicrophoneDeviceID: audio.MicrophoneDeviceID,
-		NoiseSuppression:   audio.Microphone && audio.NoiseSuppression,
+		NoiseSuppression:   audio.NoiseSuppression,
 		MicrophoneGain:     audio.MicrophoneGain,
 	}
 }
@@ -57,9 +57,6 @@ func applyAudioStatePatch(audio settings.AudioSettings, patch AudioStatePatchReq
 	}
 	if patch.MicrophoneGain != nil {
 		audio.MicrophoneGain = *patch.MicrophoneGain
-	}
-	if !audio.Microphone {
-		audio.NoiseSuppression = false
 	}
 	return audio
 }

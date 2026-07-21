@@ -4175,7 +4175,7 @@ function fromBoundAudioState(state: BoundAudioState): AudioControlState {
     systemDeviceId: state.systemDeviceId,
     microphone: state.microphone,
     microphoneDeviceId: state.microphoneDeviceId,
-    noiseSuppression: state.microphone && state.noiseSuppression,
+    noiseSuppression: state.noiseSuppression,
     microphoneGain: state.microphoneGain || 1,
   }
 }
@@ -4268,7 +4268,6 @@ function applyBrowserAudioPatch(audio: AppSettings['audio'], patch: AudioStatePa
   if (patch.microphoneDeviceId !== undefined) next.microphoneDeviceId = patch.microphoneDeviceId
   if (patch.noiseSuppression !== undefined) next.noiseSuppression = patch.noiseSuppression
   if (patch.microphoneGain !== undefined) next.microphoneGain = patch.microphoneGain
-  if (!next.microphone) next.noiseSuppression = false
   return next
 }
 

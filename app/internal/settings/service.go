@@ -19,9 +19,10 @@ import (
 const fileName = "settings.json"
 
 const (
-	pipScaleSchemaVersion = 2
-	legacyPIPMinimumScale = 0.016
-	legacyPIPMaximumScale = 0.08
+	pipScaleSchemaVersion          = 2
+	rnnoiseVoiceFocusSchemaVersion = 6
+	legacyPIPMinimumScale          = 0.016
+	legacyPIPMaximumScale          = 0.08
 )
 
 type Service struct {
@@ -103,7 +104,7 @@ func Default() Settings {
 			SystemDeviceID:     "system-audio:default",
 			Microphone:         false,
 			MicrophoneDeviceID: "microphone:default",
-			NoiseSuppression:   false,
+			NoiseSuppression:   true,
 			MicrophoneGain:     1,
 		},
 		Camera: CameraSettings{
@@ -227,10 +228,15 @@ func validOCRTranslationProvider(provider string) bool {
 }
 
 func migrateLoadedSettings(value Settings) Settings {
-	if value.SchemaVersion >= pipScaleSchemaVersion {
-		return value
+	if value.SchemaVersion < pipScaleSchemaVersion {
+		value.Camera.PIP.Scale = migrateLegacyPIPScale(value.Camera.PIP.Scale)
 	}
-	value.Camera.PIP.Scale = migrateLegacyPIPScale(value.Camera.PIP.Scale)
+	if value.SchemaVersion < rnnoiseVoiceFocusSchemaVersion {
+		// v6 promotes the tested RNNoise fan-noise voice-focus chain to the
+		// default. This migration runs once; a user's later explicit choice is
+		// preserved because saved v6 settings no longer enter this branch.
+		value.Audio.NoiseSuppression = true
+	}
 	return value
 }
 

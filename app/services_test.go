@@ -440,7 +440,7 @@ func TestPatchAudioStatePersistsAudioControls(t *testing.T) {
 	}
 }
 
-func TestPatchAudioStateDisablesRNNoiseWithMicrophone(t *testing.T) {
+func TestPatchAudioStatePreservesRNNoisePreferenceWithMicrophoneOff(t *testing.T) {
 	data := appdata.NewService(t.TempDir())
 	service := &RecordingFreedomService{
 		appData:  data,
@@ -459,15 +459,15 @@ func TestPatchAudioStateDisablesRNNoiseWithMicrophone(t *testing.T) {
 	if err != nil {
 		t.Fatalf("PatchAudioState(disable) error = %v", err)
 	}
-	if state.Microphone || state.NoiseSuppression {
-		t.Fatalf("audio state = %#v, want microphone and rnnoise disabled", state)
+	if state.Microphone || !state.NoiseSuppression {
+		t.Fatalf("audio state = %#v, want microphone off with RNNoise preference preserved", state)
 	}
 	saved, err := service.GetSettings()
 	if err != nil {
 		t.Fatalf("GetSettings() error = %v", err)
 	}
-	if saved.Audio.Microphone || saved.Audio.NoiseSuppression {
-		t.Fatalf("saved audio = %#v, want microphone and rnnoise disabled", saved.Audio)
+	if saved.Audio.Microphone || !saved.Audio.NoiseSuppression {
+		t.Fatalf("saved audio = %#v, want microphone off with RNNoise preference preserved", saved.Audio)
 	}
 }
 

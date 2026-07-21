@@ -610,7 +610,7 @@ function App() {
     }, pipPreset)
     const savedPipConfig = camera ? ensureVisiblePipConfig(rawPipConfig) : rawPipConfig
     const nextSettings = {
-      schemaVersion: 4,
+      schemaVersion: defaultSettings.schemaVersion,
       locale,
       source: {
         lastSourceId: selectedSource.id,
@@ -658,7 +658,7 @@ function App() {
     if (!isSettingsWindow || !persistedSettingsRef.current) return nextSettings
     return {
       ...persistedSettingsRef.current,
-      schemaVersion: 4,
+      schemaVersion: defaultSettings.schemaVersion,
       locale,
       storage: {
         dataRootDir: appData.rootDir,
@@ -1175,7 +1175,7 @@ function App() {
           systemDeviceId: audio.systemDeviceId,
           microphone: audio.microphone,
           microphoneDeviceId: audio.microphoneDeviceId,
-          noiseSuppression: audio.microphone && audio.noiseSuppression,
+          noiseSuppression: audio.noiseSuppression,
           microphoneGain: audio.microphoneGain || 1,
         },
       }
@@ -1184,7 +1184,7 @@ function App() {
     persistedSettingsRef.current = apply(persistedSettingsRef.current)
   }
   const applyAudioControlState = (audio: AudioControlState) => {
-    const nextNoiseSuppression = audio.microphone && audio.noiseSuppression
+    const nextNoiseSuppression = audio.noiseSuppression
     systemAudioRef.current = audio.system
     microphoneRef.current = audio.microphone
     noiseSuppressionRef.current = nextNoiseSuppression
@@ -1209,7 +1209,7 @@ function App() {
   }
   const optimisticAudioState = (patch: AudioStatePatch): AudioControlState => {
     const nextMicrophone = patch.microphone ?? microphoneRef.current
-    const nextNoiseSuppression = nextMicrophone ? (patch.noiseSuppression ?? noiseSuppressionRef.current) : false
+    const nextNoiseSuppression = patch.noiseSuppression ?? noiseSuppressionRef.current
     return {
       system: patch.system ?? systemAudioRef.current,
       systemDeviceId: patch.clearSystemDevice ? undefined : (patch.systemDeviceId ?? selectedSystemAudioRef.current),
@@ -1304,8 +1304,8 @@ function App() {
       ? microphoneRef.current && nextHasAvailableMicrophone
       : effectiveSettings.audio.microphone && nextHasAvailableMicrophone
     const nextNoiseSuppressionEnabled = options.preserveAudioEnabled
-      ? noiseSuppressionRef.current && nextMicrophoneEnabled
-      : effectiveSettings.audio.microphone && nextHasAvailableMicrophone && effectiveSettings.audio.noiseSuppression
+      ? noiseSuppressionRef.current
+      : effectiveSettings.audio.noiseSuppression
     const nextCameraDevice = selectPreferredCameraDevice(cameraList, effectiveSettings.camera.deviceId)
     const nextHasUsableCamera = !cameraList || Boolean(nextCameraDevice)
     const nextCameraEnabled = options.preserveCameraEnabled
@@ -2125,7 +2125,7 @@ function App() {
     systemAudioDeviceId: selectedSystemAudio || undefined,
     microphone,
     microphoneDeviceId: selectedMic || undefined,
-    noiseSuppression,
+    noiseSuppression: microphone && noiseSuppression,
   })
 
   const buildVideoRequest = (): MockRecordingRequest => {
@@ -2144,7 +2144,7 @@ function App() {
       systemAudioDeviceId: selectedSystemAudio || undefined,
       microphone,
       microphoneDeviceId: selectedMic || undefined,
-      noiseSuppression,
+      noiseSuppression: microphone && noiseSuppression,
       camera: requestCameraEnabled,
       cameraDeviceId: requestCameraDevice?.id ?? requestedCameraId,
       cameraDeviceNativeId: requestCameraDevice?.nativeId,
@@ -3340,7 +3340,7 @@ function App() {
                   onChange={(value) => {
                     commitAudioStatePatch(value
                       ? {microphone: true, microphoneDeviceId: selectedMic || availableMicrophones.find((device) => device.available !== false)?.id}
-                      : {microphone: false, noiseSuppression: false})
+                      : {microphone: false})
                   }}
                 />
                 <SwitchRow
@@ -3689,7 +3689,7 @@ function FloatingPanelWindow() {
   const microphone = audioState.microphone
   const selectedSystemAudio = audioState.systemDeviceId || availableSystemAudio[0]?.id || ''
   const selectedMic = audioState.microphoneDeviceId || availableMicrophones[0]?.id || ''
-  const noiseSuppression = microphone && audioState.noiseSuppression
+  const noiseSuppression = audioState.noiseSuppression
   const selectedMicrophoneDevice = availableMicrophones.find((device) => device.id === selectedMic)
   const hasAvailableMicrophone = availableMicrophones.some((device) => device.available !== false)
   const hasUsableCamera = availableCameras.some(isUsableCameraDevice)
@@ -3963,7 +3963,7 @@ function FloatingPanelWindow() {
       systemDeviceId: next.audio.systemDeviceId,
       microphone: next.audio.microphone,
       microphoneDeviceId: next.audio.microphoneDeviceId,
-      noiseSuppression: next.audio.microphone && next.audio.noiseSuppression,
+      noiseSuppression: next.audio.noiseSuppression,
       microphoneGain: next.audio.microphoneGain,
     })
     if (media) {
@@ -4483,7 +4483,7 @@ function FloatingPanelWindow() {
           <SwitchRow label={copy.panels.systemAudio} checked={systemAudio} disabled={isRecording} onChange={(value) => commitAudioStatePatch({system: value})} />
           <label className="field-label" htmlFor="floating-system-audio-device">{copy.panels.systemAudioDevice}</label>
           <SelectMenu id="floating-system-audio-device" value={selectedSystemAudio} disabled={isRecording} options={availableSystemAudio.map((device) => ({value: device.id, label: mediaDeviceName(device, copy), disabled: device.available === false}))} onChange={(value) => commitAudioStatePatch({systemDeviceId: value})} />
-          <SwitchRow label={copy.panels.microphone} checked={microphone && hasAvailableMicrophone} disabled={isRecording || !hasAvailableMicrophone} onChange={(value) => commitAudioStatePatch(value ? {microphone: true, microphoneDeviceId: selectedMic || availableMicrophones.find((device) => device.available !== false)?.id} : {microphone: false, noiseSuppression: false})} />
+          <SwitchRow label={copy.panels.microphone} checked={microphone && hasAvailableMicrophone} disabled={isRecording || !hasAvailableMicrophone} onChange={(value) => commitAudioStatePatch(value ? {microphone: true, microphoneDeviceId: selectedMic || availableMicrophones.find((device) => device.available !== false)?.id} : {microphone: false})} />
           <SwitchRow label={copy.panels.rnnoise} checked={noiseSuppression} disabled={isRecording || !microphone || selectedMicrophoneDevice?.rnnoiseEligible === false} onChange={(value) => commitAudioStatePatch({noiseSuppression: value && microphone})} />
           <label className="field-label" htmlFor="floating-mic-device">{copy.panels.microphoneDevice}</label>
           <SelectMenu id="floating-mic-device" value={selectedMic} disabled={isRecording || !microphone || !hasAvailableMicrophone} options={availableMicrophones.length === 0 ? [{value: '', label: copy.panels.noMicrophones, disabled: true}] : availableMicrophones.map((device) => ({value: device.id, label: mediaDeviceName(device, copy), disabled: device.available === false}))} onChange={(value) => commitAudioStatePatch({microphoneDeviceId: value})} />
