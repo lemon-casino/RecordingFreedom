@@ -60,7 +60,7 @@ test('annotation tools expose tool-specific style settings', async ({page}) => {
   const toolbar = page.locator('.annotation-toolbar-stack')
 
   await tools.getByRole('button', {name: 'Rectangle'}).click()
-  await toolbar.getByRole('button', {name: 'Tool detail settings'}).click()
+  await toolbar.getByRole('button', {name: 'Tool detail settings', exact: true}).click()
   const shapePanel = toolbar.locator('.annotation-style-capsule')
   await expect(shapePanel).toContainText('Fill color')
   await expect(shapePanel).toContainText('Fill style')
@@ -68,11 +68,11 @@ test('annotation tools expose tool-specific style settings', async ({page}) => {
   await expect(shapePanel).toContainText('Roughness')
   await shapePanel.getByRole('button', {name: 'Hide tool detail settings'}).click()
   await expect(toolbar.locator('.annotation-style-capsule')).toHaveCount(0)
-  await toolbar.getByRole('button', {name: 'Tool detail settings'}).click()
+  await toolbar.getByRole('button', {name: 'Tool detail settings', exact: true}).click()
   await expect(toolbar.locator('.annotation-style-capsule')).toBeVisible()
 
   await tools.getByRole('button', {name: 'Text'}).click()
-  await toolbar.getByRole('button', {name: 'Tool detail settings'}).click()
+  await toolbar.getByRole('button', {name: 'Tool detail settings', exact: true}).click()
   const textPanel = toolbar.locator('.annotation-style-capsule')
   await expect(textPanel).toContainText('Font')
   await expect(textPanel).toContainText('Font size')
