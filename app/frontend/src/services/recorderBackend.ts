@@ -925,6 +925,11 @@ export function subscribeCapsuleDockSide(handler: (side: CapsuleWindowDockSide) 
 }
 
 export async function restoreCapsuleWindow(focus = true): Promise<void> {
+  if (!isWailsDesktopRuntime()) {
+    const browserWindow = window as Window & {__RF_TEST_CAPSULE_RESTORE_COUNT__?: number}
+    browserWindow.__RF_TEST_CAPSULE_RESTORE_COUNT__ = (browserWindow.__RF_TEST_CAPSULE_RESTORE_COUNT__ ?? 0) + 1
+    return
+  }
   try {
     await WailsWindow.Show()
     await WailsWindow.UnMinimise().catch(() => undefined)
@@ -1140,7 +1145,9 @@ export async function setCapsuleWindowExpanded(
   compactCollapsed = false,
 ): Promise<CapsuleWindowExpandDirection> {
   try {
-    await restoreCapsuleWindow(false)
+    // Layout runs as soon as the webview mounts, including while a
+    // start-at-login window is intentionally hidden. Never change visibility
+    // from this geometry-only path.
     const position = await WailsWindow.Position()
     const size = await WailsWindow.Size().catch(() => ({
       width: expanded ? capsuleWindowWidth : compactCollapsed ? capsuleWindowCompactWidth : capsuleWindowWidth,
@@ -1188,7 +1195,8 @@ export async function setCapsuleWindowExpanded(
 
 export async function snapCapsuleWindowToEdge(compactCollapsed = false): Promise<CapsuleWindowDockSide> {
   try {
-    await restoreCapsuleWindow(false)
+    // Snapping may be triggered by startup/layout events for a hidden window.
+    // Showing the capsule belongs to explicit tray/user actions only.
     const position = await WailsWindow.Position()
     const size = await WailsWindow.Size().catch(() => capsuleCollapsedWindowSize(compactCollapsed, lastCapsuleDockSide, null))
     let workAreas = await capsuleWorkAreas().catch(() => [])

@@ -1,5 +1,16 @@
 import {expect, test, type Page} from '@playwright/test'
 
+test('startup layout does not request a native capsule restore', async ({page}) => {
+  await page.goto('/')
+  await expect(page.locator('.capsule')).toBeVisible()
+  await page.waitForTimeout(350)
+
+  const restoreCount = await page.evaluate(() => (
+    window as Window & {__RF_TEST_CAPSULE_RESTORE_COUNT__?: number}
+  ).__RF_TEST_CAPSULE_RESTORE_COUNT__ ?? 0)
+  expect(restoreCount).toBe(0)
+})
+
 test('capsule docking only snaps near external monitor edges', async ({page}) => {
   await page.goto('/')
 
