@@ -546,12 +546,14 @@ export interface ShortcutSettingsPatchRequest {
     "toggleCamera"?: string | null;
     "openWhiteboard"?: string | null;
     "openScreenshot"?: string | null;
+    "openScrollingScreenshot"?: string | null;
     "pasteImage"?: string | null;
 }
 
 export interface ShortcutTriggeredEvent {
     "action": settings$0.ShortcutAction;
     "accelerator": string;
+    "preserveCapsuleHidden"?: boolean;
 }
 
 export interface SourceControlState {

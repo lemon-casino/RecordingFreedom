@@ -58,8 +58,10 @@ func TestLoadMissingSettingsReturnsDefaults(t *testing.T) {
 	if got.OCR.Translation.Provider != "disabled" || got.OCR.Translation.PrivacyConfirmed {
 		t.Fatalf("default OCR translation = %#v, want disabled and unconfirmed", got.OCR.Translation)
 	}
-	if got.Shortcuts.ToggleRecording != "CmdOrCtrl+Shift+R" || got.Shortcuts.OpenWhiteboard != "CmdOrCtrl+Shift+B" {
-		t.Fatalf("default shortcuts = %#v, want recording and whiteboard defaults", got.Shortcuts)
+	if got.Shortcuts.ToggleRecording != "CmdOrCtrl+Shift+R" ||
+		got.Shortcuts.OpenWhiteboard != "CmdOrCtrl+Shift+B" ||
+		got.Shortcuts.OpenScrollingScreenshot != "CmdOrCtrl+Shift+L" {
+		t.Fatalf("default shortcuts = %#v, want recording, whiteboard, and scrolling screenshot defaults", got.Shortcuts)
 	}
 }
 
@@ -215,6 +217,23 @@ func TestValidateShortcutsAllowsFunctionKey(t *testing.T) {
 	shortcuts.ToggleRecording = "A"
 	if _, err := ValidateShortcuts(shortcuts); err == nil {
 		t.Fatal("plain letter shortcut should still require a modifier")
+	}
+}
+
+func TestShortcutBindingsIncludeScrollingScreenshot(t *testing.T) {
+	bindings := ShortcutBindings(DefaultShortcuts())
+	found := false
+	for _, binding := range bindings {
+		if binding.Action != ShortcutActionOpenScrolling {
+			continue
+		}
+		found = true
+		if binding.Accelerator != "CmdOrCtrl+Shift+L" {
+			t.Fatalf("scrolling screenshot shortcut = %q, want CmdOrCtrl+Shift+L", binding.Accelerator)
+		}
+	}
+	if !found {
+		t.Fatal("scrolling screenshot shortcut binding is missing")
 	}
 }
 

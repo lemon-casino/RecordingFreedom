@@ -904,6 +904,28 @@ func TestPatchShortcutSettingsRejectsDuplicate(t *testing.T) {
 	}
 }
 
+func TestShortcutIndependentWindowsPreserveHiddenCapsule(t *testing.T) {
+	for _, action := range []settings.ShortcutAction{
+		settings.ShortcutActionOpenWhiteboard,
+		settings.ShortcutActionOpenScreenshot,
+		settings.ShortcutActionOpenScrolling,
+		settings.ShortcutActionPasteImage,
+	} {
+		if !shortcutUsesIndependentWindow(action) {
+			t.Fatalf("%s should preserve a hidden capsule", action)
+		}
+	}
+	for _, action := range []settings.ShortcutAction{
+		settings.ShortcutActionToggleRecording,
+		settings.ShortcutActionTogglePause,
+		settings.ShortcutActionToggleCamera,
+	} {
+		if shortcutUsesIndependentWindow(action) {
+			t.Fatalf("%s should keep its existing capsule behavior", action)
+		}
+	}
+}
+
 func TestSaveSettingsDoesNotOverwritePatchedPreferences(t *testing.T) {
 	data := appdata.NewService(t.TempDir())
 	service := &RecordingFreedomService{

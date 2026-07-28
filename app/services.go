@@ -504,6 +504,21 @@ func (s *RecordingFreedomService) restoreCapsuleWindow() {
 	s.capsuleWindow.Focus()
 }
 
+func (s *RecordingFreedomService) hideCapsuleWindowForCapture() bool {
+	if s == nil || s.capsuleWindow == nil {
+		return false
+	}
+	restoreAfterCapture := s.capsuleWindow.IsVisible() && !s.capsuleWindow.IsMinimised()
+	s.capsuleWindow.Hide()
+	return restoreAfterCapture
+}
+
+func (s *RecordingFreedomService) restoreCapsuleWindowAfterCapture(restore bool) {
+	if restore {
+		s.restoreCapsuleWindow()
+	}
+}
+
 func (s *RecordingFreedomService) ShowSettingsWindow() error {
 	if s.settingsWindow == nil {
 		return errors.New("settings window is not configured")

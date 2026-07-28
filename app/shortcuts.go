@@ -8,17 +8,19 @@ import (
 )
 
 type ShortcutTriggeredEvent struct {
-	Action      settings.ShortcutAction `json:"action"`
-	Accelerator string                  `json:"accelerator"`
+	Action                settings.ShortcutAction `json:"action"`
+	Accelerator           string                  `json:"accelerator"`
+	PreserveCapsuleHidden bool                    `json:"preserveCapsuleHidden,omitempty"`
 }
 
 type ShortcutSettingsPatchRequest struct {
-	ToggleRecording *string `json:"toggleRecording,omitempty"`
-	TogglePause     *string `json:"togglePause,omitempty"`
-	ToggleCamera    *string `json:"toggleCamera,omitempty"`
-	OpenWhiteboard  *string `json:"openWhiteboard,omitempty"`
-	OpenScreenshot  *string `json:"openScreenshot,omitempty"`
-	PasteImage      *string `json:"pasteImage,omitempty"`
+	ToggleRecording         *string `json:"toggleRecording,omitempty"`
+	TogglePause             *string `json:"togglePause,omitempty"`
+	ToggleCamera            *string `json:"toggleCamera,omitempty"`
+	OpenWhiteboard          *string `json:"openWhiteboard,omitempty"`
+	OpenScreenshot          *string `json:"openScreenshot,omitempty"`
+	OpenScrollingScreenshot *string `json:"openScrollingScreenshot,omitempty"`
+	PasteImage              *string `json:"pasteImage,omitempty"`
 }
 
 func (s *RecordingFreedomService) PatchShortcutSettings(patch ShortcutSettingsPatchRequest) (settings.Settings, error) {
@@ -64,6 +66,9 @@ func applyShortcutSettingsPatch(current settings.ShortcutSettings, patch Shortcu
 	if patch.OpenScreenshot != nil {
 		current.OpenScreenshot = strings.TrimSpace(*patch.OpenScreenshot)
 	}
+	if patch.OpenScrollingScreenshot != nil {
+		current.OpenScrollingScreenshot = strings.TrimSpace(*patch.OpenScrollingScreenshot)
+	}
 	if patch.PasteImage != nil {
 		current.PasteImage = strings.TrimSpace(*patch.PasteImage)
 	}
@@ -72,12 +77,13 @@ func applyShortcutSettingsPatch(current settings.ShortcutSettings, patch Shortcu
 
 func shortcutPatchFields(patch ShortcutSettingsPatchRequest, saved settings.ShortcutSettings) map[string]string {
 	fields := map[string]string{
-		"savedToggleRecording": saved.ToggleRecording,
-		"savedTogglePause":     saved.TogglePause,
-		"savedToggleCamera":    saved.ToggleCamera,
-		"savedOpenWhiteboard":  saved.OpenWhiteboard,
-		"savedOpenScreenshot":  saved.OpenScreenshot,
-		"savedPasteImage":      saved.PasteImage,
+		"savedToggleRecording":         saved.ToggleRecording,
+		"savedTogglePause":             saved.TogglePause,
+		"savedToggleCamera":            saved.ToggleCamera,
+		"savedOpenWhiteboard":          saved.OpenWhiteboard,
+		"savedOpenScreenshot":          saved.OpenScreenshot,
+		"savedOpenScrollingScreenshot": saved.OpenScrollingScreenshot,
+		"savedPasteImage":              saved.PasteImage,
 	}
 	if patch.ToggleRecording != nil {
 		fields["toggleRecording"] = strings.TrimSpace(*patch.ToggleRecording)
@@ -93,6 +99,9 @@ func shortcutPatchFields(patch ShortcutSettingsPatchRequest, saved settings.Shor
 	}
 	if patch.OpenScreenshot != nil {
 		fields["openScreenshot"] = strings.TrimSpace(*patch.OpenScreenshot)
+	}
+	if patch.OpenScrollingScreenshot != nil {
+		fields["openScrollingScreenshot"] = strings.TrimSpace(*patch.OpenScrollingScreenshot)
 	}
 	if patch.PasteImage != nil {
 		fields["pasteImage"] = strings.TrimSpace(*patch.PasteImage)
@@ -162,7 +171,14 @@ func (s *RecordingFreedomService) registerGlobalShortcutLocked(action settings.S
 		return nil
 	}
 	if err := s.app.GlobalShortcut.Register(boundAccelerator, func() {
-		s.emitShortcutTriggered(boundAction, boundAccelerator)
+		preserveCapsuleHidden := s.shouldPreserveCapsuleHidden(boundAction)
+		if preserveCapsuleHidden {
+			s.capsuleWindow.Hide()
+		}
+		s.emitShortcutTriggered(boundAction, boundAccelerator, preserveCapsuleHidden)
+		if preserveCapsuleHidden {
+			s.capsuleWindow.Hide()
+		}
 	}); err != nil {
 		s.logEvent("shortcuts", "register-error", map[string]string{
 			"action":      string(boundAction),
@@ -179,7 +195,26 @@ func (s *RecordingFreedomService) registerGlobalShortcutLocked(action settings.S
 	return nil
 }
 
-func (s *RecordingFreedomService) emitShortcutTriggered(action settings.ShortcutAction, accelerator string) {
+func (s *RecordingFreedomService) shouldPreserveCapsuleHidden(action settings.ShortcutAction) bool {
+	if s == nil || s.capsuleWindow == nil || !shortcutUsesIndependentWindow(action) {
+		return false
+	}
+	return !s.capsuleWindow.IsVisible() || s.capsuleWindow.IsMinimised()
+}
+
+func shortcutUsesIndependentWindow(action settings.ShortcutAction) bool {
+	switch action {
+	case settings.ShortcutActionOpenWhiteboard,
+		settings.ShortcutActionOpenScreenshot,
+		settings.ShortcutActionOpenScrolling,
+		settings.ShortcutActionPasteImage:
+		return true
+	default:
+		return false
+	}
+}
+
+func (s *RecordingFreedomService) emitShortcutTriggered(action settings.ShortcutAction, accelerator string, preserveCapsuleHidden bool) {
 	if s == nil || s.app == nil {
 		return
 	}
@@ -188,7 +223,8 @@ func (s *RecordingFreedomService) emitShortcutTriggered(action settings.Shortcut
 		"accelerator": accelerator,
 	})
 	s.app.Event.Emit("shortcut.triggered", ShortcutTriggeredEvent{
-		Action:      action,
-		Accelerator: accelerator,
+		Action:                action,
+		Accelerator:           accelerator,
+		PreserveCapsuleHidden: preserveCapsuleHidden,
 	})
 }

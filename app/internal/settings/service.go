@@ -317,12 +317,13 @@ func validTheme(theme Theme) bool {
 
 func DefaultShortcuts() ShortcutSettings {
 	return ShortcutSettings{
-		ToggleRecording: "CmdOrCtrl+Shift+R",
-		TogglePause:     "CmdOrCtrl+Shift+P",
-		ToggleCamera:    "CmdOrCtrl+Shift+C",
-		OpenWhiteboard:  "CmdOrCtrl+Shift+B",
-		OpenScreenshot:  "CmdOrCtrl+Shift+S",
-		PasteImage:      "CmdOrCtrl+Shift+V",
+		ToggleRecording:         "CmdOrCtrl+Shift+R",
+		TogglePause:             "CmdOrCtrl+Shift+P",
+		ToggleCamera:            "CmdOrCtrl+Shift+C",
+		OpenWhiteboard:          "CmdOrCtrl+Shift+B",
+		OpenScreenshot:          "CmdOrCtrl+Shift+S",
+		OpenScrollingScreenshot: "CmdOrCtrl+Shift+L",
+		PasteImage:              "CmdOrCtrl+Shift+V",
 	}
 }
 
@@ -345,18 +346,20 @@ func ShortcutBindings(value ShortcutSettings) []ShortcutBinding {
 		{Action: ShortcutActionToggleCamera, Accelerator: normalized.ToggleCamera},
 		{Action: ShortcutActionOpenWhiteboard, Accelerator: normalized.OpenWhiteboard},
 		{Action: ShortcutActionOpenScreenshot, Accelerator: normalized.OpenScreenshot},
+		{Action: ShortcutActionOpenScrolling, Accelerator: normalized.OpenScrollingScreenshot},
 		{Action: ShortcutActionPasteImage, Accelerator: normalized.PasteImage},
 	}
 }
 
 func normalizeShortcuts(value ShortcutSettings, defaults ShortcutSettings) ShortcutSettings {
 	normalized, err := normalizeShortcutValues(ShortcutSettings{
-		ToggleRecording: shortcutOrDefault(value.ToggleRecording, defaults.ToggleRecording),
-		TogglePause:     shortcutOrDefault(value.TogglePause, defaults.TogglePause),
-		ToggleCamera:    shortcutOrDefault(value.ToggleCamera, defaults.ToggleCamera),
-		OpenWhiteboard:  shortcutOrDefault(value.OpenWhiteboard, defaults.OpenWhiteboard),
-		OpenScreenshot:  shortcutOrDefault(value.OpenScreenshot, defaults.OpenScreenshot),
-		PasteImage:      shortcutOrDefault(value.PasteImage, defaults.PasteImage),
+		ToggleRecording:         shortcutOrDefault(value.ToggleRecording, defaults.ToggleRecording),
+		TogglePause:             shortcutOrDefault(value.TogglePause, defaults.TogglePause),
+		ToggleCamera:            shortcutOrDefault(value.ToggleCamera, defaults.ToggleCamera),
+		OpenWhiteboard:          shortcutOrDefault(value.OpenWhiteboard, defaults.OpenWhiteboard),
+		OpenScreenshot:          shortcutOrDefault(value.OpenScreenshot, defaults.OpenScreenshot),
+		OpenScrollingScreenshot: shortcutOrDefault(value.OpenScrollingScreenshot, defaults.OpenScrollingScreenshot),
+		PasteImage:              shortcutOrDefault(value.PasteImage, defaults.PasteImage),
 	})
 	if err != nil {
 		return defaults
@@ -387,6 +390,9 @@ func normalizeShortcutValues(value ShortcutSettings) (ShortcutSettings, error) {
 	}
 	if value.OpenScreenshot, err = NormalizeShortcutAccelerator(value.OpenScreenshot); err != nil {
 		return ShortcutSettings{}, fmt.Errorf("%s: %w", ShortcutActionOpenScreenshot, err)
+	}
+	if value.OpenScrollingScreenshot, err = NormalizeShortcutAccelerator(value.OpenScrollingScreenshot); err != nil {
+		return ShortcutSettings{}, fmt.Errorf("%s: %w", ShortcutActionOpenScrolling, err)
 	}
 	if value.PasteImage, err = NormalizeShortcutAccelerator(value.PasteImage); err != nil {
 		return ShortcutSettings{}, fmt.Errorf("%s: %w", ShortcutActionPasteImage, err)
@@ -440,6 +446,7 @@ func ShortcutBindingsRaw(value ShortcutSettings) []ShortcutBinding {
 		{Action: ShortcutActionToggleCamera, Accelerator: value.ToggleCamera},
 		{Action: ShortcutActionOpenWhiteboard, Accelerator: value.OpenWhiteboard},
 		{Action: ShortcutActionOpenScreenshot, Accelerator: value.OpenScreenshot},
+		{Action: ShortcutActionOpenScrolling, Accelerator: value.OpenScrollingScreenshot},
 		{Action: ShortcutActionPasteImage, Accelerator: value.PasteImage},
 	}
 }
@@ -456,6 +463,8 @@ func defaultShortcutForAction(defaults ShortcutSettings, action ShortcutAction) 
 		return defaults.OpenWhiteboard
 	case ShortcutActionOpenScreenshot:
 		return defaults.OpenScreenshot
+	case ShortcutActionOpenScrolling:
+		return defaults.OpenScrollingScreenshot
 	case ShortcutActionPasteImage:
 		return defaults.PasteImage
 	default:
@@ -475,6 +484,8 @@ func setShortcutValue(value ShortcutSettings, action ShortcutAction, accelerator
 		value.OpenWhiteboard = accelerator
 	case ShortcutActionOpenScreenshot:
 		value.OpenScreenshot = accelerator
+	case ShortcutActionOpenScrolling:
+		value.OpenScrollingScreenshot = accelerator
 	case ShortcutActionPasteImage:
 		value.PasteImage = accelerator
 	}

@@ -154,11 +154,13 @@ test('settings persists the language selection', async ({page}) => {
   }, browserSettingsKey)).toBe('zh-CN')
 })
 
-test('settings accepts standalone function keys and exposes paste image shortcut', async ({page}) => {
+test('settings accepts standalone function keys and exposes screenshot shortcuts', async ({page}) => {
   await openRecorderShell(page)
 
   await page.getByRole('button', {name: 'Open settings'}).click()
   await expect(page.getByText('Open screenshot paste list', {exact: true})).toBeVisible()
+  const scrollingShortcut = page.locator('.setting-shortcut').filter({hasText: 'Scrolling screenshot'})
+  await expect(scrollingShortcut.locator('kbd')).toHaveText('Ctrl + Shift + L')
 
   const recordingShortcut = page.locator('.setting-shortcut').filter({hasText: 'Start / stop recording'})
   await recordingShortcut.getByRole('button', {name: 'Change'}).click()
@@ -521,6 +523,8 @@ async function openRecorderShell(page: Page) {
         toggleCamera: 'CmdOrCtrl+Shift+C',
         openWhiteboard: 'CmdOrCtrl+Shift+B',
         openScreenshot: 'CmdOrCtrl+Shift+S',
+        openScrollingScreenshot: 'CmdOrCtrl+Shift+L',
+        pasteImage: 'CmdOrCtrl+Shift+V',
       },
       window: {
         minimizeToTray: true,

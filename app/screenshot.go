@@ -213,15 +213,9 @@ func (s *RecordingFreedomService) CompleteScreenshotRegionSelection(req RegionSe
 	if s.regionOverlay != nil {
 		s.regionOverlay.Hide()
 	}
-	capsuleHidden := false
-	if s.capsuleWindow != nil {
-		s.capsuleWindow.Hide()
-		capsuleHidden = true
-	}
+	restoreCapsule := s.hideCapsuleWindowForCapture()
 	defer func() {
-		if capsuleHidden {
-			s.restoreCapsuleWindow()
-		}
+		s.restoreCapsuleWindowAfterCapture(restoreCapsule)
 	}()
 	time.Sleep(140 * time.Millisecond)
 	captureRect := mapRegionSelectionToCaptureRect(*session, regionRectFromAppRect(relative))
@@ -296,15 +290,9 @@ func (s *RecordingFreedomService) BeginScreenshotAnnotationOverlay(req RegionSel
 	if s.regionOverlay != nil {
 		s.regionOverlay.Hide()
 	}
-	capsuleHidden := false
-	if s.capsuleWindow != nil {
-		s.capsuleWindow.Hide()
-		capsuleHidden = true
-	}
+	restoreCapsule := s.hideCapsuleWindowForCapture()
 	defer func() {
-		if capsuleHidden {
-			s.restoreCapsuleWindow()
-		}
+		s.restoreCapsuleWindowAfterCapture(restoreCapsule)
 	}()
 	time.Sleep(140 * time.Millisecond)
 
@@ -341,9 +329,9 @@ func (s *RecordingFreedomService) BeginScreenshotAnnotationOverlay(req RegionSel
 	s.screenshotMu.Lock()
 	s.screenshotAnnotation = context
 	s.screenshotMu.Unlock()
-	if capsuleHidden {
-		s.restoreCapsuleWindow()
-		capsuleHidden = false
+	if restoreCapsule {
+		s.restoreCapsuleWindowAfterCapture(true)
+		restoreCapsule = false
 	}
 	return s.showScreenshotAnnotationOverlay(absoluteDIP, context.Item)
 }
@@ -752,15 +740,9 @@ func (s *RecordingFreedomService) CompleteScrollingScreenshotSelection(req Regio
 	if s.regionOverlay != nil {
 		s.regionOverlay.Hide()
 	}
-	capsuleHidden := false
-	if s.capsuleWindow != nil {
-		s.capsuleWindow.Hide()
-		capsuleHidden = true
-	}
+	restoreCapsule := s.hideCapsuleWindowForCapture()
 	defer func() {
-		if capsuleHidden {
-			s.restoreCapsuleWindow()
-		}
+		s.restoreCapsuleWindowAfterCapture(restoreCapsule)
 	}()
 	time.Sleep(160 * time.Millisecond)
 

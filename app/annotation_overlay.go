@@ -248,14 +248,8 @@ func (s *RecordingFreedomService) captureAnnotationSourceImage(session RegionSel
 	if captureRect.Empty() {
 		return "", errors.New("annotation source capture bounds are empty")
 	}
-	capsuleHidden := false
-	if s.capsuleWindow != nil {
-		s.capsuleWindow.Hide()
-		capsuleHidden = true
-	}
-	if capsuleHidden {
-		defer s.restoreCapsuleWindow()
-	}
+	restoreCapsule := s.hideCapsuleWindowForCapture()
+	defer s.restoreCapsuleWindowAfterCapture(restoreCapsule)
 	// Let the selector, capsule, and any transient region frame leave the desktop
 	// before taking the one immutable frame used by the annotation canvas/OCR.
 	time.Sleep(140 * time.Millisecond)

@@ -274,6 +274,34 @@ test('screenshot paste shortcut opens only the screenshot history list', async (
   await expect(pasteDialog.getByRole('button', {name: 'Paste to whiteboard'})).toBeVisible()
 })
 
+test('scrolling screenshot shortcut keeps a hidden capsule hidden', async ({page}) => {
+  await openRecorderShell(page)
+
+  await page.evaluate(() => {
+    window.dispatchEvent(new CustomEvent('rf-shortcut-triggered', {
+      detail: {
+        action: 'openScrollingScreenshot',
+        accelerator: 'CmdOrCtrl+Shift+L',
+        preserveCapsuleHidden: true,
+      },
+    }))
+  })
+
+  await expect.poll(async () => page.evaluate(() => {
+    const state = window as Window & {
+      __RF_CAPSULE_HIDDEN__?: boolean
+      __RF_REGION_SESSION__?: {purpose?: string}
+    }
+    return {
+      capsuleHidden: state.__RF_CAPSULE_HIDDEN__ === true,
+      purpose: state.__RF_REGION_SESSION__?.purpose ?? '',
+    }
+  })).toEqual({
+    capsuleHidden: true,
+    purpose: 'scrolling-screenshot',
+  })
+})
+
 test('screenshot history does not show stale pinned state before the user pins a screenshot', async ({page}) => {
   await openRecorderShell(page, {
     screenshotHistory: [{

@@ -203,6 +203,7 @@ export type ShortcutSettingsPatch = Partial<ShortcutSettings>
 export type ShortcutTriggeredUpdate = {
   action: ShortcutAction
   accelerator: string
+  preserveCapsuleHidden: boolean
 }
 
 export type ScreenshotImage = {
@@ -937,6 +938,20 @@ export async function restoreCapsuleWindow(focus = true): Promise<void> {
     if (focus) await WailsWindow.Focus().catch(() => undefined)
   } catch (error) {
     console.info('Using browser capsule window restore fallback:', error)
+  }
+}
+
+export async function hideCapsuleWindow(): Promise<void> {
+  if (!isWailsDesktopRuntime()) {
+    const browserWindow = window as Window & {__RF_CAPSULE_HIDDEN__?: boolean}
+    browserWindow.__RF_CAPSULE_HIDDEN__ = true
+    window.dispatchEvent(new Event('rf-capsule-hidden'))
+    return
+  }
+  try {
+    await WailsWindow.Hide()
+  } catch (error) {
+    console.info('Using browser capsule window hide fallback:', error)
   }
 }
 
@@ -5524,6 +5539,7 @@ function fromShortcutTriggeredEvent(value: unknown): ShortcutTriggeredUpdate {
   return {
     action,
     accelerator: typeof record.accelerator === 'string' ? record.accelerator : '',
+    preserveCapsuleHidden: record.preserveCapsuleHidden === true,
   }
 }
 
