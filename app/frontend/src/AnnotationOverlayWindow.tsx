@@ -16,14 +16,13 @@ import {
   Settings2,
   Type,
   Undo2,
-  X,
-} from 'lucide-react'
+  X } from 'lucide-react'
 import {useCallback, useEffect, useLayoutEffect, useRef, useState} from 'react'
 import {Excalidraw, exportToBlob, exportToClipboard, serializeAsJSON} from '@excalidraw/excalidraw'
 import type {ExcalidrawImperativeAPI} from '@excalidraw/excalidraw/types'
 import '@excalidraw/excalidraw/index.css'
 import {copyByLocale} from './i18n'
-import {defaultSettings, normalizeLocale, normalizeTheme, type AppSettings, type LocaleCode, type ScreenshotItem, type ThemeCode, type WhiteboardTool} from './services/mockBackend'
+import {defaultSettings, isDarkTheme, normalizeLocale, normalizeTheme, type AppSettings, type LocaleCode, type ScreenshotItem, type ThemeCode, type WhiteboardTool} from './services/mockBackend'
 import {hideAnnotationOverlay, hideScreenshotAnnotationOverlay, loadAnnotationCapture, loadScreenshotAnnotationCapture, loadSettings, logClientEvent, openOcrResult, patchWhiteboardSettings, queueRecognizeScreenshot, queueRecognizeWhiteboard, reselectAnnotationRegion, reselectScreenshotAnnotationRegion, saveAnnotationCapture, saveScreenshotAnnotationCapture, setAnnotationOverlayHitRegions, subscribeOcrJobEvents, subscribeSettingsChanged, type AnnotationCapture, type AnnotationOverlayState, type CapsuleWindowHitRegion, type OcrBlock, type OcrJobUpdate, type OcrResult, type ScreenshotWhiteboardContext} from './services/recorderBackend'
 import {OcrPositionTextLayer, countOcrPositionTextBlocks} from './components/ocr/OcrPositionTextLayer'
 import {writeClipboardImage, writeClipboardText} from './utils/clipboard'
@@ -69,8 +68,7 @@ function normalizeDesktopAnnotationOverlayState(value: unknown): AnnotationOverl
   const state = value as DesktopAnnotationOverlayState
   return {
     ...state,
-    sourceImageDataURL: state.sourceImageDataURL ?? state.sourceImageDataUrl,
-  }
+    sourceImageDataURL: state.sourceImageDataURL ?? state.sourceImageDataUrl }
 }
 
 function AnnotationOverlayWindow() {
@@ -93,8 +91,7 @@ function AnnotationOverlayWindow() {
     arrowhead: 'arrow',
     fontFamily: 1,
     fontSize: 20,
-    textAlign: 'left',
-  })
+    textAlign: 'left' })
   const [dirty, setDirty] = useState(false)
   const [saving, setSaving] = useState(false)
   const [ocrBusy, setOcrBusy] = useState(false)
@@ -162,8 +159,7 @@ function AnnotationOverlayWindow() {
       elementVersion: identity.version,
       isDeleted: identity.isDeleted,
       bounds: identity.bounds,
-      element,
-    }
+      element }
     setPendingAnnotationElementEvent(identity.id, event)
   }
 
@@ -175,8 +171,7 @@ function AnnotationOverlayWindow() {
       clientEventId: `annotation-client-${Date.now()}-${clientSequenceRef.current}`,
       elementId,
       elementType: 'unknown',
-      isDeleted: true,
-    })
+      isDeleted: true })
   }
 
   function setPendingAnnotationElementEvent(elementId: string, event: AnnotationElementEvent) {
@@ -320,8 +315,7 @@ function AnnotationOverlayWindow() {
       viewportWidth: window.innerWidth || 1,
       viewportHeight: window.innerHeight || 1,
       devicePixelRatio: window.devicePixelRatio || 1,
-      regions: [],
-    })
+      regions: [] })
   }, [])
 
   useLayoutEffect(() => {
@@ -342,8 +336,7 @@ function AnnotationOverlayWindow() {
           viewportWidth,
           viewportHeight,
           devicePixelRatio: window.devicePixelRatio || 1,
-          regions,
-        })
+          regions })
       })
     }
     publish(true)
@@ -362,8 +355,7 @@ function AnnotationOverlayWindow() {
         viewportWidth: window.innerWidth || 1,
         viewportHeight: window.innerHeight || 1,
         devicePixelRatio: window.devicePixelRatio || 1,
-        regions: [],
-      })
+        regions: [] })
     }
   }, [canvasReceivesInput, initialData, overlayState?.canvasBounds.height, overlayState?.canvasBounds.width])
 
@@ -393,9 +385,7 @@ function AnnotationOverlayWindow() {
         currentItemFontFamily: style.fontFamily,
         currentItemFontSize: style.fontSize,
         currentItemTextAlign: style.textAlign,
-        viewBackgroundColor: 'transparent',
-      },
-    } as any)
+        viewBackgroundColor: 'transparent' } } as any)
   }, [])
 
   useEffect(() => {
@@ -449,13 +439,11 @@ function AnnotationOverlayWindow() {
           ...api.getAppState(),
           exportBackground: false,
           exportScale: 1,
-          viewBackgroundColor: 'transparent',
-        },
+          viewBackgroundColor: 'transparent' },
         files,
         mimeType: 'image/png',
         exportPadding: 0,
-        getDimensions: () => ({width: canvasSize.width, height: canvasSize.height, scale: 1}),
-      } as any)
+        getDimensions: () => ({width: canvasSize.width, height: canvasSize.height, scale: 1}) } as any)
       const snapshotDataUrl = await blobToDataURL(blob)
       const eventsJsonl = pendingAnnotationEventsJSONL()
       let outcome: AnnotationSaveOutcome
@@ -501,9 +489,7 @@ function AnnotationOverlayWindow() {
         ...defaultSettings.whiteboard,
         lastStrokeColor: strokeColor,
         lastStrokeWidth: strokeWidth,
-        lastOpacity: opacity,
-      },
-    })
+        lastOpacity: opacity } })
     resetAnnotationElementTracking(scene)
     apiRef.current?.resetScene()
     window.setTimeout(() => applyStyle(strokeColor, strokeWidth, opacity, annotationStyle), 0)
@@ -529,13 +515,11 @@ function AnnotationOverlayWindow() {
           ...api.getAppState(),
           exportBackground: false,
           exportScale: 1,
-          viewBackgroundColor: 'transparent',
-        },
+          viewBackgroundColor: 'transparent' },
         files: api.getFiles(),
         mimeType: 'image/png',
         exportPadding: 0,
-        getDimensions: () => ({width: canvasSize.width, height: canvasSize.height, scale: 1}),
-      } as any)
+        getDimensions: () => ({width: canvasSize.width, height: canvasSize.height, scale: 1}) } as any)
       try {
         await writeClipboardImage(blob)
       } catch {
@@ -544,11 +528,9 @@ function AnnotationOverlayWindow() {
           appState: {
             ...api.getAppState(),
             exportBackground: false,
-            viewBackgroundColor: 'transparent',
-          },
+            viewBackgroundColor: 'transparent' },
           files: api.getFiles(),
-          type: 'png',
-        })
+          type: 'png' })
       }
       setImageCopied(true)
       setOcrMessage(copy.whiteboard.copiedImage)
@@ -583,8 +565,7 @@ function AnnotationOverlayWindow() {
       ctrlKey: !isMac,
       metaKey: isMac,
       bubbles: true,
-      cancelable: true,
-    }))
+      cancelable: true }))
   }
 
   const copyAnnotationOcrPositionText = useCallback((block: OcrBlock, blockId: string) => {
@@ -620,8 +601,7 @@ function AnnotationOverlayWindow() {
         const snapshot = await queueRecognizeScreenshot(saved.item.id)
         ocrSourceRef.current = {
           sourceKind: snapshot.request.sourceKind,
-          sourceId: snapshot.request.sourceId,
-        }
+          sourceId: snapshot.request.sourceId }
       } else {
         const sourceId = annotationOcrSourceId(saved.capture)
         const imagePath = saved.capture.timelineSnapshotPath || saved.capture.snapshotPath
@@ -629,12 +609,10 @@ function AnnotationOverlayWindow() {
           imagePath,
           sceneId: sourceId,
           language: 'zh-en',
-          priority: 'background',
-        })
+          priority: 'background' })
         ocrSourceRef.current = {
           sourceKind: snapshot.request.sourceKind,
-          sourceId: snapshot.request.sourceId,
-        }
+          sourceId: snapshot.request.sourceId }
       }
       setOcrMessage(copy.whiteboard.ocrQueued)
     } catch (error) {
@@ -704,8 +682,7 @@ function AnnotationOverlayWindow() {
         style={{
           left: toolbarBounds.x,
           top: toolbarBounds.y,
-          width: toolbarBounds.width,
-        }}
+          width: toolbarBounds.width }}
       >
       <section className="annotation-capsule" aria-label={copy.whiteboard.title}>
         <span className="annotation-capsule-title">{isScreenshotMode ? copy.screenshot.region : copy.whiteboard.open}</span>
@@ -832,14 +809,13 @@ function AnnotationOverlayWindow() {
           left: canvasBounds.x,
           top: canvasBounds.y,
           width: canvasBounds.width,
-          height: canvasBounds.height,
-        }}
+          height: canvasBounds.height }}
       >
         <Excalidraw
           key={overlayKey}
           initialData={initialData}
           langCode={locale}
-          theme="dark"
+          theme={isDarkTheme(theme) ? 'dark' : 'light'}
           excalidrawAPI={(api) => {
             apiRef.current = api
             if (api) {
@@ -861,8 +837,7 @@ function AnnotationOverlayWindow() {
                 void logClientEvent('annotation-overlay', 'source-image-loaded', {
                   dataUrlBytes: overlayState.sourceImageDataURL.length,
                   canvasWidth: canvasBounds.width,
-                  canvasHeight: canvasBounds.height,
-                })
+                  canvasHeight: canvasBounds.height })
               }
               trackAnnotationElementEvents(elements)
               const sceneJson = (serializeAsJSON as any)(elements, appState, files, 'local')
@@ -879,10 +854,8 @@ function AnnotationOverlayWindow() {
               saveAsImage: false,
               clearCanvas: false,
               toggleTheme: false,
-              changeViewBackgroundColor: false,
-            },
-            tools: {image: false},
-          }}
+              changeViewBackgroundColor: false },
+            tools: {image: false} }}
           renderTopRightUI={() => null}
         />
         {ocrPositionTextVisible && ocrResult && (
@@ -898,8 +871,7 @@ function AnnotationOverlayWindow() {
               position: 'absolute',
               inset: 0,
               minHeight: 0,
-              maxHeight: 'none',
-            }}
+              maxHeight: 'none' }}
           />
         )}
       </section>
@@ -910,8 +882,7 @@ function AnnotationOverlayWindow() {
           left: canvasBounds.x,
           top: canvasBounds.y,
           width: canvasBounds.width,
-          height: canvasBounds.height,
-        }}
+          height: canvasBounds.height }}
       >
         <span className="corner top-left" />
         <span className="corner top-right" />
@@ -939,12 +910,10 @@ function annotationContentSignature(elements: readonly unknown[], files: unknown
     .map(([id, file]) => ({
       id,
       mimeType: file?.mimeType,
-      dataLength: typeof file?.dataURL === 'string' ? file.dataURL.length : 0,
-    }))
+      dataLength: typeof file?.dataURL === 'string' ? file.dataURL.length : 0 }))
   return JSON.stringify({
     elements: elements.map(annotationContentElement),
-    files: fileEntries,
-  })
+    files: fileEntries })
 }
 
 function annotationContentSignatureFromScene(scene: any) {
@@ -970,8 +939,7 @@ function annotationContentElement(element: unknown) {
     opacity: record.opacity,
     text: record.text,
     points: record.points,
-    fileId: record.fileId,
-  }
+    fileId: record.fileId }
 }
 
 function elementHitRegion(element: HTMLElement | null, kind: CapsuleWindowHitRegion['kind'], radius: number): CapsuleWindowHitRegion | null {
@@ -984,8 +952,7 @@ function elementHitRegion(element: HTMLElement | null, kind: CapsuleWindowHitReg
     width: rect.width,
     height: rect.height,
     kind,
-    radius,
-  }
+    radius }
 }
 
 function defaultAnnotationScene(settings: AppSettings) {
@@ -999,11 +966,9 @@ function defaultAnnotationScene(settings: AppSettings) {
       currentItemRoughness: 1,
       currentItemFontFamily: 1,
       currentItemFontSize: 20,
-      currentItemTextAlign: 'left',
-    },
+      currentItemTextAlign: 'left' },
     elements: [],
-    files: {},
-  }
+    files: {} }
 }
 
 function annotationSceneWithFrozenSource(scene: any, dataURL: string, canvasBounds: {width: number; height: number}) {
@@ -1058,8 +1023,7 @@ function annotationSceneWithFrozenSource(scene: any, dataURL: string, canvasBoun
       status: 'saved',
       fileId,
       scale: [1, 1],
-      customData: {recordingFreedomFrozenSource: true},
-    }, ...retainedElements],
+      customData: {recordingFreedomFrozenSource: true} }, ...retainedElements],
     files: {
       ...retainedFiles,
       [fileId]: {
@@ -1072,10 +1036,7 @@ function annotationSceneWithFrozenSource(scene: any, dataURL: string, canvasBoun
             : source.startsWith('data:image/webp')
               ? 'image/webp'
               : 'image/png',
-        created: Date.now(),
-      },
-    },
-  }
+        created: Date.now() } } }
 }
 
 function screenshotAnnotationScene(settings: AppSettings, context: ScreenshotWhiteboardContext, overlayState: AnnotationOverlayState | null) {
@@ -1092,8 +1053,7 @@ function screenshotAnnotationScene(settings: AppSettings, context: ScreenshotWhi
       currentItemRoughness: 1,
       currentItemFontFamily: 1,
       currentItemFontSize: 20,
-      currentItemTextAlign: 'left',
-    },
+      currentItemTextAlign: 'left' },
     elements: [{
       id: `${fileId}-image`,
       type: 'image',
@@ -1122,17 +1082,13 @@ function screenshotAnnotationScene(settings: AppSettings, context: ScreenshotWhi
       locked: true,
       status: 'saved',
       fileId,
-      scale: [1, 1],
-    }],
+      scale: [1, 1] }],
     files: {
       [fileId]: {
         id: fileId,
         dataURL: context.dataUrl,
         mimeType: screenshotAnnotationMimeType(context.dataUrl),
-        created: Date.now(),
-      },
-    },
-  }
+        created: Date.now() } } }
 }
 
 function screenshotAnnotationMimeType(dataUrl: string) {
@@ -1170,8 +1126,7 @@ function annotationCanvasBounds(state: AnnotationOverlayState | null) {
     x: Math.round(state?.canvasBounds.x ?? 0),
     y: Math.round(state?.canvasBounds.y ?? 0),
     width: Math.max(1, Math.round(state?.canvasBounds.width ?? window.innerWidth ?? 1)),
-    height: Math.max(1, Math.round(state?.canvasBounds.height ?? window.innerHeight ?? 1)),
-  }
+    height: Math.max(1, Math.round(state?.canvasBounds.height ?? window.innerHeight ?? 1)) }
 }
 
 function annotationToolbarBounds(state: AnnotationOverlayState | null, canvasBounds: {x: number; y: number; width: number; height: number}) {
@@ -1186,8 +1141,7 @@ function annotationToolbarBounds(state: AnnotationOverlayState | null, canvasBou
       x: Math.min(maxLeft, Math.max(edgePadding, Math.round(configured.x))),
       y: Math.round(configured.y),
       width,
-      height: Math.max(1, Math.round(configured.height)),
-    }
+      height: Math.max(1, Math.round(configured.height)) }
   }
   const width = Math.min(720, maxWidth)
   const height = canvasBounds.width < 720 ? 96 : 48
@@ -1221,8 +1175,7 @@ function annotationElementIdentity(element: unknown) {
     type,
     version,
     isDeleted,
-    bounds: annotationElementBounds(record),
-  }
+    bounds: annotationElementBounds(record) }
 }
 
 function annotationElementSignature(element: unknown) {
@@ -1246,8 +1199,7 @@ function annotationElementSignature(element: unknown) {
     strokeStyle: record.strokeStyle,
     opacity: record.opacity,
     text: record.text,
-    pointsLength: Array.isArray(record.points) ? record.points.length : undefined,
-  })
+    pointsLength: Array.isArray(record.points) ? record.points.length : undefined })
 }
 
 function annotationElementBounds(record: Record<string, unknown>) {
@@ -1255,8 +1207,7 @@ function annotationElementBounds(record: Record<string, unknown>) {
     x: roundedNumber(record.x),
     y: roundedNumber(record.y),
     width: roundedNumber(record.width),
-    height: roundedNumber(record.height),
-  }
+    height: roundedNumber(record.height) }
 }
 
 function roundedNumber(value: unknown) {
@@ -1268,8 +1219,7 @@ function annotationSnapshotCanvasSize(overlayState: AnnotationOverlayState | nul
   const height = Math.round(overlayState?.canvasBounds.height ?? window.innerHeight ?? 0)
   return {
     width: Math.max(1, width),
-    height: Math.max(1, height),
-  }
+    height: Math.max(1, height) }
 }
 
 function annotationSnapshotExportElements(elements: readonly unknown[], width: number, height: number) {
@@ -1305,8 +1255,7 @@ function transparentAnnotationBoundsElement(width: number, height: number) {
     boundElements: null,
     updated: 1,
     link: null,
-    locked: true,
-  }
+    locked: true }
 }
 
 function removeAnnotationOcrPositionTextElements(api: ExcalidrawImperativeAPI | null, persist: (sceneJson: string, hasElements: boolean, contentSignature: string) => void) {

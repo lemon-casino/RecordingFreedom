@@ -21,14 +21,13 @@ import {
   Trash2,
   Type,
   Undo2,
-  X,
-} from 'lucide-react'
+  X } from 'lucide-react'
 import {useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties} from 'react'
 import {Excalidraw, exportToBlob, exportToClipboard, exportToSvg, sceneCoordsToViewportCoords, serializeAsJSON} from '@excalidraw/excalidraw'
 import type {ExcalidrawImperativeAPI} from '@excalidraw/excalidraw/types'
 import '@excalidraw/excalidraw/index.css'
 import {copyByLocale, type RecorderCopy} from './i18n'
-import {defaultSettings, normalizeLocale, normalizeTheme, type AppSettings, type LocaleCode, type ThemeCode, type WhiteboardStrokeWidth, type WhiteboardTool} from './services/mockBackend'
+import {defaultSettings, isDarkTheme, normalizeLocale, normalizeTheme, type AppSettings, type LocaleCode, type ThemeCode, type WhiteboardStrokeWidth, type WhiteboardTool} from './services/mockBackend'
 import {consumeScreenshotWhiteboardContext, hideWhiteboardWindow, loadSettings, loadWhiteboardScene, openOcrResult, patchWhiteboardSettings, queueRecognizeWhiteboard, saveWhiteboardExport, saveWhiteboardScene, saveWhiteboardSnapshot, subscribeOcrJobEvents, subscribeScreenshotWhiteboardContext, subscribeSettingsChanged, translateOcr, type OcrBlock, type OcrResult, type OcrTranslationResult, type ScreenshotWhiteboardContext} from './services/recorderBackend'
 import {OcrPositionTextLayer, countOcrPositionTextBlocks} from './components/ocr/OcrPositionTextLayer'
 import {writeClipboardImage, writeClipboardText} from './utils/clipboard'
@@ -99,7 +98,7 @@ function WhiteboardWindow() {
   const clearTimerRef = useRef<number | null>(null)
   const copy = copyByLocale[locale]
 
-  const excalidrawTheme = 'dark'
+  const excalidrawTheme = isDarkTheme(theme) ? 'dark' : 'light'
 
   const setOcrBusyState = useCallback((busy: boolean) => {
     ocrBusyRef.current = busy
@@ -303,9 +302,7 @@ function WhiteboardWindow() {
       appState: {
         currentItemStrokeColor: color,
         currentItemStrokeWidthKey: width,
-        currentItemOpacity: nextOpacity,
-      },
-    } as any)
+        currentItemOpacity: nextOpacity } } as any)
   }, [])
 
   useEffect(() => {
@@ -448,8 +445,7 @@ function WhiteboardWindow() {
       await queueRecognizeWhiteboard({
         imagePath: saved.item.path,
         sceneId: saved.item.id,
-        language: 'zh-en',
-      })
+        language: 'zh-en' })
       holdStatusText(copy.whiteboard.ocrQueued)
     } catch (error) {
       console.error('Failed to queue whiteboard OCR:', error)
@@ -495,8 +491,7 @@ function WhiteboardWindow() {
         imagePath: exported.outputPath,
         sceneId: sourceId,
         elementId: selected.elementId,
-        language: 'zh-en',
-      })
+        language: 'zh-en' })
       holdStatusText(copy.whiteboard.ocrQueued)
     } catch (error) {
       console.error('Failed to queue selected image OCR:', error)
@@ -639,8 +634,7 @@ function WhiteboardWindow() {
         baseUrl: normalized.baseUrl,
         apiKey: normalized.apiKey,
         model: normalized.model,
-        force: false,
-      })
+        force: false })
       setOcrTranslationResult(translated)
       applyOcrTranslationOverlay(translated)
       holdStatusText(copy.screenshot.translationReady)
@@ -688,8 +682,7 @@ function WhiteboardWindow() {
       metaKey: isMac,
       shiftKey: direction === 'redo',
       bubbles: true,
-      cancelable: true,
-    }))
+      cancelable: true }))
   }
 
   const exportPNG = async () => {
@@ -752,13 +745,11 @@ function WhiteboardWindow() {
         ...api.getAppState(),
         exportBackground: true,
         exportScale: 1,
-        viewBackgroundColor: api.getAppState().viewBackgroundColor,
-      },
+        viewBackgroundColor: api.getAppState().viewBackgroundColor },
       files: api.getFiles(),
       mimeType: 'image/png',
       exportPadding: 0,
-      getDimensions: () => ({width, height, scale: 1}),
-    } as any)
+      getDimensions: () => ({width, height, scale: 1}) } as any)
   }
 
   const copyWhiteboardImage = async () => {
@@ -778,11 +769,9 @@ function WhiteboardWindow() {
           appState: {
             ...api.getAppState(),
             exportBackground: true,
-            viewBackgroundColor: api.getAppState().viewBackgroundColor,
-          },
+            viewBackgroundColor: api.getAppState().viewBackgroundColor },
           files: api.getFiles(),
-          type: 'png',
-        })
+          type: 'png' })
       }
       setImageCopied(true)
       holdStatusText(copy.whiteboard.ready)
@@ -800,8 +789,7 @@ function WhiteboardWindow() {
       const svg = await exportToSvg({
         elements: whiteboardSnapshotExportElements(api.getSceneElements()) as any,
         appState: api.getAppState(),
-        files: api.getFiles(),
-      } as any)
+        files: api.getFiles() } as any)
       const payload = new XMLSerializer().serializeToString(svg)
       const result = await saveWhiteboardExport({format: 'svg', payload})
       holdStatusText(copy.whiteboard.exported(result.outputPath), 2400)
@@ -971,10 +959,8 @@ function WhiteboardWindow() {
               saveAsImage: false,
               clearCanvas: false,
               toggleTheme: false,
-              changeViewBackgroundColor: false,
-            },
-            tools: {image: true},
-          }}
+              changeViewBackgroundColor: false },
+            tools: {image: true} }}
           renderTopRightUI={() => null}
         />
         {ocrPositionTextVisible && ocrResult && ocrOverlayStyle && (
@@ -1014,8 +1000,7 @@ function normalizeOcrTranslationSettings(value: Partial<AppSettings['ocr']['tran
     sourceLanguage: cleanOptionalString(value?.sourceLanguage) || 'auto',
     targetLanguage: cleanOptionalString(value?.targetLanguage) || 'zh-CN',
     privacyConfirmed,
-    privacyConfirmedAt: privacyConfirmed ? cleanOptionalString(value?.privacyConfirmedAt) : undefined,
-  }
+    privacyConfirmedAt: privacyConfirmed ? cleanOptionalString(value?.privacyConfirmedAt) : undefined }
 }
 
 function ocrTranslationUnavailableMessage(translation: AppSettings['ocr']['translation'], copy: RecorderCopy): string {
@@ -1045,11 +1030,9 @@ function defaultScene(settings: AppSettings) {
       viewBackgroundColor: '#111827',
       currentItemStrokeColor: settings.whiteboard.lastStrokeColor || '#ef4444',
       currentItemStrokeWidthKey: settings.whiteboard.lastStrokeWidth || 'medium',
-      currentItemOpacity: normalizeOpacity(settings.whiteboard.lastOpacity),
-    },
+      currentItemOpacity: normalizeOpacity(settings.whiteboard.lastOpacity) },
     elements: [],
-    files: {},
-  }
+    files: {} }
 }
 
 function screenshotScene(settings: AppSettings, context: ScreenshotWhiteboardContext) {
@@ -1068,8 +1051,7 @@ function screenshotScene(settings: AppSettings, context: ScreenshotWhiteboardCon
       currentItemStrokeWidthKey: settings.whiteboard.lastStrokeWidth || 'medium',
       currentItemOpacity: normalizeOpacity(settings.whiteboard.lastOpacity),
       scrollX: 80,
-      scrollY: 80,
-    },
+      scrollY: 80 },
     elements: [{
       id: `${fileId}-image`,
       type: 'image',
@@ -1098,17 +1080,13 @@ function screenshotScene(settings: AppSettings, context: ScreenshotWhiteboardCon
       locked: true,
       status: 'saved',
       fileId,
-      scale: [1, 1],
-    }],
+      scale: [1, 1] }],
     files: {
       [fileId]: {
         id: fileId,
         dataURL: context.dataUrl,
         mimeType: 'image/png',
-        created: Date.now(),
-      },
-    },
-  }
+        created: Date.now() } } }
 }
 
 function screenshotContextKey(context: ScreenshotWhiteboardContext) {
@@ -1129,8 +1107,7 @@ function importedSceneJSON(scene: ReturnType<typeof screenshotScene>) {
     source: 'recordingfreedom',
     elements: scene.elements,
     appState: scene.appState,
-    files: scene.files,
-  })
+    files: scene.files })
 }
 
 function fallbackSceneJSON(api: ExcalidrawImperativeAPI) {
@@ -1140,8 +1117,7 @@ function fallbackSceneJSON(api: ExcalidrawImperativeAPI) {
     source: 'recordingfreedom',
     elements: api.getSceneElements(),
     appState: api.getAppState(),
-    files: api.getFiles(),
-  })
+    files: api.getFiles() })
 }
 
 function sceneHasImageElement(elements: readonly unknown[]) {
@@ -1184,8 +1160,7 @@ function whiteboardSnapshotExportElements(elements: readonly unknown[], width?: 
       boundElements: null,
       updated: 1,
       link: null,
-      locked: true,
-    },
+      locked: true },
   ]
 }
 
@@ -1222,8 +1197,7 @@ function whiteboardOcrOverlayStyle(api: ExcalidrawImperativeAPI, canvas: HTMLEle
     offsetLeft: rect.left,
     offsetTop: rect.top,
     scrollX: Number.isFinite(appState.scrollX) ? appState.scrollX as number : 0,
-    scrollY: Number.isFinite(appState.scrollY) ? appState.scrollY as number : 0,
-  }
+    scrollY: Number.isFinite(appState.scrollY) ? appState.scrollY as number : 0 }
   const topLeft = sceneCoordsToViewportCoords({sceneX: anchor.x, sceneY: anchor.y}, viewportState as any)
   const bottomRight = sceneCoordsToViewportCoords({sceneX: anchor.x + anchor.width, sceneY: anchor.y + anchor.height}, viewportState as any)
   const width = Math.max(1, bottomRight.x - topLeft.x)
@@ -1235,8 +1209,7 @@ function whiteboardOcrOverlayStyle(api: ExcalidrawImperativeAPI, canvas: HTMLEle
     width,
     height,
     minHeight: 0,
-    maxHeight: 'none',
-  }
+    maxHeight: 'none' }
 }
 
 function selectedWhiteboardImageFromScene(elements: readonly unknown[], appState: unknown, files: unknown): SelectedWhiteboardImage | null {
@@ -1257,8 +1230,7 @@ function selectedWhiteboardImageFromScene(elements: readonly unknown[], appState
       x: finiteNumber(image.x, 0),
       y: finiteNumber(image.y, 0),
       width: Math.max(1, finiteNumber(image.width, 1)),
-      height: Math.max(1, finiteNumber(image.height, 1)),
-    }
+      height: Math.max(1, finiteNumber(image.height, 1)) }
   }
   return null
 }
@@ -1279,8 +1251,7 @@ function firstWhiteboardImageFromScene(elements: readonly unknown[], files: unkn
       x: finiteNumber(image.x, 0),
       y: finiteNumber(image.y, 0),
       width: Math.max(1, finiteNumber(image.width, 1)),
-      height: Math.max(1, finiteNumber(image.height, 1)),
-    }
+      height: Math.max(1, finiteNumber(image.height, 1)) }
   }
   return null
 }
@@ -1370,10 +1341,7 @@ function buildOcrBlockElements(result: OcrResult, anchor: SelectedWhiteboardImag
           kind: 'block',
           resultId: result.id,
           blockId: block.id,
-          text: block.text,
-        },
-      },
-    }]
+          text: block.text } } }]
   })
 }
 
@@ -1432,10 +1400,7 @@ function buildOcrTranslationTextElements(result: OcrResult, translation: OcrTran
           kind: 'translation',
           resultId: result.id,
           blockId: block.id,
-          source: block.text,
-        },
-      },
-    }]
+          source: block.text } } }]
   })
 }
 
@@ -1484,10 +1449,7 @@ function buildOcrTextElement(result: OcrResult, text: string, anchor: SelectedWh
     customData: {
       recordingFreedomOcr: {
         kind: 'text',
-        resultId: result.id,
-      },
-    },
-  }
+        resultId: result.id } } }
 }
 
 function ocrBlockBounds(block: OcrBlock) {
@@ -1525,8 +1487,7 @@ function applyImportedSceneToApi(api: ExcalidrawImperativeAPI, scene: ReturnType
   if (files.length > 0) api.addFiles(files as any)
   api.updateScene({
     elements: scene.elements as any,
-    appState: scene.appState as any,
-  } as any)
+    appState: scene.appState as any } as any)
 }
 
 function persistApiSceneSoon(api: ExcalidrawImperativeAPI, persist: (sceneJson: string) => void) {

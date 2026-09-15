@@ -544,6 +544,49 @@ input:disabled,
   --wails-draggable: no-drag;
 }
 
+.rf-backend-notice {
+  position: absolute;
+  top: 8px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 40;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  max-width: min(480px, calc(100% - 32px));
+  padding: 8px 12px;
+  border: 1px solid var(--danger-border-strong);
+  border-radius: 10px;
+  background: var(--danger-bg);
+  color: var(--danger-readable);
+  font-size: 12px;
+  line-height: 1.4;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
+}
+
+.rf-backend-notice-text {
+  overflow-wrap: anywhere;
+}
+
+.rf-backend-notice-dismiss {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  width: 22px;
+  height: 22px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+}
+
+.rf-backend-notice-dismiss:hover {
+  background: var(--danger-bg-hover);
+  color: var(--danger-hover-readable);
+}
+
 .rf-shell.drop-up {
   place-items: end center;
   padding: 0 18px 8px;

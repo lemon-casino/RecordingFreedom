@@ -55,27 +55,22 @@ import {
   type WhiteboardSceneResult as BoundWhiteboardSceneResult,
   type WhiteboardSettingsPatchRequest as BoundWhiteboardSettingsPatchRequest,
   type WhiteboardSnapshotRequest as BoundWhiteboardSnapshotRequest,
-  type WhiteboardSnapshotResult as BoundWhiteboardSnapshotResult,
-} from '../../bindings/github.com/lemon-casino/RecordingFreedom/app/models'
+  type WhiteboardSnapshotResult as BoundWhiteboardSnapshotResult } from '../../bindings/github.com/lemon-casino/RecordingFreedom/app/models'
 import {
   type Capabilities as BoundCaptureCapabilities,
-  type Capability as BoundCaptureCapability,
-} from '../../bindings/github.com/lemon-casino/RecordingFreedom/app/internal/capture/models'
+  type Capability as BoundCaptureCapability } from '../../bindings/github.com/lemon-casino/RecordingFreedom/app/internal/capture/models'
 import {
-  type Plan as BoundExportPlan,
-} from '../../bindings/github.com/lemon-casino/RecordingFreedom/app/internal/exportplan/models'
+  type Plan as BoundExportPlan } from '../../bindings/github.com/lemon-casino/RecordingFreedom/app/internal/exportplan/models'
 import {
   CaptureSourceType as BoundCaptureSourceType,
   type CaptureSource as BoundCaptureSource,
   type MediaDevice as BoundMediaDevice,
-  type MediaInventory as BoundMediaInventory,
-} from '../../bindings/github.com/lemon-casino/RecordingFreedom/app/internal/devices/models'
+  type MediaInventory as BoundMediaInventory } from '../../bindings/github.com/lemon-casino/RecordingFreedom/app/internal/devices/models'
 import {
   type AudioOnlyRequest,
   type Session as BoundSession,
   type StartRequest,
-  type StatusEvent as BoundStatusEvent,
-} from '../../bindings/github.com/lemon-casino/RecordingFreedom/app/internal/recording/models'
+  type StatusEvent as BoundStatusEvent } from '../../bindings/github.com/lemon-casino/RecordingFreedom/app/internal/recording/models'
 import {type Summary as BoundPreflightSummary} from '../../bindings/github.com/lemon-casino/RecordingFreedom/app/internal/preflight/models'
 import {
   type Block as BoundOcrBlock,
@@ -91,8 +86,7 @@ import {
   type TranslationBlock as BoundOcrTranslationBlock,
   type TranslationResult as BoundOcrTranslationResult,
   type WhiteboardRequest as BoundOcrWhiteboardRequest,
-  type WorkerCapabilities as BoundOcrWorkerCapabilities,
-} from '../../bindings/github.com/lemon-casino/RecordingFreedom/app/internal/ocr/models'
+  type WorkerCapabilities as BoundOcrWorkerCapabilities } from '../../bindings/github.com/lemon-casino/RecordingFreedom/app/internal/ocr/models'
 import {type RecoverySummary as BoundRecoverySummary} from '../../bindings/github.com/lemon-casino/RecordingFreedom/app/internal/recpackage/models'
 import {type Settings as BoundSettings} from '../../bindings/github.com/lemon-casino/RecordingFreedom/app/internal/settings/models'
 import {
@@ -123,8 +117,32 @@ import {
   type RecordingPreflight,
   type ShortcutAction,
   type ShortcutSettings,
-  type ScreenshotItem,
-} from './mockBackend'
+  type ScreenshotItem } from './mockBackend'
+
+// Browser preview (vite dev server) legitimately falls back to mock data when
+// the Go backend is absent. A packaged desktop build must surface the failure
+// instead of silently showing placeholder data.
+const allowMockFallback = import.meta.env.DEV
+
+export function readableError(error: unknown): string {
+  if (error instanceof Error) return error.message
+  if (typeof error === 'string') return error
+  try {
+    return JSON.stringify(error)
+  } catch {
+    return String(error)
+  }
+}
+
+export function reportMockFallback(operation: string, error: unknown): void {
+  if (allowMockFallback) {
+    console.info(`Using browser mock ${operation}:`, error)
+    return
+  }
+  console.error(`Backend ${operation} failed; showing placeholder data.`, error)
+  window.dispatchEvent(new CustomEvent('rf-backend-error', {
+    detail: {operation, message: readableError(error)} }))
+}
 
 export type RecordingSession = {
   id: string
@@ -687,8 +705,7 @@ export async function showFloatingPanel(req: {
       token: req.token,
       screenId: req.screenId,
       direction: req.direction,
-      contextId: req.contextId,
-    }
+      contextId: req.contextId }
     ;(window as Window & {__RF_FLOATING_PANEL__?: FloatingPanelState}).__RF_FLOATING_PANEL__ = state
     window.dispatchEvent(new CustomEvent(browserFloatingPanelEvent, {detail: state}))
     return state
@@ -769,8 +786,7 @@ export async function showFloatingSelect(req: {
       token: req.token,
       panelToken: req.panelToken,
       screenId: req.screenId,
-      direction: req.direction,
-    }
+      direction: req.direction }
     ;(window as Window & {__RF_FLOATING_SELECT__?: FloatingSelectState}).__RF_FLOATING_SELECT__ = state
     window.dispatchEvent(new CustomEvent(browserFloatingSelectEvent, {detail: state}))
     return state
@@ -852,14 +868,12 @@ export async function patchSourceState(patch: SourceStatePatch): Promise<SourceC
     console.info('Using browser source state patch fallback:', error)
     const current = (window as Window & {__RF_SOURCE_STATE__?: SourceControlState}).__RF_SOURCE_STATE__ ?? {
       recordingMode: 'video' as RecordingMode,
-      sourceType: 'screen' as CaptureSource['type'],
-    }
+      sourceType: 'screen' as CaptureSource['type'] }
     const next: SourceControlState = {
       ...current,
       ...patch,
       sourceGeometry: patch.clearGeometry ? undefined : patch.sourceGeometry ?? current.sourceGeometry,
-      recordingMode: patch.recordingMode ?? current.recordingMode,
-    }
+      recordingMode: patch.recordingMode ?? current.recordingMode }
     ;(window as Window & {__RF_SOURCE_STATE__?: SourceControlState}).__RF_SOURCE_STATE__ = next
     window.dispatchEvent(new CustomEvent(browserSourceStateEvent, {detail: next}))
     return next
@@ -872,8 +886,7 @@ export async function getSourceState(): Promise<SourceControlState> {
   } catch {
     return (window as Window & {__RF_SOURCE_STATE__?: SourceControlState}).__RF_SOURCE_STATE__ ?? {
       recordingMode: 'video',
-      sourceType: 'screen',
-    }
+      sourceType: 'screen' }
   }
 }
 
@@ -961,8 +974,7 @@ export async function logClientEvent(component: string, event: string, fields: R
       component,
       event,
       message,
-      fields: Object.fromEntries(Object.entries(fields).map(([key, value]) => [key, String(value ?? '')])),
-    })
+      fields: Object.fromEntries(Object.entries(fields).map(([key, value]) => [key, String(value ?? '')])) })
   } catch (error) {
     console.info('Using browser client log fallback:', error)
   }
@@ -1166,8 +1178,7 @@ export async function setCapsuleWindowExpanded(
     const position = await WailsWindow.Position()
     const size = await WailsWindow.Size().catch(() => ({
       width: expanded ? capsuleWindowWidth : compactCollapsed ? capsuleWindowCompactWidth : capsuleWindowWidth,
-      height: expanded ? expandedHeight : capsuleWindowCollapsedHeight,
-    }))
+      height: expanded ? expandedHeight : capsuleWindowCollapsedHeight }))
     const dockSide = lastCapsuleDockSide
     const initialVisualSize = capsuleCollapsedVisualSize(compactCollapsed, dockSide, null)
     const initialVisualPosition = capsuleVisualPositionFromWindow(dockSide, position, size, initialVisualSize)
@@ -1295,8 +1306,7 @@ export function __resolveCapsuleDockTargetForTest(input: {
   const target = resolveCapsuleDockTarget(input.position, input.size, input.workAreas, preferredWorkArea)
   return {
     side: target.side,
-    workArea: target.workArea ? {...target.workArea} : null,
-  }
+    workArea: target.workArea ? {...target.workArea} : null }
 }
 
 export function __capsuleCollapsedWindowGeometryForTest(input: {
@@ -1306,8 +1316,7 @@ export function __capsuleCollapsedWindowGeometryForTest(input: {
 }) {
   return {
     windowSize: capsuleCollapsedWindowSize(input.compactCollapsed, input.dockSide, input.workArea ?? null),
-    visualSize: capsuleCollapsedVisualSize(input.compactCollapsed, input.dockSide, input.workArea ?? null),
-  }
+    visualSize: capsuleCollapsedVisualSize(input.compactCollapsed, input.dockSide, input.workArea ?? null) }
 }
 
 if (import.meta.env.DEV && typeof window !== 'undefined') {
@@ -1415,8 +1424,7 @@ function capsuleWorkAreaForVisualRectFromAreas(
     .map((area) => {
       return {
         area,
-        areaPixels: capsuleWorkAreaOverlapPixels(position, size, area),
-      }
+        areaPixels: capsuleWorkAreaOverlapPixels(position, size, area) }
     })
     .sort((a, b) => b.areaPixels - a.areaPixels)
   if (intersections[0]?.areaPixels > 0) return intersections[0].area
@@ -1508,8 +1516,7 @@ function capsuleDockCandidate(
     overlapRatio,
     originInside: pointInsideWorkAreaOpenEnd(position.x, centerY, workArea),
     centerInside: pointInsideWorkAreaOpenEnd(centerX, centerY, workArea),
-    screenDistance: distanceToWorkArea(centerX, centerY, workArea),
-  }
+    screenDistance: distanceToWorkArea(centerX, centerY, workArea) }
 }
 
 function compareCapsuleDockCandidates(a: CapsuleDockCandidate, b: CapsuleDockCandidate) {
@@ -1538,13 +1545,11 @@ function capsuleCollapsedWindowSize(
     const requestedWidth = compactCollapsed ? capsuleWindowSideWidth : capsuleWindowWidth
     return {
       width: Math.min(requestedWidth, Math.max(64, workArea?.width ?? requestedWidth)),
-      height: Math.min(requestedHeight, Math.max(capsuleWindowCollapsedHeight, workArea?.height ?? requestedHeight)),
-    }
+      height: Math.min(requestedHeight, Math.max(capsuleWindowCollapsedHeight, workArea?.height ?? requestedHeight)) }
   }
   return {
     width: compactCollapsed ? capsuleWindowCompactWidth : capsuleWindowWidth,
-    height: capsuleWindowCollapsedHeight,
-  }
+    height: capsuleWindowCollapsedHeight }
 }
 
 function capsuleCollapsedVisualSize(
@@ -1556,13 +1561,11 @@ function capsuleCollapsedVisualSize(
     const requestedHeight = compactCollapsed ? capsuleWindowSideCompactHeight : capsuleWindowSideHeight
     return {
       width: Math.min(capsuleWindowSideWidth, Math.max(64, workArea?.width ?? capsuleWindowSideWidth)),
-      height: Math.min(requestedHeight, Math.max(capsuleWindowCollapsedHeight, workArea?.height ?? requestedHeight)),
-    }
+      height: Math.min(requestedHeight, Math.max(capsuleWindowCollapsedHeight, workArea?.height ?? requestedHeight)) }
   }
   return {
     width: compactCollapsed ? capsuleWindowCompactWidth : capsuleWindowWidth,
-    height: capsuleWindowCollapsedHeight,
-  }
+    height: capsuleWindowCollapsedHeight }
 }
 
 function capsuleReservedWindowSize(
@@ -1577,13 +1580,11 @@ function capsuleReservedWindowSize(
     )
     return {
       width: Math.min(capsuleWindowSideExpandedWidth, Math.max(capsuleWindowSideWidth, workArea?.width ?? capsuleWindowSideExpandedWidth)),
-      height: Math.min(height, Math.max(capsuleWindowCollapsedHeight, workArea?.height ?? height)),
-    }
+      height: Math.min(height, Math.max(capsuleWindowCollapsedHeight, workArea?.height ?? height)) }
   }
   return {
     width: capsuleWindowWidth,
-    height: Math.min(capsuleWindowExpandedHeight, Math.max(capsuleWindowCollapsedHeight, workArea?.height ?? capsuleWindowExpandedHeight)),
-  }
+    height: Math.min(capsuleWindowExpandedHeight, Math.max(capsuleWindowCollapsedHeight, workArea?.height ?? capsuleWindowExpandedHeight)) }
 }
 
 function capsuleVisibleCollapsedPosition(
@@ -1647,8 +1648,7 @@ function capsuleDockedWindowPosition(
   if (!workArea) {
     return {
       x: Math.round(position.x + (size.width - targetSize.width) / 2),
-      y: Math.round(position.y + (size.height - targetSize.height) / 2),
-    }
+      y: Math.round(position.y + (size.height - targetSize.height) / 2) }
   }
   const centerX = position.x + size.width / 2
   const centerY = position.y + size.height / 2
@@ -1695,8 +1695,7 @@ async function setCapsuleWindowBoundsIfChanged(
     x: Math.round(targetPosition.x),
     y: Math.round(targetPosition.y),
     width: Math.round(targetSize.width),
-    height: Math.round(targetSize.height),
-  }
+    height: Math.round(targetSize.height) }
   try {
     await RecordingFreedomService.SetCapsuleWindowBounds(bounds)
     return
@@ -1719,8 +1718,7 @@ function clampCapsuleWindowPosition(
   const maxY = Math.max(workArea.y, workArea.y + workArea.height - height)
   return {
     x: Math.round(clampNumber(x, workArea.x, maxX)),
-    y: Math.round(clampNumber(y, workArea.y, maxY)),
-  }
+    y: Math.round(clampNumber(y, workArea.y, maxY)) }
 }
 
 function clampNumber(value: number, min: number, max: number) {
@@ -1797,7 +1795,7 @@ export async function loadBootstrap(): Promise<RecorderBootstrap> {
   try {
     return fromBoundBootstrap(await RecordingFreedomService.Bootstrap())
   } catch (error) {
-    console.info('Using browser mock bootstrap:', error)
+    reportMockFallback('bootstrap', error)
     return {
       appData: fallbackAppData,
       storage: fallbackStorageStatus,
@@ -1807,8 +1805,7 @@ export async function loadBootstrap(): Promise<RecorderBootstrap> {
       media: fallbackMediaInventory,
       recoveries: [],
       settings: loadBrowserSettings(),
-      capabilities: fallbackCapabilities,
-    }
+      capabilities: fallbackCapabilities }
   }
 }
 
@@ -2033,8 +2030,7 @@ export async function patchAudioState(patch: AudioStatePatch): Promise<AudioCont
       microphone: nextAudio.microphone,
       microphoneDeviceId: nextAudio.microphoneDeviceId,
       noiseSuppression: nextAudio.microphone && nextAudio.noiseSuppression,
-      microphoneGain: nextAudio.microphoneGain,
-    }
+      microphoneGain: nextAudio.microphoneGain }
   }
 }
 
@@ -2053,10 +2049,8 @@ export async function patchCameraState(patch: CameraStatePatch): Promise<AppSett
         enabled,
         deviceId: patch.deviceId ?? current.camera.deviceId,
         pipPreset: nextPip.preset,
-        pip: nextPip,
-      },
-      updatedAt: new Date().toISOString(),
-    }
+        pip: nextPip },
+      updatedAt: new Date().toISOString() }
     window.localStorage?.setItem(browserSettingsKey, JSON.stringify(next))
     return next
   }
@@ -2122,8 +2116,7 @@ export async function showWhiteboardWindow(): Promise<void> {
     ;(window as Window & {__RF_LAST_WHITEBOARD_LAUNCH__?: {mode: string; url: string; at: string}}).__RF_LAST_WHITEBOARD_LAUNCH__ = {
       mode: 'whiteboard',
       url: '/#/whiteboard',
-      at: new Date().toISOString(),
-    }
+      at: new Date().toISOString() }
     emitBrowserWhiteboardVisibility({visible: true, mode: 'whiteboard'})
     const popup = window.open('/#/whiteboard', 'recordingfreedom-whiteboard', 'width=1120,height=760')
     popup?.focus()
@@ -2139,8 +2132,7 @@ export async function showAnnotationOverlay(): Promise<AnnotationOverlayState> {
     ;(window as Window & {__RF_LAST_WHITEBOARD_LAUNCH__?: {mode: string; url: string; at: string}}).__RF_LAST_WHITEBOARD_LAUNCH__ = {
       mode: 'annotation',
       url: '/#/annotation-overlay',
-      at: new Date().toISOString(),
-    }
+      at: new Date().toISOString() }
     emitBrowserWhiteboardVisibility({visible: true, mode: 'annotation'})
     const popup = window.open('/#/annotation-overlay', 'recordingfreedom-annotation-overlay', 'width=1280,height=720')
     popup?.focus()
@@ -2234,16 +2226,14 @@ export async function beginScreenshotAnnotationOverlay(request: RegionSelectionS
     const context: ScreenshotWhiteboardContext = {
       available: true,
       item,
-      dataUrl: browserScreenshotDataUrl(item),
-    }
+      dataUrl: browserScreenshotDataUrl(item) }
     window.localStorage?.setItem(browserScreenshotAnnotationKey, JSON.stringify(context))
     const state = browserAnnotationOverlayState('screenshot', request)
     ;(window as Window & {__RF_ANNOTATION_OVERLAY__?: AnnotationOverlayState}).__RF_ANNOTATION_OVERLAY__ = state
     ;(window as Window & {__RF_LAST_WHITEBOARD_LAUNCH__?: {mode: string; url: string; at: string}}).__RF_LAST_WHITEBOARD_LAUNCH__ = {
       mode: 'screenshot',
       url: '/#/annotation-overlay',
-      at: new Date().toISOString(),
-    }
+      at: new Date().toISOString() }
     emitBrowserWhiteboardVisibility({visible: true, mode: 'annotation'})
     const popup = window.open('/#/annotation-overlay', 'recordingfreedom-screenshot-annotation', 'width=1280,height=720')
     popup?.focus()
@@ -2334,8 +2324,7 @@ export async function loadAnnotationCapture(): Promise<WhiteboardScene> {
       scenePath: 'browser-preview/data/video/recording-preview.rfrec/annotations/scene.excalidraw',
       sceneJson,
       bytes: sceneJson.length,
-      contentType: 'application/vnd.excalidraw+json',
-    }
+      contentType: 'application/vnd.excalidraw+json' }
   }
 }
 
@@ -2364,8 +2353,7 @@ export async function saveAnnotationCapture(request: {sceneJson: string; snapsho
       eventsPath: 'browser-preview/data/video/recording-preview.rfrec/annotations/events.jsonl',
       snapshotPath: 'browser-preview/data/video/recording-preview.rfrec/annotations/exports/annotation.png',
       timelineSnapshotPath: 'browser-preview/data/video/recording-preview.rfrec/annotations/snapshots/annotation-000001.png',
-      bytes: request.sceneJson.length + request.snapshotDataUrl.length,
-    }
+      bytes: request.sceneJson.length + request.snapshotDataUrl.length }
   }
 }
 
@@ -2382,8 +2370,7 @@ export async function saveScreenshotAnnotationCapture(request: {sceneJson: strin
     const saved = {
       ...item,
       id: `browser-screenshot-${Date.now()}`,
-      createdAt: new Date().toISOString(),
-    }
+      createdAt: new Date().toISOString() }
     saveBrowserScreenshotHistory([saved, ...loadBrowserScreenshotHistory()])
     window.dispatchEvent(new CustomEvent(browserScreenshotCapturedEvent, {detail: saved}))
     return saved
@@ -2428,8 +2415,7 @@ export async function loadWhiteboardScene(): Promise<WhiteboardScene> {
       scenePath: 'browser-preview/data/whiteboards/board-current.excalidraw',
       sceneJson,
       bytes: sceneJson.length,
-      contentType: 'application/vnd.excalidraw+json',
-    }
+      contentType: 'application/vnd.excalidraw+json' }
   }
   try {
     return fromBoundWhiteboardScene(await RecordingFreedomService.LoadWhiteboardScene())
@@ -2442,8 +2428,7 @@ export async function loadWhiteboardScene(): Promise<WhiteboardScene> {
       scenePath: 'browser-preview/data/whiteboards/board-current.excalidraw',
       sceneJson,
       bytes: sceneJson.length,
-      contentType: 'application/vnd.excalidraw+json',
-    }
+      contentType: 'application/vnd.excalidraw+json' }
   }
 }
 
@@ -2456,8 +2441,7 @@ export async function saveWhiteboardScene(sceneJson: string): Promise<Whiteboard
       sceneJson,
       bytes: sceneJson.length,
       updatedAt: new Date().toISOString(),
-      contentType: 'application/vnd.excalidraw+json',
-    }
+      contentType: 'application/vnd.excalidraw+json' }
   }
   try {
     return fromBoundWhiteboardScene(await RecordingFreedomService.SaveWhiteboardScene({sceneJson} as BoundWhiteboardSceneRequest))
@@ -2471,8 +2455,7 @@ export async function saveWhiteboardScene(sceneJson: string): Promise<Whiteboard
       sceneJson,
       bytes: sceneJson.length,
       updatedAt: new Date().toISOString(),
-      contentType: 'application/vnd.excalidraw+json',
-    }
+      contentType: 'application/vnd.excalidraw+json' }
   }
 }
 
@@ -2489,10 +2472,8 @@ export async function saveWhiteboardSnapshot(request: {sceneJson: string; snapsh
         sceneJson: request.sceneJson,
         bytes: request.sceneJson.length,
         updatedAt: new Date().toISOString(),
-        contentType: 'application/vnd.excalidraw+json',
-      },
-      item,
-    }
+        contentType: 'application/vnd.excalidraw+json' },
+      item }
   }
   try {
     return fromBoundWhiteboardSnapshot(await RecordingFreedomService.SaveWhiteboardSnapshot(request as BoundWhiteboardSnapshotRequest))
@@ -2510,10 +2491,8 @@ export async function saveWhiteboardSnapshot(request: {sceneJson: string; snapsh
         sceneJson: request.sceneJson,
         bytes: request.sceneJson.length,
         updatedAt: new Date().toISOString(),
-        contentType: 'application/vnd.excalidraw+json',
-      },
-      item,
-    }
+        contentType: 'application/vnd.excalidraw+json' },
+      item }
   }
 }
 
@@ -2526,8 +2505,7 @@ export async function saveWhiteboardExport(request: {format: 'png' | 'svg' | 'ex
     return {
       format: request.format,
       outputPath: `browser-preview/data/whiteboards/exports/whiteboard.${request.format}`,
-      bytes: (request.payload ?? request.dataUrl ?? '').length,
-    }
+      bytes: (request.payload ?? request.dataUrl ?? '').length }
   }
 }
 
@@ -2615,8 +2593,7 @@ export async function setActiveOcrModel(modelId: string): Promise<OcrStatus> {
     const next: OcrStatus = {
       ...current,
       activeModelId: modelId,
-      models: current.models.map((model) => ({...model, active: model.id === modelId})),
-    }
+      models: current.models.map((model) => ({...model, active: model.id === modelId})) }
     browserWindow.__RF_OCR_STATUS__ = next
     return next
   }
@@ -2736,8 +2713,7 @@ export async function queueRecognizeWhiteboard(request: OcrWhiteboardRequest): P
   try {
     return fromBoundOcrJobSnapshot(await RecordingFreedomService.QueueRecognizeWhiteboard({
       ...request,
-      force: request.force === true,
-    } as BoundOcrWhiteboardRequest))
+      force: request.force === true } as BoundOcrWhiteboardRequest))
   } catch (error) {
     if (isWailsDesktopRuntime()) throw error
     console.info('Using browser whiteboard OCR queue fallback:', error)
@@ -2749,8 +2725,7 @@ export async function recognizeWhiteboard(request: OcrWhiteboardRequest): Promis
   try {
     return fromBoundOcrResult(await RecordingFreedomService.RecognizeWhiteboard({
       ...request,
-      force: request.force === true,
-    } as BoundOcrWhiteboardRequest))
+      force: request.force === true } as BoundOcrWhiteboardRequest))
   } catch (error) {
     if (isWailsDesktopRuntime()) throw error
     console.info('Using browser whiteboard OCR fallback:', error)
@@ -2808,8 +2783,7 @@ export async function readScreenshotImage(id: string, thumbnail = false): Promis
       available: Boolean(item),
       dataUrl: browserScreenshotDataUrl(item),
       path: item?.path,
-      bytes: browserScreenshotDataUrl(item)?.length ?? 0,
-    }
+      bytes: browserScreenshotDataUrl(item)?.length ?? 0 }
   }
 }
 
@@ -2833,8 +2807,7 @@ export async function openScreenshotDirectory(id: string): Promise<ScreenshotIte
     ;(window as Window & {__RF_LAST_OPEN_SCREENSHOT_DIRECTORY__?: {id: string; path?: string; at: string}}).__RF_LAST_OPEN_SCREENSHOT_DIRECTORY__ = {
       id,
       path: item?.path,
-      at: new Date().toISOString(),
-    }
+      at: new Date().toISOString() }
     return item
   }
 }
@@ -2850,8 +2823,7 @@ export async function patchScreenshotItem(id: string, patch: {pinned?: boolean; 
       ? {
         ...item,
         pinned: false,
-        fixed: patch.pinned === false ? false : patch.fixed ?? item.fixed,
-      }
+        fixed: patch.pinned === false ? false : patch.fixed ?? item.fixed }
       : item)
     saveBrowserScreenshotHistory(next)
     const pinned = fromBrowserScreenshotPinState(safeJSON(window.localStorage?.getItem(browserScreenshotPinStateKey)))
@@ -2895,8 +2867,7 @@ export async function showPinnedScreenshot(id: string): Promise<ScreenshotPinSta
     const state = item ? appendBrowserScreenshotPinStateItem(current, {
       item,
       dataUrl: browserScreenshotDataUrl(item),
-      fixed: item.fixed === true,
-    }) : fromBrowserScreenshotPinState({visible: false, fixed: false})
+      fixed: item.fixed === true }) : fromBrowserScreenshotPinState({visible: false, fixed: false})
     window.localStorage?.setItem(browserScreenshotPinStateKey, JSON.stringify(state))
     window.dispatchEvent(new CustomEvent(browserScreenshotPinEvent, {detail: state}))
     return state
@@ -2934,8 +2905,7 @@ export async function openScreenshotInWhiteboard(id: string): Promise<Screenshot
     const context: ScreenshotWhiteboardContext = {
       available: Boolean(item),
       item,
-      dataUrl: browserScreenshotDataUrl(item),
-    }
+      dataUrl: browserScreenshotDataUrl(item) }
     window.localStorage?.setItem(browserScreenshotWhiteboardKey, JSON.stringify(context))
     window.dispatchEvent(new CustomEvent(browserScreenshotWhiteboardEvent, {detail: context}))
     const popup = window.open('/#/whiteboard', 'recordingfreedom-whiteboard', 'width=1120,height=760')
@@ -2952,8 +2922,7 @@ export async function openScreenshotInWhiteboard(id: string): Promise<Screenshot
     const context: ScreenshotWhiteboardContext = {
       available: Boolean(item),
       item,
-      dataUrl: browserScreenshotDataUrl(item),
-    }
+      dataUrl: browserScreenshotDataUrl(item) }
     window.localStorage?.setItem(browserScreenshotWhiteboardKey, JSON.stringify(context))
     window.dispatchEvent(new CustomEvent(browserScreenshotWhiteboardEvent, {detail: context}))
     const popup = window.open('/#/whiteboard', 'recordingfreedom-whiteboard', 'width=1120,height=760')
@@ -3040,8 +3009,7 @@ export async function completeRegionSelection(request: RegionSelectionSession['b
       nativeId: 'region:browser-preview',
       available: false,
       capability: 'native-backend-queued',
-      unavailableReason: 'Desktop region overlay is only available in the Wails runtime.',
-    }
+      unavailableReason: 'Desktop region overlay is only available in the Wails runtime.' }
     const result = {source, geometry: request, cancelled: false}
     ;(window as Window & {__RF_LAST_REGION_SELECTION__?: RegionSelectionResult}).__RF_LAST_REGION_SELECTION__ = result
     return result
@@ -3065,8 +3033,7 @@ export async function cancelRegionSelector(): Promise<RegionSelectionResult> {
     console.info('Using browser region selection cancel fallback:', error)
     ;(window as Window & {__RF_LAST_REGION_CANCEL__?: {cancelled: boolean; at: string}}).__RF_LAST_REGION_CANCEL__ = {
       cancelled: true,
-      at: new Date().toISOString(),
-    }
+      at: new Date().toISOString() }
     return {cancelled: true}
   }
 }
@@ -3091,8 +3058,7 @@ function browserRegionSelectionSession(purpose: NonNullable<RegionSelectionSessi
     minimumHeight: purpose === 'screenshot' ? 12 : 64,
     displayCount: 1,
     purpose,
-    candidates: previous?.candidates ? [...previous.candidates] : undefined,
-  }
+    candidates: previous?.candidates ? [...previous.candidates] : undefined }
 }
 
 function finalizeRegionSelectionSession(
@@ -3121,8 +3087,7 @@ function emitBrowserRegionFrame(bounds: RegionSelectionSession['bounds'], purpos
     bounds,
     overlayBounds: {x: 0, y: 0, width: window.innerWidth, height: window.innerHeight},
     mode: 'edit',
-    purpose,
-  }
+    purpose }
   ;(window as Window & {__RF_REGION_FRAME__?: typeof frame}).__RF_REGION_FRAME__ = frame
   window.dispatchEvent(new CustomEvent('rf-region-frame', {detail: frame}))
 }
@@ -3174,8 +3139,7 @@ export async function readPipPreviewImage(path: string, knownModifiedUnixNano = 
   try {
     const result = await RecordingFreedomService.ReadPIPPreviewImage({
       path,
-      knownModifiedUnixNano,
-    } as BoundPIPPreviewImageRequest)
+      knownModifiedUnixNano } as BoundPIPPreviewImageRequest)
     return fromBoundPipPreviewImage(result)
   } catch (error) {
     console.info('Using browser PIP preview image fallback:', error)
@@ -3219,7 +3183,7 @@ export async function loadSources(): Promise<CaptureSource[]> {
     const boundSources = bootstrap.sources ?? []
     return boundSources.length > 0 ? boundSources.map(fromBoundSource) : fallbackSources
   } catch (error) {
-    console.info('Using browser mock sources:', error)
+    reportMockFallback('sources', error)
     return fallbackSources
   }
 }
@@ -3228,7 +3192,7 @@ export async function loadMediaDevices(): Promise<MediaInventory> {
   try {
     return fromBoundMediaInventory(await RecordingFreedomService.ListMediaDevices())
   } catch (error) {
-    console.info('Using browser mock media devices:', error)
+    reportMockFallback('media devices', error)
     return fallbackMediaInventory
   }
 }
@@ -3237,7 +3201,7 @@ export async function loadCaptureCapabilities(): Promise<CaptureCapabilities> {
   try {
     return fromBoundCapabilities(await RecordingFreedomService.GetCaptureCapabilities())
   } catch (error) {
-    console.info('Using browser mock capture capabilities:', error)
+    reportMockFallback('capture capabilities', error)
     return fallbackCapabilities
   }
 }
@@ -3246,7 +3210,7 @@ export async function loadSettings(): Promise<AppSettings> {
   try {
     return fromBoundSettings(await RecordingFreedomService.GetSettings())
   } catch (error) {
-    console.info('Using browser mock settings:', error)
+    reportMockFallback('settings', error)
     return loadBrowserSettings()
   }
 }
@@ -3255,7 +3219,7 @@ export async function saveSettings(settings: AppSettings): Promise<AppSettings> 
   try {
     return fromBoundSettings(await RecordingFreedomService.SaveSettings(toBoundSettings(settings)))
   } catch (error) {
-    console.info('Using browser mock settings save:', error)
+    reportMockFallback('settings save', error)
     const current = loadBrowserSettings()
     const next = {
       ...settings,
@@ -3267,10 +3231,8 @@ export async function saveSettings(settings: AppSettings): Promise<AppSettings> 
       window: {
         ...settings.window,
         theme: current.window.theme,
-        startAtLogin: current.window.startAtLogin,
-      },
-      updatedAt: new Date().toISOString(),
-    }
+        startAtLogin: current.window.startAtLogin },
+      updatedAt: new Date().toISOString() }
     window.localStorage?.setItem(browserSettingsKey, JSON.stringify(next))
     return next
   }
@@ -3281,16 +3243,14 @@ export async function setDataRoot(rootDir: string): Promise<AppDataInfo> {
     const info = await RecordingFreedomService.SetDataRoot(rootDir)
     return {
       rootDir: info.rootDir,
-      videoDir: info.videoDir,
-    }
+      videoDir: info.videoDir }
   } catch (error) {
-    console.info('Using browser mock data root apply:', error)
+    reportMockFallback('data root apply', error)
     const cleanRoot = rootDir.trim() || fallbackAppData.rootDir
     const separator = cleanRoot.includes('\\') ? '\\' : '/'
     return {
       rootDir: cleanRoot,
-      videoDir: `${cleanRoot.replace(/[\\/]+$/, '')}${separator}data${separator}video`,
-    }
+      videoDir: `${cleanRoot.replace(/[\\/]+$/, '')}${separator}data${separator}video` }
   }
 }
 
@@ -3299,8 +3259,7 @@ export async function openVideoDirectory(): Promise<AppDataInfo> {
     const info = await RecordingFreedomService.OpenVideoDirectory()
     return {
       rootDir: info.rootDir,
-      videoDir: info.videoDir,
-    }
+      videoDir: info.videoDir }
   } catch (error) {
     console.info('Desktop video directory open unavailable:', error)
     throw error
@@ -3320,8 +3279,7 @@ export async function exportRecordingPackage(packagePath: string, options: Recor
   try {
     return fromBoundExport(await RecordingFreedomService.ExportRecordingPackage({
       packageDir: packagePath,
-      includeAnnotations: options.includeAnnotations,
-    }))
+      includeAnnotations: options.includeAnnotations }))
   } catch (error) {
     console.info('Desktop recording export unavailable:', error)
     throw error
@@ -3332,8 +3290,7 @@ export async function previewExportRecordingPackage(packagePath: string, options
   try {
     const result: BoundExportRecordingPlanResult = await RecordingFreedomService.PreviewExportRecordingPackage({
       packageDir: packagePath,
-      includeAnnotations: options.includeAnnotations,
-    })
+      includeAnnotations: options.includeAnnotations })
     return fromBoundExportPlan(result.plan)
   } catch (error) {
     console.info('Desktop recording export preview unavailable:', error)
@@ -3345,14 +3302,12 @@ export async function readAnnotationPreviewImage(packagePath: string, snapshotPa
   try {
     const result: BoundAnnotationPreviewImageResult = await RecordingFreedomService.ReadAnnotationPreviewImage({
       packageDir: packagePath,
-      snapshotPath,
-    } as BoundAnnotationPreviewImageRequest)
+      snapshotPath } as BoundAnnotationPreviewImageRequest)
     return {
       available: result.available === true,
       dataUrl: result.dataUrl,
       relativePath: result.relativePath,
-      bytes: result.bytes,
-    }
+      bytes: result.bytes }
   } catch (error) {
     console.info('Desktop annotation preview image unavailable:', error)
     return {available: false}
@@ -3364,7 +3319,7 @@ export async function scanRecordingPackages(): Promise<RecordingRecovery[]> {
     const recoveries = await RecordingFreedomService.ScanRecordingPackages()
     return (recoveries ?? []).map(fromBoundRecovery)
   } catch (error) {
-    console.info('Using browser mock recovery scan:', error)
+    reportMockFallback('recovery scan', error)
     return []
   }
 }
@@ -3373,7 +3328,7 @@ export async function recoverRecordingPackage(packagePath: string): Promise<Reco
   try {
     return fromBoundRecovery(await RecordingFreedomService.RecoverRecordingPackage(packagePath))
   } catch (error) {
-    console.info('Using browser mock package recovery:', error)
+    reportMockFallback('package recovery', error)
     return null
   }
 }
@@ -3382,7 +3337,7 @@ export async function preflightRecording(request: MockRecordingRequest): Promise
   try {
     return fromBoundPreflight(await RecordingFreedomService.PreflightRecording(toStartRequest(request)))
   } catch (error) {
-    console.info('Using browser mock preflight:', error)
+    reportMockFallback('preflight', error)
     return {
       status: 'ready',
       backend: 'browser-mock',
@@ -3392,10 +3347,8 @@ export async function preflightRecording(request: MockRecordingRequest): Promise
           id: 'browser-mock',
           label: 'Browser Preview',
           status: 'ready',
-          reason: 'Preview mode validates UI flow only; desktop runtime performs native preflight.',
-        },
-      ],
-    }
+          reason: 'Preview mode validates UI flow only; desktop runtime performs native preflight.' },
+      ] }
   }
 }
 
@@ -3403,7 +3356,7 @@ export async function preflightAudioOnlyRecording(request: AudioOnlyRecordingReq
   try {
     return fromBoundPreflight(await RecordingFreedomService.PreflightAudioOnlyRecording(toAudioOnlyRequest(request)))
   } catch (error) {
-    console.info('Using browser mock audio-only preflight:', error)
+    reportMockFallback('audio-only preflight', error)
     return {
       status: request.systemAudio || request.microphone ? 'ready' : 'blocked',
       backend: 'browser-mock',
@@ -3413,10 +3366,8 @@ export async function preflightAudioOnlyRecording(request: AudioOnlyRecordingReq
           id: 'browser-mock',
           label: 'Browser Preview',
           status: request.systemAudio || request.microphone ? 'ready' : 'blocked',
-          reason: 'Preview mode validates UI flow only; desktop runtime performs native preflight.',
-        },
-      ],
-    }
+          reason: 'Preview mode validates UI flow only; desktop runtime performs native preflight.' },
+      ] }
   }
 }
 
@@ -3425,7 +3376,7 @@ export async function startRecording(request: MockRecordingRequest): Promise<Rec
     const session = await RecordingFreedomService.StartRecording(toStartRequest(request))
     return fromBoundSession(session)
   } catch (error) {
-    console.info('Using browser mock recording package:', error)
+    reportMockFallback('recording package', error)
     const session = createMockRecordingPackage(request)
     return {id: session.id, packagePath: session.packagePath, backend: 'browser-mock'}
   }
@@ -3436,7 +3387,7 @@ export async function startAudioOnlyRecording(request: AudioOnlyRecordingRequest
     const session = await RecordingFreedomService.StartAudioOnlyRecording(toAudioOnlyRequest(request))
     return fromBoundSession(session)
   } catch (error) {
-    console.info('Using browser mock audio-only recording package:', error)
+    reportMockFallback('audio-only recording package', error)
     const session = createMockAudioOnlyRecordingPackage(request)
     return {id: session.id, packagePath: session.packagePath, backend: 'browser-mock', recordingMode: 'audio-only'}
   }
@@ -3451,16 +3402,14 @@ function fromBoundPreflight(summary: BoundPreflightSummary): RecordingPreflight 
       id: check.id,
       label: check.label,
       status: check.status as RecordingPreflight['status'],
-      reason: check.reason,
-    })),
-  }
+      reason: check.reason })) }
 }
 
 export async function pauseRecording(): Promise<RecordingSession | null> {
   try {
     return fromBoundSession(await RecordingFreedomService.PauseRecording())
   } catch (error) {
-    console.info('Using browser mock pause:', error)
+    reportMockFallback('pause', error)
     return null
   }
 }
@@ -3469,7 +3418,7 @@ export async function resumeRecording(): Promise<RecordingSession | null> {
   try {
     return fromBoundSession(await RecordingFreedomService.ResumeRecording())
   } catch (error) {
-    console.info('Using browser mock resume:', error)
+    reportMockFallback('resume', error)
     return null
   }
 }
@@ -3478,7 +3427,7 @@ export async function stopRecording(): Promise<RecordingSession | null> {
   try {
     return fromBoundSession(await RecordingFreedomService.StopRecording())
   } catch (error) {
-    console.info('Using browser mock stop:', error)
+    reportMockFallback('stop', error)
     return null
   }
 }
@@ -3489,8 +3438,7 @@ function fromBoundBootstrap(bootstrap: BoundBootstrapState): RecorderBootstrap {
   return {
     appData: {
       rootDir: bootstrap.appData.rootDir,
-      videoDir: bootstrap.appData.videoDir,
-    },
+      videoDir: bootstrap.appData.videoDir },
     storage: fromBoundStorageStatus(bootstrap.storage),
     state: bootstrap.state,
     backend: bootstrap.backend,
@@ -3498,8 +3446,7 @@ function fromBoundBootstrap(bootstrap: BoundBootstrapState): RecorderBootstrap {
     media: fromBoundMediaInventory(bootstrap.media),
     recoveries: recoveries.map(fromBoundRecovery),
     settings: fromBoundSettings(bootstrap.settings),
-    capabilities: fromBoundCapabilities(bootstrap.capabilities),
-  }
+    capabilities: fromBoundCapabilities(bootstrap.capabilities) }
 }
 
 function fromBoundStorageStatus(storage: BoundBootstrapState['storage']): AppStorageStatus {
@@ -3512,8 +3459,7 @@ function fromBoundStorageStatus(storage: BoundBootstrapState['storage']): AppSto
     availableBytes: storage.availableBytes,
     minimumRecommendedBytes: storage.minimumRecommendedBytes,
     status: storage.status as AppStorageStatus['status'],
-    reason: storage.reason,
-  }
+    reason: storage.reason }
 }
 
 function fromBoundSource(source: BoundCaptureSource): CaptureSource {
@@ -3533,8 +3479,7 @@ function fromBoundSource(source: BoundCaptureSource): CaptureSource {
     processId: source.processId,
     available: source.available,
     capability: source.capability,
-    unavailableReason: source.unavailableReason,
-  }
+    unavailableReason: source.unavailableReason }
 }
 
 function fromBoundRegionSelectionSession(session: BoundRegionSelectionSession): RegionSelectionSession {
@@ -3545,27 +3490,23 @@ function fromBoundRegionSelectionSession(session: BoundRegionSelectionSession): 
       x: session.bounds.x,
       y: session.bounds.y,
       width: session.bounds.width,
-      height: session.bounds.height,
-    },
+      height: session.bounds.height },
     captureBounds: session.captureBounds ? {
       x: session.captureBounds.x,
       y: session.captureBounds.y,
       width: session.captureBounds.width,
-      height: session.captureBounds.height,
-    } : undefined,
+      height: session.captureBounds.height } : undefined,
     displayBounds: (session.displayBounds ?? []).map((display) => ({
       id: display.id,
       bounds: fromBoundRegionRect(display.bounds),
       captureBounds: fromBoundRegionRect(display.captureBounds),
-      scaleFactor: display.scaleFactor,
-    })),
+      scaleFactor: display.scaleFactor })),
     minimumWidth: session.minimumWidth,
     minimumHeight: session.minimumHeight,
     displayCount: session.displayCount,
     purpose: session.purpose === 'annotation' || session.purpose === 'screenshot' || session.purpose === 'scrolling-screenshot' ? session.purpose : 'capture',
     candidates: (session.candidates ?? []).map(fromBoundRegionSmartCandidate),
-    initialPointer: initialPointer ? {x: initialPointer.x, y: initialPointer.y} : undefined,
-  }
+    initialPointer: initialPointer ? {x: initialPointer.x, y: initialPointer.y} : undefined }
 }
 
 function fromBoundRegionSmartCandidate(candidate: BoundRegionSmartCandidate): RegionSmartCandidate {
@@ -3575,16 +3516,14 @@ function fromBoundRegionSmartCandidate(candidate: BoundRegionSmartCandidate): Re
     label: candidate.label,
     bounds: fromBoundRegionRect(candidate.bounds),
     sourceId: candidate.sourceId,
-    score: candidate.score,
-  }
+    score: candidate.score }
 }
 
 function fromBoundRegionAssistResult(result: BoundRegionAssistResult): RegionAssistResult {
   return {
     candidates: (result.candidates ?? []).map(fromBoundRegionSmartCandidate),
     best: result.best ? fromBoundRegionSmartCandidate(result.best) : undefined,
-    source: normalizeRegionAssistSource(result.source),
-  }
+    source: normalizeRegionAssistSource(result.source) }
 }
 
 function fromBoundRegionSelectionResult(result: BoundRegionSelectionResult): RegionSelectionResult {
@@ -3595,11 +3534,9 @@ function fromBoundRegionSelectionResult(result: BoundRegionSelectionResult): Reg
       x: result.geometry.x,
       y: result.geometry.y,
       width: result.geometry.width,
-      height: result.geometry.height,
-    } : undefined,
+      height: result.geometry.height } : undefined,
     cancelled: result.cancelled,
-    error: result.error,
-  }
+    error: result.error }
 }
 
 function fromBoundScreenIndicatorResult(result: BoundScreenIndicatorResult): ScreenIndicatorResult {
@@ -3608,8 +3545,7 @@ function fromBoundScreenIndicatorResult(result: BoundScreenIndicatorResult): Scr
     displayIndex: result.displayIndex,
     label: result.label,
     sourceBounds: fromBoundRegionRect(result.sourceBounds),
-    windowBounds: fromBoundRegionRect(result.windowBounds),
-  }
+    windowBounds: fromBoundRegionRect(result.windowBounds) }
 }
 
 function fromBoundPipOverlayState(state: BoundPIPOverlayState): PIPOverlayState {
@@ -3623,12 +3559,10 @@ function fromBoundPipOverlayState(state: BoundPIPOverlayState): PIPOverlayState 
         y: state.placement.rect.y,
         width: state.placement.rect.width,
         height: state.placement.rect.height,
-        visible: state.placement.rect.visible,
-      },
+        visible: state.placement.rect.visible },
       shape: state.placement.shape as PIPConfig['shape'],
       mirror: state.placement.mirror,
-      edgeFeather: state.placement.edgeFeather,
-    },
+      edgeFeather: state.placement.edgeFeather },
     overlayBounds: fromBoundRegionRect(state.overlayBounds),
     windowBounds: fromBoundRegionRect(state.windowBounds),
     contentBounds: fromBoundRegionRect(state.contentBounds),
@@ -3637,16 +3571,14 @@ function fromBoundPipOverlayState(state: BoundPIPOverlayState): PIPOverlayState 
     camera: fromBoundPipCamera(state.camera),
     previewImagePath: state.previewImagePath,
     captureExcluded: state.captureExcluded,
-    clientOperationId: state.clientOperationId,
-  }
+    clientOperationId: state.clientOperationId }
 }
 
 function fromBoundPipPreviewImage(result: BoundPIPPreviewImageResult): PIPPreviewImage {
   return {
     available: result.available,
     dataUrl: result.dataUrl,
-    modifiedUnixNano: result.modifiedUnixNano,
-  }
+    modifiedUnixNano: result.modifiedUnixNano }
 }
 
 function fromBoundWhiteboardScene(result: BoundWhiteboardSceneResult): WhiteboardScene {
@@ -3656,29 +3588,25 @@ function fromBoundWhiteboardScene(result: BoundWhiteboardSceneResult): Whiteboar
     sceneJson: result.sceneJson,
     bytes: result.bytes,
     updatedAt: result.updatedAt,
-    contentType: result.contentType,
-  }
+    contentType: result.contentType }
 }
 
 function fromBoundWhiteboardExport(result: BoundWhiteboardExportResult): WhiteboardExport {
   return {
     format: result.format === 'svg' || result.format === 'excalidraw' ? result.format : 'png',
     outputPath: result.outputPath,
-    bytes: result.bytes,
-  }
+    bytes: result.bytes }
 }
 
 function fromBoundScreenshotCaptureResult(result: BoundScreenshotCaptureResult): {item: ScreenshotItem} {
   return {
-    item: fromBoundScreenshotItem(result.item),
-  }
+    item: fromBoundScreenshotItem(result.item) }
 }
 
 function fromBoundWhiteboardSnapshot(result: BoundWhiteboardSnapshotResult): {scene: WhiteboardScene; item: ScreenshotItem} {
   return {
     scene: fromBoundWhiteboardScene(result.scene),
-    item: fromBoundScreenshotItem(result.item),
-  }
+    item: fromBoundScreenshotItem(result.item) }
 }
 
 function fromBoundScreenshotHistory(result: BoundScreenshotHistoryResult): ScreenshotItem[] {
@@ -3702,8 +3630,7 @@ function fromBoundScreenshotItem(item: BoundScreenshotItem): ScreenshotItem {
     ocrModelId: item.ocrModelId,
     ocrLanguage: item.ocrLanguage,
     ocrUpdatedAt: item.ocrUpdatedAt,
-    ocrError: item.ocrError,
-  }
+    ocrError: item.ocrError }
 }
 
 function fromBoundOcrModelInfo(model: BoundOcrModelInfo): OcrModelInfo {
@@ -3727,8 +3654,7 @@ function fromBoundOcrModelInfo(model: BoundOcrModelInfo): OcrModelInfo {
     smokeAssetReady: model.smokeAssetReady === true,
     smokeError: model.smokeError,
     missingFiles: model.missingFiles ?? [],
-    verificationError: model.verificationError,
-  }
+    verificationError: model.verificationError }
 }
 
 function fromBoundOcrModelDownloadSnapshot(snapshot: BoundOcrModelDownloadSnapshot): OcrModelDownloadSnapshot {
@@ -3742,14 +3668,12 @@ function fromBoundOcrModelDownloadSnapshot(snapshot: BoundOcrModelDownloadSnapsh
     error: snapshot.error,
     model: snapshot.model ? fromBoundOcrModelInfo(snapshot.model) : undefined,
     startedAt: String(snapshot.startedAt ?? ''),
-    updatedAt: String(snapshot.updatedAt ?? ''),
-  }
+    updatedAt: String(snapshot.updatedAt ?? '') }
 }
 
 function fromBoundOcrModelDownloadEvent(event: BoundOcrModelDownloadEvent): {snapshot: OcrModelDownloadSnapshot} {
   return {
-    snapshot: fromBoundOcrModelDownloadSnapshot(event.snapshot),
-  }
+    snapshot: fromBoundOcrModelDownloadSnapshot(event.snapshot) }
 }
 
 function fromBoundOcrStatus(status: BoundOcrStatus): OcrStatus {
@@ -3760,8 +3684,7 @@ function fromBoundOcrStatus(status: BoundOcrStatus): OcrStatus {
     workerPath: status.workerPath,
     runtimeDir: status.runtimeDir,
     workerCapabilities: status.workerCapabilities ? fromBoundOcrWorkerCapabilities(status.workerCapabilities) : undefined,
-    message: status.message,
-  }
+    message: status.message }
 }
 
 function fromBoundOcrJobSnapshot(snapshot: BoundOcrJobSnapshot): OcrJobSnapshot {
@@ -3772,8 +3695,7 @@ function fromBoundOcrJobSnapshot(snapshot: BoundOcrJobSnapshot): OcrJobSnapshot 
     request: fromBoundOcrRecognizeRequest(snapshot.request),
     merged: snapshot.merged === true,
     createdAt: String(snapshot.createdAt ?? ''),
-    updatedAt: String(snapshot.updatedAt ?? ''),
-  }
+    updatedAt: String(snapshot.updatedAt ?? '') }
 }
 
 function fromBoundOcrJobEvent(event: BoundOcrJobEvent): OcrJobUpdate {
@@ -3785,8 +3707,7 @@ function fromBoundOcrJobEvent(event: BoundOcrJobEvent): OcrJobUpdate {
     cacheKey: event.cacheKey,
     merged: event.merged,
     error: event.error,
-    result: event.result ? fromBoundOcrResult(event.result) : undefined,
-  }
+    result: event.result ? fromBoundOcrResult(event.result) : undefined }
 }
 
 function fromBrowserOcrJobEvent(event: Partial<OcrJobUpdate>): OcrJobUpdate {
@@ -3799,8 +3720,7 @@ function fromBrowserOcrJobEvent(event: Partial<OcrJobUpdate>): OcrJobUpdate {
     cacheKey: event.cacheKey,
     merged: event.merged,
     error: event.error,
-    result,
-  }
+    result }
 }
 
 function fromBrowserOcrResult(result: Partial<OcrResult>): OcrResult {
@@ -3818,8 +3738,7 @@ function fromBrowserOcrResult(result: Partial<OcrResult>): OcrResult {
     blocks: Array.isArray(result.blocks) ? result.blocks.map(fromBrowserOcrBlock) : [],
     plainText: String(result.plainText || ''),
     createdAt: String(result.createdAt || new Date().toISOString()),
-    durationMs: finiteNonNegativeNumber(result.durationMs, 0),
-  }
+    durationMs: finiteNonNegativeNumber(result.durationMs, 0) }
 }
 
 function fromBrowserOcrBlock(block: Partial<OcrBlock>, index: number): OcrBlock {
@@ -3829,8 +3748,7 @@ function fromBrowserOcrBlock(block: Partial<OcrBlock>, index: number): OcrBlock 
     confidence: finiteNonNegativeNumber(block.confidence, 0),
     box: Array.isArray(block.box) ? block.box.map(fromBrowserOcrPoint).filter((point): point is OcrPoint => Boolean(point)) : [],
     lineIndex: Number.isFinite(block.lineIndex) ? Number(block.lineIndex) : index,
-    languageHint: block.languageHint,
-  }
+    languageHint: block.languageHint }
 }
 
 function fromBrowserOcrPoint(point: unknown): OcrPoint | null {
@@ -3863,8 +3781,7 @@ function fromBoundOcrWorkerCapabilities(capabilities: BoundOcrWorkerCapabilities
     runtimeVersion: capabilities.runtimeVersion,
     runtimeApiVersion: capabilities.runtimeApiVersion,
     runtimeError: capabilities.runtimeError,
-    message: capabilities.message,
-  }
+    message: capabilities.message }
 }
 
 function fromBoundOcrRecognizeRequest(request: BoundOcrRecognizeRequest): OcrRecognizeRequest {
@@ -3875,8 +3792,7 @@ function fromBoundOcrRecognizeRequest(request: BoundOcrRecognizeRequest): OcrRec
     language: request.language,
     modelId: request.modelId,
     force: request.force,
-    priority: request.priority,
-  }
+    priority: request.priority }
 }
 
 function fromBoundOcrResult(result: BoundOcrResult): OcrResult {
@@ -3893,8 +3809,7 @@ function fromBoundOcrResult(result: BoundOcrResult): OcrResult {
     blocks: (result.blocks ?? []).map(fromBoundOcrBlock),
     plainText: result.plainText,
     createdAt: String(result.createdAt ?? ''),
-    durationMs: result.durationMs,
-  }
+    durationMs: result.durationMs }
 }
 
 function fromBoundOcrBlock(block: BoundOcrBlock): OcrBlock {
@@ -3904,8 +3819,7 @@ function fromBoundOcrBlock(block: BoundOcrBlock): OcrBlock {
     confidence: block.confidence,
     box: (block.box ?? []).map((point) => ({x: point.x, y: point.y})),
     lineIndex: block.lineIndex,
-    languageHint: block.languageHint,
-  }
+    languageHint: block.languageHint }
 }
 
 function fromBoundOcrTranslationResult(result: BoundOcrTranslationResult): OcrTranslationResult {
@@ -3917,16 +3831,14 @@ function fromBoundOcrTranslationResult(result: BoundOcrTranslationResult): OcrTr
     model: result.model,
     promptVersion: result.promptVersion,
     blocks: (result.blocks ?? []).map(fromBoundOcrTranslationBlock),
-    createdAt: String(result.createdAt ?? ''),
-  }
+    createdAt: String(result.createdAt ?? '') }
 }
 
 function fromBoundOcrTranslationBlock(block: BoundOcrTranslationBlock): OcrTranslationBlock {
   return {
     blockId: block.blockId,
     source: block.source,
-    translated: block.translated,
-  }
+    translated: block.translated }
 }
 
 function toBoundOcrRecognizeRequest(request: OcrRecognizeRequest): BoundOcrRecognizeRequest {
@@ -3937,8 +3849,7 @@ function toBoundOcrRecognizeRequest(request: OcrRecognizeRequest): BoundOcrRecog
     language: request.language ?? 'zh-en',
     modelId: request.modelId,
     force: request.force === true,
-    priority: request.priority ?? 'normal',
-  }
+    priority: request.priority ?? 'normal' }
 }
 
 function fromBoundOcrSourceKind(sourceKind: BoundOcrSourceKind): OcrSourceKind {
@@ -4002,8 +3913,7 @@ function fromBoundScreenshotImage(result: BoundScreenshotImageResult): Screensho
     available: result.available === true,
     dataUrl: result.dataUrl,
     path: result.path,
-    bytes: result.bytes,
-  }
+    bytes: result.bytes }
 }
 
 function fromBoundScreenshotPinState(state: Partial<BoundScreenshotPinState> | undefined): ScreenshotPinState {
@@ -4012,8 +3922,7 @@ function fromBoundScreenshotPinState(state: Partial<BoundScreenshotPinState> | u
     item: state?.item ? fromBoundScreenshotItem(state.item) : undefined,
     dataUrl: state?.dataUrl,
     fixed: state?.fixed === true,
-    pins: Array.isArray(state?.pins) ? state.pins.map(fromBoundScreenshotPinnedItem).filter((pin): pin is ScreenshotPinnedItem => Boolean(pin)) : undefined,
-  })
+    pins: Array.isArray(state?.pins) ? state.pins.map(fromBoundScreenshotPinnedItem).filter((pin): pin is ScreenshotPinnedItem => Boolean(pin)) : undefined })
 }
 
 function fromBoundScreenshotPinnedItem(pin: unknown): ScreenshotPinnedItem | null {
@@ -4023,16 +3932,14 @@ function fromBoundScreenshotPinnedItem(pin: unknown): ScreenshotPinnedItem | nul
   return {
     item,
     dataUrl: typeof record.dataUrl === 'string' ? record.dataUrl : browserScreenshotDataUrl(item),
-    fixed: record.fixed === true || item.fixed === true,
-  }
+    fixed: record.fixed === true || item.fixed === true }
 }
 
 function fromBoundScreenshotWhiteboardContext(context: Partial<BoundScreenshotWhiteboardContext> | undefined): ScreenshotWhiteboardContext {
   return {
     available: context?.available === true,
     item: context?.item ? fromBoundScreenshotItem(context.item) : undefined,
-    dataUrl: context?.dataUrl,
-  }
+    dataUrl: context?.dataUrl }
 }
 
 function fromBoundAnnotationOverlayState(state: BoundAnnotationOverlayState): AnnotationOverlayState {
@@ -4053,13 +3960,10 @@ function fromBoundAnnotationOverlayState(state: BoundAnnotationOverlayState): An
         width: state.target.geometry.width,
         height: state.target.geometry.height,
         displayIndex: state.target.geometry.displayIndex,
-        nativeId: state.target.geometry.nativeId,
-      } : undefined,
-    },
+        nativeId: state.target.geometry.nativeId } : undefined },
     captureExcluded: state.captureExcluded === true,
     sourceImageDataURL: state.sourceImageDataUrl,
-    sourceImageCapturedAt: state.sourceImageCapturedAt,
-  }
+    sourceImageCapturedAt: state.sourceImageCapturedAt }
 }
 
 function fromBoundAnnotationCapture(result: BoundAnnotationCaptureResult): AnnotationCapture {
@@ -4069,8 +3973,7 @@ function fromBoundAnnotationCapture(result: BoundAnnotationCaptureResult): Annot
     eventsPath: result.eventsPath,
     snapshotPath: result.snapshotPath,
     timelineSnapshotPath: result.timelineSnapshotPath,
-    bytes: result.bytes,
-  }
+    bytes: result.bytes }
 }
 
 function fromBoundAnnotationRenderJobClaim(result: BoundAnnotationRenderJobClaim): AnnotationRenderJobClaim {
@@ -4090,10 +3993,8 @@ function fromBoundAnnotationRenderJobClaim(result: BoundAnnotationRenderJobClaim
         canvasHeight: job.canvasHeight,
         index: job.index,
         startOffsetMs: job.startOffsetMs,
-        endOffsetMs: job.endOffsetMs,
-      }
-      : undefined,
-  }
+        endOffsetMs: job.endOffsetMs }
+      : undefined }
 }
 
 function browserAnnotationOverlayState(
@@ -4111,10 +4012,8 @@ function browserAnnotationOverlayState(
     target: {
       type: mode === 'screenshot' ? 'screenshot-region' : 'screen',
       id: mode === 'screenshot' ? 'browser-screenshot-region' : 'browser-preview',
-      geometry: {x: bounds?.x ?? 0, y: bounds?.y ?? 0, width: bounds?.width ?? width, height: bounds?.height ?? height},
-    },
-    captureExcluded: false,
-  }
+      geometry: {x: bounds?.x ?? 0, y: bounds?.y ?? 0, width: bounds?.width ?? width, height: bounds?.height ?? height} },
+    captureExcluded: false }
 }
 
 function fromBoundPipCamera(camera: BoundPIPOverlayState['camera']): PIPOverlayCamera | undefined {
@@ -4122,8 +4021,7 @@ function fromBoundPipCamera(camera: BoundPIPOverlayState['camera']): PIPOverlayC
   return normalizePipOverlayCamera({
     deviceId: camera.deviceId,
     nativeId: camera.nativeId,
-    name: camera.name,
-  })
+    name: camera.name })
 }
 
 function fromBoundRegionRect(rect: {x: number; y: number; width: number; height: number}) {
@@ -4131,8 +4029,7 @@ function fromBoundRegionRect(rect: {x: number; y: number; width: number; height:
     x: rect.x,
     y: rect.y,
     width: rect.width,
-    height: rect.height,
-  }
+    height: rect.height }
 }
 
 function sourceMeta(source: BoundCaptureSource) {
@@ -4171,9 +4068,7 @@ function fromBoundMediaInventory(inventory: BoundMediaInventory): MediaInventory
       appliesTo: inventory.enhancement.appliesTo,
       available: inventory.enhancement.available,
       capability: inventory.enhancement.capability,
-      unavailableReason: inventory.enhancement.unavailableReason,
-    },
-  }
+      unavailableReason: inventory.enhancement.unavailableReason } }
 }
 
 function fromBoundMediaDevice(device: BoundMediaDevice): MediaDevice {
@@ -4188,8 +4083,7 @@ function fromBoundMediaDevice(device: BoundMediaDevice): MediaDevice {
     capability: device.capability,
     unavailableReason: device.unavailableReason,
     rnnoiseEligible: device.rnnoiseEligible,
-    sidecarEligible: device.sidecarEligible,
-  }
+    sidecarEligible: device.sidecarEligible }
 }
 
 function fromBoundAudioState(state: BoundAudioState): AudioControlState {
@@ -4199,8 +4093,7 @@ function fromBoundAudioState(state: BoundAudioState): AudioControlState {
     microphone: state.microphone,
     microphoneDeviceId: state.microphoneDeviceId,
     noiseSuppression: state.noiseSuppression,
-    microphoneGain: state.microphoneGain || 1,
-  }
+    microphoneGain: state.microphoneGain || 1 }
 }
 
 function toBoundAudioStatePatch(patch: AudioStatePatch): BoundAudioStatePatchRequest {
@@ -4212,8 +4105,7 @@ function toBoundAudioStatePatch(patch: AudioStatePatch): BoundAudioStatePatchReq
     noiseSuppression: patch.noiseSuppression,
     microphoneGain: patch.microphoneGain,
     clearSystemDevice: patch.clearSystemDevice,
-    clearMicrophoneDevice: patch.clearMicrophoneDevice,
-  }
+    clearMicrophoneDevice: patch.clearMicrophoneDevice }
 }
 
 function toBoundSettingsPreferencesPatch(patch: SettingsPreferencesPatch): BoundSettingsPreferencesPatchRequest {
@@ -4226,8 +4118,7 @@ function toBoundSettingsPreferencesPatch(patch: SettingsPreferencesPatch): Bound
     countdownSeconds: patch.countdownSeconds,
     startAtLogin: patch.startAtLogin,
     autoOcr: patch.autoOcr,
-    ocrTranslation: patch.ocrTranslation as BoundSettingsPreferencesPatchRequest['ocrTranslation'],
-  }
+    ocrTranslation: patch.ocrTranslation as BoundSettingsPreferencesPatchRequest['ocrTranslation'] }
 }
 
 function applyBrowserSettingsPreferencesPatch(settings: AppSettings, patch: SettingsPreferencesPatch): AppSettings {
@@ -4239,35 +4130,28 @@ function applyBrowserSettingsPreferencesPatch(settings: AppSettings, patch: Sett
       quality: patch.recordingQuality ?? settings.recording.quality,
       fps: patch.recordingFps ?? settings.recording.fps,
       captureCursor: patch.captureCursor ?? settings.recording.captureCursor,
-      countdownSeconds: patch.countdownSeconds ?? settings.recording.countdownSeconds,
-    },
+      countdownSeconds: patch.countdownSeconds ?? settings.recording.countdownSeconds },
     window: {
       ...settings.window,
       theme: patch.theme ?? settings.window.theme,
-      startAtLogin: patch.startAtLogin ?? settings.window.startAtLogin,
-    },
+      startAtLogin: patch.startAtLogin ?? settings.window.startAtLogin },
     ocr: {
       ...settings.ocr,
       autoRecognizeScreenshots: patch.autoOcr ?? settings.ocr.autoRecognizeScreenshots,
       translation: normalizeOcrTranslationSettings({
         ...settings.ocr.translation,
-        ...(patch.ocrTranslation ?? {}),
-      }),
-    },
-    updatedAt: new Date().toISOString(),
-  }
+        ...(patch.ocrTranslation ?? {}) }) },
+    updatedAt: new Date().toISOString() }
 }
 
 function applyBrowserShortcutPatch(settings: AppSettings, patch: ShortcutSettingsPatch): AppSettings {
   const nextShortcuts = normalizeShortcutSettings({
     ...settings.shortcuts,
-    ...patch,
-  })
+    ...patch })
   return {
     ...settings,
     shortcuts: nextShortcuts,
-    updatedAt: new Date().toISOString(),
-  }
+    updatedAt: new Date().toISOString() }
 }
 
 function applyBrowserWhiteboardPatch(settings: AppSettings, patch: WhiteboardSettingsPatch): AppSettings {
@@ -4275,10 +4159,8 @@ function applyBrowserWhiteboardPatch(settings: AppSettings, patch: WhiteboardSet
     ...settings,
     whiteboard: fromBoundWhiteboardSettings({
       ...settings.whiteboard,
-      ...patch,
-    }),
-    updatedAt: new Date().toISOString(),
-  }
+      ...patch }),
+    updatedAt: new Date().toISOString() }
 }
 
 function applyBrowserAudioPatch(audio: AppSettings['audio'], patch: AudioStatePatch): AppSettings['audio'] {
@@ -4306,8 +4188,7 @@ function fromBoundCapabilities(capabilities: BoundCaptureCapabilities): CaptureC
     microphoneEnhancement: fromBoundCapability(capabilities.microphoneEnhancement),
     cameraSidecar: fromBoundCapability(capabilities.cameraSidecar),
     pipExport: fromBoundCapability(capabilities.pipExport),
-    packageRecovery: fromBoundCapability(capabilities.packageRecovery),
-  }
+    packageRecovery: fromBoundCapability(capabilities.packageRecovery) }
 }
 
 function fromBoundCapability(capability: BoundCaptureCapability): CaptureCapability {
@@ -4317,8 +4198,7 @@ function fromBoundCapability(capability: BoundCaptureCapability): CaptureCapabil
     status: capability.status as CaptureCapability['status'],
     backend: capability.backend,
     permission: capability.permission as CaptureCapability['permission'],
-    reason: capability.reason,
-  }
+    reason: capability.reason }
 }
 
 function mediaDeviceMeta(device: BoundMediaDevice) {
@@ -4337,8 +4217,7 @@ function emptyFloatingPanelState(): FloatingPanelState {
     visible: false,
     anchor: {x: 0, y: 0, width: 0, height: 0},
     bounds: {x: 0, y: 0, width: 0, height: 0},
-    token: 0,
-  }
+    token: 0 }
 }
 
 function emptyFloatingSelectState(): FloatingSelectState {
@@ -4347,8 +4226,7 @@ function emptyFloatingSelectState(): FloatingSelectState {
     anchor: {x: 0, y: 0, width: 0, height: 0},
     bounds: {x: 0, y: 0, width: 0, height: 0},
     options: [],
-    token: 0,
-  }
+    token: 0 }
 }
 
 function fromBoundFloatingRect(rect: BoundFloatingRect | undefined): FloatingRect {
@@ -4356,8 +4234,7 @@ function fromBoundFloatingRect(rect: BoundFloatingRect | undefined): FloatingRec
     x: rect?.x ?? 0,
     y: rect?.y ?? 0,
     width: rect?.width ?? 0,
-    height: rect?.height ?? 0,
-  }
+    height: rect?.height ?? 0 }
 }
 
 function fromBoundFloatingPanelState(state: BoundFloatingPanelState): FloatingPanelState {
@@ -4370,8 +4247,7 @@ function fromBoundFloatingPanelState(state: BoundFloatingPanelState): FloatingPa
     token: state.token ?? 0,
     screenId: state.screenId,
     direction: state.direction,
-    contextId: (state as BoundFloatingPanelState & {contextId?: string}).contextId,
-  }
+    contextId: (state as BoundFloatingPanelState & {contextId?: string}).contextId }
 }
 
 function normalizeFloatingPanelKind(value: unknown): FloatingPanelKind | undefined {
@@ -4385,8 +4261,7 @@ function fromBoundFloatingSelectOption(option: BoundFloatingSelectOption): Float
     value: option.value,
     label: option.label,
     disabled: option.disabled,
-    swatch: option.swatch,
-  }
+    swatch: option.swatch }
 }
 
 function fromBoundFloatingSelectState(state: BoundFloatingSelectState): FloatingSelectState {
@@ -4400,8 +4275,7 @@ function fromBoundFloatingSelectState(state: BoundFloatingSelectState): Floating
     token: state.token ?? 0,
     panelToken: state.panelToken,
     screenId: state.screenId,
-    direction: state.direction,
-  }
+    direction: state.direction }
 }
 
 function fromBoundFloatingSelectChosen(event: BoundFloatingSelectChosenEvent): FloatingSelectChosenEvent {
@@ -4409,8 +4283,7 @@ function fromBoundFloatingSelectChosen(event: BoundFloatingSelectChosenEvent): F
     id: event.id,
     value: event.value,
     token: event.token,
-    panelToken: event.panelToken,
-  }
+    panelToken: event.panelToken }
 }
 
 function fromBoundSourceControlState(state: BoundSourceControlState): SourceControlState {
@@ -4424,9 +4297,7 @@ function fromBoundSourceControlState(state: BoundSourceControlState): SourceCont
       width: state.sourceGeometry.width,
       height: state.sourceGeometry.height,
       displayIndex: state.sourceGeometry.displayIndex,
-      nativeId: state.sourceGeometry.nativeId,
-    } : undefined,
-  }
+      nativeId: state.sourceGeometry.nativeId } : undefined }
 }
 
 function toBoundSourceStatePatch(patch: SourceStatePatch): BoundSourceStatePatchRequest {
@@ -4440,10 +4311,8 @@ function toBoundSourceStatePatch(patch: SourceStatePatch): BoundSourceStatePatch
       width: Math.round(patch.sourceGeometry.width),
       height: Math.round(patch.sourceGeometry.height),
       displayIndex: patch.sourceGeometry.displayIndex ?? 0,
-      nativeId: patch.sourceGeometry.nativeId,
-    } as BoundSourceGeometry : undefined,
-    clearGeometry: patch.clearGeometry,
-  }
+      nativeId: patch.sourceGeometry.nativeId } as BoundSourceGeometry : undefined,
+    clearGeometry: patch.clearGeometry }
 }
 
 function normalizeSourceType(value: unknown): CaptureSource['type'] | undefined {
@@ -4458,41 +4327,34 @@ function fromBoundSettings(settings: BoundSettings): AppSettings {
     locale: normalizeLocale(settings.locale),
     source: {
       lastSourceId: settings.source.lastSourceId,
-      lastSourceType: settings.source.lastSourceType as CaptureSource['type'],
-    },
+      lastSourceType: settings.source.lastSourceType as CaptureSource['type'] },
     storage: {
-      dataRootDir: settings.storage?.dataRootDir,
-    },
+      dataRootDir: settings.storage?.dataRootDir },
     recording: {
       quality: normalizeRecordingQuality(settings.recording.quality),
       fps: normalizeRecordingFPS(settings.recording.fps),
       captureCursor: settings.recording.captureCursor,
-      countdownSeconds: normalizeCountdown(settings.recording.countdownSeconds),
-    },
+      countdownSeconds: normalizeCountdown(settings.recording.countdownSeconds) },
     audio: {
       system: settings.audio.system,
       systemDeviceId: settings.audio.systemDeviceId,
       microphone: settings.audio.microphone,
       microphoneDeviceId: settings.audio.microphoneDeviceId,
       noiseSuppression: settings.audio.noiseSuppression,
-      microphoneGain: settings.audio.microphoneGain,
-    },
+      microphoneGain: settings.audio.microphoneGain },
     camera: {
       enabled: settings.camera.enabled,
       deviceId: settings.camera.deviceId,
       pipPreset: settings.camera.pipPreset as AppSettings['camera']['pipPreset'],
-      pip: fromBoundPipConfig((settings.camera as BoundSettings['camera'] & {pip?: PIPConfig}).pip, settings.camera.pipPreset as AppSettings['camera']['pipPreset']),
-    },
+      pip: fromBoundPipConfig((settings.camera as BoundSettings['camera'] & {pip?: PIPConfig}).pip, settings.camera.pipPreset as AppSettings['camera']['pipPreset']) },
     whiteboard: fromBoundWhiteboardSettings((settings as BoundSettings & {whiteboard?: Partial<AppSettings['whiteboard']>}).whiteboard),
     ocr: fromBoundOcrSettings((settings as BoundSettings & {ocr?: Partial<AppSettings['ocr']>}).ocr),
     shortcuts: normalizeShortcutSettings((settings as BoundSettings & {shortcuts?: Partial<ShortcutSettings>}).shortcuts),
     window: {
       minimizeToTray: settings.window.minimizeToTray,
       theme: normalizeTheme(settings.window.theme),
-      startAtLogin: Boolean((settings.window as BoundSettings['window'] & {startAtLogin?: boolean}).startAtLogin),
-    },
-    updatedAt: typeof settings.updatedAt === 'string' ? settings.updatedAt : undefined,
-  }
+      startAtLogin: Boolean((settings.window as BoundSettings['window'] & {startAtLogin?: boolean}).startAtLogin) },
+    updatedAt: typeof settings.updatedAt === 'string' ? settings.updatedAt : undefined }
 }
 
 function toBoundSettings(settings: AppSettings): BoundSettings {
@@ -4501,41 +4363,34 @@ function toBoundSettings(settings: AppSettings): BoundSettings {
     locale: settings.locale as BoundSettings['locale'],
     source: {
       lastSourceId: settings.source.lastSourceId,
-      lastSourceType: settings.source.lastSourceType,
-    },
+      lastSourceType: settings.source.lastSourceType },
     storage: {
-      dataRootDir: settings.storage.dataRootDir,
-    },
+      dataRootDir: settings.storage.dataRootDir },
     recording: {
       quality: settings.recording.quality,
       fps: settings.recording.fps,
       captureCursor: settings.recording.captureCursor,
-      countdownSeconds: settings.recording.countdownSeconds,
-    },
+      countdownSeconds: settings.recording.countdownSeconds },
     audio: {
       system: settings.audio.system,
       systemDeviceId: settings.audio.systemDeviceId,
       microphone: settings.audio.microphone,
       microphoneDeviceId: settings.audio.microphoneDeviceId,
       noiseSuppression: settings.audio.noiseSuppression,
-      microphoneGain: settings.audio.microphoneGain,
-    },
+      microphoneGain: settings.audio.microphoneGain },
     camera: {
       enabled: settings.camera.enabled,
       deviceId: settings.camera.deviceId,
       pipPreset: settings.camera.pipPreset,
-      pip: settings.camera.pip as unknown as BoundSettings['camera']['pip'],
-    },
+      pip: settings.camera.pip as unknown as BoundSettings['camera']['pip'] },
     whiteboard: settings.whiteboard as unknown as BoundSettings['whiteboard'],
     ocr: settings.ocr as unknown as BoundSettings['ocr'],
     shortcuts: settings.shortcuts as unknown as BoundSettings['shortcuts'],
     window: {
       minimizeToTray: settings.window.minimizeToTray,
       theme: settings.window.theme as BoundSettings['window']['theme'],
-      startAtLogin: settings.window.startAtLogin,
-    },
-    updatedAt: settings.updatedAt ?? new Date(0).toISOString(),
-  }
+      startAtLogin: settings.window.startAtLogin },
+    updatedAt: settings.updatedAt ?? new Date(0).toISOString() }
 }
 
 function loadBrowserScreenshotHistory(): ScreenshotItem[] {
@@ -4570,12 +4425,10 @@ function createBrowserScreenshotItem(mode: string, region?: RegionSelectionSessi
       x: Math.round(region.x),
       y: Math.round(region.y),
       width,
-      height,
-    } : undefined,
+      height } : undefined,
     pinned: false,
     fixed: false,
-    ocrStatus: 'none',
-  }
+    ocrStatus: 'none' }
 }
 
 function fromBrowserScreenshotItem(value: unknown): ScreenshotItem | null {
@@ -4597,8 +4450,7 @@ function fromBrowserScreenshotItem(value: unknown): ScreenshotItem | null {
     ocrModelId: typeof record.ocrModelId === 'string' ? record.ocrModelId : undefined,
     ocrLanguage: typeof record.ocrLanguage === 'string' ? record.ocrLanguage : undefined,
     ocrUpdatedAt: typeof record.ocrUpdatedAt === 'string' ? record.ocrUpdatedAt : undefined,
-    ocrError: typeof record.ocrError === 'string' ? record.ocrError : undefined,
-  }
+    ocrError: typeof record.ocrError === 'string' ? record.ocrError : undefined }
 }
 
 function normalizeOcrStatus(status: unknown): ScreenshotItem['ocrStatus'] {
@@ -4643,9 +4495,7 @@ function fromBrowserOcrModelDownloadEvent(snapshot: Partial<OcrModelDownloadSnap
       error: snapshot.error,
       model: snapshot.model,
       startedAt: snapshot.startedAt || now,
-      updatedAt: snapshot.updatedAt || now,
-    },
-  }
+      updatedAt: snapshot.updatedAt || now } }
 }
 
 function browserStartOcrModelDownload(modelId: string): OcrModelDownloadSnapshot {
@@ -4666,8 +4516,7 @@ function browserStartOcrModelDownload(modelId: string): OcrModelDownloadSnapshot
     totalBytes,
     percent: 0,
     startedAt: now,
-    updatedAt: now,
-  }
+    updatedAt: now }
   browserStoreOcrModelDownload(queued)
   window.setTimeout(() => {
     const running: OcrModelDownloadSnapshot = {
@@ -4675,8 +4524,7 @@ function browserStartOcrModelDownload(modelId: string): OcrModelDownloadSnapshot
       status: 'running',
       downloadedBytes: Math.max(1, Math.round(totalBytes * 0.55)),
       percent: 55,
-      updatedAt: new Date().toISOString(),
-    }
+      updatedAt: new Date().toISOString() }
     browserStoreOcrModelDownload(running)
   }, 10)
   window.setTimeout(() => {
@@ -4690,20 +4538,17 @@ function browserStartOcrModelDownload(modelId: string): OcrModelDownloadSnapshot
       smokeAssetReady: true,
       missingFiles: [],
       verificationError: undefined,
-      smokeError: undefined,
-    }
+      smokeError: undefined }
     browserWindow.__RF_OCR_STATUS__ = {
       ...current,
-      models: current.models.map((model) => model.id === modelId ? verifiedModel : model),
-    }
+      models: current.models.map((model) => model.id === modelId ? verifiedModel : model) }
     browserStoreOcrModelDownload({
       ...queued,
       status: 'installed',
       downloadedBytes: totalBytes,
       percent: 100,
       model: verifiedModel,
-      updatedAt: new Date().toISOString(),
-    })
+      updatedAt: new Date().toISOString() })
   }, 25)
   return queued
 }
@@ -4718,11 +4563,9 @@ function browserCancelOcrModelDownload(modelId: string): OcrModelDownloadSnapsho
       downloadedBytes: 0,
       totalBytes: 0,
       percent: 0,
-      startedAt: now,
-    }),
+      startedAt: now }),
     status: 'cancelled',
-    updatedAt: now,
-  }
+    updatedAt: now }
   browserStoreOcrModelDownload(cancelled)
   return cancelled
 }
@@ -4732,8 +4575,7 @@ function browserOcrStatus(): OcrStatus {
   if (injected) {
     return {
       ...injected,
-      models: injected.models ?? [],
-    }
+      models: injected.models ?? [] }
   }
   return {
     status: 'no-model',
@@ -4751,8 +4593,7 @@ function browserOcrStatus(): OcrStatus {
         verified: false,
         active: true,
         smokeAssetReady: false,
-        missingFiles: ['manifest.json', 'det.onnx', 'cls.onnx', 'rec.onnx', 'keys.txt'],
-      },
+        missingFiles: ['manifest.json', 'det.onnx', 'cls.onnx', 'rec.onnx', 'keys.txt'] },
       {
         id: 'ppocrv6-mobile-zh-en',
         name: 'PP-OCRv6 Mobile Chinese/English',
@@ -4765,8 +4606,7 @@ function browserOcrStatus(): OcrStatus {
         verified: false,
         active: false,
         smokeAssetReady: false,
-        missingFiles: ['manifest.json', 'det.onnx', 'cls.onnx', 'rec.onnx', 'keys.txt'],
-      },
+        missingFiles: ['manifest.json', 'det.onnx', 'cls.onnx', 'rec.onnx', 'keys.txt'] },
       {
         id: 'ppocrv6-medium-zh-en',
         name: 'PP-OCRv6 Medium Chinese/English',
@@ -4779,11 +4619,9 @@ function browserOcrStatus(): OcrStatus {
         verified: false,
         active: false,
         smokeAssetReady: false,
-        missingFiles: ['manifest.json', 'det.onnx', 'cls.onnx', 'rec.onnx', 'keys.txt'],
-      },
+        missingFiles: ['manifest.json', 'det.onnx', 'cls.onnx', 'rec.onnx', 'keys.txt'] },
     ],
-    message: 'OCR is local-only and is not available in browser preview.',
-  }
+    message: 'OCR is local-only and is not available in browser preview.' }
 }
 
 function browserOcrResult(resultId: string): OcrResult {
@@ -4824,8 +4662,7 @@ function browserOcrResult(resultId: string): OcrResult {
           {x: titleRight, y: titleTop},
           {x: titleRight, y: titleBottom},
           {x: left, y: titleBottom},
-        ],
-      },
+        ] },
       {
         id: `${resultId}-block-zh`,
         text: '文字识别',
@@ -4837,13 +4674,11 @@ function browserOcrResult(resultId: string): OcrResult {
           {x: subtitleRight, y: subtitleTop},
           {x: subtitleRight, y: subtitleBottom},
           {x: left, y: subtitleBottom},
-        ],
-      },
+        ] },
     ],
     plainText: 'RecordingFreedom\n文字识别',
     createdAt: item.ocrUpdatedAt || item.createdAt,
-    durationMs: 126,
-  }
+    durationMs: 126 }
 }
 
 function browserOcrResultImage(resultId: string): ScreenshotImage {
@@ -4858,8 +4693,7 @@ function browserOcrResultImage(resultId: string): ScreenshotImage {
     available: Boolean(dataUrl),
     dataUrl,
     path: item.path,
-    bytes: dataUrl?.length ?? 0,
-  }
+    bytes: dataUrl?.length ?? 0 }
 }
 
 function browserInjectedOcrResult(resultId: string): OcrResult | null {
@@ -4876,8 +4710,7 @@ function browserInjectedOcrImage(resultId: string): ScreenshotImage | null {
     available: Boolean(dataUrl),
     dataUrl,
     path: typeof injected.path === 'string' ? injected.path : undefined,
-    bytes: typeof injected.bytes === 'number' && Number.isFinite(injected.bytes) ? injected.bytes : dataUrl?.length ?? 0,
-  }
+    bytes: typeof injected.bytes === 'number' && Number.isFinite(injected.bytes) ? injected.bytes : dataUrl?.length ?? 0 }
 }
 
 function browserTranslateOcr(request: OcrTranslateRequest): OcrTranslationResult {
@@ -4892,8 +4725,7 @@ function browserTranslateOcr(request: OcrTranslateRequest): OcrTranslationResult
     .map((block) => ({
       blockId: block.id,
       source: block.text,
-      translated: browserTranslatedText(block.text, request.targetLanguage),
-    }))
+      translated: browserTranslatedText(block.text, request.targetLanguage) }))
     .filter((block) => block.source.trim() && block.translated.trim())
   if (blocks.length === 0) throw new Error('No OCR text to translate')
   return {
@@ -4904,8 +4736,7 @@ function browserTranslateOcr(request: OcrTranslateRequest): OcrTranslationResult
     model: request.model,
     promptVersion: 'browser-preview',
     blocks,
-    createdAt: new Date().toISOString(),
-  }
+    createdAt: new Date().toISOString() }
 }
 
 function browserOcrResultForTranslation(resultId: string): OcrResult {
@@ -4930,21 +4761,18 @@ function browserOcrResultForTranslation(resultId: string): OcrResult {
           confidence: 0.97,
           lineIndex: 0,
           languageHint: 'en',
-          box: [],
-        },
+          box: [] },
         {
           id: 'block-chinese',
           text: '文字识别',
           confidence: 0.94,
           lineIndex: 1,
           languageHint: 'zh',
-          box: [],
-        },
+          box: [] },
       ],
       plainText: 'RecordingFreedom\n文字识别',
       createdAt: '2026-07-06T10:00:00.000Z',
-      durationMs: 126,
-    }
+      durationMs: 126 }
   }
 }
 
@@ -4968,16 +4796,14 @@ function browserQueuedWhiteboardOcrSnapshot(request: OcrWhiteboardRequest): OcrJ
     sourceId,
     language: request.language || 'zh-en',
     force: request.force === true,
-    priority: request.priority || 'interactive',
-  }
+    priority: request.priority || 'interactive' }
   const snapshot: OcrJobSnapshot = {
     jobId: `browser-whiteboard-ocr-${Date.now()}`,
     status: 'queued',
     request: recognizeRequest,
     merged: false,
     createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString(),
-  }
+    updatedAt: new Date().toISOString() }
   ;(window as Window & {
     __RF_LAST_WHITEBOARD_OCR_QUEUE__?: OcrJobSnapshot
     __RF_LAST_WHITEBOARD_OCR_REQUEST__?: OcrWhiteboardRequest
@@ -5117,8 +4943,7 @@ function fromBrowserScreenshotPinState(value: unknown): ScreenshotPinState {
     item: item ?? undefined,
     dataUrl: typeof record.dataUrl === 'string' ? record.dataUrl : browserScreenshotDataUrl(item),
     fixed: record.fixed === true,
-    pins,
-  })
+    pins })
 }
 
 function fromBrowserScreenshotPinnedItem(value: unknown): ScreenshotPinnedItem | null {
@@ -5128,16 +4953,14 @@ function fromBrowserScreenshotPinnedItem(value: unknown): ScreenshotPinnedItem |
   return {
     item,
     dataUrl: typeof record.dataUrl === 'string' ? record.dataUrl : browserScreenshotDataUrl(item),
-    fixed: record.fixed === true || item.fixed === true,
-  }
+    fixed: record.fixed === true || item.fixed === true }
 }
 
 function normalizeScreenshotPinState(state: ScreenshotPinState): ScreenshotPinState {
   const pins = normalizeScreenshotPins(state.pins ?? (state.item ? [{
     item: state.item,
     dataUrl: state.dataUrl,
-    fixed: state.fixed,
-  }] : []))
+    fixed: state.fixed }] : []))
   if (pins.length === 0) {
     return {visible: false, fixed: false, pins: []}
   }
@@ -5147,8 +4970,7 @@ function normalizeScreenshotPinState(state: ScreenshotPinState): ScreenshotPinSt
     item: active.item,
     dataUrl: active.dataUrl,
     fixed: active.fixed,
-    pins,
-  }
+    pins }
 }
 
 function normalizeScreenshotPins(pins: ScreenshotPinnedItem[]) {
@@ -5161,8 +4983,7 @@ function normalizeScreenshotPins(pins: ScreenshotPinnedItem[]) {
     next.push({
       item,
       dataUrl: pin.dataUrl || browserScreenshotDataUrl(item),
-      fixed: pin.fixed === true || item.fixed === true,
-    })
+      fixed: pin.fixed === true || item.fixed === true })
   }
   return next
 }
@@ -5196,8 +5017,7 @@ function fromBrowserScreenshotWhiteboardContext(value: unknown): ScreenshotWhite
   return {
     available: record.available === true && Boolean(item),
     item: item ?? undefined,
-    dataUrl: typeof record.dataUrl === 'string' ? record.dataUrl : browserScreenshotDataUrl(item),
-  }
+    dataUrl: typeof record.dataUrl === 'string' ? record.dataUrl : browserScreenshotDataUrl(item) }
 }
 
 function safeJSON(value: string | null | undefined): unknown {
@@ -5225,12 +5045,10 @@ function loadBrowserSettings(): AppSettings {
       whiteboard: {...defaultSettings.whiteboard, ...parsed.whiteboard},
       ocr: fromBoundOcrSettings(parsed.ocr),
       shortcuts: normalizeShortcutSettings(parsed.shortcuts),
-      window: {...defaultSettings.window, ...parsed.window},
-    }
+      window: {...defaultSettings.window, ...parsed.window} }
     const camera = {
       ...next.camera,
-      pip: fromBoundPipConfig(next.camera.pip, next.camera.pipPreset),
-    }
+      pip: fromBoundPipConfig(next.camera.pip, next.camera.pipPreset) }
     camera.pipPreset = camera.pip.preset
     return {...next, camera, locale: normalizeLocale(next.locale), shortcuts: normalizeShortcutSettings(next.shortcuts), window: {...next.window, theme: normalizeTheme(next.window.theme), startAtLogin: Boolean(next.window.startAtLogin)}}
   } catch {
@@ -5252,9 +5070,7 @@ function migrateBrowserSettings(value: unknown): Partial<AppSettings> {
       ...camera,
       pip: {
         ...pip,
-        scale: typeof scale === 'number' && Number.isFinite(scale) ? migrateLegacyPipScale(scale) : scale,
-      },
-    }
+        scale: typeof scale === 'number' && Number.isFinite(scale) ? migrateLegacyPipScale(scale) : scale } }
   }
   return next
 }
@@ -5275,15 +5091,13 @@ function fromBoundWhiteboardSettings(value: Partial<AppSettings['whiteboard']> |
     lastStrokeColor: typeof next.lastStrokeColor === 'string' && next.lastStrokeColor.trim() ? next.lastStrokeColor : defaultSettings.whiteboard.lastStrokeColor,
     lastStrokeWidth: next.lastStrokeWidth === 'thin' || next.lastStrokeWidth === 'bold' ? next.lastStrokeWidth : 'medium',
     lastOpacity: normalizedRange(next.lastOpacity, defaultSettings.whiteboard.lastOpacity, 5, 100),
-    capturePolicy: next.capturePolicy === 'preview-only' ? 'preview-only' : 'export-compose',
-  }
+    capturePolicy: next.capturePolicy === 'preview-only' ? 'preview-only' : 'export-compose' }
 }
 
 function fromBoundOcrSettings(value: Partial<AppSettings['ocr']> | undefined): AppSettings['ocr'] {
   return {
     autoRecognizeScreenshots: value?.autoRecognizeScreenshots === true,
-    translation: normalizeOcrTranslationSettings(value?.translation),
-  }
+    translation: normalizeOcrTranslationSettings(value?.translation) }
 }
 
 function normalizeOcrTranslationSettings(value: Partial<AppSettings['ocr']['translation']> | undefined): AppSettings['ocr']['translation'] {
@@ -5298,8 +5112,7 @@ function normalizeOcrTranslationSettings(value: Partial<AppSettings['ocr']['tran
     sourceLanguage: trimOptionalString(value?.sourceLanguage) || 'auto',
     targetLanguage: trimOptionalString(value?.targetLanguage) || 'zh-CN',
     privacyConfirmed,
-    privacyConfirmedAt: privacyConfirmed ? trimOptionalString(value?.privacyConfirmedAt) : undefined,
-  }
+    privacyConfirmedAt: privacyConfirmed ? trimOptionalString(value?.privacyConfirmedAt) : undefined }
 }
 
 function trimOptionalString(value: unknown): string | undefined {
@@ -5336,16 +5149,13 @@ function toStartRequest(request: MockRecordingRequest): StartRequest {
       microphone: request.microphone,
       microphoneDeviceId: request.microphoneDeviceId,
       noiseSuppression: request.noiseSuppression,
-      microphoneGain: 1,
-    },
+      microphoneGain: 1 },
     camera: {
       enabled: request.camera,
       deviceId: request.cameraDeviceId,
       deviceNativeId: request.cameraDeviceNativeId,
       pipPreset: request.camera ? request.pipPreset : 'off',
-      pip: (request.camera ? request.pip : {...request.pip, preset: 'off'}) as unknown as StartRequest['camera']['pip'],
-    },
-  }
+      pip: (request.camera ? request.pip : {...request.pip, preset: 'off'}) as unknown as StartRequest['camera']['pip'] } }
 }
 
 function fromBoundPipConfig(config: Partial<PIPConfig> | undefined, fallbackPreset: AppSettings['camera']['pipPreset']): PIPConfig {
@@ -5356,11 +5166,9 @@ function fromBoundPipConfig(config: Partial<PIPConfig> | undefined, fallbackPres
     mirror: config?.mirror !== false,
     position: {
       x: normalizedUnit(config?.position?.x ?? (preset === 'bottom-left' ? 0 : 1)),
-      y: normalizedUnit(config?.position?.y ?? 1),
-    },
+      y: normalizedUnit(config?.position?.y ?? 1) },
     scale: normalizedRange(config?.scale, pipMaximumScale, pipMinimumScale, pipMaximumScale),
-    edgeFeather: normalizedRange(config?.edgeFeather, 0.16, 0.02, 0.42),
-  }
+    edgeFeather: normalizedRange(config?.edgeFeather, 0.16, 0.02, 0.42) }
 }
 
 function normalizePipPreset(value: unknown): AppSettings['camera']['pipPreset'] {
@@ -5375,8 +5183,7 @@ function toSourceGeometry(source: CaptureSource): StartRequest['sourceGeometry']
     width: source.width,
     height: source.height,
     displayIndex: source.displayIndex ?? 0,
-    nativeId: source.nativeId,
-  }
+    nativeId: source.nativeId }
 }
 
 function toAudioOnlyRequest(request: AudioOnlyRecordingRequest): AudioOnlyRequest {
@@ -5388,9 +5195,7 @@ function toAudioOnlyRequest(request: AudioOnlyRecordingRequest): AudioOnlyReques
       microphone: request.microphone,
       microphoneDeviceId: request.microphoneDeviceId,
       noiseSuppression: request.noiseSuppression,
-      microphoneGain: 1,
-    },
-  }
+      microphoneGain: 1 } }
 }
 
 function toBoundRegionSelectionRequest(request: RegionSelectionSession['bounds']): BoundRegionSelectionRequest {
@@ -5398,8 +5203,7 @@ function toBoundRegionSelectionRequest(request: RegionSelectionSession['bounds']
     x: Math.round(request.x),
     y: Math.round(request.y),
     width: Math.round(request.width),
-    height: Math.round(request.height),
-  }
+    height: Math.round(request.height) }
 }
 
 function toBoundRegionAssistRequest(request: RegionAssistRequest): BoundRegionAssistRequest {
@@ -5409,14 +5213,12 @@ function toBoundRegionAssistRequest(request: RegionAssistRequest): BoundRegionAs
     pointerX: Math.round(request.pointerX ?? 0),
     pointerY: Math.round(request.pointerY ?? 0),
     selection: request.selection ? toBoundRegionSelectionRequest(request.selection) : undefined,
-    candidateLevel: Math.max(0, Math.round(request.candidateLevel ?? 0)),
-  }
+    candidateLevel: Math.max(0, Math.round(request.candidateLevel ?? 0)) }
 }
 
 function toBoundScreenIndicatorRequest(sourceId: string): BoundScreenIndicatorRequest {
   return {
-    sourceId,
-  }
+    sourceId }
 }
 
 function toBoundPipOverlayRequest(config: PIPConfig, mode: PIPOverlayMode, camera: string | PIPOverlayCamera, previewImagePath = '', clientOperationId = 0): BoundPIPOverlayRequest {
@@ -5427,8 +5229,7 @@ function toBoundPipOverlayRequest(config: PIPConfig, mode: PIPOverlayMode, camer
     cameraName: target.name,
     camera: target as BoundPIPOverlayRequest['camera'],
     previewImagePath,
-    clientOperationId,
-  }
+    clientOperationId }
 }
 
 function browserPipOverlayState(config: PIPConfig, mode: PIPOverlayMode, camera: string | PIPOverlayCamera, previewImagePath = '', clientOperationId = 0): PIPOverlayState {
@@ -5444,8 +5245,7 @@ function browserPipOverlayState(config: PIPConfig, mode: PIPOverlayMode, camera:
       rect: {...contentBounds, visible: normalized.preset !== 'off'},
       shape: normalized.shape,
       mirror: normalized.mirror,
-      edgeFeather: normalized.edgeFeather,
-    },
+      edgeFeather: normalized.edgeFeather },
     overlayBounds,
     windowBounds: {x: 0, y: 0, width: size + 48, height: size + 48},
     contentBounds,
@@ -5454,8 +5254,7 @@ function browserPipOverlayState(config: PIPConfig, mode: PIPOverlayMode, camera:
     camera: target,
     previewImagePath,
     captureExcluded: false,
-    clientOperationId,
-  }
+    clientOperationId }
 }
 
 function normalizePipOverlayCamera(camera: string | PIPOverlayCamera | undefined): PIPOverlayCamera {
@@ -5463,8 +5262,7 @@ function normalizePipOverlayCamera(camera: string | PIPOverlayCamera | undefined
   const next = {
     deviceId: cleanOptionalString(target.deviceId),
     nativeId: cleanOptionalString(target.nativeId),
-    name: cleanOptionalString(target.name),
-  }
+    name: cleanOptionalString(target.name) }
   if (!next.name) next.name = next.nativeId || next.deviceId
   return next
 }
@@ -5504,8 +5302,7 @@ function fromBoundSession(session: BoundSession): RecordingSession {
     manifestPath: session.manifest,
     backend: session.backend,
     recordingMode: session.recordingMode,
-    status: session.status,
-  }
+    status: session.status }
 }
 
 function fromBoundStatusEvent(event: BoundStatusEvent): RecordingStatusUpdate {
@@ -5515,22 +5312,19 @@ function fromBoundStatusEvent(event: BoundStatusEvent): RecordingStatusUpdate {
     manifestPath: event.manifest,
     backend: event.backend,
     recordingMode: undefined,
-    status: event.status,
-  } : undefined
+    status: event.status } : undefined
   return {
     status: event.status,
     message: event.message,
     backend: event.backend,
-    session,
-  }
+    session }
 }
 
 function fromWhiteboardVisibilityEvent(value: unknown): WhiteboardVisibilityUpdate {
   const record = value && typeof value === 'object' ? value as Record<string, unknown> : {}
   return {
     visible: record.visible === true,
-    mode: record.mode === 'annotation' ? 'annotation' : 'whiteboard',
-  }
+    mode: record.mode === 'annotation' ? 'annotation' : 'whiteboard' }
 }
 
 function fromShortcutTriggeredEvent(value: unknown): ShortcutTriggeredUpdate {
@@ -5539,8 +5333,7 @@ function fromShortcutTriggeredEvent(value: unknown): ShortcutTriggeredUpdate {
   return {
     action,
     accelerator: typeof record.accelerator === 'string' ? record.accelerator : '',
-    preserveCapsuleHidden: record.preserveCapsuleHidden === true,
-  }
+    preserveCapsuleHidden: record.preserveCapsuleHidden === true }
 }
 
 function emitBrowserWhiteboardVisibility(event: WhiteboardVisibilityUpdate) {
@@ -5557,8 +5350,7 @@ function fromBoundAudioLevel(event: unknown): AudioLevelUpdate {
     rms: normalizedUnit(data.rms),
     peak: normalizedUnit(data.peak),
     active: data.active === true,
-    error: typeof data.error === 'string' ? data.error : undefined,
-  }
+    error: typeof data.error === 'string' ? data.error : undefined }
 }
 
 function normalizedUnit(value: unknown): number {
@@ -5581,8 +5373,7 @@ function fromBoundRecovery(recovery: BoundRecoverySummary): RecordingRecovery {
     manifestPath: recovery.manifestPath,
     status: recovery.status,
     recoverable: recovery.recoverable,
-    reason: recovery.reason,
-  }
+    reason: recovery.reason }
 }
 
 function fromBoundExportPlan(plan: BoundExportPlan): RecordingExportPlan {
@@ -5604,8 +5395,7 @@ function fromBoundExportPlan(plan: BoundExportPlan): RecordingExportPlan {
       startOffsetMs: snapshot.startOffsetMs,
       endOffsetMs: snapshot.endOffsetMs,
       durationMs: snapshot.durationMs,
-      bytes: snapshot.bytes,
-    })),
+      bytes: snapshot.bytes })),
     annotationElementScenes: plan.annotationElementScenes?.map((scene) => ({
       inputPath: scene.inputPath,
       relativePath: scene.relativePath,
@@ -5618,17 +5408,14 @@ function fromBoundExportPlan(plan: BoundExportPlan): RecordingExportPlan {
       canvasHeight: scene.canvasHeight,
       elementCount: scene.elementCount,
       sourceEventSequence: scene.sourceEventSequence,
-      bytes: scene.bytes,
-    })),
+      bytes: scene.bytes })),
     annotationSummary: plan.annotationSummary
       ? {
         ...plan.annotationSummary,
         elementTypeCounts: normalizedNumberRecord(plan.annotationSummary.elementTypeCounts),
-        elementPreviewFrames: plan.annotationSummary.elementPreviewFrames ?? undefined,
-      }
+        elementPreviewFrames: plan.annotationSummary.elementPreviewFrames ?? undefined }
       : undefined,
-    warnings: plan.warnings ?? [],
-  }
+    warnings: plan.warnings ?? [] }
 }
 
 function normalizedNumberRecord(value: Record<string, number | undefined> | null | undefined): Record<string, number> | undefined {
@@ -5647,6 +5434,5 @@ function fromBoundExport(result: BoundExportRecordingResult): RecordingExportRes
     webcamInputPath: result.export.webcamInputPath,
     pipVisible: result.export.pipVisible,
     ffmpegPath: result.export.ffmpegPath,
-    outputVerified: result.export.outputVerified === true,
-  }
+    outputVerified: result.export.outputVerified === true }
 }

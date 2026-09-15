@@ -16,8 +16,7 @@ export function parseOcrPanelContext(contextId: string | undefined) {
   if (clean.startsWith(ocrPanelAutoTranslatePrefix)) {
     return {
       resultId: clean.slice(ocrPanelAutoTranslatePrefix.length).trim(),
-      autoTranslate: true,
-    }
+      autoTranslate: true }
   }
   return {resultId: clean, autoTranslate: false}
 }
@@ -35,8 +34,7 @@ export async function showOcrResultFloatingPanel(anchorElement: Element, options
     width: ocrResultPanelSize.width,
     height: ocrResultPanelSize.height,
     maxHeight: ocrResultPanelSize.maxHeight,
-    minWidth: ocrResultPanelSize.minWidth,
-  })
+    minWidth: ocrResultPanelSize.minWidth })
   await showFloatingPanel({
     kind: 'ocr-result',
     anchor: placement.anchor,
@@ -49,7 +47,6 @@ export async function showOcrResultFloatingPanel(anchorElement: Element, options
     token: options.token,
     screenId: placement.screenId,
     direction: placement.direction,
-    contextId: ocrPanelContext(resultId, options.autoTranslate === true),
-  })
+    contextId: ocrPanelContext(resultId, options.autoTranslate === true) })
   return placement
 }

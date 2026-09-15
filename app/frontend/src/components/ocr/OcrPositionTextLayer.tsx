@@ -11,8 +11,7 @@ export function OcrPositionTextLayer({
   onHover,
   onCopy,
   className = '',
-  style,
-}: {
+  style }: {
   copy: RecorderCopy
   result: OcrResult
   translationResult?: OcrTranslationResult | null
@@ -37,8 +36,7 @@ export function OcrPositionTextLayer({
     const buttonStyle = {
       left: `${bounds.left}%`,
       top: `${bounds.top}%`,
-      width: `${bounds.width}%`,
-    } satisfies CSSProperties
+      width: `${bounds.width}%` } satisfies CSSProperties
     return (
       <button
         type="button"
@@ -98,8 +96,7 @@ export function ocrBlockBoundsPercent(block: OcrBlock, resultWidth: number, resu
     left: (minX / resultWidth) * 100,
     top: (minY / resultHeight) * 100,
     width: Math.max(4, ((maxX - minX) / resultWidth) * 100),
-    height: Math.max(8, ((maxY - minY) / resultHeight) * 100),
-  }
+    height: Math.max(8, ((maxY - minY) / resultHeight) * 100) }
 }
 
 function clampNumber(value: number, min: number, max: number) {

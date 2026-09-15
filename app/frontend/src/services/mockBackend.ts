@@ -1,3 +1,4 @@
+import type {RecorderCopy} from '../i18n'
 export type CaptureSourceType = 'screen' | 'all-screens' | 'region' | 'window' | 'application'
 export type RecordingMode = 'video' | 'audio'
 export type RecordingState = 'idle' | 'preparing' | 'recording' | 'paused' | 'stopping' | 'ready' | 'failed'
@@ -268,8 +269,7 @@ export const sources: CaptureSource[] = [
     height: 1964,
     available: false,
     capability: 'native-backend-queued',
-    unavailableReason: 'Multi-display composition is queued behind the native video writer.',
-  },
+    unavailableReason: 'Multi-display composition is queued behind the native video writer.' },
   {
     id: 'screen:primary',
     type: 'screen',
@@ -283,8 +283,7 @@ export const sources: CaptureSource[] = [
     displayIndex: 1,
     nativeId: 'display:primary',
     available: true,
-    capability: 'enumerated',
-  },
+    capability: 'enumerated' },
   {
     id: 'region:custom',
     type: 'region',
@@ -297,8 +296,7 @@ export const sources: CaptureSource[] = [
     height: 1964,
     available: false,
     capability: 'native-backend-queued',
-    unavailableReason: 'Region selector overlay is available; native region crop writer is queued.',
-  },
+    unavailableReason: 'Region selector overlay is available; native region crop writer is queued.' },
   {
     id: 'window:browser',
     type: 'window',
@@ -306,8 +304,7 @@ export const sources: CaptureSource[] = [
     name: 'Browser Preview',
     meta: 'Single app window',
     available: true,
-    capability: 'enumerated',
-  },
+    capability: 'enumerated' },
   {
     id: 'application:editor',
     type: 'application',
@@ -315,8 +312,7 @@ export const sources: CaptureSource[] = [
     name: 'Code Editor',
     meta: 'Application group',
     available: true,
-    capability: 'enumerated',
-  },
+    capability: 'enumerated' },
 ]
 
 export const mediaInventory: MediaInventory = {
@@ -328,8 +324,7 @@ export const mediaInventory: MediaInventory = {
       meta: 'System sound capture endpoint',
       isDefault: true,
       available: true,
-      capability: 'enumerated',
-    },
+      capability: 'enumerated' },
   ],
   microphones: [
     {
@@ -341,8 +336,7 @@ export const mediaInventory: MediaInventory = {
       available: false,
       capability: 'native-backend-queued',
       unavailableReason: 'Real microphone devices are listed by the Wails desktop backend.',
-      rnnoiseEligible: true,
-    },
+      rnnoiseEligible: true },
   ],
   cameras: [
     {
@@ -354,8 +348,7 @@ export const mediaInventory: MediaInventory = {
       isDefault: true,
       available: true,
       capability: 'enumerated',
-      sidecarEligible: true,
-    },
+      sidecarEligible: true },
     {
       id: 'camera:facetime-hd',
       type: 'camera',
@@ -364,8 +357,7 @@ export const mediaInventory: MediaInventory = {
       nativeId: 'browser-facetime-hd',
       available: true,
       capability: 'enumerated',
-      sidecarEligible: true,
-    },
+      sidecarEligible: true },
     {
       id: 'camera:usb-capture',
       type: 'camera',
@@ -374,16 +366,13 @@ export const mediaInventory: MediaInventory = {
       nativeId: 'browser-usb-capture',
       available: true,
       capability: 'enumerated',
-      sidecarEligible: true,
-    },
+      sidecarEligible: true },
   ],
   enhancement: {
     engine: 'rnnoise',
     appliesTo: 'microphone-only',
     available: true,
-    capability: 'enumerated',
-  },
-}
+    capability: 'enumerated' } }
 
 export const fallbackCapabilities: CaptureCapabilities = {
   platform: 'browser-preview',
@@ -393,86 +382,74 @@ export const fallbackCapabilities: CaptureCapabilities = {
     status: 'available',
     backend: 'browser mock',
     permission: 'not-required',
-    reason: 'Browser preview uses deterministic demo sources; Wails desktop runtime uses native source enumeration.',
-  },
+    reason: 'Browser preview uses deterministic demo sources; Wails desktop runtime uses native source enumeration.' },
   screenRecording: {
     id: 'screen-recording',
     label: 'Screen Recording',
     status: 'queued',
     backend: 'native capture backend',
     permission: 'screen-recording',
-    reason: 'Real capture is implemented in the Go native backend, not in browser preview.',
-  },
+    reason: 'Real capture is implemented in the Go native backend, not in browser preview.' },
   windowRecording: {
     id: 'window-recording',
     label: 'Window Recording',
     status: 'queued',
     backend: 'native capture backend',
     permission: 'screen-recording',
-    reason: 'Window capture target mapping is handled by the platform backend.',
-  },
+    reason: 'Window capture target mapping is handled by the platform backend.' },
   applicationRecording: {
     id: 'application-recording',
     label: 'Program Recording',
     status: 'queued',
     backend: 'native capture backend',
     permission: 'screen-recording',
-    reason: 'Program capture groups application windows before native recording starts.',
-  },
+    reason: 'Program capture groups application windows before native recording starts.' },
   systemAudio: {
     id: 'system-audio',
     label: 'System Audio',
     status: 'queued',
     backend: 'native audio backend',
     permission: 'unknown',
-    reason: 'System audio capture is platform-specific and is not available in browser preview.',
-  },
+    reason: 'System audio capture is platform-specific and is not available in browser preview.' },
   microphone: {
     id: 'microphone',
     label: 'Microphone',
     status: 'queued',
     backend: 'native audio backend',
     permission: 'microphone',
-    reason: 'Microphone capture is implemented after native device enumeration lands.',
-  },
+    reason: 'Microphone capture is implemented after native device enumeration lands.' },
   microphoneEnhancement: {
     id: 'microphone-enhancement',
     label: 'Microphone RNNoise',
     status: 'queued',
     backend: 'RNNoise native DSP',
     permission: 'not-required',
-    reason: 'RNNoise processes microphone PCM only; system audio is never denoised.',
-  },
+    reason: 'RNNoise processes microphone PCM only; system audio is never denoised.' },
   cameraSidecar: {
     id: 'camera-sidecar',
     label: 'Camera',
     status: 'queued',
     backend: 'native camera backend',
     permission: 'camera',
-    reason: 'Camera media is composed into the screen recording as picture-in-picture.',
-  },
+    reason: 'Camera media is composed into the screen recording as picture-in-picture.' },
   pipExport: {
     id: 'pip-export',
     label: 'PIP Export',
     status: 'queued',
     backend: 'export compositor',
     permission: 'not-required',
-    reason: 'PIP composition will use the screen video plus camera sidecar during export.',
-  },
+    reason: 'PIP composition will use the screen video plus camera sidecar during export.' },
   packageRecovery: {
     id: 'package-recovery',
     label: 'Recording Package Recovery',
     status: 'available',
     backend: 'browser mock',
     permission: 'not-required',
-    reason: 'Desktop runtime scans .rfrec packages under app-managed data/video.',
-  },
-}
+    reason: 'Desktop runtime scans .rfrec packages under app-managed data/video.' } }
 
 export const fallbackAppData: AppDataInfo = {
   rootDir: 'browser-preview',
-  videoDir: 'data/video',
-}
+  videoDir: 'data/video' }
 
 export const fallbackStorageStatus: AppStorageStatus = {
   rootDir: fallbackAppData.rootDir,
@@ -482,14 +459,12 @@ export const fallbackStorageStatus: AppStorageStatus = {
   availableBytes: 0,
   minimumRecommendedBytes: 1024 * 1024 * 1024,
   status: 'ready',
-  reason: 'Browser preview does not inspect desktop free space.',
-}
+  reason: 'Browser preview does not inspect desktop free space.' }
 
 export const localeOptions: LocaleCode[] = ['zh-CN', 'en']
 export const themeGroups: Record<ThemeGroupCode, ThemeCode[]> = {
   dark: ['night-teal', 'mountain-green', 'sky-blue', 'sunset-yellow', 'ink-purple', 'sage-gray'],
-  light: ['cloud-white', 'mint-morning', 'sky-day', 'warm-sand', 'lavender-mist', 'apple-green'],
-}
+  light: ['cloud-white', 'mint-morning', 'sky-day', 'warm-sand', 'lavender-mist', 'apple-green'] }
 export const themeOptions: ThemeCode[] = [...themeGroups.dark, ...themeGroups.light]
 export const shortcutActions: ShortcutAction[] = ['toggleRecording', 'togglePause', 'toggleCamera', 'openWhiteboard', 'openScreenshot', 'openScrollingScreenshot', 'pasteImage']
 export const defaultShortcuts: ShortcutSettings = {
@@ -499,8 +474,7 @@ export const defaultShortcuts: ShortcutSettings = {
   openWhiteboard: 'CmdOrCtrl+Shift+B',
   openScreenshot: 'CmdOrCtrl+Shift+S',
   openScrollingScreenshot: 'CmdOrCtrl+Shift+L',
-  pasteImage: 'CmdOrCtrl+Shift+V',
-}
+  pasteImage: 'CmdOrCtrl+Shift+V' }
 export const themeSwatches: Record<ThemeCode, string> = {
   'night-teal': '#11b7a7',
   'mountain-green': '#57c785',
@@ -513,8 +487,7 @@ export const themeSwatches: Record<ThemeCode, string> = {
   'sky-day': '#0284c7',
   'warm-sand': '#b45309',
   'lavender-mist': '#7c3aed',
-  'apple-green': '#4d9f38',
-}
+  'apple-green': '#4d9f38' }
 
 export function normalizeLocale(value: unknown): LocaleCode {
   return value === 'en' || value === 'zh-CN' ? value : 'zh-CN'
@@ -522,6 +495,10 @@ export function normalizeLocale(value: unknown): LocaleCode {
 
 export function normalizeTheme(value: unknown): ThemeCode {
   return themeOptions.includes(value as ThemeCode) ? value as ThemeCode : 'night-teal'
+}
+
+export function isDarkTheme(theme: ThemeCode): boolean {
+  return themeGroups.dark.includes(theme)
 }
 
 export function normalizeShortcutSettings(value: Partial<ShortcutSettings> | undefined): ShortcutSettings {
@@ -532,8 +509,7 @@ export function normalizeShortcutSettings(value: Partial<ShortcutSettings> | und
     openWhiteboard: normalizeShortcutValue(value?.openWhiteboard, defaultShortcuts.openWhiteboard),
     openScreenshot: normalizeShortcutValue(value?.openScreenshot, defaultShortcuts.openScreenshot),
     openScrollingScreenshot: normalizeShortcutValue(value?.openScrollingScreenshot, defaultShortcuts.openScrollingScreenshot),
-    pasteImage: normalizeShortcutValue(value?.pasteImage, defaultShortcuts.pasteImage),
-  }
+    pasteImage: normalizeShortcutValue(value?.pasteImage, defaultShortcuts.pasteImage) }
 }
 
 function normalizeShortcutValue(value: unknown, fallback: string): string {
@@ -548,25 +524,21 @@ export const defaultSettings: AppSettings = {
   schemaVersion: 6,
   locale: 'zh-CN',
   source: {
-    lastSourceType: 'screen',
-  },
+    lastSourceType: 'screen' },
   storage: {
-    dataRootDir: 'browser-preview',
-  },
+    dataRootDir: 'browser-preview' },
   recording: {
     quality: 'balanced',
     fps: 30,
     captureCursor: true,
-    countdownSeconds: 0,
-  },
+    countdownSeconds: 0 },
   audio: {
     system: false,
     systemDeviceId: 'system-audio:default',
     microphone: false,
     microphoneDeviceId: 'microphone:browser-preview',
     noiseSuppression: true,
-    microphoneGain: 1,
-  },
+    microphoneGain: 1 },
   camera: {
     enabled: false,
     deviceId: 'camera:default',
@@ -577,9 +549,7 @@ export const defaultSettings: AppSettings = {
       mirror: true,
       position: {x: 1, y: 1},
       scale: 0.15,
-      edgeFeather: 0.16,
-    },
-  },
+      edgeFeather: 0.16 } },
   whiteboard: {
     enabled: true,
     lastMode: 'board',
@@ -587,24 +557,19 @@ export const defaultSettings: AppSettings = {
     lastStrokeColor: '#ef4444',
     lastStrokeWidth: 'medium',
     lastOpacity: 100,
-    capturePolicy: 'export-compose',
-  },
+    capturePolicy: 'export-compose' },
   ocr: {
     autoRecognizeScreenshots: false,
     translation: {
       provider: 'disabled',
       sourceLanguage: 'auto',
       targetLanguage: 'zh-CN',
-      privacyConfirmed: false,
-    },
-  },
+      privacyConfirmed: false } },
   shortcuts: defaultShortcuts,
   window: {
     minimizeToTray: true,
     theme: 'night-teal',
-    startAtLogin: false,
-  },
-}
+    startAtLogin: false } }
 
 export function createMockRecordingPackage(request: MockRecordingRequest) {
   const stamp = new Date()
@@ -625,27 +590,21 @@ export function createMockRecordingPackage(request: MockRecordingRequest) {
         type: request.source.type,
         id: request.source.id,
         name: request.source.name,
-        geometry: sourceGeometry(request.source),
-      },
+        geometry: sourceGeometry(request.source) },
       recording: request.recording,
       audio: {
         system: request.systemAudio,
         systemDeviceId: request.systemAudio ? request.systemAudioDeviceId : undefined,
         microphone: request.microphone,
         microphoneDeviceId: request.microphone ? request.microphoneDeviceId : undefined,
-        microphoneNoiseSuppression: request.microphone && request.noiseSuppression ? 'rnnoise' : 'off',
-      },
+        microphoneNoiseSuppression: request.microphone && request.noiseSuppression ? 'rnnoise' : 'off' },
       camera: {
         enabled: request.camera,
         deviceId: request.cameraDeviceId,
         pipPreset: request.camera ? request.pipPreset : 'off',
-        pip: request.camera ? request.pip : {...defaultSettings.camera.pip, preset: 'off'},
-      },
+        pip: request.camera ? request.pip : {...defaultSettings.camera.pip, preset: 'off'} },
       diagnostics: {
-        mock: true,
-      },
-    },
-  }
+        mock: true } } }
 }
 
 function sourceGeometry(source: CaptureSource) {
@@ -656,8 +615,7 @@ function sourceGeometry(source: CaptureSource) {
     width: source.width,
     height: source.height,
     displayIndex: source.displayIndex,
-    nativeId: source.nativeId,
-  }
+    nativeId: source.nativeId }
 }
 
 export function createMockAudioOnlyRecordingPackage(request: AudioOnlyRecordingRequest) {
@@ -682,11 +640,76 @@ export function createMockAudioOnlyRecordingPackage(request: AudioOnlyRecordingR
         systemDeviceId: request.systemAudio ? request.systemAudioDeviceId : undefined,
         microphone: request.microphone,
         microphoneDeviceId: request.microphone ? request.microphoneDeviceId : undefined,
-        microphoneNoiseSuppression: request.microphone && request.noiseSuppression ? 'rnnoise' : 'off',
-      },
+        microphoneNoiseSuppression: request.microphone && request.noiseSuppression ? 'rnnoise' : 'off' },
       diagnostics: {
-        mock: true,
-      },
-    },
-  }
+        mock: true } } }
+}
+
+export function normalizeOcrTranslationSettings(value: Partial<AppSettings['ocr']['translation']> | undefined): AppSettings['ocr']['translation'] {
+  const provider = value?.provider === 'deepl' || value?.provider === 'openai-compatible' ? value.provider : 'disabled'
+  const privacyConfirmed = provider !== 'disabled' && value?.privacyConfirmed === true
+  return {
+    provider,
+    baseUrl: cleanOptionalString(value?.baseUrl),
+    apiKey: cleanOptionalString(value?.apiKey),
+    apiKeySet: value?.apiKeySet === true || Boolean(cleanOptionalString(value?.apiKey)),
+    model: cleanOptionalString(value?.model),
+    sourceLanguage: cleanOptionalString(value?.sourceLanguage) || 'auto',
+    targetLanguage: cleanOptionalString(value?.targetLanguage) || 'zh-CN',
+    privacyConfirmed,
+    privacyConfirmedAt: privacyConfirmed ? cleanOptionalString(value?.privacyConfirmedAt) : undefined }
+}
+
+export function ocrTranslationUnavailableMessage(translation: AppSettings['ocr']['translation'], copy: RecorderCopy): string {
+  if (translation.provider === 'disabled') return copy.screenshot.translationUnavailable
+  if (!translation.privacyConfirmed) return copy.screenshot.translationPrivacyRequired
+  if (!translation.baseUrl) return copy.screenshot.translationMissingBaseUrl
+  if (!translation.apiKey && !translation.apiKeySet) return copy.screenshot.translationMissingApiKey
+  if (translation.provider === 'openai-compatible' && !translation.model) return copy.screenshot.translationMissingModel
+  return ''
+}
+
+export function cleanOptionalString(value: unknown): string | undefined {
+  return typeof value === 'string' && value.trim() ? value.trim() : undefined
+}
+
+export function normalizePipConfig(value: Partial<PIPConfig> | undefined, fallbackPreset: PIPPreset): PIPConfig {
+  const preset = normalizePipPreset((value?.preset as PIPPreset | undefined) ?? fallbackPreset)
+  const fallbackPosition = defaultPipPosition(preset)
+  return {
+    preset,
+    shape: normalizePipShape((value?.shape as PIPShape | undefined) ?? 'circle'),
+    mirror: value?.mirror !== false,
+    position: {
+      x: clampNumber(value?.position?.x ?? fallbackPosition.x, 0, 1),
+      y: clampNumber(value?.position?.y ?? fallbackPosition.y, 0, 1) },
+    scale: clampNumber(value?.scale ?? pipDefaultScale, pipMinimumScale, pipMaximumScale),
+    edgeFeather: clampNumber(value?.edgeFeather ?? 0.16, 0.02, 0.42) }
+}
+
+export const pipMinimumScale = 0.08
+export const pipMaximumScale = 0.15
+export const pipDefaultScale = pipMaximumScale
+export const pipMinimumDisplayPercent = 20
+export const pipMaximumDisplayPercent = 100
+
+export function clampNumber(value: number, min: number, max: number) {
+  if (!Number.isFinite(value)) return min
+  return Math.min(max, Math.max(min, value))
+}
+
+export const pipPresetOptions: PIPPreset[] = ['bottom-right', 'bottom-left', 'free']
+export const allPipPresetOptions: PIPPreset[] = [...pipPresetOptions, 'off']
+export const pipShapeOptions: PIPShape[] = ['circle', 'square']
+
+export function normalizePipPreset(value: PIPPreset): PIPPreset {
+  return allPipPresetOptions.includes(value) ? value : 'bottom-right'
+}
+
+export function defaultPipPosition(preset: PIPPreset) {
+  return {x: preset === 'bottom-left' ? 0 : 1, y: 1}
+}
+
+export function normalizePipShape(value: PIPShape): PIPShape {
+  return pipShapeOptions.includes(value) ? value : 'circle'
 }

@@ -77,8 +77,7 @@ async function renderAndCompleteJob(job: AnnotationRenderJob) {
     await completeAnnotationRenderJob({id: job.id, error: message})
     void logClientEvent('annotation-renderer', 'job-error', {
       id: job.id,
-      scene: job.relativeScenePath,
-    }, message)
+      scene: job.relativeScenePath }, message)
   }
 }
 
@@ -96,13 +95,11 @@ async function renderAnnotationJob(job: AnnotationRenderJob) {
       ...(scene.appState ?? {}),
       exportBackground: false,
       exportScale: 1,
-      viewBackgroundColor: 'transparent',
-    },
+      viewBackgroundColor: 'transparent' },
     files: scene.files,
     mimeType: 'image/png',
     exportPadding: 0,
-    getDimensions: () => ({width, height, scale: 1}),
-  } as any)
+    getDimensions: () => ({width, height, scale: 1}) } as any)
   return blobToDataURL(blob)
 }
 
@@ -111,8 +108,7 @@ function parseAnnotationScene(sceneJson: string): {elements: any[]; appState: Re
   return {
     elements: Array.isArray(parsed?.elements) ? parsed.elements : [],
     appState: parsed?.appState && typeof parsed.appState === 'object' ? parsed.appState : {},
-    files: parsed?.files && typeof parsed.files === 'object' ? parsed.files : {},
-  }
+    files: parsed?.files && typeof parsed.files === 'object' ? parsed.files : {} }
 }
 
 function transparentBoundsElement(width: number, height: number, index: number) {
@@ -141,8 +137,7 @@ function transparentBoundsElement(width: number, height: number, index: number) 
     boundElements: null,
     updated: 1,
     link: null,
-    locked: true,
-  }
+    locked: true }
 }
 
 function blobToDataURL(blob: Blob) {

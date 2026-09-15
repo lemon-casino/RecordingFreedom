@@ -75,15 +75,13 @@ async function globalAnchorRect(element: Element): Promise<FloatingRect> {
       x: Math.round(position.x + rect.left),
       y: Math.round(position.y + rect.top),
       width: Math.round(rect.width),
-      height: Math.round(rect.height),
-    }
+      height: Math.round(rect.height) }
   } catch {
     return {
       x: Math.round(rect.left),
       y: Math.round(rect.top),
       width: Math.round(rect.width),
-      height: Math.round(rect.height),
-    }
+      height: Math.round(rect.height) }
   }
 }
 
@@ -99,8 +97,7 @@ async function getWorkAreas(): Promise<WorkArea[]> {
           x: rect.X,
           y: rect.Y,
           width: rect.Width,
-          height: rect.Height,
-        }
+          height: rect.Height }
       })
       .filter((area): area is WorkArea => area !== null)
   } catch {
@@ -150,23 +147,20 @@ function positionForDirection(
       x: anchor.x - size.width - margin,
       y: anchor.y + anchor.height / 2 - size.height / 2,
       width: size.width,
-      height: size.height,
-    }
+      height: size.height }
   }
   if (direction === 'right') {
     return {
       x: anchor.x + anchor.width + margin,
       y: anchor.y + anchor.height / 2 - size.height / 2,
       width: size.width,
-      height: size.height,
-    }
+      height: size.height }
   }
   return {
     x: anchor.x + anchor.width / 2 - size.width / 2,
     y: direction === 'up' ? anchor.y - size.height - margin : anchor.y + anchor.height + margin,
     width: size.width,
-    height: size.height,
-  }
+    height: size.height }
 }
 
 function clampToWorkArea(rect: FloatingRect, workArea: WorkArea | undefined, margin: number): FloatingRect {
@@ -179,8 +173,7 @@ function clampToWorkArea(rect: FloatingRect, workArea: WorkArea | undefined, mar
     x: Math.round(clamp(rect.x, minX, maxX)),
     y: Math.round(clamp(rect.y, minY, maxY)),
     width: Math.round(rect.width),
-    height: Math.round(rect.height),
-  }
+    height: Math.round(rect.height) }
 }
 
 function pointInside(x: number, y: number, area: WorkArea) {
@@ -207,6 +200,5 @@ function roundRect(rect: FloatingRect): FloatingRect {
     x: Math.round(rect.x),
     y: Math.round(rect.y),
     width: Math.round(rect.width),
-    height: Math.round(rect.height),
-  }
+    height: Math.round(rect.height) }
 }
