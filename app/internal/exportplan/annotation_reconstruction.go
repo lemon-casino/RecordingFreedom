@@ -8,6 +8,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/lemon-casino/RecordingFreedom/app/internal/fsutil"
 	"github.com/lemon-casino/RecordingFreedom/app/internal/recpackage"
 )
 
@@ -269,15 +270,7 @@ func annotationElementSceneJSON(elements []json.RawMessage) ([]byte, error) {
 }
 
 func writeAnnotationElementSceneFile(path string, data []byte) error {
-	tmp := path + ".tmp"
-	if err := os.WriteFile(tmp, append(data, '\n'), 0o644); err != nil {
-		return err
-	}
-	if err := os.Rename(tmp, path); err != nil {
-		_ = os.Remove(tmp)
-		return err
-	}
-	return nil
+	return fsutil.WriteFileAtomic(path, append(data, '\n'), 0o644)
 }
 
 func annotationElementPayload(event map[string]any) (json.RawMessage, bool) {

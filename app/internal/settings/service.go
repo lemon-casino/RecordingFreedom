@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/lemon-casino/RecordingFreedom/app/internal/appdata"
+	"github.com/lemon-casino/RecordingFreedom/app/internal/fsutil"
 	"github.com/lemon-casino/RecordingFreedom/app/internal/pip"
 	"github.com/lemon-casino/RecordingFreedom/app/internal/recordingprofile"
 )
@@ -80,12 +81,7 @@ func (s *Service) Save(next Settings) (Settings, error) {
 	}
 	data = append(data, '\n')
 
-	tmp := path + ".tmp"
-	if err := os.WriteFile(tmp, data, 0o644); err != nil {
-		return Settings{}, err
-	}
-	if err := replaceFile(tmp, path); err != nil {
-		_ = os.Remove(tmp)
+	if err := fsutil.WriteFileAtomic(path, data, 0o600); err != nil {
 		return Settings{}, err
 	}
 	return next, nil
@@ -657,11 +653,4 @@ func shortcutPlatformModifierIdentity(value string) (string, bool) {
 		}
 	}
 	return "", false
-}
-
-func replaceFile(tmp string, target string) error {
-	if err := os.Remove(target); err != nil && !errors.Is(err, os.ErrNotExist) {
-		return err
-	}
-	return os.Rename(tmp, target)
 }

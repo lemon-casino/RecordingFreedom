@@ -8,6 +8,8 @@ import (
 	"path/filepath"
 	"strings"
 	"time"
+
+	"github.com/lemon-casino/RecordingFreedom/app/internal/fsutil"
 )
 
 const secretsDir = "secrets"
@@ -46,19 +48,7 @@ func diskSave(s *Store, name string, secret string) error {
 	if err != nil {
 		return err
 	}
-	tmp := path + ".tmp"
-	if err := os.WriteFile(tmp, data, 0o600); err != nil {
-		return err
-	}
-	if err := os.Chmod(tmp, 0o600); err != nil {
-		_ = os.Remove(tmp)
-		return err
-	}
-	if err := replaceFile(tmp, path); err != nil {
-		_ = os.Remove(tmp)
-		return err
-	}
-	return nil
+	return fsutil.WriteFileAtomic(path, data, 0o600)
 }
 
 func diskLoad(s *Store, name string) (string, bool, error) {
@@ -117,11 +107,4 @@ func diskDir(s *Store) (string, error) {
 		return "", err
 	}
 	return filepath.Join(root, "data", secretsDir), nil
-}
-
-func replaceFile(tmp string, target string) error {
-	if err := os.Remove(target); err != nil && !errors.Is(err, os.ErrNotExist) {
-		return err
-	}
-	return os.Rename(tmp, target)
 }

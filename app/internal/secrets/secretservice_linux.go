@@ -49,6 +49,7 @@ func backendStatus(s *Store) (Status, error) {
 func backendSave(s *Store, name string, secret string) error {
 	client, err := newSecretServiceClient()
 	if isSecretServiceUnavailable(err) {
+		s.notifyPlaintextFallback("save", err)
 		return diskSave(s, name, secret)
 	}
 	if err != nil {
@@ -57,6 +58,7 @@ func backendSave(s *Store, name string, secret string) error {
 	defer client.Close()
 	if err := client.save(name, secret); err != nil {
 		if isSecretServiceUnavailable(err) {
+			s.notifyPlaintextFallback("save", err)
 			return diskSave(s, name, secret)
 		}
 		return err

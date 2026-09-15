@@ -9,11 +9,10 @@ import (
 	"image/png"
 	"os"
 	"path/filepath"
-	"runtime"
 	"strings"
-	"syscall"
 	"time"
 
+	"github.com/lemon-casino/RecordingFreedom/app/internal/fsutil"
 	"github.com/lemon-casino/RecordingFreedom/app/internal/settings"
 )
 
@@ -178,7 +177,7 @@ func (s *RecordingFreedomService) SaveWhiteboardScene(req WhiteboardSceneRequest
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 		return WhiteboardSceneResult{}, err
 	}
-	if err := writeFileAtomic(path, append([]byte(sceneJSON), '\n'), 0o644); err != nil {
+	if err := fsutil.WriteFileAtomic(path, append([]byte(sceneJSON), '\n'), 0o644); err != nil {
 		return WhiteboardSceneResult{}, err
 	}
 	s.logEvent("whiteboard", "save-scene", map[string]string{
@@ -238,7 +237,7 @@ func (s *RecordingFreedomService) SaveWhiteboardExport(req WhiteboardExportReque
 		return WhiteboardExportResult{}, err
 	}
 	path := filepath.Join(dir, "whiteboard-"+time.Now().Format("20060102-150405")+"."+format)
-	if err := writeFileAtomic(path, data, 0o644); err != nil {
+	if err := fsutil.WriteFileAtomic(path, data, 0o644); err != nil {
 		return WhiteboardExportResult{}, err
 	}
 	s.logEvent("whiteboard", "save-export", map[string]string{
@@ -349,83 +348,23 @@ func (s *RecordingFreedomService) whiteboardDir() (string, error) {
 	return filepath.Join(root, "data", whiteboardDirName), nil
 }
 
-func writeFileAtomic(path string, data []byte, perm os.FileMode) error {
-	tmp := path + ".tmp"
-	if err := os.WriteFile(tmp, data, perm); err != nil {
-		return err
-	}
-	if err := retryTransientFileAccess(func() error {
-		if err := os.Remove(path); err != nil && !errors.Is(err, os.ErrNotExist) {
-			return err
-		}
-		return nil
-	}); err != nil {
-		_ = os.Remove(tmp)
-		return err
-	}
-	if err := retryTransientFileAccess(func() error {
-		return os.Rename(tmp, path)
-	}); err != nil {
-		_ = os.Remove(tmp)
-		return err
-	}
-	return nil
-}
-
 func readFileWithTransientRetry(path string) ([]byte, error) {
 	var lastErr error
-	for attempt := 0; attempt < transientFileAccessAttempts; attempt++ {
+	for attempt := 0; attempt < fsutil.TransientAccessAttempts; attempt++ {
 		data, err := os.ReadFile(path)
 		if err == nil {
 			return data, nil
 		}
 		lastErr = err
-		if !isTransientFileAccessError(err) && !(errors.Is(err, os.ErrNotExist) && atomicWriteTempExists(path)) {
+		if !fsutil.IsTransientFileAccessError(err) && !(errors.Is(err, os.ErrNotExist) && atomicWriteTempExists(path)) {
 			return nil, err
 		}
-		time.Sleep(transientFileAccessDelay)
+		time.Sleep(fsutil.TransientAccessDelay)
 	}
 	return nil, lastErr
-}
-
-const (
-	transientFileAccessAttempts = 20
-	transientFileAccessDelay    = 10 * time.Millisecond
-)
-
-func retryTransientFileAccess(op func() error) error {
-	var lastErr error
-	for attempt := 0; attempt < transientFileAccessAttempts; attempt++ {
-		err := op()
-		if err == nil {
-			return nil
-		}
-		lastErr = err
-		if !isTransientFileAccessError(err) {
-			return err
-		}
-		time.Sleep(transientFileAccessDelay)
-	}
-	return lastErr
 }
 
 func atomicWriteTempExists(path string) bool {
 	_, err := os.Stat(path + ".tmp")
 	return err == nil
-}
-
-func isTransientFileAccessError(err error) bool {
-	if runtime.GOOS != "windows" || err == nil {
-		return false
-	}
-	var errno syscall.Errno
-	if !errors.As(err, &errno) {
-		return false
-	}
-	switch errno {
-	case 5, 32, 33:
-		return true
-	default:
-		return false
-	}
 }

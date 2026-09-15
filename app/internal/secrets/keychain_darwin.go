@@ -203,6 +203,7 @@ func backendSave(s *Store, name string, secret string) error {
 	if status != C.errSecSuccess {
 		err := keychainError("save secret", status)
 		if isKeychainUnavailable(err) {
+			s.notifyPlaintextFallback("save", err)
 			return diskSave(s, name, secret)
 		}
 		return err

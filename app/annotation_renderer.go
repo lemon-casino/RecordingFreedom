@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/lemon-casino/RecordingFreedom/app/internal/exportplan"
+	"github.com/lemon-casino/RecordingFreedom/app/internal/fsutil"
 	"github.com/lemon-casino/RecordingFreedom/app/internal/recpackage"
 	"github.com/wailsapp/wails/v3/pkg/application"
 )
@@ -371,16 +372,5 @@ func decodeAnnotationRenderedPNG(dataURL string) ([]byte, error) {
 }
 
 func writeAnnotationRenderedPNG(path string, data []byte) error {
-	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
-		return err
-	}
-	tmp := path + ".tmp"
-	if err := os.WriteFile(tmp, data, 0o644); err != nil {
-		return err
-	}
-	if err := os.Rename(tmp, path); err != nil {
-		_ = os.Remove(tmp)
-		return err
-	}
-	return nil
+	return fsutil.WriteFileAtomic(path, data, 0o644)
 }

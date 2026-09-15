@@ -203,10 +203,10 @@ func (s *RecordingFreedomService) QueueRecognizeScreenshot(itemID string) (ocr.J
 		return ocr.JobSnapshot{}, err
 	}
 	req := screenshotOCRRequest(item, ocr.JobPriorityInteractive)
-	_ = s.patchScreenshotOCRState(item.ID, ocr.ResultStatusQueued, "", "", req.Language, "")
+	s.patchScreenshotOCRStateBestEffort(item.ID, ocr.ResultStatusQueued, "", "", req.Language, "")
 	snapshot, err := s.QueueRecognizeImage(req)
 	if err != nil {
-		_ = s.patchScreenshotOCRState(item.ID, ocr.ResultStatusFailed, "", "", req.Language, err.Error())
+		s.patchScreenshotOCRStateBestEffort(item.ID, ocr.ResultStatusFailed, "", "", req.Language, err.Error())
 		return ocr.JobSnapshot{}, err
 	}
 	return snapshot, nil
@@ -237,7 +237,7 @@ func (s *RecordingFreedomService) queueScreenshotOCRAfterSave(item ScreenshotIte
 			})
 		}
 		if _, err := s.QueueRecognizeImage(req); err != nil {
-			_ = s.patchScreenshotOCRState(item.ID, ocr.ResultStatusFailed, "", "", req.Language, err.Error())
+			s.patchScreenshotOCRStateBestEffort(item.ID, ocr.ResultStatusFailed, "", "", req.Language, err.Error())
 			s.logEvent("ocr", "auto-queue-failed", map[string]string{
 				"screenshotId": item.ID,
 				"sourceKind":   string(req.SourceKind),
@@ -259,10 +259,10 @@ func (s *RecordingFreedomService) QueueRecognizePinnedScreenshot(itemID string) 
 		Language:   "zh-en",
 		Priority:   ocr.JobPriorityInteractive,
 	}
-	_ = s.patchScreenshotOCRState(item.ID, ocr.ResultStatusQueued, "", "", req.Language, "")
+	s.patchScreenshotOCRStateBestEffort(item.ID, ocr.ResultStatusQueued, "", "", req.Language, "")
 	snapshot, err := s.QueueRecognizeImage(req)
 	if err != nil {
-		_ = s.patchScreenshotOCRState(item.ID, ocr.ResultStatusFailed, "", "", req.Language, err.Error())
+		s.patchScreenshotOCRStateBestEffort(item.ID, ocr.ResultStatusFailed, "", "", req.Language, err.Error())
 		return ocr.JobSnapshot{}, err
 	}
 	return snapshot, nil
@@ -273,10 +273,10 @@ func (s *RecordingFreedomService) QueueRecognizeWhiteboard(req ocr.WhiteboardReq
 	if err != nil {
 		return ocr.JobSnapshot{}, err
 	}
-	_ = s.patchScreenshotOCRState(recognizeReq.SourceID, ocr.ResultStatusQueued, "", "", recognizeReq.Language, "")
+	s.patchScreenshotOCRStateBestEffort(recognizeReq.SourceID, ocr.ResultStatusQueued, "", "", recognizeReq.Language, "")
 	snapshot, err := s.QueueRecognizeImage(recognizeReq)
 	if err != nil {
-		_ = s.patchScreenshotOCRState(recognizeReq.SourceID, ocr.ResultStatusFailed, "", "", recognizeReq.Language, err.Error())
+		s.patchScreenshotOCRStateBestEffort(recognizeReq.SourceID, ocr.ResultStatusFailed, "", "", recognizeReq.Language, err.Error())
 		return ocr.JobSnapshot{}, err
 	}
 	return snapshot, nil
@@ -290,10 +290,10 @@ func (s *RecordingFreedomService) RecognizeScreenshot(itemID string) (ocr.Result
 	req := screenshotOCRRequest(item, ocr.JobPriorityInteractive)
 	result, err := s.RecognizeImage(req)
 	if err != nil {
-		_ = s.patchScreenshotOCRState(item.ID, "failed", "", "", req.Language, err.Error())
+		s.patchScreenshotOCRStateBestEffort(item.ID, "failed", "", "", req.Language, err.Error())
 		return ocr.Result{}, err
 	}
-	_ = s.patchScreenshotOCRState(item.ID, "ready", result.ID, result.ModelID, result.Language, "")
+	s.patchScreenshotOCRStateBestEffort(item.ID, "ready", result.ID, result.ModelID, result.Language, "")
 	return result, nil
 }
 
@@ -318,10 +318,10 @@ func (s *RecordingFreedomService) RecognizeWhiteboard(req ocr.WhiteboardRequest)
 	}
 	result, err := s.RecognizeImage(recognizeReq)
 	if err != nil {
-		_ = s.patchScreenshotOCRState(recognizeReq.SourceID, ocr.ResultStatusFailed, "", "", recognizeReq.Language, err.Error())
+		s.patchScreenshotOCRStateBestEffort(recognizeReq.SourceID, ocr.ResultStatusFailed, "", "", recognizeReq.Language, err.Error())
 		return ocr.Result{}, err
 	}
-	_ = s.patchScreenshotOCRState(recognizeReq.SourceID, ocr.ResultStatusReady, result.ID, result.ModelID, result.Language, "")
+	s.patchScreenshotOCRStateBestEffort(recognizeReq.SourceID, ocr.ResultStatusReady, result.ID, result.ModelID, result.Language, "")
 	return result, nil
 }
 
@@ -638,6 +638,18 @@ func (s *RecordingFreedomService) patchScreenshotOCRState(itemID string, status 
 	return nil
 }
 
+// patchScreenshotOCRStateBestEffort records state-patch failures in the app log
+// instead of dropping them; callers treat the patch as non-fatal.
+func (s *RecordingFreedomService) patchScreenshotOCRStateBestEffort(itemID string, status string, resultID string, modelID string, language string, message string) {
+	if err := s.patchScreenshotOCRState(itemID, status, resultID, modelID, language, message); err != nil {
+		s.logEvent("ocr", "screenshot_state_patch_failed", map[string]string{
+			"itemID": itemID,
+			"status": status,
+			"reason": err.Error(),
+		})
+	}
+}
+
 func (s *RecordingFreedomService) emitOCRStatus() {
 	if s.app == nil || s.ocr == nil {
 		return
@@ -654,7 +666,13 @@ func (s *RecordingFreedomService) emitOCRJobEvent(name string, event OcrJobEvent
 	if event.Event == "" {
 		event.Event = ocrJobEventName(event.Status)
 	}
-	_ = s.writeOCRJobEvidenceEvent(event)
+	if err := s.writeOCRJobEvidenceEvent(event); err != nil {
+		s.logEvent("ocr", "job_evidence_event_failed", map[string]string{
+			"event":  event.Event,
+			"jobID":  event.JobID,
+			"reason": err.Error(),
+		})
+	}
 	if s.app == nil {
 		return
 	}
@@ -770,7 +788,7 @@ func (s *RecordingFreedomService) handleOCRJobEvent(event ocr.JobEvent) {
 		switch event.Status {
 		case ocr.ResultStatusQueued, ocr.ResultStatusRunning:
 			s.clearCancelledScreenshotOCRSource(event)
-			_ = s.patchScreenshotOCRState(event.Request.SourceID, event.Status, "", "", event.Request.Language, "")
+			s.patchScreenshotOCRStateBestEffort(event.Request.SourceID, event.Status, "", "", event.Request.Language, "")
 		case ocr.ResultStatusReady:
 			resultID := ""
 			modelID := ""
@@ -780,12 +798,12 @@ func (s *RecordingFreedomService) handleOCRJobEvent(event ocr.JobEvent) {
 				modelID = event.Result.ModelID
 				language = event.Result.Language
 			}
-			_ = s.patchScreenshotOCRState(event.Request.SourceID, ocr.ResultStatusReady, resultID, modelID, language, "")
+			s.patchScreenshotOCRStateBestEffort(event.Request.SourceID, ocr.ResultStatusReady, resultID, modelID, language, "")
 		case ocr.ResultStatusFailed:
-			_ = s.patchScreenshotOCRState(event.Request.SourceID, ocr.ResultStatusFailed, "", "", event.Request.Language, event.Error)
+			s.patchScreenshotOCRStateBestEffort(event.Request.SourceID, ocr.ResultStatusFailed, "", "", event.Request.Language, event.Error)
 		case ocr.ResultStatusCancelled:
 			s.markCancelledScreenshotOCRSource(event)
-			_ = s.patchScreenshotOCRState(event.Request.SourceID, ocr.ResultStatusNone, "", "", event.Request.Language, "")
+			s.patchScreenshotOCRStateBestEffort(event.Request.SourceID, ocr.ResultStatusNone, "", "", event.Request.Language, "")
 		}
 	}
 	s.emitOCRJobEvent(ocrJobEventName(event.Status), OcrJobEvent{

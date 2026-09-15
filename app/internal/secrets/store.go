@@ -19,6 +19,17 @@ const (
 type Store struct {
 	appData *appdata.Service
 	now     func() time.Time
+	// OnPlaintextFallback, when set, is called before a secret is written to the
+	// local file because the platform vault (Keychain, Secret Service) is
+	// unavailable. On those platforms the file content is plaintext.
+	OnPlaintextFallback func(operation string, reason string)
+}
+
+func (s *Store) notifyPlaintextFallback(operation string, reason error) {
+	if s == nil || s.OnPlaintextFallback == nil || reason == nil {
+		return
+	}
+	s.OnPlaintextFallback(operation, reason.Error())
 }
 
 type Status struct {

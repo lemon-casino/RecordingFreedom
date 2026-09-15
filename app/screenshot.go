@@ -17,6 +17,7 @@ import (
 
 	desktopscreenshot "github.com/kbinani/screenshot"
 	"github.com/lemon-casino/RecordingFreedom/app/internal/devices"
+	"github.com/lemon-casino/RecordingFreedom/app/internal/fsutil"
 	"github.com/lemon-casino/RecordingFreedom/app/internal/recpackage"
 	"github.com/wailsapp/wails/v3/pkg/application"
 	"golang.org/x/image/draw"
@@ -1300,7 +1301,7 @@ func (s *RecordingFreedomService) saveScreenshotHistory(items []ScreenshotItem) 
 	if err != nil {
 		return err
 	}
-	return writeFileAtomic(path, append(data, '\n'), 0o644)
+	return fsutil.WriteFileAtomic(path, append(data, '\n'), 0o644)
 }
 
 func normalizeScreenshotHistory(items []ScreenshotItem) []ScreenshotItem {

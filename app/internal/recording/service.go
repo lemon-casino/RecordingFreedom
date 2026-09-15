@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 	"sync"
 	"time"
 
@@ -17,6 +18,8 @@ type Service struct {
 	packages         *recpackage.Service
 	backend          Backend
 	audioOnlyBackend *AudioOnlyRuntimeBackend
+	recoveryHooks    recoveryHooks
+	diskMonitor      *diskMonitor
 	mu               sync.Mutex
 	state            State
 	session          *Session
@@ -63,6 +66,7 @@ func newService(appData *appdata.Service, packages *recpackage.Service, backend 
 		packages:         packages,
 		backend:          backend,
 		audioOnlyBackend: NewAudioOnlyRuntimeBackend(packages, audioOnlyOptions),
+		recoveryHooks:    defaultRecoveryHooks(),
 		state:            StateIdle,
 	}
 }
@@ -161,6 +165,34 @@ func (s *Service) ScanPackages() ([]recpackage.RecoverySummary, error) {
 	return s.packages.Scan(videoDir)
 }
 
+// startDiskMonitorLocked watches free space on the recording volume while a
+// session is active and auto-stops the recording below the threshold.
+func (s *Service) startDiskMonitorLocked() {
+	threshold := minFreeDiskBytes()
+	if threshold == 0 || s.session == nil || s.diskMonitor != nil {
+		return
+	}
+	monitor := &diskMonitor{stop: make(chan struct{}), done: make(chan struct{})}
+	s.diskMonitor = monitor
+	go runDiskMonitor(monitor, diskMonitorOptions{
+		packageDir:   s.session.PackageDir,
+		manifestPath: s.session.Manifest,
+		threshold:    threshold,
+		interval:     diskMonitorInterval,
+		freeBytes:    appdata.AvailableBytes,
+		packages:     s.packages,
+		onStop: func() {
+			_, _ = s.Stop()
+		},
+	})
+}
+
+func (s *Service) stopDiskMonitor() {
+	monitor := s.diskMonitor
+	s.diskMonitor = nil
+	monitor.close()
+}
+
 func (s *Service) RecoverPackage(packageDir string) (recpackage.RecoverySummary, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -172,7 +204,15 @@ func (s *Service) RecoverPackage(packageDir string) (recpackage.RecoverySummary,
 	if err != nil {
 		return recpackage.RecoverySummary{}, err
 	}
-	return s.packages.Recover(videoDir, packageDir, time.Now())
+	notes, finalizeErr := s.finalizeCrashedPackage(packageDir)
+	summary, err := s.packages.Recover(videoDir, packageDir, time.Now())
+	if err != nil && finalizeErr != nil {
+		return summary, fmt.Errorf("%w (recovery finalize: %v)", err, finalizeErr)
+	}
+	if err == nil && len(notes) > 0 {
+		summary.Reason = summary.Reason + "; " + strings.Join(notes, "; ")
+	}
+	return summary, err
 }
 
 func (s *Service) StartMockRecording(req StartRequest) (Session, error) {
@@ -222,6 +262,7 @@ func (s *Service) StartRecording(req StartRequest) (Session, error) {
 	}
 	s.state = StateRecording
 	s.session = &session
+	s.startDiskMonitorLocked()
 	return session, nil
 }
 
@@ -267,6 +308,7 @@ func (s *Service) StartAudioOnlyRecording(req AudioOnlyRequest) (Session, error)
 	}
 	s.state = StateRecording
 	s.session = &session
+	s.startDiskMonitorLocked()
 	return session, nil
 }
 
@@ -288,6 +330,7 @@ func (s *Service) Stop() (Session, error) {
 	if s.state != StateRecording && s.state != StatePaused {
 		return Session{}, fmt.Errorf("cannot stop recording from state %q", s.state)
 	}
+	s.stopDiskMonitor()
 
 	completed := time.Now()
 	s.state = StateStopping

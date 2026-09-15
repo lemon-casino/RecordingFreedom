@@ -11,6 +11,7 @@ import (
 	"time"
 
 	desktopscreenshot "github.com/kbinani/screenshot"
+	"github.com/lemon-casino/RecordingFreedom/app/internal/fsutil"
 	"github.com/lemon-casino/RecordingFreedom/app/internal/recording"
 	"github.com/lemon-casino/RecordingFreedom/app/internal/recpackage"
 	"github.com/wailsapp/wails/v3/pkg/application"
@@ -385,13 +386,13 @@ func (s *RecordingFreedomService) SaveAnnotationCapture(req AnnotationCaptureReq
 	if err := os.MkdirAll(annotationsDir, 0o755); err != nil {
 		return AnnotationCaptureResult{}, err
 	}
-	if err := writeFileAtomic(scenePath, append([]byte(sceneJSON), '\n'), 0o644); err != nil {
+	if err := fsutil.WriteFileAtomic(scenePath, append([]byte(sceneJSON), '\n'), 0o644); err != nil {
 		return AnnotationCaptureResult{}, err
 	}
-	if err := writeFileAtomic(snapshotPath, snapshot, 0o644); err != nil {
+	if err := fsutil.WriteFileAtomic(snapshotPath, snapshot, 0o644); err != nil {
 		return AnnotationCaptureResult{}, err
 	}
-	if err := writeFileAtomic(timelineSnapshotPath, snapshot, 0o644); err != nil {
+	if err := fsutil.WriteFileAtomic(timelineSnapshotPath, snapshot, 0o644); err != nil {
 		return AnnotationCaptureResult{}, err
 	}
 	eventJSON, err := s.annotationEventJSON(session, recpackage.AnnotationSceneFile, timelineSnapshotRel)

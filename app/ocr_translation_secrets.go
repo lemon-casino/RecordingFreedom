@@ -2,7 +2,6 @@ package main
 
 import (
 	"errors"
-	"fmt"
 	"strings"
 
 	"github.com/lemon-casino/RecordingFreedom/app/internal/ocr"
@@ -28,30 +27,36 @@ func (s *RecordingFreedomService) loadSettingsForMutation() (settings.Settings, 
 	if err != nil {
 		return settings.Settings{}, err
 	}
-	current, err = s.migrateLegacyOCRTranslationAPIKey(current)
-	if err != nil {
-		return settings.Settings{}, err
-	}
-	return current, nil
+	return s.migrateLegacyOCRTranslationAPIKey(current), nil
 }
 
-func (s *RecordingFreedomService) migrateLegacyOCRTranslationAPIKey(current settings.Settings) (settings.Settings, error) {
+// migrateLegacyOCRTranslationAPIKey moves a legacy plaintext API key into the
+// secret store. Migration is best-effort: when the store keeps failing (disk
+// full, permissions), the key stays in settings so the next load can retry,
+// and settings reads keep working instead of being blocked by the migration.
+func (s *RecordingFreedomService) migrateLegacyOCRTranslationAPIKey(current settings.Settings) settings.Settings {
 	legacyKey := strings.TrimSpace(current.OCR.Translation.APIKey)
 	if legacyKey == "" {
 		current.OCR.Translation.APIKey = ""
-		return current, nil
+		return current
 	}
 	store := s.ocrTranslationSecretStore()
 	if err := store.Save(ocrTranslationAPIKeySecretName, legacyKey); err != nil {
-		return settings.Settings{}, fmt.Errorf("migrate OCR translation API key: %w", err)
+		s.logEvent("ocr", "api_key_migration_failed", map[string]string{
+			"reason": err.Error(),
+		})
+		return current
 	}
 	current.OCR.Translation.APIKey = ""
 	current.OCR.Translation.APIKeySet = true
 	saved, err := s.settings.Save(current)
 	if err != nil {
-		return settings.Settings{}, err
+		s.logEvent("ocr", "api_key_migration_failed", map[string]string{
+			"reason": err.Error(),
+		})
+		return current
 	}
-	return saved, nil
+	return saved
 }
 
 func sanitizeSettingsForClient(current settings.Settings) settings.Settings {
@@ -65,6 +70,12 @@ func sanitizeSettingsForClient(current settings.Settings) settings.Settings {
 func (s *RecordingFreedomService) ocrTranslationSecretStore() *secretstore.Store {
 	if s.secrets == nil {
 		s.secrets = secretstore.NewStore(s.appData)
+		s.secrets.OnPlaintextFallback = func(operation string, reason string) {
+			s.logEvent("secrets", "plaintext_fallback", map[string]string{
+				"operation": operation,
+				"reason":    reason,
+			})
+		}
 	}
 	return s.secrets
 }

@@ -512,7 +512,11 @@ func (s *Service) Recover(videoDir string, packageDir string, completedAt time.T
 		if !isRecoverableStatus(manifest.Status) {
 			return RecoverySummary{}, fmt.Errorf("package %q is not recoverable from status %q", packageDir, manifest.Status)
 		}
-		if !manifestHasReadableScreenMedia(packageDir, manifest) {
+		if manifest.RecordingMode == RecordingModeAudio {
+			if !manifestHasReadableAudioMedia(packageDir, manifest) {
+				return RecoverySummary{}, fmt.Errorf("cannot recover %q: manifest audio media is missing or empty", packageDir)
+			}
+		} else if !manifestHasReadableScreenMedia(packageDir, manifest) {
 			return RecoverySummary{}, fmt.Errorf("cannot recover %q: manifest screen media is missing or empty", packageDir)
 		}
 		if manifest.Diagnostics.Message == "" {
@@ -1111,6 +1115,17 @@ func manifestHasReadableScreenMedia(packageDir string, manifest Manifest) bool {
 		return false
 	}
 	info, err := os.Stat(filepath.Join(packageDir, filepath.Clean(manifest.Media.ScreenVideoPath)))
+	return err == nil && !info.IsDir() && info.Size() > 0
+}
+
+func manifestHasReadableAudioMedia(packageDir string, manifest Manifest) bool {
+	if manifest.Media.AudioPath == "" {
+		return false
+	}
+	if validatePackageRelativePath("audioPath", manifest.Media.AudioPath) != nil {
+		return false
+	}
+	info, err := os.Stat(filepath.Join(packageDir, filepath.Clean(manifest.Media.AudioPath)))
 	return err == nil && !info.IsDir() && info.Size() > 0
 }
 
