@@ -48,7 +48,7 @@
 
 ### A1 真实音频设备枚举
 
-状态：Windows WASAPI system audio / microphone endpoint 枚举已完成；Windows FFmpeg DirectShow 摄像头枚举已完成并已供 sidecar writer 使用；macOS CoreAudio 输入设备枚举、默认麦克风识别和设备 UID 选择代码路径已完成，系统声音仍由 ScreenCaptureKit 视频录制路径负责；Linux PipeWire/PulseAudio/PipeWire camera 待接入，macOS AVFoundation 摄像头仍待接入。
+状态：Windows WASAPI system audio / microphone endpoint 枚举已完成；Windows FFmpeg DirectShow 摄像头枚举已完成并已供 sidecar writer 使用；macOS CoreAudio 输入设备枚举、默认麦克风识别和设备 UID 选择代码路径已完成，系统声音仍由 ScreenCaptureKit 视频录制路径负责；Linux PipeWire/PulseAudio/PipeWire camera 待接入。（更新 2026-09：macOS FFmpeg AVFoundation 摄像头枚举与 sidecar writer 已接入，见 docs/06；剩余为真机 smoke。）
 
 交付：
 

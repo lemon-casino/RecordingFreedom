@@ -205,9 +205,8 @@ User settings are persisted in:
 
 ## Roadmap
 
-1. Validate CI on the new GitHub repository.
-2. Replace queued media-device placeholders with native macOS/Linux audio and camera enumeration; Windows WASAPI/DirectShow enumeration is already wired.
-3. Real-device smoke macOS ScreenCaptureKit recording.
-4. Download the Windows portable preview artifact and run `.\tools\run-windows-portable-smoke.ps1` on a real desktop to verify screen/all-screens/region/locked-window, pause/resume, system audio, microphone, RNNoise, and audio-only smoke.
-5. Smoke `audio-smoke -rnnoise` on target desktops built with the same `rnnoise_dynamic` release toolchain, then keep the release `desktop-doctor -require-rnnoise` gate green on every desktop runner.
-6. After video recording and voice/audio recording are accepted, resume camera sidecar and PIP preview/export work.
+1. Replace the remaining queued media-device placeholders with native Linux enumeration (PipeWire/PulseAudio devices and PipeWire camera); macOS CoreAudio microphone and FFmpeg AVFoundation camera enumeration plus Windows WASAPI/DirectShow enumeration are already wired.
+2. Real-device smoke macOS ScreenCaptureKit recording.
+3. Download the Windows portable preview artifact and run `.\tools\run-windows-portable-smoke.ps1` on a real desktop to verify screen/all-screens/region/locked-window, pause/resume, system audio, microphone, RNNoise, and audio-only smoke.
+4. Smoke `audio-smoke -rnnoise` on target desktops built with the same `rnnoise_dynamic` release toolchain, then keep the release `desktop-doctor -require-rnnoise` gate green on every desktop runner.
+5. Camera sidecar and PIP code paths are wired on all three platforms; finish cross-platform real-device camera smoke, preview device-matching validation, screen + camera + audio combination, pause/resume sync, and long-recording validation (see docs/08 P1-CAMERA).
