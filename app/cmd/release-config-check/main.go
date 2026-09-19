@@ -201,7 +201,7 @@ var releaseConfigChecks = []configCheck{
 		},
 	},
 	{
-		File: "app/frontend/src/App.tsx",
+		File: "app/frontend/src/components/OcrResultPanel.tsx",
 		Name: "Frontend OCR result panel emits desktop render evidence logs",
 		Needles: []string{
 			"logClientEvent('ocr-result', 'preview-loaded'",
