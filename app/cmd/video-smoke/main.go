@@ -316,8 +316,8 @@ func regionGeometryForSmoke(sources []devices.CaptureSource, opts options) (reco
 		width := minInt(640, source.Width)
 		height := minInt(360, source.Height)
 		return recording.SourceGeometry{
-			X:            source.X + minInt(64, maxInt(0, source.Width-width)),
-			Y:            source.Y + minInt(64, maxInt(0, source.Height-height)),
+			X:            source.X + minInt(64, max(0, source.Width-width)),
+			Y:            source.Y + minInt(64, max(0, source.Height-height)),
 			Width:        width,
 			Height:       height,
 			DisplayIndex: source.DisplayIndex,
@@ -558,13 +558,6 @@ func parseSourceType(value string) (devices.CaptureSourceType, error) {
 
 func minInt(a int, b int) int {
 	if a < b {
-		return a
-	}
-	return b
-}
-
-func maxInt(a int, b int) int {
-	if a > b {
 		return a
 	}
 	return b

@@ -13,6 +13,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/lemon-casino/RecordingFreedom/app/internal/evidencetool"
 	"github.com/lemon-casino/RecordingFreedom/app/internal/ocr"
 )
 
@@ -245,10 +246,10 @@ func decodeCTC(output ortTensorOutput, characters []string) (string, float64, er
 func cropCandidate(src *image.RGBA, candidate detCandidateBox) *image.RGBA {
 	bounds := detBoxBounds(candidate)
 	srcBounds := src.Bounds()
-	minX := clampInt(int(math.Floor(bounds.minX)), srcBounds.Min.X, srcBounds.Max.X)
-	minY := clampInt(int(math.Floor(bounds.minY)), srcBounds.Min.Y, srcBounds.Max.Y)
-	maxX := clampInt(int(math.Ceil(bounds.maxX)), srcBounds.Min.X, srcBounds.Max.X)
-	maxY := clampInt(int(math.Ceil(bounds.maxY)), srcBounds.Min.Y, srcBounds.Max.Y)
+	minX := evidencetool.ClampInt(int(math.Floor(bounds.minX)), srcBounds.Min.X, srcBounds.Max.X)
+	minY := evidencetool.ClampInt(int(math.Floor(bounds.minY)), srcBounds.Min.Y, srcBounds.Max.Y)
+	maxX := evidencetool.ClampInt(int(math.Ceil(bounds.maxX)), srcBounds.Min.X, srcBounds.Max.X)
+	maxY := evidencetool.ClampInt(int(math.Ceil(bounds.maxY)), srcBounds.Min.Y, srcBounds.Max.Y)
 	if maxX-minX < 2 || maxY-minY < 2 {
 		return nil
 	}
@@ -372,16 +373,6 @@ func looksMostlyASCII(value string) bool {
 		}
 	}
 	return total > 0 && ascii*2 >= total
-}
-
-func clampInt(value int, minValue int, maxValue int) int {
-	if value < minValue {
-		return minValue
-	}
-	if value > maxValue {
-		return maxValue
-	}
-	return value
 }
 
 func fillImage(img *image.RGBA, c color.RGBA) {

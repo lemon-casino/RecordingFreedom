@@ -2,8 +2,6 @@ package main
 
 import (
 	"bufio"
-	"crypto/sha256"
-	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"flag"
@@ -11,7 +9,6 @@ import (
 	"image"
 	_ "image/jpeg"
 	_ "image/png"
-	"io"
 	"io/fs"
 	"os"
 	"path/filepath"
@@ -19,6 +16,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/lemon-casino/RecordingFreedom/app/internal/evidencetool"
 	"github.com/lemon-casino/RecordingFreedom/app/internal/ocr"
 	"github.com/lemon-casino/RecordingFreedom/app/internal/ocrevidence"
 )
@@ -751,7 +749,7 @@ func ocrJobEventResultID(event ocrJobEvidenceEvent) string {
 }
 
 func requireVisualEvidence(path string) error {
-	if err := requireDirWithFile(path); err != nil {
+	if err := evidencetool.RequireDirWithFile(path); err != nil {
 		return err
 	}
 	manifest, err := loadVisualManifest(filepath.Join(path, "visual-manifest.json"))
@@ -788,7 +786,7 @@ func requireVisualEvidence(path string) error {
 }
 
 func loadVisualManifest(path string) (visualManifest, error) {
-	if err := requireNonEmptyFile(path); err != nil {
+	if err := evidencetool.RequireNonEmptyFile(path); err != nil {
 		return visualManifest{}, err
 	}
 	data, err := os.ReadFile(path)
@@ -826,7 +824,7 @@ func validateVisualManifestEntry(root string, entry visualManifestEntry) error {
 	if info.Size() != entry.Bytes {
 		return fmt.Errorf("visual evidence %s bytes = %d, want manifest %d", entry.Path, info.Size(), entry.Bytes)
 	}
-	sum, err := fileSHA256(path)
+	sum, err := evidencetool.FileSHA256(path)
 	if err != nil {
 		return err
 	}
@@ -846,10 +844,10 @@ func validateVisualManifestEntry(root string, entry visualManifestEntry) error {
 func validateVisualCaptureChecklist(evidenceDir string) error {
 	markdownPath := filepath.Join(evidenceDir, "visual-capture-checklist.md")
 	jsonPath := filepath.Join(evidenceDir, "visual-capture-checklist.json")
-	if err := requireNonEmptyFile(markdownPath); err != nil {
+	if err := evidencetool.RequireNonEmptyFile(markdownPath); err != nil {
 		return err
 	}
-	if err := requireNonEmptyFile(jsonPath); err != nil {
+	if err := evidencetool.RequireNonEmptyFile(jsonPath); err != nil {
 		return err
 	}
 	markdown, err := os.ReadFile(markdownPath)
@@ -910,7 +908,7 @@ func validateVisualCaptureChecklist(evidenceDir string) error {
 }
 
 func loadDataRootPrecheck(path string) (ocrevidence.DataRootPrecheckReport, error) {
-	if err := requireNonEmptyFile(path); err != nil {
+	if err := evidencetool.RequireNonEmptyFile(path); err != nil {
 		return ocrevidence.DataRootPrecheckReport{}, err
 	}
 	data, err := os.ReadFile(path)
@@ -1020,7 +1018,7 @@ func validateSessionMarkers(path string, session ocrevidence.DataRootPrecheckSes
 }
 
 func validateExportReport(path string, evidenceDir string) error {
-	if err := requireNonEmptyFile(path); err != nil {
+	if err := evidencetool.RequireNonEmptyFile(path); err != nil {
 		return err
 	}
 	data, err := os.ReadFile(path)
@@ -1202,7 +1200,7 @@ func validateSourceExport(evidenceDir string, source sourceExport) error {
 }
 
 func loadOCRResults(path string) ([]ocr.Result, error) {
-	if err := requireDirWithFile(path); err != nil {
+	if err := evidencetool.RequireDirWithFile(path); err != nil {
 		return nil, err
 	}
 	results := []ocr.Result{}
@@ -1332,7 +1330,7 @@ func validateOCRBlock(result ocr.Result, block ocr.Block) error {
 }
 
 func validateTranslations(path string) error {
-	if err := requireDirWithFile(path); err != nil {
+	if err := evidencetool.RequireDirWithFile(path); err != nil {
 		return err
 	}
 	found := 0
@@ -1412,7 +1410,7 @@ func readAppLog(path string) ([]appLogEvent, error) {
 }
 
 func readLowerNonEmpty(path string) (string, error) {
-	if err := requireNonEmptyFile(path); err != nil {
+	if err := evidencetool.RequireNonEmptyFile(path); err != nil {
 		return "", err
 	}
 	data, err := os.ReadFile(path)
@@ -1425,66 +1423,15 @@ func readLowerNonEmpty(path string) (string, error) {
 func missingRequirements(content string, requirements []namedRequirement) []string {
 	missing := []string{}
 	for _, requirement := range requirements {
-		if !containsAny(content, requirement.Terms) {
+		if !evidencetool.ContainsAny(content, requirement.Terms) {
 			missing = append(missing, requirement.Name)
 		}
 	}
 	return missing
 }
 
-func containsAny(content string, terms []string) bool {
-	for _, term := range terms {
-		if strings.Contains(content, strings.ToLower(term)) {
-			return true
-		}
-	}
-	return false
-}
-
-func requireDirWithFile(path string) error {
-	info, err := os.Stat(path)
-	if err != nil {
-		return err
-	}
-	if !info.IsDir() {
-		return fmt.Errorf("%s is not a directory", path)
-	}
-	hasFile := false
-	err = filepath.WalkDir(path, func(_ string, entry fs.DirEntry, err error) error {
-		if err != nil {
-			return err
-		}
-		if !entry.IsDir() {
-			hasFile = true
-			return filepath.SkipAll
-		}
-		return nil
-	})
-	if err != nil {
-		return err
-	}
-	if !hasFile {
-		return fmt.Errorf("%s contains no files", path)
-	}
-	return nil
-}
-
-func requireNonEmptyFile(path string) error {
-	info, err := os.Stat(path)
-	if err != nil {
-		return err
-	}
-	if info.IsDir() {
-		return fmt.Errorf("%s is a directory", path)
-	}
-	if info.Size() == 0 {
-		return fmt.Errorf("%s is empty", path)
-	}
-	return nil
-}
-
 func countNonEmptyLines(path string) (int, error) {
-	if err := requireNonEmptyFile(path); err != nil {
+	if err := evidencetool.RequireNonEmptyFile(path); err != nil {
 		return 0, err
 	}
 	file, err := os.Open(path)
@@ -1530,25 +1477,6 @@ func countJSONFiles(path string) (int, error) {
 	return count, err
 }
 
-func evidenceFileNames(path string) ([]string, error) {
-	files := []string{}
-	err := filepath.WalkDir(path, func(itemPath string, entry fs.DirEntry, err error) error {
-		if err != nil {
-			return err
-		}
-		if entry.IsDir() {
-			return nil
-		}
-		rel, err := filepath.Rel(path, itemPath)
-		if err != nil {
-			return err
-		}
-		files = append(files, strings.ToLower(filepath.ToSlash(rel)))
-		return nil
-	})
-	return files, err
-}
-
 func evidenceFilePath(root string, value string, field string) (string, error) {
 	value = strings.TrimSpace(value)
 	if value == "" {
@@ -1573,7 +1501,7 @@ func evidenceFilePath(root string, value string, field string) (string, error) {
 	if rel == "." || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) || filepath.IsAbs(rel) {
 		return "", fmt.Errorf("evidence %s %q must stay inside %q", field, value, root)
 	}
-	if err := requireNonEmptyFile(absCandidate); err != nil {
+	if err := evidencetool.RequireNonEmptyFile(absCandidate); err != nil {
 		return "", err
 	}
 	return absCandidate, nil
@@ -1603,7 +1531,7 @@ func evidencePath(root string, value string) (string, error) {
 	if rel == "." || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) || filepath.IsAbs(rel) {
 		return "", fmt.Errorf("evidence image path %q must stay inside %q", value, root)
 	}
-	if err := requireNonEmptyFile(absCandidate); err != nil {
+	if err := evidencetool.RequireNonEmptyFile(absCandidate); err != nil {
 		return "", err
 	}
 	return absCandidate, nil
@@ -1623,17 +1551,4 @@ func imageSize(path string) (int, int, error) {
 		return 0, 0, fmt.Errorf("image %s has invalid dimensions %dx%d", path, config.Width, config.Height)
 	}
 	return config.Width, config.Height, nil
-}
-
-func fileSHA256(path string) (string, error) {
-	file, err := os.Open(path)
-	if err != nil {
-		return "", err
-	}
-	defer file.Close()
-	hash := sha256.New()
-	if _, err := io.Copy(hash, file); err != nil {
-		return "", err
-	}
-	return hex.EncodeToString(hash.Sum(nil)), nil
 }

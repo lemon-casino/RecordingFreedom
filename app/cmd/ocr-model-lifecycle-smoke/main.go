@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/lemon-casino/RecordingFreedom/app/internal/appdata"
+	"github.com/lemon-casino/RecordingFreedom/app/internal/evidencetool"
 	"github.com/lemon-casino/RecordingFreedom/app/internal/ocr"
 )
 
@@ -109,7 +110,7 @@ func main() {
 }
 
 func run(dataRoot string, evidenceDir string, workerPath string, runtimeDir string, stablePackage string, candidatePackages []string) (lifecycleReport, error) {
-	evidenceDir, err := prepareEvidenceDir(evidenceDir)
+	evidenceDir, err := evidencetool.PrepareEvidenceDir(evidenceDir)
 	if err != nil {
 		return lifecycleReport{}, err
 	}
@@ -120,15 +121,15 @@ func run(dataRoot string, evidenceDir string, workerPath string, runtimeDir stri
 			return lifecycleReport{}, err
 		}
 	}
-	workerPath, err = requireFile(workerPath, "-worker-path")
+	workerPath, err = evidencetool.RequireFile(workerPath, "-worker-path")
 	if err != nil {
 		return lifecycleReport{}, err
 	}
-	runtimeDir, err = requireDir(runtimeDir, "-runtime-dir")
+	runtimeDir, err = evidencetool.RequireDir(runtimeDir, "-runtime-dir")
 	if err != nil {
 		return lifecycleReport{}, err
 	}
-	stablePackage, err = requirePackagePath(stablePackage, "-stable-package")
+	stablePackage, err = evidencetool.RequirePackagePath(stablePackage, "-stable-package")
 	if err != nil {
 		return lifecycleReport{}, err
 	}
@@ -137,7 +138,7 @@ func run(dataRoot string, evidenceDir string, workerPath string, runtimeDir stri
 	}
 	resolvedCandidates := make([]string, 0, len(candidatePackages))
 	for _, candidate := range candidatePackages {
-		resolved, err := requirePackagePath(candidate, "-candidate-package")
+		resolved, err := evidencetool.RequirePackagePath(candidate, "-candidate-package")
 		if err != nil {
 			return lifecycleReport{}, err
 		}
@@ -249,85 +250,10 @@ func run(dataRoot string, evidenceDir string, workerPath string, runtimeDir stri
 		return lifecycleReport{}, fmt.Errorf("final stable status: %w", err)
 	}
 	report.FinalActiveModel = finalStatus.ActiveModelID
-	if err := writeEvidence(report); err != nil {
+	if err := evidencetool.WriteEvidence(report.EvidencePath, report); err != nil {
 		return lifecycleReport{}, err
 	}
 	return report, nil
-}
-
-func prepareEvidenceDir(path string) (string, error) {
-	path = strings.TrimSpace(path)
-	if path == "" {
-		return "", errors.New("evidence dir is required")
-	}
-	resolved, err := filepath.Abs(path)
-	if err != nil {
-		return "", err
-	}
-	if err := os.MkdirAll(resolved, 0o755); err != nil {
-		return "", err
-	}
-	return resolved, nil
-}
-
-func requireFile(path string, flagName string) (string, error) {
-	resolved, err := requirePath(path, flagName)
-	if err != nil {
-		return "", err
-	}
-	info, err := os.Stat(resolved)
-	if err != nil {
-		return "", err
-	}
-	if info.IsDir() {
-		return "", fmt.Errorf("%s must be a file: %s", flagName, resolved)
-	}
-	return resolved, nil
-}
-
-func requireDir(path string, flagName string) (string, error) {
-	resolved, err := requirePath(path, flagName)
-	if err != nil {
-		return "", err
-	}
-	info, err := os.Stat(resolved)
-	if err != nil {
-		return "", err
-	}
-	if !info.IsDir() {
-		return "", fmt.Errorf("%s must be a directory: %s", flagName, resolved)
-	}
-	return resolved, nil
-}
-
-func requirePackagePath(path string, flagName string) (string, error) {
-	resolved, err := requirePath(path, flagName)
-	if err != nil {
-		return "", err
-	}
-	info, err := os.Stat(resolved)
-	if err != nil {
-		return "", err
-	}
-	if info.IsDir() {
-		return resolved, nil
-	}
-	if !strings.EqualFold(filepath.Ext(resolved), ".zip") {
-		return "", fmt.Errorf("%s must be a .zip file or directory: %s", flagName, resolved)
-	}
-	return resolved, nil
-}
-
-func requirePath(path string, flagName string) (string, error) {
-	path = strings.TrimSpace(path)
-	if path == "" {
-		return "", fmt.Errorf("%s is required", flagName)
-	}
-	resolved, err := filepath.Abs(path)
-	if err != nil {
-		return "", err
-	}
-	return resolved, nil
 }
 
 func requireActiveReady(status ocr.Status, modelID string) error {
@@ -457,18 +383,4 @@ func missingExpectedTexts(present []string) []string {
 		}
 	}
 	return missing
-}
-
-func writeEvidence(report lifecycleReport) error {
-	if strings.TrimSpace(report.EvidencePath) == "" {
-		return errors.New("evidence path is required")
-	}
-	if err := os.MkdirAll(filepath.Dir(report.EvidencePath), 0o755); err != nil {
-		return err
-	}
-	data, err := json.MarshalIndent(report, "", "  ")
-	if err != nil {
-		return err
-	}
-	return os.WriteFile(report.EvidencePath, append(data, '\n'), 0o644)
 }

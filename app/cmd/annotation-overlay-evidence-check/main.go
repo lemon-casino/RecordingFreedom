@@ -5,13 +5,13 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
-	"io/fs"
 	"os"
 	"path/filepath"
 	"regexp"
 	"strings"
 	"time"
 
+	"github.com/lemon-casino/RecordingFreedom/app/internal/evidencetool"
 	"github.com/lemon-casino/RecordingFreedom/app/internal/exportplan"
 	"github.com/lemon-casino/RecordingFreedom/app/internal/recpackage"
 )
@@ -173,7 +173,7 @@ func run(evidenceDir string) (report, error) {
 	result.addCheck("recordings", requireEvidenceNamedFiles(filepath.Join(resolved, "recordings"), requiredRecordingEvidence))
 
 	packagesDir := filepath.Join(resolved, "packages")
-	result.addCheck("packages", requireDirWithFile(packagesDir))
+	result.addCheck("packages", evidencetool.RequireDirWithFile(packagesDir))
 	packageDirs, err := filepath.Glob(filepath.Join(packagesDir, "*"+recpackage.PackageDirSuffix))
 	if err != nil {
 		return report{}, err
@@ -274,7 +274,7 @@ func validateAnnotationEvidence(packageDir string, manifest recpackage.Manifest,
 	if err != nil {
 		return err
 	}
-	if err := requireNonEmptyFile(eventsPath); err != nil {
+	if err := evidencetool.RequireNonEmptyFile(eventsPath); err != nil {
 		return fmt.Errorf("annotation events: %w", err)
 	}
 	if err := validateAnnotationEvents(eventsPath); err != nil {
@@ -289,7 +289,7 @@ func validateAnnotationEvidence(packageDir string, manifest recpackage.Manifest,
 	if err != nil {
 		return err
 	}
-	if err := requireNonEmptyFile(diagnosticsPath); err != nil {
+	if err := evidencetool.RequireNonEmptyFile(diagnosticsPath); err != nil {
 		return fmt.Errorf("annotation overlay diagnostics: %w", err)
 	}
 	if err := validateOverlayDiagnostics(diagnosticsPath, manifest); err != nil {
@@ -302,7 +302,7 @@ func validateAnnotationEvidence(packageDir string, manifest recpackage.Manifest,
 		return err
 	}
 	item.Snapshot = snapshotPath
-	if err := requireNonEmptyFile(item.ExportPath); err != nil {
+	if err := evidencetool.RequireNonEmptyFile(item.ExportPath); err != nil {
 		return fmt.Errorf("exported recording: %w", err)
 	}
 	exportDurationMs, err := validateExportedRecordingMP4(item.ExportPath, durationMs)
@@ -366,7 +366,7 @@ type namedEvidenceRequirement struct {
 }
 
 func validateEvidenceREADME(path string) error {
-	if err := requireNonEmptyFile(path); err != nil {
+	if err := evidencetool.RequireNonEmptyFile(path); err != nil {
 		return err
 	}
 	data, err := os.ReadFile(path)
@@ -396,7 +396,7 @@ func validateEvidenceREADME(path string) error {
 	}
 	missing := make([]string, 0)
 	for _, requirement := range requirements {
-		if !containsAny(content, requirement.Terms) {
+		if !evidencetool.ContainsAny(content, requirement.Terms) {
 			missing = append(missing, requirement.Name)
 		}
 	}
@@ -406,17 +406,8 @@ func validateEvidenceREADME(path string) error {
 	return nil
 }
 
-func containsAny(content string, terms []string) bool {
-	for _, term := range terms {
-		if strings.Contains(content, strings.ToLower(term)) {
-			return true
-		}
-	}
-	return false
-}
-
 func validatePlatformFile(path string) error {
-	if err := requireNonEmptyFile(path); err != nil {
+	if err := evidencetool.RequireNonEmptyFile(path); err != nil {
 		return err
 	}
 	data, err := os.ReadFile(path)
@@ -432,7 +423,7 @@ func validatePlatformFile(path string) error {
 	}
 	missing := make([]string, 0)
 	for _, requirement := range requirements {
-		if !containsAny(content, requirement.Terms) {
+		if !evidencetool.ContainsAny(content, requirement.Terms) {
 			missing = append(missing, requirement.Name)
 		}
 	}
@@ -446,7 +437,7 @@ func validatePlatformFile(path string) error {
 }
 
 func validateAppLog(path string) error {
-	if err := requireNonEmptyFile(path); err != nil {
+	if err := evidencetool.RequireNonEmptyFile(path); err != nil {
 		return err
 	}
 	file, err := os.Open(path)
@@ -808,7 +799,7 @@ func findAnnotationSnapshot(packageDir string, manifestSnapshotPath string) (str
 		candidates = append(candidates, matches...)
 	}
 	for _, path := range candidates {
-		if requireNonEmptyFile(path) == nil {
+		if evidencetool.RequireNonEmptyFile(path) == nil {
 			return path, nil
 		}
 	}
@@ -835,53 +826,11 @@ func packageRelativePath(packageDir string, relative string) (string, error) {
 	return absJoined, nil
 }
 
-func requireNonEmptyFile(path string) error {
-	info, err := os.Stat(path)
-	if err != nil {
-		return err
-	}
-	if info.IsDir() {
-		return fmt.Errorf("%s is a directory", path)
-	}
-	if info.Size() == 0 {
-		return fmt.Errorf("%s is empty", path)
-	}
-	return nil
-}
-
-func requireDirWithFile(path string) error {
-	info, err := os.Stat(path)
-	if err != nil {
-		return err
-	}
-	if !info.IsDir() {
-		return fmt.Errorf("%s is not a directory", path)
-	}
-	hasFile := false
-	err = filepath.WalkDir(path, func(_ string, entry fs.DirEntry, err error) error {
-		if err != nil {
-			return err
-		}
-		if !entry.IsDir() {
-			hasFile = true
-			return filepath.SkipAll
-		}
-		return nil
-	})
-	if err != nil {
-		return err
-	}
-	if !hasFile {
-		return fmt.Errorf("%s contains no files", path)
-	}
-	return nil
-}
-
 func requireEvidenceNamedFiles(path string, requirements []namedEvidenceRequirement) error {
-	if err := requireDirWithFile(path); err != nil {
+	if err := evidencetool.RequireDirWithFile(path); err != nil {
 		return err
 	}
-	files, err := evidenceFileNames(path)
+	files, err := evidencetool.EvidenceFileNames(path)
 	if err != nil {
 		return err
 	}
@@ -897,28 +846,9 @@ func requireEvidenceNamedFiles(path string, requirements []namedEvidenceRequirem
 	return nil
 }
 
-func evidenceFileNames(path string) ([]string, error) {
-	files := []string{}
-	err := filepath.WalkDir(path, func(itemPath string, entry fs.DirEntry, err error) error {
-		if err != nil {
-			return err
-		}
-		if entry.IsDir() {
-			return nil
-		}
-		rel, err := filepath.Rel(path, itemPath)
-		if err != nil {
-			return err
-		}
-		files = append(files, strings.ToLower(filepath.ToSlash(rel)))
-		return nil
-	})
-	return files, err
-}
-
 func evidenceFilesContainAny(files []string, terms []string) bool {
 	for _, file := range files {
-		if containsAny(file, terms) {
+		if evidencetool.ContainsAny(file, terms) {
 			return true
 		}
 	}

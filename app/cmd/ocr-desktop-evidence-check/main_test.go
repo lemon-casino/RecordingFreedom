@@ -11,6 +11,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/lemon-casino/RecordingFreedom/app/internal/evidencetool"
 	"github.com/lemon-casino/RecordingFreedom/app/internal/ocr"
 	"github.com/lemon-casino/RecordingFreedom/app/internal/ocrevidence"
 )
@@ -886,9 +887,9 @@ func writeVisualManifest(t *testing.T, root string, names []string) {
 		if err != nil {
 			t.Fatalf("imageSize(%s) error = %v", path, err)
 		}
-		sum, err := fileSHA256(path)
+		sum, err := evidencetool.FileSHA256(path)
 		if err != nil {
-			t.Fatalf("fileSHA256(%s) error = %v", path, err)
+			t.Fatalf("evidencetool.FileSHA256(%s) error = %v", path, err)
 		}
 		manifest.Files = append(manifest.Files, visualManifestEntry{
 			Path:   filepath.ToSlash(name),

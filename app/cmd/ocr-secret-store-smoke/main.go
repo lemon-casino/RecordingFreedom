@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/lemon-casino/RecordingFreedom/app/internal/appdata"
+	"github.com/lemon-casino/RecordingFreedom/app/internal/evidencetool"
 	secretstore "github.com/lemon-casino/RecordingFreedom/app/internal/secrets"
 )
 
@@ -150,7 +151,7 @@ func run(dataRoot string, evidenceDir string) (smokeReport, error) {
 		RawSecretInDataRoot:  false,
 		ScannedFiles:         scanned,
 	}
-	if err := writeEvidence(report); err != nil {
+	if err := evidencetool.WriteEvidence(report.EvidencePath, report); err != nil {
 		return smokeReport{}, err
 	}
 	return report, nil
@@ -197,17 +198,3 @@ func scanForRawSecret(root string, secret string) (bool, int, error) {
 }
 
 var errRawSecretFound = errors.New("raw secret found")
-
-func writeEvidence(report smokeReport) error {
-	if strings.TrimSpace(report.EvidencePath) == "" {
-		return errors.New("evidence path is required")
-	}
-	if err := os.MkdirAll(filepath.Dir(report.EvidencePath), 0o755); err != nil {
-		return err
-	}
-	data, err := json.MarshalIndent(report, "", "  ")
-	if err != nil {
-		return err
-	}
-	return os.WriteFile(report.EvidencePath, append(data, '\n'), 0o644)
-}

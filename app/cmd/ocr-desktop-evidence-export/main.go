@@ -2,15 +2,10 @@ package main
 
 import (
 	"bufio"
-	"crypto/sha256"
-	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"flag"
 	"fmt"
-	"image"
-	_ "image/jpeg"
-	_ "image/png"
 	"io"
 	"io/fs"
 	"os"
@@ -20,6 +15,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/lemon-casino/RecordingFreedom/app/internal/evidencetool"
 	"github.com/lemon-casino/RecordingFreedom/app/internal/ocr"
 	"github.com/lemon-casino/RecordingFreedom/app/internal/ocrevidence"
 )
@@ -769,11 +765,11 @@ func visualEvidenceEntry(root string, rel string) (visualManifestEntry, error) {
 	if info.IsDir() || info.Size() <= 0 {
 		return visualManifestEntry{}, fmt.Errorf("visual evidence %s is not a non-empty file", rel)
 	}
-	width, height, err := imageSize(path)
+	width, height, err := evidencetool.ImageSize(path)
 	if err != nil {
 		return visualManifestEntry{}, fmt.Errorf("visual evidence %s is not a decodable image: %w", rel, err)
 	}
-	sum, err := fileSHA256(path)
+	sum, err := evidencetool.FileSHA256(path)
 	if err != nil {
 		return visualManifestEntry{}, err
 	}
@@ -889,33 +885,4 @@ func safeEvidenceName(value string) string {
 	}
 	replacer := strings.NewReplacer("\\", "_", "/", "_", ":", "_", "*", "_", "?", "_", "\"", "_", "<", "_", ">", "_", "|", "_")
 	return replacer.Replace(value)
-}
-
-func fileSHA256(path string) (string, error) {
-	file, err := os.Open(path)
-	if err != nil {
-		return "", err
-	}
-	defer file.Close()
-	hash := sha256.New()
-	if _, err := io.Copy(hash, file); err != nil {
-		return "", err
-	}
-	return hex.EncodeToString(hash.Sum(nil)), nil
-}
-
-func imageSize(path string) (int, int, error) {
-	file, err := os.Open(path)
-	if err != nil {
-		return 0, 0, err
-	}
-	defer file.Close()
-	config, _, err := image.DecodeConfig(file)
-	if err != nil {
-		return 0, 0, err
-	}
-	if config.Width <= 0 || config.Height <= 0 {
-		return 0, 0, fmt.Errorf("invalid image dimensions %dx%d", config.Width, config.Height)
-	}
-	return config.Width, config.Height, nil
 }

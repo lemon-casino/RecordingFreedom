@@ -15,6 +15,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/lemon-casino/RecordingFreedom/app/internal/evidencetool"
 	"github.com/lemon-casino/RecordingFreedom/app/internal/ocr"
 )
 
@@ -104,15 +105,15 @@ func main() {
 }
 
 func run(workerPath string, runtimeDir string, modelPackage string, modelID string, evidenceDir string, expectedTexts []string) (smokeReport, error) {
-	workerPath, err := requireFile(workerPath, "-worker-path")
+	workerPath, err := evidencetool.RequireFile(workerPath, "-worker-path")
 	if err != nil {
 		return smokeReport{}, err
 	}
-	runtimeDir, err = requireDir(runtimeDir, "-runtime-dir")
+	runtimeDir, err = evidencetool.RequireDir(runtimeDir, "-runtime-dir")
 	if err != nil {
 		return smokeReport{}, err
 	}
-	modelPackage, err = requirePackagePath(modelPackage, "-model-package")
+	modelPackage, err = evidencetool.RequirePackagePath(modelPackage, "-model-package")
 	if err != nil {
 		return smokeReport{}, err
 	}
@@ -123,7 +124,7 @@ func run(workerPath string, runtimeDir string, modelPackage string, modelID stri
 	if len(expectedTexts) == 0 {
 		expectedTexts = []string{"RecordingFreedom", "文字识别"}
 	}
-	evidenceDir, err = prepareEvidenceDir(evidenceDir)
+	evidenceDir, err = evidencetool.PrepareEvidenceDir(evidenceDir)
 	if err != nil {
 		return smokeReport{}, err
 	}
@@ -180,7 +181,7 @@ func run(workerPath string, runtimeDir string, modelPackage string, modelID stri
 		ExpectedTexts:     expectedTexts,
 		ExpectedTextsSeen: seen,
 	}
-	if err := writeEvidence(report); err != nil {
+	if err := evidencetool.WriteEvidence(report.EvidencePath, report); err != nil {
 		return smokeReport{}, err
 	}
 	return report, nil
@@ -311,77 +312,6 @@ func writeStreamToFile(reader io.Reader, target string, mode os.FileMode) error 
 	return err
 }
 
-func requireFile(path string, flagName string) (string, error) {
-	resolved, err := requirePath(path, flagName)
-	if err != nil {
-		return "", err
-	}
-	info, err := os.Stat(resolved)
-	if err != nil {
-		return "", err
-	}
-	if info.IsDir() {
-		return "", fmt.Errorf("%s must be a file: %s", flagName, resolved)
-	}
-	return resolved, nil
-}
-
-func requireDir(path string, flagName string) (string, error) {
-	resolved, err := requirePath(path, flagName)
-	if err != nil {
-		return "", err
-	}
-	info, err := os.Stat(resolved)
-	if err != nil {
-		return "", err
-	}
-	if !info.IsDir() {
-		return "", fmt.Errorf("%s must be a directory: %s", flagName, resolved)
-	}
-	return resolved, nil
-}
-
-func requirePackagePath(path string, flagName string) (string, error) {
-	resolved, err := requirePath(path, flagName)
-	if err != nil {
-		return "", err
-	}
-	info, err := os.Stat(resolved)
-	if err != nil {
-		return "", err
-	}
-	if info.IsDir() {
-		return resolved, nil
-	}
-	if !strings.EqualFold(filepath.Ext(resolved), ".zip") {
-		return "", fmt.Errorf("%s must be a .zip file or directory: %s", flagName, resolved)
-	}
-	return resolved, nil
-}
-
-func requirePath(path string, flagName string) (string, error) {
-	path = strings.TrimSpace(path)
-	if path == "" {
-		return "", fmt.Errorf("%s is required", flagName)
-	}
-	return filepath.Abs(path)
-}
-
-func prepareEvidenceDir(path string) (string, error) {
-	path = strings.TrimSpace(path)
-	if path == "" {
-		return "", errors.New("evidence dir is required")
-	}
-	resolved, err := filepath.Abs(path)
-	if err != nil {
-		return "", err
-	}
-	if err := os.MkdirAll(resolved, 0o755); err != nil {
-		return "", err
-	}
-	return resolved, nil
-}
-
 func safeRelativePath(path string) bool {
 	path = filepath.Clean(strings.TrimSpace(path))
 	if path == "" || path == "." || filepath.IsAbs(path) {
@@ -415,18 +345,4 @@ func missingExpectedTexts(expectedTexts []string, present []string) []string {
 		}
 	}
 	return missing
-}
-
-func writeEvidence(report smokeReport) error {
-	if strings.TrimSpace(report.EvidencePath) == "" {
-		return errors.New("evidence path is required")
-	}
-	if err := os.MkdirAll(filepath.Dir(report.EvidencePath), 0o755); err != nil {
-		return err
-	}
-	data, err := json.MarshalIndent(report, "", "  ")
-	if err != nil {
-		return err
-	}
-	return os.WriteFile(report.EvidencePath, append(data, '\n'), 0o644)
 }

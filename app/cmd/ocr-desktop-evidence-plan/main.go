@@ -5,15 +5,13 @@ import (
 	"errors"
 	"flag"
 	"fmt"
-	"image"
-	_ "image/jpeg"
-	_ "image/png"
 	"io/fs"
 	"os"
 	"path/filepath"
 	"strings"
 	"time"
 
+	"github.com/lemon-casino/RecordingFreedom/app/internal/evidencetool"
 	"github.com/lemon-casino/RecordingFreedom/app/internal/ocrevidence"
 )
 
@@ -145,7 +143,7 @@ func scanVisualDir(root string) ([]string, []ocrevidence.VisualFileDimension, er
 			return err
 		}
 		rel = strings.ToLower(filepath.ToSlash(rel))
-		width, height, err := imageSize(path)
+		width, height, err := evidencetool.ImageSize(path)
 		if err != nil {
 			return fmt.Errorf("visual evidence %s is not a decodable image: %w", rel, err)
 		}
@@ -174,20 +172,4 @@ func isIgnoredVisualMetadataFile(name string) bool {
 
 func markdownChecklist(report planReport) string {
 	return ocrevidence.MarkdownChecklist(report)
-}
-
-func imageSize(path string) (int, int, error) {
-	file, err := os.Open(path)
-	if err != nil {
-		return 0, 0, err
-	}
-	defer file.Close()
-	config, _, err := image.DecodeConfig(file)
-	if err != nil {
-		return 0, 0, err
-	}
-	if config.Width <= 0 || config.Height <= 0 {
-		return 0, 0, fmt.Errorf("invalid image dimensions %dx%d", config.Width, config.Height)
-	}
-	return config.Width, config.Height, nil
 }

@@ -18,6 +18,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/lemon-casino/RecordingFreedom/app/internal/evidencetool"
 	"github.com/lemon-casino/RecordingFreedom/app/internal/exporter"
 	"github.com/lemon-casino/RecordingFreedom/app/internal/exportplan"
 	"github.com/lemon-casino/RecordingFreedom/app/internal/pip"
@@ -82,9 +83,9 @@ type report struct {
 	Source              recpackage.ManifestSource           `json:"source"`
 	AnnotationTarget    recpackage.ManifestAnnotationTarget `json:"annotationTarget"`
 	TimelineSwitchMs    int64                               `json:"timelineSwitchMs"`
-	RedPixel            sampledPixel                        `json:"redPixel"`
-	GreenPixel          sampledPixel                        `json:"greenPixel"`
-	BackgroundPixel     sampledPixel                        `json:"backgroundPixel"`
+	RedPixel            evidencetool.SampledPixel           `json:"redPixel"`
+	GreenPixel          evidencetool.SampledPixel           `json:"greenPixel"`
+	BackgroundPixel     evidencetool.SampledPixel           `json:"backgroundPixel"`
 	SegmentSamples      []timelineSample                    `json:"segmentSamples,omitempty"`
 	DurationMs          int64                               `json:"durationMs"`
 	KeptDataDir         bool                                `json:"keptDataDir"`
@@ -93,21 +94,13 @@ type report struct {
 }
 
 type timelineSample struct {
-	Segment  int          `json:"segment"`
-	AtMs     int64        `json:"atMs"`
-	Expected sampleColor  `json:"expected"`
-	Pixel    sampledPixel `json:"pixel"`
+	Segment  int                       `json:"segment"`
+	AtMs     int64                     `json:"atMs"`
+	Expected sampleColor               `json:"expected"`
+	Pixel    evidencetool.SampledPixel `json:"pixel"`
 }
 
 type sampleColor struct {
-	R uint8 `json:"r"`
-	G uint8 `json:"g"`
-	B uint8 `json:"b"`
-}
-
-type sampledPixel struct {
-	X int   `json:"x"`
-	Y int   `json:"y"`
 	R uint8 `json:"r"`
 	G uint8 `json:"g"`
 	B uint8 `json:"b"`
@@ -394,7 +387,7 @@ func annotationPNG(width int, height int, fill color.NRGBA) ([]byte, error) {
 	img := image.NewNRGBA(image.Rect(0, 0, width, height))
 	rect := image.Rect(width/10, height/6, width/2, height/2)
 	if rect.Dx() < 8 || rect.Dy() < 8 {
-		rect = image.Rect(4, 4, maxInt(12, width-4), maxInt(12, height-4))
+		rect = image.Rect(4, 4, max(12, width-4), max(12, height-4))
 	}
 	draw.Draw(img, rect, &image.Uniform{C: fill}, image.Point{}, draw.Src)
 	var buffer bytes.Buffer
@@ -522,16 +515,16 @@ func defaultAnnotationSmokeSourceID(sourceType string) string {
 	}
 }
 
-func verifyAnnotationPixels(ffmpegPath string, outputPath string, width int, height int, duration time.Duration, targets []annotationSampleTarget, timeout time.Duration) ([]timelineSample, sampledPixel, error) {
+func verifyAnnotationPixels(ffmpegPath string, outputPath string, width int, height int, duration time.Duration, targets []annotationSampleTarget, timeout time.Duration) ([]timelineSample, evidencetool.SampledPixel, error) {
 	if len(targets) < 2 {
-		return nil, sampledPixel{}, errors.New("at least two annotation samples are required")
+		return nil, evidencetool.SampledPixel{}, errors.New("at least two annotation samples are required")
 	}
-	sampleX := clampInt(width/5, 0, width-1)
-	sampleY := clampInt(height/4, 0, height-1)
-	backgroundX := clampInt(width*4/5, 0, width-1)
-	backgroundY := clampInt(height*3/4, 0, height-1)
+	sampleX := evidencetool.ClampInt(width/5, 0, width-1)
+	sampleY := evidencetool.ClampInt(height/4, 0, height-1)
+	backgroundX := evidencetool.ClampInt(width*4/5, 0, width-1)
+	backgroundY := evidencetool.ClampInt(height*3/4, 0, height-1)
 	samples := make([]timelineSample, 0, len(targets))
-	var background sampledPixel
+	var background evidencetool.SampledPixel
 	for _, target := range targets {
 		if target.At <= 0 || target.At >= duration {
 			return samples, background, fmt.Errorf("invalid annotation sample time segment=%d at=%s duration=%s", target.Segment, target.At, duration)
@@ -540,8 +533,8 @@ func verifyAnnotationPixels(ffmpegPath string, outputPath string, width int, hei
 		if err != nil {
 			return samples, background, err
 		}
-		pixel := pixelAt(frame, width, sampleX, sampleY)
-		background = pixelAt(frame, width, backgroundX, backgroundY)
+		pixel := evidencetool.PixelAt(frame, width, sampleX, sampleY)
+		background = evidencetool.PixelAt(frame, width, backgroundX, backgroundY)
 		sample := timelineSample{
 			Segment: target.Segment,
 			AtMs:    target.At.Milliseconds(),
@@ -584,20 +577,6 @@ func extractRGBFrame(ffmpegPath string, outputPath string, width int, height int
 	return stdout.Bytes(), nil
 }
 
-func pixelAt(frame []byte, width int, x int, y int) sampledPixel {
-	offset := (y*width + x) * 3
-	if offset < 0 || offset+2 >= len(frame) {
-		return sampledPixel{X: x, Y: y}
-	}
-	return sampledPixel{
-		X: x,
-		Y: y,
-		R: frame[offset],
-		G: frame[offset+1],
-		B: frame[offset+2],
-	}
-}
-
 func runFFmpeg(timeout time.Duration, ffmpegPath string, args []string, stdout io.Writer) error {
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
@@ -617,16 +596,6 @@ func runFFmpeg(timeout time.Duration, ffmpegPath string, args []string, stdout i
 		return err
 	}
 	return nil
-}
-
-func clampInt(value int, minimum int, maximum int) int {
-	if value < minimum {
-		return minimum
-	}
-	if value > maximum {
-		return maximum
-	}
-	return value
 }
 
 func buildAnnotationTimeline(duration time.Duration, segments int) annotationTimelineSpec {
@@ -707,27 +676,13 @@ func annotationElementEvent(sequence int, offsetMs int64) string {
 	return string(encoded)
 }
 
-func pixelNearColor(pixel sampledPixel, expected color.NRGBA) bool {
-	return absInt(int(pixel.R)-int(expected.R)) <= sampleColorTolerance &&
-		absInt(int(pixel.G)-int(expected.G)) <= sampleColorTolerance &&
-		absInt(int(pixel.B)-int(expected.B)) <= sampleColorTolerance
-}
-
-func absInt(value int) int {
-	if value < 0 {
-		return -value
-	}
-	return value
+func pixelNearColor(pixel evidencetool.SampledPixel, expected color.NRGBA) bool {
+	return evidencetool.AbsInt(int(pixel.R)-int(expected.R)) <= sampleColorTolerance &&
+		evidencetool.AbsInt(int(pixel.G)-int(expected.G)) <= sampleColorTolerance &&
+		evidencetool.AbsInt(int(pixel.B)-int(expected.B)) <= sampleColorTolerance
 }
 
 func maxInt64(a int64, b int64) int64 {
-	if a > b {
-		return a
-	}
-	return b
-}
-
-func maxInt(a int, b int) int {
 	if a > b {
 		return a
 	}

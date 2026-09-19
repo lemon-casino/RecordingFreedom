@@ -14,6 +14,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/lemon-casino/RecordingFreedom/app/internal/evidencetool"
 	"github.com/lemon-casino/RecordingFreedom/app/internal/exporter"
 	"github.com/lemon-casino/RecordingFreedom/app/internal/exportplan"
 	"github.com/lemon-casino/RecordingFreedom/app/internal/pip"
@@ -33,35 +34,27 @@ const (
 var syntheticPIPColor = sampleColor{R: 253, G: 0, B: 0}
 
 type report struct {
-	OK                  bool            `json:"ok"`
-	Synthetic           bool            `json:"synthetic"`
-	DataDir             string          `json:"dataDir,omitempty"`
-	VideoDir            string          `json:"videoDir"`
-	PackageDir          string          `json:"packageDir"`
-	ManifestPath        string          `json:"manifestPath,omitempty"`
-	OutputPath          string          `json:"outputPath"`
-	OutputBytes         int64           `json:"outputBytes"`
-	OutputVerified      bool            `json:"outputVerified"`
-	PIPPixelVerified    bool            `json:"pipPixelVerified,omitempty"`
-	PIPPixel            sampledPixel    `json:"pipPixel,omitempty"`
-	BackgroundPixel     sampledPixel    `json:"backgroundPixel,omitempty"`
-	ScreenInputPath     string          `json:"screenInputPath"`
-	WebcamInputPath     string          `json:"webcamInputPath,omitempty"`
-	WebcamStartOffsetMs int             `json:"webcamStartOffsetMs,omitempty"`
-	PIPVisible          bool            `json:"pipVisible"`
-	PIPLayout           pip.Placement   `json:"pipLayout"`
-	Warnings            []string        `json:"warnings,omitempty"`
-	DurationMs          int64           `json:"durationMs"`
-	FFmpegPath          string          `json:"ffmpegPath"`
-	Plan                exportplan.Plan `json:"plan"`
-}
-
-type sampledPixel struct {
-	X int   `json:"x"`
-	Y int   `json:"y"`
-	R uint8 `json:"r"`
-	G uint8 `json:"g"`
-	B uint8 `json:"b"`
+	OK                  bool                      `json:"ok"`
+	Synthetic           bool                      `json:"synthetic"`
+	DataDir             string                    `json:"dataDir,omitempty"`
+	VideoDir            string                    `json:"videoDir"`
+	PackageDir          string                    `json:"packageDir"`
+	ManifestPath        string                    `json:"manifestPath,omitempty"`
+	OutputPath          string                    `json:"outputPath"`
+	OutputBytes         int64                     `json:"outputBytes"`
+	OutputVerified      bool                      `json:"outputVerified"`
+	PIPPixelVerified    bool                      `json:"pipPixelVerified,omitempty"`
+	PIPPixel            evidencetool.SampledPixel `json:"pipPixel,omitempty"`
+	BackgroundPixel     evidencetool.SampledPixel `json:"backgroundPixel,omitempty"`
+	ScreenInputPath     string                    `json:"screenInputPath"`
+	WebcamInputPath     string                    `json:"webcamInputPath,omitempty"`
+	WebcamStartOffsetMs int                       `json:"webcamStartOffsetMs,omitempty"`
+	PIPVisible          bool                      `json:"pipVisible"`
+	PIPLayout           pip.Placement             `json:"pipLayout"`
+	Warnings            []string                  `json:"warnings,omitempty"`
+	DurationMs          int64                     `json:"durationMs"`
+	FFmpegPath          string                    `json:"ffmpegPath"`
+	Plan                exportplan.Plan           `json:"plan"`
 }
 
 type sampleColor struct {
@@ -160,8 +153,8 @@ func run(opts options) (report, error) {
 	if err != nil {
 		return report{}, fmt.Errorf("export PIP recording: %w", err)
 	}
-	var pipPixel sampledPixel
-	var background sampledPixel
+	var pipPixel evidencetool.SampledPixel
+	var background evidencetool.SampledPixel
 	pipPixelVerified := false
 	if opts.synthetic {
 		pipPixel, background, err = verifySyntheticPIPPixels(opts.ffmpegPath, exportResult.OutputPath, opts.width, opts.height, plan.PIPLayout, opts.duration, opts.timeout)
@@ -380,35 +373,35 @@ func writeSyntheticManifest(packageDir string, width int, height int, duration t
 	return manifestPath, nil
 }
 
-func verifySyntheticPIPPixels(ffmpegPath string, outputPath string, width int, height int, layout pip.Placement, duration time.Duration, timeout time.Duration) (sampledPixel, sampledPixel, error) {
+func verifySyntheticPIPPixels(ffmpegPath string, outputPath string, width int, height int, layout pip.Placement, duration time.Duration, timeout time.Duration) (evidencetool.SampledPixel, evidencetool.SampledPixel, error) {
 	sampleAt := duration / 2
 	if sampleAt <= 0 {
 		sampleAt = 500 * time.Millisecond
 	}
 	frame, err := extractRGBFrame(ffmpegPath, outputPath, width, height, sampleAt, timeout)
 	if err != nil {
-		return sampledPixel{}, sampledPixel{}, err
+		return evidencetool.SampledPixel{}, evidencetool.SampledPixel{}, err
 	}
 	return verifyPIPPixelsFromFrame(frame, width, height, layout, syntheticPIPColor)
 }
 
-func verifyPIPPixelsFromFrame(frame []byte, width int, height int, layout pip.Placement, expected sampleColor) (sampledPixel, sampledPixel, error) {
+func verifyPIPPixelsFromFrame(frame []byte, width int, height int, layout pip.Placement, expected sampleColor) (evidencetool.SampledPixel, evidencetool.SampledPixel, error) {
 	if width <= 0 || height <= 0 {
-		return sampledPixel{}, sampledPixel{}, fmt.Errorf("invalid frame size %dx%d", width, height)
+		return evidencetool.SampledPixel{}, evidencetool.SampledPixel{}, fmt.Errorf("invalid frame size %dx%d", width, height)
 	}
 	expectedBytes := width * height * 3
 	if len(frame) != expectedBytes {
-		return sampledPixel{}, sampledPixel{}, fmt.Errorf("frame has %d bytes, want %d", len(frame), expectedBytes)
+		return evidencetool.SampledPixel{}, evidencetool.SampledPixel{}, fmt.Errorf("frame has %d bytes, want %d", len(frame), expectedBytes)
 	}
 	if !layout.Visible || !layout.Rect.Visible || layout.Rect.Width <= 0 || layout.Rect.Height <= 0 {
-		return sampledPixel{}, sampledPixel{}, errors.New("PIP layout is not visible")
+		return evidencetool.SampledPixel{}, evidencetool.SampledPixel{}, errors.New("PIP layout is not visible")
 	}
-	pipX := clampInt(layout.Rect.X+layout.Rect.Width/2, 0, width-1)
-	pipY := clampInt(layout.Rect.Y+layout.Rect.Height/2, 0, height-1)
-	backgroundX := clampInt(width/8, 0, width-1)
-	backgroundY := clampInt(height/8, 0, height-1)
-	pipPixel := pixelAt(frame, width, pipX, pipY)
-	background := pixelAt(frame, width, backgroundX, backgroundY)
+	pipX := evidencetool.ClampInt(layout.Rect.X+layout.Rect.Width/2, 0, width-1)
+	pipY := evidencetool.ClampInt(layout.Rect.Y+layout.Rect.Height/2, 0, height-1)
+	backgroundX := evidencetool.ClampInt(width/8, 0, width-1)
+	backgroundY := evidencetool.ClampInt(height/8, 0, height-1)
+	pipPixel := evidencetool.PixelAt(frame, width, pipX, pipY)
+	background := evidencetool.PixelAt(frame, width, backgroundX, backgroundY)
 	if !pixelNearColor(pipPixel, expected) {
 		return pipPixel, background, fmt.Errorf("PIP pixel mismatch at %d,%d: got rgb(%d,%d,%d), want near rgb(%d,%d,%d)", pipPixel.X, pipPixel.Y, pipPixel.R, pipPixel.G, pipPixel.B, expected.R, expected.G, expected.B)
 	}
@@ -439,24 +432,10 @@ func extractRGBFrame(ffmpegPath string, outputPath string, width int, height int
 	return stdout.Bytes(), nil
 }
 
-func pixelAt(frame []byte, width int, x int, y int) sampledPixel {
-	offset := (y*width + x) * 3
-	if offset < 0 || offset+2 >= len(frame) {
-		return sampledPixel{X: x, Y: y}
-	}
-	return sampledPixel{
-		X: x,
-		Y: y,
-		R: frame[offset],
-		G: frame[offset+1],
-		B: frame[offset+2],
-	}
-}
-
-func pixelNearColor(pixel sampledPixel, expected sampleColor) bool {
-	return absInt(int(pixel.R)-int(expected.R)) <= sampleColorTolerance &&
-		absInt(int(pixel.G)-int(expected.G)) <= sampleColorTolerance &&
-		absInt(int(pixel.B)-int(expected.B)) <= sampleColorTolerance
+func pixelNearColor(pixel evidencetool.SampledPixel, expected sampleColor) bool {
+	return evidencetool.AbsInt(int(pixel.R)-int(expected.R)) <= sampleColorTolerance &&
+		evidencetool.AbsInt(int(pixel.G)-int(expected.G)) <= sampleColorTolerance &&
+		evidencetool.AbsInt(int(pixel.B)-int(expected.B)) <= sampleColorTolerance
 }
 
 func runCommand(timeout time.Duration, executable string, args []string, stdout io.Writer) error {
@@ -481,23 +460,6 @@ func runCommand(timeout time.Duration, executable string, args []string, stdout 
 		return err
 	}
 	return nil
-}
-
-func clampInt(value int, minimum int, maximum int) int {
-	if value < minimum {
-		return minimum
-	}
-	if value > maximum {
-		return maximum
-	}
-	return value
-}
-
-func absInt(value int) int {
-	if value < 0 {
-		return -value
-	}
-	return value
 }
 
 func fail(err error) {
