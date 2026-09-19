@@ -11,7 +11,7 @@ import {
   subscribeSettingsChanged,
   type FloatingSelectState } from './services/recorderBackend'
 import {elementHitRegion} from './components/hitRegion'
-import {isThemeGroupOption} from './components/themeOptions'
+import {applyTheme, isThemeGroupOption} from './components/themeOptions'
 
 export default function FloatingSelectWindow() {
   const rootRef = useRef<HTMLElement | null>(null)
@@ -29,7 +29,7 @@ export default function FloatingSelectWindow() {
   }, [])
 
   useEffect(() => {
-    document.documentElement.dataset.theme = theme
+    applyTheme(theme)
   }, [theme])
 
   useEffect(() => {

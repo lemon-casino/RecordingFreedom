@@ -1,3 +1,4 @@
+import {applyTheme} from './components/themeOptions'
 import {useEffect, useRef, useState, type CSSProperties, type PointerEvent as ReactPointerEvent} from 'react'
 import {copyByLocale} from './i18n'
 import {clampNumber, normalizeLocale, normalizePipConfig, normalizeTheme, pipMaximumScale, type LocaleCode, type PIPConfig, type PIPShape, type ThemeCode} from './services/mockBackend'
@@ -177,7 +178,7 @@ function PIPOverlayWindow() {
   }), [])
 
   useEffect(() => {
-    document.documentElement.dataset.theme = overlayTheme
+    applyTheme(overlayTheme)
   }, [overlayTheme])
 
   useEffect(() => {

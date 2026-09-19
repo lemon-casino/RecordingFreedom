@@ -1,3 +1,4 @@
+import {applyTheme} from './components/themeOptions'
 import {useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type RefObject} from 'react'
 import {Copy as CopyIcon, Eye, FileText, Image as ImageIcon, Languages, Lock, Pin, X} from 'lucide-react'
 import {OcrPositionTextLayer, ocrBlockPolygonPoints, ocrBlockStableId} from './components/ocr/OcrPositionTextLayer'
@@ -168,7 +169,7 @@ function ScreenshotPinWindow() {
 
   useEffect(() => {
     document.documentElement.lang = locale
-    document.documentElement.dataset.theme = theme
+    applyTheme(theme)
   }, [locale, theme])
 
   useEffect(() => {

@@ -1,3 +1,4 @@
+import {applyTheme} from './components/themeOptions'
 import {useCallback, useEffect, useRef, useState, type PointerEvent as ReactPointerEvent} from 'react'
 import {Check, MousePointer2, X} from 'lucide-react'
 import {copyByLocale} from './i18n'
@@ -254,7 +255,7 @@ function RegionOverlayWindow() {
   }), [])
 
   useEffect(() => {
-    document.documentElement.dataset.theme = overlayTheme
+    applyTheme(overlayTheme)
   }, [overlayTheme])
 
   useEffect(() => {

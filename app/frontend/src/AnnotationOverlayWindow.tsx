@@ -1,3 +1,4 @@
+import {applyTheme} from './components/themeOptions'
 import {
   ArrowUpRight,
   Check,
@@ -291,7 +292,7 @@ function AnnotationOverlayWindow() {
 
   useEffect(() => {
     document.documentElement.lang = locale
-    document.documentElement.dataset.theme = theme
+    applyTheme(theme)
   }, [locale, theme])
 
   useEffect(() => {

@@ -1,3 +1,4 @@
+import {applyTheme} from './components/themeOptions'
 import {
   ArrowUpRight,
   Check,
@@ -146,7 +147,7 @@ function WhiteboardWindow() {
   }, [locale])
 
   useEffect(() => {
-    document.documentElement.dataset.theme = theme
+    applyTheme(theme)
   }, [theme])
 
   useEffect(() => {

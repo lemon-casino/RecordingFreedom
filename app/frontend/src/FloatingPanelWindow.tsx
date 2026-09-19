@@ -9,7 +9,7 @@ import {elementHitRegion} from './components/hitRegion'
 import {SourceSelectionMessageState, StorageMessageState, audioOnlySourceMeta, countdownOptions, ensureVisiblePipConfig, floatingPanelOcrResultExpandedSize, floatingPanelOcrResultSize, floatingPanelSizes, formatPipScalePercent, formatSourceSelectionMessage, formatStorageMessage, formatStorageStatusValue, fpsOptions, isUsableCameraDevice, mediaDeviceName, normalizeRecordingQuality, pipPresetOptions, pipShapeOptions, recordingQualityOptions, selectVisibleInitialSource, sourceName, storageStatusDetail, storageStatusForBadge} from './components/panelShared'
 import {screenshotOcrBusy} from './components/screenshotShared'
 import {joinDisplayPath} from './components/panelShared'
-import {themeSelectOptions} from './components/themeOptions'
+import {applyTheme, themeSelectOptions} from './components/themeOptions'
 import {AppDataInfo, AppStorageStatus, CaptureSource, MediaDevice, MediaInventory, RecordingMode, ScreenshotItem, ShortcutAction, cameraDevices, fallbackAppData, fallbackStorageStatus, localeOptions, pipMaximumScale, pipMinimumScale, shortcutActions, sources, systemAudioDevices} from './services/mockBackend'
 import {AudioControlState, AudioLevelUpdate, AudioStatePatch, FloatingPanelState, OcrResult, SettingsPreferencesPatch, ShortcutSettingsPatch, SourceControlState, subscribeAudioLevel, subscribeAudioState, subscribeFloatingPanelChanged, subscribeOcrJobEvents, subscribeRecordingStatus, subscribeRegionSelection, subscribeScreenshotCaptured, subscribeScreenshotHistoryChanged, subscribeSettingsChanged, subscribeSourceStateChanged} from './services/recorderBackend'
 import {AppWindow, Check, ChevronDown, ChevronLeft, CircleDot, Crosshair, Globe2, History, ImageIcon, Maximize2, PenLine, ScrollText, Square, Video, Volume2} from 'lucide-react'
@@ -134,7 +134,7 @@ function FloatingPanelWindow() {
 
   useEffect(() => {
     document.documentElement.lang = locale
-    document.documentElement.dataset.theme = theme
+    applyTheme(theme)
   }, [locale, theme])
 
   useEffect(() => {

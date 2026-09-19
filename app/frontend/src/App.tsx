@@ -79,13 +79,15 @@ import {
  
   fallbackCapabilities,
   fallbackStorageStatus } from './services/mockBackend'
-import {captureScreenshot, deleteScreenshotItem, exportRecordingPackage, getFloatingPanelState, getSourceState, hideAnnotationOverlay, hideCapsuleWindow, hideFloatingPanel, hidePipOverlay, hideRegionFrame, hideScreenIndicator, hideSettingsWindow, hideWhiteboardWindow, isWailsDesktopRuntime, listScreenshots, loadBootstrap, loadSettings, logClientEvent, minimizeApplication, openOcrResult, openRecordingPackage, openScreenshotDirectory, openScreenshotInWhiteboard, openVideoDirectory, patchAudioState, patchCameraState, patchScreenshotItem, patchSettingsPreferences, patchShortcutSettings, patchSourceState, patchWhiteboardSettings, pauseRecording, preflightAudioOnlyRecording, preflightRecording, previewExportRecordingPackage, queueRecognizeScreenshot, quitApplication, recoverRecordingPackage, restoreCapsuleWindow, resumeRecording, saveSettings, setCapsuleWindowExpanded, setCapsuleWindowHitRegions, setDataRoot, showAnnotationOverlay, showAnnotationRegionSelector, showFloatingPanel, showPinnedScreenshot, showPipOverlay, showRegionSelector, showScreenIndicator, showScreenshotRegionSelector, showWhiteboardWindow, snapCapsuleWindowToEdge, startAudioOnlyRecording, startMicrophoneLevelMonitor, startRecording, startScrollingScreenshot, stopMicrophoneLevelMonitor, stopRecording, subscribeAudioLevel, subscribeAudioState, subscribeCapsuleDockSide, subscribeCapsuleWindowMoveEnded, subscribeFloatingPanelChanged, subscribeOcrJobEvents, subscribeRecordingStatus, subscribeRegionSelection, subscribeScreenshotCaptured, subscribeScreenshotHistoryChanged, subscribeSettingsChanged, subscribeShortcutTriggered, subscribeSourceStateChanged, subscribeWhiteboardVisibility, updatePipOverlay, type AudioControlState, type AudioLevelUpdate, type AudioStatePatch, type CapsuleWindowDockSide, type CapsuleWindowExpandDirection, type CapsuleWindowHitRegion, type FloatingPanelKind, type FloatingPanelState, type PIPOverlayCamera, type RecordingExportPlan, type RecordingRecovery, type RecordingStatusUpdate, type SettingsPreferencesPatch, type ShortcutSettingsPatch, type SourceControlState, type WhiteboardSettingsPatch, type WhiteboardVisibilityUpdate} from './services/recorderBackend'
+import {captureScreenshot, deleteScreenshotItem, exportRecordingPackage, getFloatingPanelState, getSourceState, hideAnnotationOverlay, hideCapsuleWindow, hideFloatingPanel, hidePipOverlay, hideRegionFrame, hideScreenIndicator, hideSettingsWindow, hideWhiteboardWindow, isWailsDesktopRuntime, listScreenshots, loadBootstrap, loadSettings, logClientEvent, minimizeApplication, openOcrResult, openRecordingPackage, openScreenshotDirectory, openScreenshotInWhiteboard, openVideoDirectory, patchAudioState, patchCameraState, patchScreenshotItem, patchSettingsPreferences, patchShortcutSettings, patchSourceState, patchWhiteboardSettings, pauseRecording, preflightAudioOnlyRecording, preflightRecording, previewExportRecordingPackage, queueRecognizeScreenshot, quitApplication, recoverRecordingPackage, restoreCapsuleWindow, resumeRecording, saveSettings, setCapsuleWindowExpanded, setCapsuleWindowHitRegions, setDataRoot, showAnnotationOverlay, showAnnotationRegionSelector, showFloatingPanel, showPinnedScreenshot, showPipOverlay, showRegionSelector, showScreenIndicator, showScreenshotRegionSelector, showWhiteboardWindow, snapCapsuleWindowToEdge, startAudioOnlyRecording, startRecording, startScrollingScreenshot, stopMicrophoneLevelMonitor, stopRecording, subscribeAudioState, subscribeCapsuleDockSide, subscribeCapsuleWindowMoveEnded, subscribeFloatingPanelChanged, subscribeOcrJobEvents, subscribeRecordingStatus, subscribeRegionSelection, subscribeScreenshotCaptured, subscribeScreenshotHistoryChanged, subscribeSettingsChanged, subscribeShortcutTriggered, subscribeSourceStateChanged, subscribeWhiteboardVisibility, updatePipOverlay, type AudioControlState, type AudioStatePatch, type CapsuleWindowDockSide, type CapsuleWindowExpandDirection, type CapsuleWindowHitRegion, type FloatingPanelKind, type FloatingPanelState, type PIPOverlayCamera, type RecordingExportPlan, type RecordingRecovery, type RecordingStatusUpdate, type SettingsPreferencesPatch, type ShortcutSettingsPatch, type SourceControlState, type WhiteboardSettingsPatch, type WhiteboardVisibilityUpdate} from './services/recorderBackend'
 import {resolveFloatingPanelPlacement} from './components/floating/floatingPosition'
 import {elementHitRegion} from './components/hitRegion'
-import {formatTime, isRecordingPackagePath, packageDisplayName} from './components/panelShared'
-import {themeSelectOptions} from './components/themeOptions'
+import {isRecordingPackagePath, packageDisplayName} from './components/panelShared'
+import {applyTheme, themeSelectOptions} from './components/themeOptions'
 import {copyOcrResultText, translateAndCopyOcrResultText} from './components/screenshotShared'
 import {readableError} from './services/recorderBackend'
+import {MicMeter} from './components/MicMeter'
+import {RecordingClock} from './components/RecordingClock'
 import {ocrPanelContext} from './components/floating/ocrResultPanel'
 import {} from './utils/clipboard'
 
@@ -253,7 +255,7 @@ function App() {
   const [closeBusy, setCloseBusy] = useState(false)
   const [recordingMode, setRecordingMode] = useState<RecordingMode>('video')
   const [state, setState] = useState<RecordingState>('idle')
-  const [elapsed, setElapsed] = useState(0)
+  const [clockEpoch, setClockEpoch] = useState(0)
   const [countdownRemaining, setCountdownRemaining] = useState(0)
   const [recordingQuality, setRecordingQuality] = useState<RecordingQuality>('balanced')
   const [recordingFPS, setRecordingFPS] = useState(30)
@@ -266,10 +268,6 @@ function App() {
   const [noiseSuppression, setNoiseSuppression] = useState(false)
   const [availableMicrophones, setAvailableMicrophones] = useState<MediaDevice[]>([])
   const [selectedMic, setSelectedMic] = useState('')
-  const [micLevel, setMicLevel] = useState(0)
-  const [micPeak, setMicPeak] = useState(0)
-  const [micMonitorActive, setMicMonitorActive] = useState(false)
-  const [micMonitorError, setMicMonitorError] = useState<string | null>(null)
   const [camera, setCamera] = useState(false)
   const [availableCameras, setAvailableCameras] = useState<MediaDevice[]>(cameraDevices)
   const [selectedCamera, setSelectedCamera] = useState(cameraDevices[0].id)
@@ -530,22 +528,6 @@ function App() {
     : camera
       ? copy.panels.cameraEnabled
       : copy.panels.cameraOff
-  const micMonitorStatusText = micMonitorError
-    ? copy.panels.microphoneLevelError
-    : !microphone
-      ? copy.panels.microphoneLevelOff
-      : selectedMicrophoneDevice?.available === false || !hasAvailableMicrophone
-        ? copy.panels.microphoneLevelUnavailable
-        : micMonitorActive
-          ? copy.panels.microphoneLevelLive
-          : copy.panels.microphoneLevelWaiting
-  const micMeterLevel = microphone && micMonitorActive ? micLevel : 0
-  const micMeterBars = useMemo(() => Array.from({length: 18}, (_, index) => {
-    const threshold = (index + 1) / 18
-    const active = micMeterLevel >= threshold
-    const height = active ? Math.max(14, Math.min(100, micMeterLevel * 100 + index * 0.9)) : 8
-    return {active, height: `${height}%`}
-  }), [micMeterLevel])
   const canOpenLastPackage = isRecordingPackagePath(lastPackage) && lastPackage !== previewPackagePath
   const lastPackageName = canOpenLastPackage ? packageDisplayName(lastPackage) : copy.settings.noRecordingPackage
   const exportPlanValue = exportPlanBusy
@@ -709,7 +691,7 @@ function App() {
     setState(nextStatus)
     if (update.status !== 'preparing') setCountdownRemaining(0)
     if (nextStatus === 'idle' || nextStatus === 'ready' || nextStatus === 'failed') {
-      setElapsed(0)
+      setClockEpoch((value) => value + 1)
     }
     if (!isSettingsWindow && !isFloatingPanelWindow && (nextStatus === 'ready' || nextStatus === 'failed')) {
       void restoreCapsuleWindow(false)
@@ -947,12 +929,6 @@ function App() {
       selectedMicRef.current = audio.microphoneDeviceId
       setSelectedMic(audio.microphoneDeviceId)
     }
-    if (!audio.microphone) {
-      setMicMonitorError(null)
-      setMicMonitorActive(false)
-      setMicLevel(0)
-      setMicPeak(0)
-    }
     mergeAudioIntoSettingsCache(audio)
   }
   const optimisticAudioState = (patch: AudioStatePatch): AudioControlState => {
@@ -1122,7 +1098,7 @@ function App() {
   }, [locale])
 
   useEffect(() => {
-    document.documentElement.dataset.theme = theme
+    applyTheme(theme)
   }, [theme])
 
   useEffect(() => {
@@ -1277,22 +1253,6 @@ function App() {
         nativeId: sourceState.sourceGeometry.nativeId }
     })
   }
-
-  useEffect(() => subscribeAudioLevel((update: AudioLevelUpdate) => {
-    const currentMic = selectedMicRef.current
-    if (update.deviceId && currentMic && update.deviceId !== currentMic) return
-    if (update.error) {
-      setMicMonitorError(update.error)
-      setMicMonitorActive(false)
-      setMicLevel(0)
-      setMicPeak(0)
-      return
-    }
-    setMicMonitorError(null)
-    setMicMonitorActive(update.active)
-    setMicLevel(update.active ? update.level : 0)
-    setMicPeak(update.active ? update.peak : 0)
-  }), [])
 
   useLayoutEffect(() => {
     if (isSettingsWindow || isFloatingPanelWindow) return
@@ -1591,40 +1551,6 @@ function App() {
     }
   }, [activePanel, recordingConfigLocked])
 
-  useEffect(() => {
-    if (isSettingsWindow) return
-    const shouldMonitor = activePanel === 'audio' &&
-      microphone &&
-      !isRecording &&
-      selectedMic !== '' &&
-      selectedMicrophoneDevice?.available !== false &&
-      hasAvailableMicrophone
-    if (!shouldMonitor) {
-      setMicMonitorActive(false)
-      setMicLevel(0)
-      setMicPeak(0)
-      void stopMicrophoneLevelMonitor()
-      return
-    }
-
-    let cancelled = false
-    setMicMonitorError(null)
-    void startMicrophoneLevelMonitor(selectedMic)
-      .then(() => {
-        if (!cancelled) setMicMonitorActive(true)
-      })
-      .catch((error) => {
-        if (cancelled) return
-        setMicMonitorError(readableError(error))
-        setMicMonitorActive(false)
-        setMicLevel(0)
-        setMicPeak(0)
-      })
-    return () => {
-      cancelled = true
-      void stopMicrophoneLevelMonitor()
-    }
-  }, [activePanel, hasAvailableMicrophone, isRecording, isSettingsWindow, microphone, selectedMic, selectedMicrophoneDevice?.available])
 
   useEffect(() => {
     let cancelled = false
@@ -1664,14 +1590,6 @@ function App() {
     }, 300)
     return () => window.clearTimeout(saveTimer)
   }, [settingsAutosaveKey, settingsLoaded])
-
-  useEffect(() => {
-    if (state !== 'recording') {
-      return
-    }
-    const timer = window.setInterval(() => setElapsed((value) => value + 1), 1000)
-    return () => window.clearInterval(timer)
-  }, [state])
 
   useEffect(() => () => {
     countdownTokenRef.current += 1
@@ -1879,7 +1797,6 @@ function App() {
     return copy.statusChips[state] ?? copy.statusChips.idle
   }, [copy, state])
   const timeChipLabel = countdownRemaining > 0 && state === 'preparing' ? copy.settings.countdown : statusLabel
-  const timeChipValue = countdownRemaining > 0 && state === 'preparing' ? formatTime(countdownRemaining) : formatTime(elapsed)
 
   const currentRecordingProfile = () => ({
     quality: recordingQuality,
@@ -1977,7 +1894,7 @@ function App() {
     setActivePanel(null)
     setSettingsOpen(false)
     void hideFloatingPanel()
-    setElapsed(0)
+    setClockEpoch((value) => value + 1)
     setState('preparing')
     try {
       if (recordingMode === 'audio') {
@@ -2906,7 +2823,7 @@ function App() {
           <div className="time-chip" aria-live="polite">
             <span className={`status-dot ${state}`} />
             <strong>{timeChipLabel}</strong>
-            <span>{timeChipValue}</span>
+            <RecordingClock active={state === 'recording'} epoch={clockEpoch} countdown={countdownRemaining > 0 && state === 'preparing' ? countdownRemaining : null} />
           </div>
 
           <button
@@ -3130,19 +3047,7 @@ function App() {
                     : availableMicrophones.map((device) => ({value: device.id, label: mediaDeviceName(device, copy), disabled: device.available === false}))}
                   onChange={(value) => commitAudioStatePatch({microphoneDeviceId: value})}
                 />
-                <div
-                  className={`meter ${micMonitorActive ? 'live' : ''} ${micMonitorError ? 'error' : ''}`}
-                  aria-label={copy.aria.microphoneLevel}
-                  title={micMonitorError ?? micMonitorStatusText}
-                >
-                  {micMeterBars.map((bar, index) => (
-                    <span key={index} className={bar.active ? 'active' : ''} style={{height: bar.height}} />
-                  ))}
-                </div>
-                <div className="meter-status">
-                  <span>{micMonitorStatusText}</span>
-                  <b>{Math.round(micPeak * 100)}%</b>
-                </div>
+                <MicMeter copy={copy} microphone={microphone} deviceId={selectedMic} deviceAvailable={selectedMicrophoneDevice?.available !== false} hasAvailableDevice={hasAvailableMicrophone} isRecording={isRecording} />
               </div>
             )}
 
