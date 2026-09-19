@@ -23,7 +23,7 @@ func TestDirectShowCameraInputArgsUseNativeDeviceName(t *testing.T) {
 	if !slices.Contains(args.Args, "video=Integrated Camera") {
 		t.Fatalf("args = %#v, want native DirectShow camera name", args)
 	}
-	if args.PreviewImagePath != filepath.Join("cache", "pip-camera-preview.jpg") || args.PreviewImageFPS != 8 || args.PreviewImageWidth != 360 {
+	if args.PreviewImagePath != filepath.Join("cache", "pip-camera-preview.jpg") || args.PreviewImageFPS != 4 || args.PreviewImageWidth != 360 {
 		t.Fatalf("preview image spec = path:%q fps:%d width:%d", args.PreviewImagePath, args.PreviewImageFPS, args.PreviewImageWidth)
 	}
 }

@@ -201,7 +201,6 @@ func ffmpegAudioMuxArgs(videoPath string, inputs []AudioMuxInput, outputPath str
 		"-ar", "48000",
 		"-ac", "2",
 		"-shortest",
-		"-movflags", "+faststart",
 		outputPath,
 	)
 	return args

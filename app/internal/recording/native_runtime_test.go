@@ -3,6 +3,7 @@ package recording
 import (
 	"context"
 	"errors"
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -545,6 +546,7 @@ func TestNativeBackendRuntimeBuildsSyncDiagnosticsFromMediaDiagnostics(t *testin
 
 type fakeNativeAudioSession struct {
 	startErr    error
+	stopErr     error
 	started     int
 	paused      int
 	resumed     int
@@ -569,7 +571,7 @@ func (s *fakeNativeAudioSession) Resume() error {
 
 func (s *fakeNativeAudioSession) Stop() error {
 	s.stopped++
-	return nil
+	return s.stopErr
 }
 
 func (s *fakeNativeAudioSession) Diagnostics() audio.Diagnostics {
@@ -640,6 +642,178 @@ func (s *fakeNativeCameraSession) Stop() error {
 
 func (s *fakeNativeCameraSession) Diagnostics() video.TrackDiagnostics {
 	return s.diagnostics
+}
+
+type fakeAudioFinalizeVideoSession struct {
+	fakeNativeVideoSession
+	audioSession      *fakeNativeAudioSession
+	armedInputs       []video.AudioMuxInput
+	armCount          int
+	audioStoppedOnArm bool
+}
+
+func (s *fakeAudioFinalizeVideoSession) SetFinalizeAudioInputs(inputs []video.AudioMuxInput) {
+	s.armCount++
+	s.armedInputs = append([]video.AudioMuxInput(nil), inputs...)
+	if s.audioSession != nil {
+		s.audioStoppedOnArm = s.audioSession.stopped > 0
+	}
+}
+
+func TestNativeBackendRuntimeArmsVideoFinalizeAudioWithReadableSidecars(t *testing.T) {
+	audioSession := &fakeNativeAudioSession{}
+	videoSession := &fakeAudioFinalizeVideoSession{audioSession: audioSession}
+	var postStopRuntime *NativeBackendRuntime
+	runtime, err := NewNativeBackendRuntime(recpackage.NewService(), BackendFFmpegDesktopCapture, BackendStartRequest{
+		VideoDir:  t.TempDir(),
+		CreatedAt: time.Now(),
+		StartRequest: StartRequest{
+			SourceID:   "screen:primary",
+			SourceType: SourceScreen,
+			Audio: AudioRequest{
+				System:         true,
+				SystemDeviceID: "system-audio:default",
+				Microphone:     true,
+				MicrophoneID:   "microphone:default",
+			},
+		},
+	}, NativeBackendRuntimeOptions{
+		VideoSessionFactory: func(video.CaptureConfig) (NativeVideoSession, error) {
+			return videoSession, nil
+		},
+		AudioSessionFactory: func(audio.CaptureConfig, audio.NoiseSuppressor) (NativeAudioSession, error) {
+			return audioSession, nil
+		},
+		PostStopProcessor: func(candidate *NativeBackendRuntime) error {
+			postStopRuntime = candidate
+			return nil
+		},
+	})
+	if err != nil {
+		t.Fatalf("NewNativeBackendRuntime() error = %v", err)
+	}
+	for _, path := range []string{runtime.Plan.SystemAudioPath, runtime.Plan.MicrophoneAudioPath} {
+		if err := os.WriteFile(path, make([]byte, 512), 0o644); err != nil {
+			t.Fatalf("WriteFile(%s) error = %v", path, err)
+		}
+	}
+
+	if err := runtime.Start(context.Background()); err != nil {
+		t.Fatalf("Start() error = %v", err)
+	}
+	if err := runtime.Stop(); err != nil {
+		t.Fatalf("Stop() error = %v", err)
+	}
+
+	if videoSession.armCount != 1 {
+		t.Fatalf("SetFinalizeAudioInputs call count = %d, want 1", videoSession.armCount)
+	}
+	if len(videoSession.armedInputs) != 2 ||
+		videoSession.armedInputs[0].Path != runtime.Plan.SystemAudioPath || videoSession.armedInputs[0].Label != "system" ||
+		videoSession.armedInputs[1].Path != runtime.Plan.MicrophoneAudioPath || videoSession.armedInputs[1].Label != "microphone" {
+		t.Fatalf("armed inputs = %#v, want system then microphone sidecars", videoSession.armedInputs)
+	}
+	if !videoSession.audioStoppedOnArm {
+		t.Fatal("SetFinalizeAudioInputs ran before StopAudio; sidecar headers would not be final")
+	}
+	if postStopRuntime == nil {
+		t.Fatal("post-stop processor was not invoked")
+	}
+	if postStopRuntime.videoFinalizeAudio == nil || !postStopRuntime.videoFinalizeAudio.MuxSystem || !postStopRuntime.videoFinalizeAudio.MuxMicrophone {
+		t.Fatalf("videoFinalizeAudio plan = %#v, want both sidecars marked muxed", postStopRuntime.videoFinalizeAudio)
+	}
+}
+
+func TestNativeBackendRuntimeDoesNotArmVideoFinalizeAudioWithoutSidecars(t *testing.T) {
+	videoSession := &fakeAudioFinalizeVideoSession{}
+	postStopCalls := 0
+	runtime, err := NewNativeBackendRuntime(recpackage.NewService(), BackendFFmpegDesktopCapture, BackendStartRequest{
+		VideoDir:  t.TempDir(),
+		CreatedAt: time.Now(),
+		StartRequest: StartRequest{
+			SourceID:   "screen:primary",
+			SourceType: SourceScreen,
+			Audio: AudioRequest{
+				System:         true,
+				SystemDeviceID: "system-audio:default",
+			},
+		},
+	}, NativeBackendRuntimeOptions{
+		VideoSessionFactory: func(video.CaptureConfig) (NativeVideoSession, error) {
+			return videoSession, nil
+		},
+		AudioSessionFactory: func(audio.CaptureConfig, audio.NoiseSuppressor) (NativeAudioSession, error) {
+			return &fakeNativeAudioSession{}, nil
+		},
+		PostStopProcessor: func(*NativeBackendRuntime) error {
+			postStopCalls++
+			return nil
+		},
+	})
+	if err != nil {
+		t.Fatalf("NewNativeBackendRuntime() error = %v", err)
+	}
+
+	if err := runtime.Start(context.Background()); err != nil {
+		t.Fatalf("Start() error = %v", err)
+	}
+	if err := runtime.Stop(); err != nil {
+		t.Fatalf("Stop() error = %v", err)
+	}
+
+	if videoSession.armCount != 0 {
+		t.Fatalf("SetFinalizeAudioInputs call count = %d, want 0 without readable sidecars", videoSession.armCount)
+	}
+	if runtime.videoFinalizeAudio != nil {
+		t.Fatalf("videoFinalizeAudio plan = %#v, want nil without readable sidecars", runtime.videoFinalizeAudio)
+	}
+	if postStopCalls != 1 {
+		t.Fatalf("post-stop processor calls = %d, want 1", postStopCalls)
+	}
+}
+
+func TestNativeBackendRuntimeArmsVideoFinalizeAudioEvenWhenStopAudioFails(t *testing.T) {
+	audioSession := &fakeNativeAudioSession{stopErr: errors.New("audio stop failed")}
+	videoSession := &fakeAudioFinalizeVideoSession{}
+	runtime, err := NewNativeBackendRuntime(recpackage.NewService(), BackendFFmpegDesktopCapture, BackendStartRequest{
+		VideoDir:  t.TempDir(),
+		CreatedAt: time.Now(),
+		StartRequest: StartRequest{
+			SourceID:   "screen:primary",
+			SourceType: SourceScreen,
+			Audio: AudioRequest{
+				System:         true,
+				SystemDeviceID: "system-audio:default",
+			},
+		},
+	}, NativeBackendRuntimeOptions{
+		VideoSessionFactory: func(video.CaptureConfig) (NativeVideoSession, error) {
+			return videoSession, nil
+		},
+		AudioSessionFactory: func(audio.CaptureConfig, audio.NoiseSuppressor) (NativeAudioSession, error) {
+			return audioSession, nil
+		},
+	})
+	if err != nil {
+		t.Fatalf("NewNativeBackendRuntime() error = %v", err)
+	}
+	if err := os.WriteFile(runtime.Plan.SystemAudioPath, make([]byte, 512), 0o644); err != nil {
+		t.Fatalf("WriteFile(%s) error = %v", runtime.Plan.SystemAudioPath, err)
+	}
+
+	if err := runtime.Start(context.Background()); err != nil {
+		t.Fatalf("Start() error = %v", err)
+	}
+	err = runtime.Stop()
+	if err == nil || !strings.Contains(err.Error(), "audio stop failed") {
+		t.Fatalf("Stop() error = %v, want the audio stop failure to propagate", err)
+	}
+	if videoSession.armCount != 1 {
+		t.Fatalf("SetFinalizeAudioInputs call count = %d, want 1 despite the audio stop failure", videoSession.armCount)
+	}
+	if runtime.videoFinalizeAudio == nil || !runtime.videoFinalizeAudio.MuxSystem || runtime.videoFinalizeAudio.MuxMicrophone {
+		t.Fatalf("videoFinalizeAudio plan = %#v, want only the system sidecar armed", runtime.videoFinalizeAudio)
+	}
 }
 
 type fakeNoiseSuppressor struct {

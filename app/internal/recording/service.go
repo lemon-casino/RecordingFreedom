@@ -4,6 +4,9 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io/fs"
+	"os"
+	"path/filepath"
 	"strings"
 	"sync"
 	"time"
@@ -362,6 +365,8 @@ func (s *Service) Stop() (Session, error) {
 		return *s.session, err
 	}
 
+	s.cleanupReadyPackageCache(s.session.PackageDir, s.session.Manifest)
+
 	s.state = StateReady
 	s.session.Status = StateReady
 	s.session.CompletedAt = completed
@@ -451,4 +456,58 @@ func recpackageStatus(state State) string {
 	default:
 		return string(state)
 	}
+}
+
+// ffmpegVideoCacheSubdir mirrors the FFmpeg segment cache layout a desktop
+// session writes under the package cache dir (video: cache/ffmpeg-video/<output>).
+const ffmpegVideoCacheSubdir = "ffmpeg-video"
+
+// cleanupReadyPackageCache reclaims disk a ready package no longer needs:
+// the cached FFmpeg segments (only crash recovery reads them, and ready is
+// not a recoverable state), the recovery concat list, and mux temp files a
+// killed process may have left behind. Best effort: failures are recorded in
+// the manifest diagnostics message and never block the ready transition.
+func (s *Service) cleanupReadyPackageCache(packageDir string, manifestPath string) {
+	var failures []string
+	if err := os.RemoveAll(filepath.Join(packageDir, recpackage.CacheDir, ffmpegVideoCacheSubdir)); err != nil {
+		failures = append(failures, "segment cache: "+err.Error())
+	}
+	for _, name := range []string{"recovery-segments.txt"} {
+		if err := os.Remove(filepath.Join(packageDir, name)); err != nil && !errors.Is(err, fs.ErrNotExist) {
+			failures = append(failures, name+": "+err.Error())
+		}
+	}
+	for _, pattern := range []string{".screen-audio-mux-*", ".audio-only-mux-*", ".finalize-*"} {
+		matches, err := filepath.Glob(filepath.Join(packageDir, pattern))
+		if err != nil {
+			failures = append(failures, pattern+": "+err.Error())
+			continue
+		}
+		for _, match := range matches {
+			if err := os.Remove(match); err != nil && !errors.Is(err, fs.ErrNotExist) {
+				failures = append(failures, filepath.Base(match)+": "+err.Error())
+			}
+		}
+	}
+	if len(failures) == 0 {
+		return
+	}
+	s.noteCleanupFailures(manifestPath, failures)
+}
+
+// noteCleanupFailures appends the cleanup failures to the package manifest's
+// diagnostics message. Best effort: an unreadable or invalid manifest keeps
+// the ready transition untouched.
+func (s *Service) noteCleanupFailures(manifestPath string, failures []string) {
+	manifest, err := s.packages.ReadManifest(manifestPath)
+	if err != nil {
+		return
+	}
+	note := "package cache cleanup failed: " + strings.Join(failures, "; ")
+	if existing := strings.TrimSpace(manifest.Diagnostics.Message); existing != "" {
+		manifest.Diagnostics.Message = existing + "; " + note
+	} else {
+		manifest.Diagnostics.Message = note
+	}
+	_ = s.packages.WriteManifest(manifestPath, manifest)
 }

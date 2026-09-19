@@ -22,7 +22,7 @@ func TestAVFoundationCameraInputArgsUseNativeIndex(t *testing.T) {
 	if !slices.Contains(args.Args, "0:none") {
 		t.Fatalf("args = %#v, want AVFoundation video index with no audio", args)
 	}
-	if args.PreviewImagePath != previewPath || args.PreviewImageFPS != 8 || args.PreviewImageWidth != 360 {
+	if args.PreviewImagePath != previewPath || args.PreviewImageFPS != 4 || args.PreviewImageWidth != 360 {
 		t.Fatalf("preview image spec = path:%q fps:%d width:%d", args.PreviewImagePath, args.PreviewImageFPS, args.PreviewImageWidth)
 	}
 }

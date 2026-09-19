@@ -53,7 +53,7 @@ func v4l2CameraInputArgs(camera CameraCaptureConfig) ffmpegInputArgsBuilder {
 			},
 			Engine:            "v4l2-camera",
 			PreviewImagePath:  camera.PreviewImagePath,
-			PreviewImageFPS:   8,
+			PreviewImageFPS:   4,
 			PreviewImageWidth: 360,
 		}, nil
 	}

@@ -76,15 +76,7 @@ func concatSegments(ffmpegPath string, outputPath string, segments []string) err
 	if err != nil {
 		return err
 	}
-	args := []string{
-		"-hide_banner", "-loglevel", "warning", "-y",
-		"-f", "concat",
-		"-safe", "0",
-		"-i", listPath,
-		"-c", "copy",
-		"-movflags", "+faststart",
-		outputPath,
-	}
+	args := ffmpegConcatArgs(listPath, outputPath)
 	ctx, cancel := context.WithTimeout(context.Background(), ffmpegFinalizeTimeout)
 	defer cancel()
 	cmd := exec.CommandContext(ctx, ffmpegPath, args...)

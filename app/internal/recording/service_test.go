@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -706,4 +707,55 @@ func mp4Box(kind string, payload []byte) []byte {
 	copy(box[4:8], []byte(kind))
 	copy(box[8:], payload)
 	return box
+}
+
+func TestStopCleansSegmentCacheAfterReady(t *testing.T) {
+	service := newMockRecordingService(t.TempDir())
+	session, err := service.StartMockRecording(StartRequest{
+		SourceID:   "screen:primary",
+		SourceType: SourceScreen,
+	})
+	if err != nil {
+		t.Fatalf("StartMockRecording() error = %v", err)
+	}
+
+	segmentCache := filepath.Join(session.PackageDir, recpackage.CacheDir, "ffmpeg-video", "screen")
+	if err := os.MkdirAll(segmentCache, 0o755); err != nil {
+		t.Fatalf("create segment cache: %v", err)
+	}
+	leftovers := map[string]string{
+		filepath.Join(segmentCache, "segment-000-000.mp4"):           "segment",
+		filepath.Join(session.PackageDir, "recovery-segments.txt"):   "file 'segment-000-000.mp4'\n",
+		filepath.Join(session.PackageDir, ".screen-audio-mux-1.mp4"): "tmp",
+		filepath.Join(session.PackageDir, ".finalize-screen.mp4"):    "staging",
+		filepath.Join(session.PackageDir, ".audio-only-mux-1.m4a"):   "tmp",
+	}
+	for path, data := range leftovers {
+		if err := os.WriteFile(path, []byte(data), 0o644); err != nil {
+			t.Fatalf("write leftover %s: %v", path, err)
+		}
+	}
+
+	session, err = service.Stop()
+	if err != nil {
+		t.Fatalf("Stop() error = %v", err)
+	}
+	if session.Status != StateReady {
+		t.Fatalf("session status = %q, want ready", session.Status)
+	}
+	for path := range leftovers {
+		if _, statErr := os.Stat(path); !os.IsNotExist(statErr) {
+			t.Fatalf("leftover %s survived stop cleanup (stat err %v)", path, statErr)
+		}
+	}
+	if _, err := os.Stat(filepath.Join(session.PackageDir, recpackage.CacheDir)); err != nil && !os.IsNotExist(err) {
+		t.Fatalf("package cache dir probe failed: %v", err)
+	}
+	manifest, err := recpackage.NewService().ReadManifest(session.Manifest)
+	if err != nil {
+		t.Fatalf("ReadManifest() error = %v", err)
+	}
+	if strings.Contains(manifest.Diagnostics.Message, "cleanup failed") {
+		t.Fatalf("manifest diagnostics = %q, want no cleanup failure", manifest.Diagnostics.Message)
+	}
 }

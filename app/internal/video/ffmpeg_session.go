@@ -49,14 +49,15 @@ type ffmpegDesktopSession struct {
 	ffmpeg    string
 	inputArgs ffmpegInputArgsBuilder
 
-	diagnostics Diagnostics
-	segments    []ffmpegSegment
-	active      *ffmpegProcess
-	paused      bool
-	started     bool
-	stopped     bool
-	totalActive time.Duration
-	nextGroup   int
+	diagnostics         Diagnostics
+	segments            []ffmpegSegment
+	active              *ffmpegProcess
+	paused              bool
+	started             bool
+	stopped             bool
+	totalActive         time.Duration
+	nextGroup           int
+	finalizeAudioInputs []AudioMuxInput
 
 	mu sync.Mutex
 }
@@ -204,6 +205,21 @@ func evenOutputDimension(value int) int {
 	return value + 1
 }
 
+// SetFinalizeAudioInputs arms this session's stop finalize to mix the given
+// audio sidecar inputs into the screen media in the same FFmpeg pass that
+// concatenates the recorded segments. The inputs are copied; an empty list
+// disarms. Arm before Stop and after the audio sidecar writers are closed so
+// their WAV headers are final.
+func (s *ffmpegDesktopSession) SetFinalizeAudioInputs(inputs []AudioMuxInput) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if len(inputs) == 0 {
+		s.finalizeAudioInputs = nil
+		return
+	}
+	s.finalizeAudioInputs = append([]AudioMuxInput(nil), inputs...)
+}
+
 func (s *ffmpegDesktopSession) Start(ctx context.Context) error {
 	if ctx == nil {
 		ctx = context.Background()
@@ -270,18 +286,33 @@ func (s *ffmpegDesktopSession) Stop() error {
 	}
 	s.stopped = true
 	var errs []error
+	timings := make(map[string]int64, 3)
 	if s.active != nil {
-		if err := s.stopActiveSegmentLocked("stop"); err != nil {
+		started := time.Now()
+		err := s.stopActiveSegmentLocked("stop")
+		timings["segment_stop"] = time.Since(started).Milliseconds()
+		if err != nil {
 			errs = append(errs, err)
 		}
 	}
 	if len(s.segments) == 0 {
 		errs = append(errs, errors.New("FFmpeg desktop capture wrote no segments"))
-	} else if err := s.finalizeLocked(); err != nil {
-		errs = append(errs, err)
-	} else if err := s.verifyOutputLocked(); err != nil {
-		errs = append(errs, err)
+	} else {
+		started := time.Now()
+		finalizeErr := s.finalizeLocked()
+		timings["finalize"] = time.Since(started).Milliseconds()
+		if finalizeErr != nil {
+			errs = append(errs, finalizeErr)
+		} else {
+			started := time.Now()
+			err := s.verifyOutputLocked()
+			timings["verify"] = time.Since(started).Milliseconds()
+			if err != nil {
+				errs = append(errs, err)
+			}
+		}
 	}
+	s.recordStopTimingsLocked(timings)
 	s.patchDiagnosticsLocked()
 	if strings.TrimSpace(s.config.DiagnosticsPath) != "" {
 		if err := WriteDiagnostics(s.config.DiagnosticsPath, s.diagnostics); err != nil {
@@ -289,6 +320,34 @@ func (s *ffmpegDesktopSession) Stop() error {
 		}
 	}
 	return errors.Join(errs...)
+}
+
+// recordStopTimingsLocked stores the measured stop-stage wall-clock timings
+// (milliseconds) in the diagnostics and mirrors them into Messages so the
+// breakdown also shows up in human-readable logs. Recordings merge into the
+// existing map by key so a stage that recorded earlier in the stop chain
+// (the fallback "audio_mux" entry finalizeLocked adds) is preserved in the
+// final breakdown.
+func (s *ffmpegDesktopSession) recordStopTimingsLocked(timings map[string]int64) {
+	if len(timings) == 0 {
+		return
+	}
+	if s.diagnostics.Timings == nil {
+		s.diagnostics.Timings = make(map[string]int64, len(timings))
+	}
+	for key, value := range timings {
+		s.diagnostics.Timings[key] = value
+	}
+	keys := make([]string, 0, len(s.diagnostics.Timings))
+	for key := range s.diagnostics.Timings {
+		keys = append(keys, key)
+	}
+	slices.Sort(keys)
+	parts := make([]string, 0, len(keys))
+	for _, key := range keys {
+		parts = append(parts, fmt.Sprintf("%s=%dms", key, s.diagnostics.Timings[key]))
+	}
+	s.diagnostics.Messages = append(s.diagnostics.Messages, "FFmpeg stop stage timings: "+strings.Join(parts, ", ")+".")
 }
 
 func (s *ffmpegDesktopSession) Diagnostics() Diagnostics {
@@ -379,7 +438,6 @@ func (s *ffmpegDesktopSession) encodingArgs(outputPattern string, input ffmpegIn
 		"-segment_time", fmt.Sprintf("%d", segmentSeconds),
 		"-reset_timestamps", "1",
 		"-segment_format", "mp4",
-		"-segment_format_options", "movflags=+faststart",
 		outputPattern,
 	)
 	if previewPath != "" {
@@ -423,7 +481,6 @@ func (s *ffmpegDesktopSession) encodingArgsWithPreviewSplit(outputPattern string
 		"-segment_time", fmt.Sprintf("%d", segmentSeconds),
 		"-reset_timestamps", "1",
 		"-segment_format", "mp4",
-		"-segment_format_options", "movflags=+faststart",
 		outputPattern,
 		"-map", "[" + previewLabel + "]",
 		"-an",
@@ -451,7 +508,7 @@ func prepareFFmpegPreviewImage(input ffmpegInputSpec) error {
 func ffmpegPreviewImageFilter(input ffmpegInputSpec) string {
 	fps := input.PreviewImageFPS
 	if fps <= 0 {
-		fps = 8
+		fps = 4
 	}
 	if fps > 15 {
 		fps = 15
@@ -571,10 +628,23 @@ func (s *ffmpegDesktopSession) collectProcessSegments(active *ffmpegProcess, sto
 }
 
 func (s *ffmpegDesktopSession) finalizeLocked() error {
-	if err := os.RemoveAll(s.config.OutputPath); err != nil && !errors.Is(err, os.ErrNotExist) {
-		return err
+	if len(s.finalizeAudioInputs) > 0 {
+		return s.finalizeWithAudioLocked()
 	}
+	return s.finalizeWithoutAudioLocked()
+}
+
+// finalizeWithoutAudioLocked is the video-only finalize: a single segment is
+// moved (or copied) onto the output path, multiple segments are concatenated
+// into a dot-prefixed staging file and installed with a single rename. A
+// crash mid-concat then leaves the final path missing (recovery rebuilds it
+// from segments) instead of a half-written file that only the byte size gate
+// would accept as ready media.
+func (s *ffmpegDesktopSession) finalizeWithoutAudioLocked() error {
 	if len(s.segments) == 1 {
+		if err := os.RemoveAll(s.config.OutputPath); err != nil && !errors.Is(err, os.ErrNotExist) {
+			return err
+		}
 		if err := os.Rename(s.segments[0].Path, s.config.OutputPath); err == nil {
 			s.diagnostics.Messages = append(s.diagnostics.Messages, fmt.Sprintf("Single FFmpeg segment moved to %s.", filepath.Base(s.config.OutputPath)))
 			return nil
@@ -590,15 +660,11 @@ func (s *ffmpegDesktopSession) finalizeLocked() error {
 	if err != nil {
 		return err
 	}
-	args := []string{
-		"-hide_banner", "-loglevel", "warning", "-y",
-		"-f", "concat",
-		"-safe", "0",
-		"-i", listPath,
-		"-c", "copy",
-		"-movflags", "+faststart",
-		s.config.OutputPath,
+	stagingPath := finalizeStagingPath(s.config.OutputPath)
+	if err := os.Remove(stagingPath); err != nil && !errors.Is(err, os.ErrNotExist) {
+		return err
 	}
+	args := ffmpegConcatArgs(listPath, stagingPath)
 	ctx, cancel := context.WithTimeout(context.Background(), ffmpegFinalizeTimeout)
 	defer cancel()
 	cmd := exec.CommandContext(ctx, s.ffmpeg, args...)
@@ -607,10 +673,155 @@ func (s *ffmpegDesktopSession) finalizeLocked() error {
 	cmd.Stdout = io.Discard
 	cmd.Stderr = stderr
 	if err := cmd.Run(); err != nil {
+		_ = os.Remove(stagingPath)
 		return fmt.Errorf("FFmpeg concat finalize failed: %w%s", err, stderrSuffix(stderr))
+	}
+	if err := os.Rename(stagingPath, s.config.OutputPath); err != nil {
+		_ = os.Remove(stagingPath)
+		return fmt.Errorf("install finalized FFmpeg output: %w", err)
 	}
 	s.diagnostics.Messages = append(s.diagnostics.Messages, fmt.Sprintf("Merged %d FFmpeg segments into %s.", len(s.segments), filepath.Base(s.config.OutputPath)))
 	return nil
+}
+
+// ffmpegProcessRun starts one FFmpeg process and waits for it, reporting
+// whether the executable actually launched. Package variable so tests can
+// script process outcomes without a real FFmpeg binary.
+var ffmpegProcessRun = func(cmd *exec.Cmd) (bool, error) {
+	if err := cmd.Start(); err != nil {
+		return false, err
+	}
+	return true, cmd.Wait()
+}
+
+// finalizeWithAudioLocked concatenates the recorded segments and mixes the
+// armed audio sidecars into the screen media in a single FFmpeg pass, then
+// installs the result from the dot-prefixed staging path with one rename.
+// The pass reuses the exact amix filter and stream order of the two-step
+// finalize + MuxAudioIntoMP4 pair, so a merged output is byte-identical to
+// the two-step output. Post-launch failures (nonzero exit, timeout, or an
+// unreadable staging file) fall back to the two-step path; structural
+// failures (missing segment list) surface without a fallback attempt.
+func (s *ffmpegDesktopSession) finalizeWithAudioLocked() error {
+	inputs := s.finalizeAudioInputs
+	stagingPath := finalizeStagingPath(s.config.OutputPath)
+	if err := os.Remove(stagingPath); err != nil && !errors.Is(err, os.ErrNotExist) {
+		return err
+	}
+	videoArgs, err := s.finalizeVideoInputArgsLocked()
+	if err != nil {
+		return err
+	}
+	args := ffmpegMergedFinalizeArgs(videoArgs, inputs, stagingPath)
+	ctx, cancel := context.WithTimeout(context.Background(), ffmpegAudioMuxTimeout)
+	defer cancel()
+	cmd := exec.CommandContext(ctx, s.ffmpeg, args...)
+	configureBackgroundCommand(cmd)
+	stderr := &bytes.Buffer{}
+	cmd.Stdout = io.Discard
+	cmd.Stderr = stderr
+	launched, runErr := ffmpegProcessRun(cmd)
+	if runErr == nil {
+		if readErr := requireReadableFile(stagingPath, 1); readErr != nil {
+			runErr = fmt.Errorf("merged finalize output: %w", readErr)
+		}
+	}
+	if runErr != nil {
+		_ = os.Remove(stagingPath)
+		if !launched {
+			return fmt.Errorf("start FFmpeg merged finalize: %w", runErr)
+		}
+		return s.finalizeWithAudioFallbackLocked(inputs, runErr, stderr)
+	}
+	if err := os.Rename(stagingPath, s.config.OutputPath); err != nil {
+		_ = os.Remove(stagingPath)
+		return fmt.Errorf("install finalized FFmpeg output: %w", err)
+	}
+	s.diagnostics.Messages = append(s.diagnostics.Messages, fmt.Sprintf("Merged %d FFmpeg segment(s) and %d audio sidecar(s) into %s in a single FFmpeg pass.", len(s.segments), len(inputs), filepath.Base(s.config.OutputPath)))
+	return nil
+}
+
+// finalizeWithAudioFallbackLocked rebuilds the screen media with the plain
+// two-step finalize and then mixes the armed audio sidecars in a separate
+// MuxAudioIntoMP4 pass — the pre-merge stop behavior. Any failure here
+// propagates to Stop, matching today's post-stop mux failure semantics. The
+// fallback mux duration is recorded as an extra "audio_mux" timing.
+func (s *ffmpegDesktopSession) finalizeWithAudioFallbackLocked(inputs []AudioMuxInput, cause error, stderr *bytes.Buffer) error {
+	s.diagnostics.Messages = append(s.diagnostics.Messages, fmt.Sprintf("Merged finalize failed: %v%s; fell back to two-step finalize + audio mux.", cause, stderrSuffix(stderr)))
+	if err := s.finalizeWithoutAudioLocked(); err != nil {
+		return err
+	}
+	muxStart := time.Now()
+	if _, err := MuxAudioIntoMP4(AudioMuxConfig{VideoPath: s.config.OutputPath, Inputs: inputs}); err != nil {
+		return err
+	}
+	s.recordStopTimingsLocked(map[string]int64{"audio_mux": time.Since(muxStart).Milliseconds()})
+	return nil
+}
+
+// finalizeVideoInputArgsLocked builds the video input arguments of the merged
+// finalize: one segment is passed directly, multiple segments go through the
+// concat demuxer list shared with the plain finalize.
+func (s *ffmpegDesktopSession) finalizeVideoInputArgsLocked() ([]string, error) {
+	if len(s.segments) == 1 {
+		return []string{"-i", s.segments[0].Path}, nil
+	}
+	listPath, err := s.writeConcatListLocked()
+	if err != nil {
+		return nil, err
+	}
+	return []string{"-f", "concat", "-safe", "0", "-i", listPath}, nil
+}
+
+// ffmpegMergedFinalizeArgs builds the single-pass finalize command: the
+// segment video (concat list or one segment) plus the armed audio sidecars,
+// mixed and encoded exactly like ffmpegAudioMuxArgs. Video is stream-copied;
+// audio is re-encoded to AAC with -shortest so a shorter sidecar bounds the
+// output without clipping the video tail the way a video re-encode would.
+func ffmpegMergedFinalizeArgs(videoArgs []string, inputs []AudioMuxInput, outputPath string) []string {
+	args := []string{"-hide_banner", "-loglevel", "warning", "-y"}
+	args = append(args, videoArgs...)
+	for _, input := range inputs {
+		args = append(args, "-i", input.Path)
+	}
+	args = append(args, "-map", "0:v:0", "-c:v", "copy")
+	if len(inputs) == 1 {
+		args = append(args, "-map", "1:a:0")
+	} else {
+		args = append(args, "-filter_complex", audioMixFilter(len(inputs)), "-map", "[mixed_audio]")
+	}
+	args = append(args,
+		"-c:a", "aac",
+		"-b:a", "192k",
+		"-ar", "48000",
+		"-ac", "2",
+		"-shortest",
+		outputPath,
+	)
+	return args
+}
+
+// finalizeStagingPath returns the dot-prefixed staging path the concat
+// finalize writes before atomically installing outputPath. The leading dot
+// keeps the staging name outside the screen.* package media glob and outside
+// the recovery segment glob.
+func finalizeStagingPath(outputPath string) string {
+	return filepath.Join(filepath.Dir(outputPath), ".finalize-"+filepath.Base(outputPath))
+}
+
+// ffmpegConcatArgs builds the concat-demuxer remux args shared by the stop
+// finalize and the crash-recovery rebuild. The output intentionally carries
+// no movflags: these files are internal intermediate media, and a moov atom
+// at the end is valid for the later -c copy mux and for MP4 box probing.
+func ffmpegConcatArgs(listPath string, outputPath string) []string {
+	return []string{
+		"-hide_banner", "-loglevel", "warning", "-y",
+		"-f", "concat",
+		"-safe", "0",
+		"-i", listPath,
+		"-c", "copy",
+		outputPath,
+	}
 }
 
 func (s *ffmpegDesktopSession) verifyOutputLocked() error {

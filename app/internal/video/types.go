@@ -67,6 +67,10 @@ type Diagnostics struct {
 	Screen        TrackDiagnostics `json:"screen"`
 	SystemAudio   TrackDiagnostics `json:"systemAudio"`
 	Messages      []string         `json:"messages,omitempty"`
+	// Timings records wall-clock milliseconds per stop stage (for example
+	// "segment_stop", "finalize", "verify"). Additive optional field: older
+	// consumers decode the JSON without it and newer producers may omit it.
+	Timings map[string]int64 `json:"timings,omitempty"`
 }
 
 type SourceDiagnostic struct {

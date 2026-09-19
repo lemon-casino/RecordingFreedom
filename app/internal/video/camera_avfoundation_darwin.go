@@ -54,7 +54,7 @@ func avFoundationCameraInputArgs(camera CameraCaptureConfig) ffmpegInputArgsBuil
 			},
 			Engine:            "avfoundation-camera",
 			PreviewImagePath:  camera.PreviewImagePath,
-			PreviewImageFPS:   8,
+			PreviewImageFPS:   4,
 			PreviewImageWidth: 360,
 		}, nil
 	}

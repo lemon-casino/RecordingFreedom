@@ -1236,8 +1236,18 @@ func (s *RecordingFreedomService) StopRecording() (recording.Session, error) {
 		Message: "Finalizing recording package",
 	})
 	defer s.restoreCapsuleWindow()
+	// Stop runs the whole finalize chain synchronously (backend stop, mux,
+	// diagnostics sync, ready validation); log its wall time so slow-disk
+	// stop waits show up in the app log next to the per-stage timings the
+	// FFmpeg session writes into video-diagnostics.json.
+	stopStarted := time.Now()
 	session, err := s.recorder.Stop()
+	stopElapsedMs := time.Since(stopStarted).Milliseconds()
 	if err != nil {
+		s.logEvent("recording", "stop-failed", map[string]string{
+			"elapsedMs": fmt.Sprint(stopElapsedMs),
+			"reason":    err.Error(),
+		})
 		s.emitRecordingStatus(recording.StatusEvent{
 			Status:  recording.StateFailed,
 			Backend: s.recorder.ActiveBackendID(),
@@ -1245,6 +1255,10 @@ func (s *RecordingFreedomService) StopRecording() (recording.Session, error) {
 		})
 		return session, err
 	}
+	s.logEvent("recording", "stop-completed", map[string]string{
+		"elapsedMs": fmt.Sprint(stopElapsedMs),
+		"sessionId": session.ID,
+	})
 	_ = s.HidePIPOverlay()
 	_ = s.HideAnnotationOverlay()
 	s.emitSessionStatus(session, "Recording package ready")

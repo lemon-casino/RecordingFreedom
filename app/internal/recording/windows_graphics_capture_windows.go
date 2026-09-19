@@ -37,6 +37,24 @@ func windowsMuxAudioSidecarsIntoScreen(runtime *NativeBackendRuntime) error {
 		return nil
 	}
 	manifest := runtime.Plan.Package.Manifest
+	if plan := runtime.videoFinalizeAudio; plan != nil {
+		// StopVideo armed the merged stop finalize and Stop succeeded, so the
+		// sidecars are already mixed into the screen media (single pass or its
+		// two-step fallback). Re-muxing would re-decode that output; just
+		// record the arming booleans instead of re-deciding from the sidecars.
+		manifest, err := runtime.packages.PatchScreenAudioMuxed(runtime.Plan.Package.ManifestPath, plan.MuxSystem, plan.MuxMicrophone)
+		if err != nil {
+			return err
+		}
+		runtime.Plan.Package.Manifest = manifest
+		if plan.MuxSystem {
+			runtime.Plan.SystemAudioPath = runtime.Plan.ScreenVideoPath
+		}
+		if plan.MuxMicrophone {
+			runtime.Plan.MicrophoneAudioPath = runtime.Plan.ScreenVideoPath
+		}
+		return nil
+	}
 	inputs := make([]video.AudioMuxInput, 0, 2)
 	muxSystem := false
 	muxMicrophone := false

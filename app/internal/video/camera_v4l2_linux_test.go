@@ -22,7 +22,7 @@ func TestV4L2CameraInputArgsUseDevicePath(t *testing.T) {
 	if !slices.Contains(args.Args, "/dev/video0") {
 		t.Fatalf("args = %#v, want v4l2 device path", args)
 	}
-	if args.PreviewImagePath != previewPath || args.PreviewImageFPS != 8 || args.PreviewImageWidth != 360 {
+	if args.PreviewImagePath != previewPath || args.PreviewImageFPS != 4 || args.PreviewImageWidth != 360 {
 		t.Fatalf("preview image spec = path:%q fps:%d width:%d", args.PreviewImagePath, args.PreviewImageFPS, args.PreviewImageWidth)
 	}
 }

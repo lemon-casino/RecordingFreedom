@@ -1,6 +1,7 @@
 package recording
 
 import (
+	"bytes"
 	"errors"
 	"os"
 	"path/filepath"
@@ -173,7 +174,8 @@ func TestRecoverPackageWithoutSegmentsReportsFinalizeFailure(t *testing.T) {
 
 func TestRecoverPackageLeavesCompleteScreenTrackUntouched(t *testing.T) {
 	fixture := newRecoveryFixture(t, false)
-	if err := os.WriteFile(fixture.screenPath, []byte("existing-video"), 0o644); err != nil {
+	probeable := minimalMP4Data("vide")
+	if err := os.WriteFile(fixture.screenPath, probeable, 0o644); err != nil {
 		t.Fatalf("write screen: %v", err)
 	}
 	hooks := recoveryHooks{
@@ -192,8 +194,40 @@ func TestRecoverPackageLeavesCompleteScreenTrackUntouched(t *testing.T) {
 		t.Fatalf("summary status = %q, want ready", summary.Status)
 	}
 	data, err := os.ReadFile(fixture.screenPath)
-	if err != nil || string(data) != "existing-video" {
+	if err != nil || !bytes.Equal(data, probeable) {
 		t.Fatalf("screen track was modified: %q (%v)", data, err)
+	}
+}
+
+func TestRecoverPackageRebuildsTruncatedScreenTrack(t *testing.T) {
+	fixture := newRecoveryFixture(t, false)
+	probeable := minimalMP4Data("vide")
+	// Only the ftyp box survived a finalize killed mid-concat: the file is
+	// non-empty but has no moov, so recovery must rebuild, not mark ready.
+	if err := os.WriteFile(fixture.screenPath, probeable[:16], 0o644); err != nil {
+		t.Fatalf("write truncated screen: %v", err)
+	}
+	rebuilt := false
+	hooks := recoveryHooks{
+		rebuildScreenVideo: func(ffmpegPath string, outputPath string, segmentDir string) (int, error) {
+			rebuilt = true
+			if err := os.WriteFile(outputPath, probeable, 0o644); err != nil {
+				return 0, err
+			}
+			return 1, nil
+		},
+	}
+	service := fixture.service(hooks)
+
+	summary, err := service.RecoverPackage(fixture.packageDir)
+	if err != nil {
+		t.Fatalf("RecoverPackage() error = %v", err)
+	}
+	if !rebuilt {
+		t.Fatal("truncated screen track did not trigger a rebuild")
+	}
+	if summary.Status != recpackage.StatusReady {
+		t.Fatalf("summary status = %q, want ready", summary.Status)
 	}
 }
 
@@ -237,7 +271,7 @@ func TestRecoverPackageAudioOnlyRebuildsM4A(t *testing.T) {
 
 func TestRecoverPackageScreenMuxFailureStillRecoversVideo(t *testing.T) {
 	fixture := newRecoveryFixture(t, true)
-	if err := os.WriteFile(fixture.screenPath, []byte("existing-video"), 0o644); err != nil {
+	if err := os.WriteFile(fixture.screenPath, minimalMP4Data("vide"), 0o644); err != nil {
 		t.Fatalf("write screen: %v", err)
 	}
 	hooks := recoveryHooks{

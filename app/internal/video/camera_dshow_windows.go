@@ -54,7 +54,7 @@ func directShowCameraInputArgs(camera CameraCaptureConfig) ffmpegInputArgsBuilde
 			},
 			Engine:            "windows-dshow-camera",
 			PreviewImagePath:  camera.PreviewImagePath,
-			PreviewImageFPS:   8,
+			PreviewImageFPS:   4,
 			PreviewImageWidth: 360,
 		}, nil
 	}

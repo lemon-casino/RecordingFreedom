@@ -1,10 +1,13 @@
 package audio
 
 import (
+	"bufio"
 	"encoding/binary"
+	"errors"
 	"math"
 	"os"
 	"path/filepath"
+	"slices"
 	"testing"
 )
 
@@ -64,5 +67,84 @@ func TestWAVSinkRejectsFormatChanges(t *testing.T) {
 	}
 	if err := sink.Append(ProcessedBuffer{Buffer: PCMBuffer{Kind: StreamMicrophone, SampleRate: 44100, Channels: 1, Samples: []float32{0}}}); err == nil {
 		t.Fatal("Append() accepted a sample-rate change")
+	}
+}
+
+// TestWAVSinkBuffersSmallAppendsUntilClose keeps every batch under the write
+// buffer size so Close's header rewrite runs while PCM is still buffered. It
+// catches the regressions where the header rewrite seeks to 0 before the
+// buffer flushes and later clobbers the file header with PCM data.
+func TestWAVSinkBuffersSmallAppendsUntilClose(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "microphone.wav")
+	sink, err := NewWAVSink("microphone", path)
+	if err != nil {
+		t.Fatalf("NewWAVSink() error = %v", err)
+	}
+
+	var want []float32
+	for batch := 0; batch < 40; batch++ {
+		samples := make([]float32, 1000)
+		for index := range samples {
+			samples[index] = float32((batch*1000+index)%256)/128 - 1
+		}
+		want = append(want, samples...)
+		if err := sink.Append(ProcessedBuffer{Buffer: PCMBuffer{Kind: StreamMicrophone, SampleRate: RNNoiseSampleRate, Channels: 1, Samples: samples}}); err != nil {
+			t.Fatalf("Append(batch %d) error = %v", batch, err)
+		}
+	}
+	if err := sink.Close(); err != nil {
+		t.Fatalf("Close() error = %v", err)
+	}
+
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("ReadFile() error = %v", err)
+	}
+	dataBytes := binary.LittleEndian.Uint32(data[40:44])
+	if int(dataBytes) != len(want)*wavFloat32Bytes {
+		t.Fatalf("data size = %d, want %d", dataBytes, len(want)*wavFloat32Bytes)
+	}
+	if len(data) != wavHeaderSize+int(dataBytes) {
+		t.Fatalf("file size = %d, want header %d + data %d", len(data), wavHeaderSize, dataBytes)
+	}
+	got := make([]float32, len(want))
+	for index := range got {
+		got[index] = math.Float32frombits(binary.LittleEndian.Uint32(data[wavHeaderSize+index*wavFloat32Bytes:]))
+	}
+	if !slices.Equal(got, want) {
+		t.Fatal("decoded samples differ from appended samples; buffered PCM was lost or clobbered")
+	}
+}
+
+// failingWAVWriter always fails, standing in for a dead disk handle.
+type failingWAVWriter struct {
+	err error
+}
+
+func (w *failingWAVWriter) Write([]byte) (int, error) {
+	return 0, w.err
+}
+
+// TestWAVSinkSurfacesWriteErrorsThroughClose verifies a write failure is
+// sticky in the buffered writer: the batch that forces a flush reports it,
+// later appends keep reporting it, and Close's header flush returns it so the
+// error reaches the session stop chain.
+func TestWAVSinkSurfacesWriteErrorsThroughClose(t *testing.T) {
+	sink, err := NewWAVSink("microphone", filepath.Join(t.TempDir(), "microphone.wav"))
+	if err != nil {
+		t.Fatalf("NewWAVSink() error = %v", err)
+	}
+	cause := errors.New("disk unavailable")
+	sink.writer = bufio.NewWriterSize(&failingWAVWriter{err: cause}, wavWriteBufferSize)
+
+	oversized := make([]float32, wavWriteBufferSize/wavFloat32Bytes+1)
+	if err := sink.Append(ProcessedBuffer{Buffer: PCMBuffer{Kind: StreamMicrophone, SampleRate: RNNoiseSampleRate, Channels: 1, Samples: oversized}}); err == nil {
+		t.Fatal("Append() error = nil, want the batch that forces a flush to report the writer failure")
+	}
+	if err := sink.Append(ProcessedBuffer{Buffer: PCMBuffer{Kind: StreamMicrophone, SampleRate: RNNoiseSampleRate, Channels: 1, Samples: []float32{0.5}}}); err == nil {
+		t.Fatal("second Append() error = nil, want sticky buffered-writer failure")
+	}
+	if err := sink.Close(); err == nil {
+		t.Fatal("Close() error = nil, want header rewrite to surface the flush failure")
 	}
 }

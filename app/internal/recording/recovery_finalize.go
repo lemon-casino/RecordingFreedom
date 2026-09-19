@@ -52,7 +52,7 @@ func (s *Service) finalizeCrashedPackage(packageDir string) ([]string, error) {
 	switch manifest.RecordingMode {
 	case recpackage.RecordingModeScreen:
 		screenPath := filepath.Join(packageDir, filepath.FromSlash(manifest.Media.ScreenVideoPath))
-		if !readableOutputFile(screenPath) {
+		if !readableScreenMedia(screenPath, manifest.Diagnostics.Mock) {
 			rebuildNote, rebuildErr := rebuildScreenTrack(hooks, packageDir, screenPath)
 			notes = append(notes, rebuildNote)
 			if rebuildErr != nil {
@@ -146,4 +146,22 @@ func crashedAudioSidecarInputs(packageDir string, manifest recpackage.Manifest) 
 func readableOutputFile(path string) bool {
 	info, err := os.Stat(path)
 	return err == nil && !info.IsDir() && info.Size() > 0
+}
+
+// readableScreenMedia reports whether screenPath holds media the recovery
+// chain can trust: a non-empty file that probes as an MP4 with a video track.
+// A file left half-written by a finalize that was killed mid-concat passes
+// the byte-size check but has no moov atom yet, so treating it as present
+// would fake a ready package; it must be rebuilt from cached segments
+// instead. Mock packages keep the size-only check: their marker file is
+// plain text by design.
+func readableScreenMedia(path string, mock bool) bool {
+	if !readableOutputFile(path) {
+		return false
+	}
+	if mock {
+		return true
+	}
+	probe, err := recpackage.ProbeMP4(path)
+	return err == nil && probe.HasVideoTrack
 }

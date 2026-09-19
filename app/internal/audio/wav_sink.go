@@ -1,6 +1,7 @@
 package audio
 
 import (
+	"bufio"
 	"encoding/binary"
 	"errors"
 	"fmt"
@@ -13,12 +14,17 @@ const (
 	wavHeaderSize      = 44
 	wavFormatIEEEFloat = 3
 	wavFloat32Bytes    = 4
+	// wavWriteBufferSize batches PCM appends in memory so each capture chunk
+	// does not turn into a file-syscall write. The header rewrite in Close
+	// flushes the buffer before seeking, so buffering never delays data.
+	wavWriteBufferSize = 256 << 10
 )
 
 type WAVSink struct {
 	id         string
 	path       string
 	file       *os.File
+	writer     *bufio.Writer
 	sampleRate int
 	channels   int
 	dataBytes  uint32
@@ -39,7 +45,7 @@ func NewWAVSink(id string, path string) (*WAVSink, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &WAVSink{id: id, path: path, file: file}, nil
+	return &WAVSink{id: id, path: path, file: file, writer: bufio.NewWriterSize(file, wavWriteBufferSize)}, nil
 }
 
 func (s *WAVSink) ID() string {
@@ -77,7 +83,7 @@ func (s *WAVSink) Append(buffer ProcessedBuffer) error {
 	for index, sample := range pcm.Samples {
 		binary.LittleEndian.PutUint32(scratch[index*wavFloat32Bytes:], math.Float32bits(sample))
 	}
-	written, err := s.file.Write(scratch)
+	written, err := s.writer.Write(scratch)
 	s.dataBytes += uint32(written)
 	return err
 }
@@ -112,6 +118,11 @@ func (s *WAVSink) ensureHeader(sampleRate int, channels int) error {
 }
 
 func (s *WAVSink) rewriteHeader() error {
+	// Flush before seeking: the buffered PCM must land on disk first, or the
+	// header rewrite would be overwritten once the buffer drains past it.
+	if err := s.writer.Flush(); err != nil {
+		return err
+	}
 	if _, err := s.file.Seek(0, 0); err != nil {
 		return err
 	}

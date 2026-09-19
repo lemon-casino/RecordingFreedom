@@ -29,6 +29,25 @@ type NativeVideoSession interface {
 	Diagnostics() video.Diagnostics
 }
 
+// AudioFinalizeAwareVideoSession is implemented by video sessions that can mix
+// audio sidecar inputs into the screen media during their stop finalize pass.
+// Sessions that do not implement it keep the two-step stop + post-stop mux.
+type AudioFinalizeAwareVideoSession interface {
+	NativeVideoSession
+	SetFinalizeAudioInputs(inputs []video.AudioMuxInput)
+}
+
+// videoFinalizeAudioPlan records what was armed into the video session before
+// StopVideo: the audio sidecar inputs handed to the merged finalize, plus the
+// sidecar booleans those inputs stand for. The post-stop processor reuses the
+// booleans to skip its own mux instead of re-deciding from the sidecars,
+// which are already merged into the screen media by the time it runs.
+type videoFinalizeAudioPlan struct {
+	Inputs        []video.AudioMuxInput
+	MuxSystem     bool
+	MuxMicrophone bool
+}
+
 type NativeCameraSession interface {
 	Start(context.Context) error
 	Pause() error
@@ -57,9 +76,10 @@ type NativeBackendRuntime struct {
 	BackendID string
 	Plan      recpackage.RecordingWritePlan
 
-	videoSession NativeVideoSession
-	videoStarted bool
-	videoStopped bool
+	videoSession       NativeVideoSession
+	videoStarted       bool
+	videoStopped       bool
+	videoFinalizeAudio *videoFinalizeAudioPlan
 
 	cameraSession       NativeCameraSession
 	cameraStarted       bool
@@ -175,7 +195,40 @@ func (r *NativeBackendRuntime) StopVideo() error {
 		return nil
 	}
 	r.videoStopped = true
+	r.armVideoFinalizeAudio()
 	return r.videoSession.Stop()
+}
+
+// armVideoFinalizeAudio hands the recorded audio sidecars to a video session
+// that can mix them into the screen media during its stop finalize. Every
+// caller of StopVideo runs StopAudio first (Stop joins camera, audio, video
+// in that order, and the Start error paths stop audio before video), so the
+// sidecar WAV headers are final by the time the finalize reads them. The
+// arming mirrors the post-stop mux conditions in
+// windowsMuxAudioSidecarsIntoScreen; sessions without merged-finalize support
+// keep the two-step behavior untouched.
+func (r *NativeBackendRuntime) armVideoFinalizeAudio() {
+	session, ok := r.videoSession.(AudioFinalizeAwareVideoSession)
+	if !ok {
+		return
+	}
+	manifest := r.Plan.Package.Manifest
+	plan := &videoFinalizeAudioPlan{}
+	inputs := make([]video.AudioMuxInput, 0, 2)
+	if manifest.Audio.System && manifest.Media.SystemAudioStorage == recpackage.AudioStorageSidecar && readableAudioSidecar(r.Plan.SystemAudioPath) {
+		inputs = append(inputs, video.AudioMuxInput{Path: r.Plan.SystemAudioPath, Label: "system"})
+		plan.MuxSystem = true
+	}
+	if manifest.Audio.Microphone && manifest.Media.MicrophoneAudioStorage == recpackage.AudioStorageSidecar && readableAudioSidecar(r.Plan.MicrophoneAudioPath) {
+		inputs = append(inputs, video.AudioMuxInput{Path: r.Plan.MicrophoneAudioPath, Label: "microphone"})
+		plan.MuxMicrophone = true
+	}
+	if len(inputs) == 0 {
+		return
+	}
+	plan.Inputs = inputs
+	session.SetFinalizeAudioInputs(inputs)
+	r.videoFinalizeAudio = plan
 }
 
 func (r *NativeBackendRuntime) VideoDiagnostics() (video.Diagnostics, bool) {

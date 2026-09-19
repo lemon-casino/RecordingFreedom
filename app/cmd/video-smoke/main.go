@@ -90,7 +90,7 @@ func main() {
 	flag.DurationVar(&opts.pauseAfter, "pause-after", 0, "optional pause time after start; 0 disables pause/resume smoke")
 	flag.DurationVar(&opts.pauseDuration, "pause-duration", time.Second, "pause duration when -pause-after is set")
 	flag.BoolVar(&opts.systemAudio, "system", false, "capture system audio into the primary media when the backend supports muxing")
-	flag.BoolVar(&opts.microphone, "microphone", false, "capture microphone; disabled by default until mux support lands")
+	flag.BoolVar(&opts.microphone, "microphone", false, "capture microphone into the primary media when the backend supports muxing")
 	flag.BoolVar(&opts.camera, "camera", false, "capture camera sidecar when the platform reports an available native camera writer")
 	flag.StringVar(&opts.quality, "quality", recordingprofile.QualityBalanced, "recording quality: standard, balanced, or high")
 	flag.IntVar(&opts.fps, "fps", recordingprofile.DefaultFPS, "recording fps: 24, 30, or 60")

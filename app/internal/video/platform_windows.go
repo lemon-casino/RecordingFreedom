@@ -153,6 +153,19 @@ func (t windowsGraphicsCaptureTarget) String() string {
 	}
 }
 
+// SetFinalizeAudioInputs arms the underlying FFmpeg writer's merged stop
+// finalize. It must be called before Stop; arming takes the session lock
+// briefly and Stop later consumes the armed inputs under the same lock, with
+// arming always happening first in the stop chain.
+func (s *windowsGraphicsCaptureSession) SetFinalizeAudioInputs(inputs []AudioMuxInput) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.writer == nil {
+		return
+	}
+	s.writer.SetFinalizeAudioInputs(inputs)
+}
+
 func (s *windowsGraphicsCaptureSession) Start(ctx context.Context) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
