@@ -13,6 +13,11 @@ Thumbs.db
 *.test
 coverage/
 release-out/
+/tmp/
+/.tmp-artifacts/
+
+# Local portable build output (root only; app/build holds tracked Wails assets)
+/build/
 
 # Wails / Go build output
 app/.task/
