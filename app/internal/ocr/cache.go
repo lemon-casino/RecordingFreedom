@@ -130,6 +130,11 @@ func (s *Service) ReadResult(resultID string) (Result, error) {
 }
 
 func (s *Service) WriteResult(result Result) error {
+	// Results reuse IDs across jobs (the worker decides the ID), so two jobs can
+	// target the same results/<id>.json path. Serialize the paired writes; under
+	// the previous single job worker this serialization was implicit.
+	s.resultWriteMu.Lock()
+	defer s.resultWriteMu.Unlock()
 	if strings.TrimSpace(result.ID) == "" {
 		return errors.New("OCR result id is required")
 	}

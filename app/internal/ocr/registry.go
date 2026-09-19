@@ -52,14 +52,21 @@ type Service struct {
 	jobNotify  chan struct{}
 	jobEvents  chan JobEvent
 	jobQueue   []*jobState
-	activeJob  *jobState
 	jobsByID   map[string]*jobState
 	jobsByKey  map[string]*jobState
+
+	// jobWorkerCount is only written by ApplyOptions (construction time) and read
+	// under jobMu when the worker pool starts; values <= 0 mean defaultJobWorkers.
+	jobWorkerCount int
 
 	modelDownloadMu      sync.Mutex
 	modelDownloads       map[string]*modelDownloadState
 	modelDownloadCancels map[string]context.CancelFunc
 	modelDownloadEvents  chan ModelDownloadEvent
+
+	// resultWriteMu serializes WriteResult so concurrent job workers (and direct
+	// RecognizeImage callers) never interleave writes to the same results file.
+	resultWriteMu sync.Mutex
 }
 
 type ServiceOptions struct {
@@ -70,6 +77,9 @@ type ServiceOptions struct {
 	WorkerEnv              []string
 	WorkerTimeout          time.Duration
 	ModelRegistry          []ModelManifest
+	// JobWorkers bounds how many OCR jobs run concurrently. Values <= 0 use
+	// defaultJobWorkers. Must be set before the first EnqueueRecognize call.
+	JobWorkers int
 }
 
 func NewService(appData *appdata.Service) *Service {
@@ -103,6 +113,7 @@ func (s *Service) ApplyOptions(options ServiceOptions) {
 	s.workerEnv = append([]string(nil), options.WorkerEnv...)
 	s.workerTimeout = options.WorkerTimeout
 	s.modelRegistryOverride = append([]ModelManifest(nil), options.ModelRegistry...)
+	s.jobWorkerCount = options.JobWorkers
 }
 
 func (s *Service) ListModels() ([]ModelInfo, error) {

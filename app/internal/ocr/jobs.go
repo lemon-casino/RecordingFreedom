@@ -82,9 +82,6 @@ func (s *Service) CancelJob(jobID string) error {
 	job.status = ResultStatusCancelled
 	job.updatedAt = s.now().UTC()
 	s.removeQueuedJobLocked(job)
-	if s.activeJob == job {
-		s.activeJob = nil
-	}
 	delete(s.jobsByID, job.id)
 	delete(s.jobsByKey, job.cacheKey)
 	for _, req := range append([]RecognizeRequest(nil), job.requests...) {
@@ -130,6 +127,10 @@ func (s *Service) normalizeJobRequest(req RecognizeRequest) (RecognizeRequest, s
 	return req, cacheKey, nil
 }
 
+// defaultJobWorkers is the number of jobs recognized concurrently when the
+// ServiceOptions.JobWorkers option does not say otherwise.
+const defaultJobWorkers = 2
+
 func (s *Service) ensureJobWorkerLocked() {
 	if s.jobStarted {
 		return
@@ -147,7 +148,13 @@ func (s *Service) ensureJobWorkerLocked() {
 		s.jobsByKey = map[string]*jobState{}
 	}
 	s.jobStarted = true
-	go s.runJobWorker()
+	workers := s.jobWorkerCount
+	if workers <= 0 {
+		workers = defaultJobWorkers
+	}
+	for index := 0; index < workers; index++ {
+		go s.runJobWorker()
+	}
 }
 
 func (s *Service) runJobWorker() {
@@ -169,35 +176,38 @@ func (s *Service) runJobWorker() {
 func (s *Service) nextJob() *jobState {
 	s.jobMu.Lock()
 	defer s.jobMu.Unlock()
-	if len(s.jobQueue) == 0 {
-		return nil
-	}
-	bestIndex := 0
-	for index := 1; index < len(s.jobQueue); index++ {
-		if compareJobPriority(s.jobQueue[index], s.jobQueue[bestIndex]) < 0 {
-			bestIndex = index
+	for len(s.jobQueue) > 0 {
+		bestIndex := 0
+		for index := 1; index < len(s.jobQueue); index++ {
+			if compareJobPriority(s.jobQueue[index], s.jobQueue[bestIndex]) < 0 {
+				bestIndex = index
+			}
 		}
+		job := s.jobQueue[bestIndex]
+		s.jobQueue = append(s.jobQueue[:bestIndex], s.jobQueue[bestIndex+1:]...)
+		if job.cancelled {
+			continue
+		}
+		now := s.now().UTC()
+		job.status = ResultStatusRunning
+		job.updatedAt = now
+		for _, req := range append([]RecognizeRequest(nil), job.requests...) {
+			s.emitJobEventLocked(jobEventForRequest(job, req, ResultStatusRunning, "", nil, false))
+		}
+		return job
 	}
-	job := s.jobQueue[bestIndex]
-	s.jobQueue = append(s.jobQueue[:bestIndex], s.jobQueue[bestIndex+1:]...)
-	if job.cancelled {
-		return nil
-	}
-	now := s.now().UTC()
-	job.status = ResultStatusRunning
-	job.updatedAt = now
-	s.activeJob = job
-	for _, req := range append([]RecognizeRequest(nil), job.requests...) {
-		s.emitJobEventLocked(jobEventForRequest(job, req, ResultStatusRunning, "", nil, false))
-	}
-	return job
+	return nil
 }
 
 func (s *Service) runJob(job *jobState) {
 	if job == nil {
 		return
 	}
+	// Snapshot under jobMu: EnqueueRecognize may append merged requests to a
+	// running job (it stays in jobsByKey until finishJob) from other goroutines.
+	s.jobMu.Lock()
 	requests := append([]RecognizeRequest(nil), job.requests...)
+	s.jobMu.Unlock()
 	if len(requests) == 0 {
 		s.finishJob(job, nil, errors.New("OCR job has no requests"))
 		return
@@ -216,9 +226,6 @@ func (s *Service) runJob(job *jobState) {
 func (s *Service) finishJob(job *jobState, result *Result, err error) {
 	s.jobMu.Lock()
 	cancelled := job.cancelled
-	if s.activeJob == job {
-		s.activeJob = nil
-	}
 	delete(s.jobsByID, job.id)
 	delete(s.jobsByKey, job.cacheKey)
 	job.updatedAt = s.now().UTC()

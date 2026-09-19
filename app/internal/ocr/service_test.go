@@ -1305,6 +1305,136 @@ func TestEnqueueRecognizeMergesSameImageAndEmitsPerSourceResults(t *testing.T) {
 	}
 }
 
+func TestJobWorkersRunConcurrentlyByDefault(t *testing.T) {
+	root := t.TempDir()
+	service := NewService(appdata.NewService(root))
+	service.workerPathOverride = os.Args[0]
+	service.workerArgs = []string{"-test.run=TestOCRWorkerHelperProcess"}
+	service.workerCapabilitiesArgs = []string{"-test.run=TestOCRWorkerHelperProcess", "--", "--capabilities"}
+	service.workerEnv = []string{
+		"RF_OCR_WORKER_HELPER=1",
+		"RF_OCR_WORKER_RECOGNIZE=1",
+		"RF_OCR_WORKER_DELAY_MS=200",
+	}
+	service.workerTimeout = 5 * time.Second
+	writeVerifiedTestModel(t, root, defaultActiveModelID())
+
+	for index := 0; index < 3; index++ {
+		imagePath := writeTestPNG(t, filepath.Join(root, fmt.Sprintf("job-%d", index)), 80+index, 60)
+		if _, err := service.EnqueueRecognize(RecognizeRequest{
+			ImagePath:  imagePath,
+			SourceKind: SourceImage,
+			SourceID:   fmt.Sprintf("shot-%d", index),
+			Language:   defaultLanguage,
+		}); err != nil {
+			t.Fatalf("EnqueueRecognize(shot-%d) error = %v", index, err)
+		}
+	}
+
+	running := map[string]bool{}
+	ready := map[string]Result{}
+	deadline := time.After(5 * time.Second)
+	for len(ready) < 3 {
+		select {
+		case event := <-service.Events():
+			switch event.Status {
+			case ResultStatusRunning:
+				running[event.JobID] = true
+			case ResultStatusReady:
+				// A single serial worker must finish job one before job two can
+				// start, so two running jobs before any ready event proves overlap.
+				if len(running) < 2 {
+					t.Fatalf("job finished after only %d job(s) started running, want 2 concurrent workers", len(running))
+				}
+				if event.Result == nil {
+					t.Fatalf("ready event without result: %#v", event)
+				}
+				ready[event.Request.SourceID] = *event.Result
+			}
+		case <-deadline:
+			t.Fatalf("timed out waiting for ready events; running=%v ready=%v", running, ready)
+		}
+	}
+	if len(running) != 3 {
+		t.Fatalf("running job ids = %d, want 3 distinct jobs", len(running))
+	}
+	for index := 0; index < 3; index++ {
+		result, ok := ready[fmt.Sprintf("shot-%d", index)]
+		if !ok {
+			t.Fatalf("missing ready result for shot-%d: %#v", index, ready)
+		}
+		if result.PlainText != "RecordingFreedom\n文字识别" || result.SourceID != fmt.Sprintf("shot-%d", index) {
+			t.Fatalf("ready result for shot-%d = %#v, want helper text with own source", index, result)
+		}
+	}
+}
+
+func TestJobWorkersOptionRunsSingleWorker(t *testing.T) {
+	root := t.TempDir()
+	service := NewServiceWithOptions(appdata.NewService(root), ServiceOptions{JobWorkers: 1})
+	service.workerPathOverride = os.Args[0]
+	service.workerArgs = []string{"-test.run=TestOCRWorkerHelperProcess"}
+	service.workerCapabilitiesArgs = []string{"-test.run=TestOCRWorkerHelperProcess", "--", "--capabilities"}
+	service.workerEnv = []string{
+		"RF_OCR_WORKER_HELPER=1",
+		"RF_OCR_WORKER_RECOGNIZE=1",
+		"RF_OCR_WORKER_DELAY_MS=100",
+	}
+	service.workerTimeout = 5 * time.Second
+	writeVerifiedTestModel(t, root, defaultActiveModelID())
+
+	firstPath := writeTestPNG(t, filepath.Join(root, "first"), 80, 60)
+	secondPath := writeTestPNG(t, filepath.Join(root, "second"), 81, 60)
+	first, err := service.EnqueueRecognize(RecognizeRequest{
+		ImagePath:  firstPath,
+		SourceKind: SourceImage,
+		SourceID:   "first",
+		Language:   defaultLanguage,
+	})
+	if err != nil {
+		t.Fatalf("EnqueueRecognize(first) error = %v", err)
+	}
+	second, err := service.EnqueueRecognize(RecognizeRequest{
+		ImagePath:  secondPath,
+		SourceKind: SourceImage,
+		SourceID:   "second",
+		Language:   defaultLanguage,
+	})
+	if err != nil {
+		t.Fatalf("EnqueueRecognize(second) error = %v", err)
+	}
+	if first.JobID == second.JobID {
+		t.Fatalf("job ids %q match, want separate jobs for distinct images", first.JobID)
+	}
+
+	ready := map[string]bool{}
+	firstReady := false
+	secondRunning := false
+	deadline := time.After(5 * time.Second)
+	for len(ready) < 2 {
+		select {
+		case event := <-service.Events():
+			switch {
+			case event.Status == ResultStatusRunning && event.JobID == second.JobID:
+				secondRunning = true
+				if !firstReady {
+					t.Fatalf("second job started running before first job finished, want serial execution with JobWorkers=1")
+				}
+			case event.Status == ResultStatusReady:
+				ready[event.Request.SourceID] = true
+				if event.JobID == first.JobID {
+					firstReady = true
+				}
+			}
+		case <-deadline:
+			t.Fatalf("timed out waiting for ready events; firstReady=%v secondRunning=%v ready=%v", firstReady, secondRunning, ready)
+		}
+	}
+	if !secondRunning {
+		t.Fatalf("second job never started running")
+	}
+}
+
 func TestCancelQueuedJobEmitsCancelledAndRemovesJob(t *testing.T) {
 	root := t.TempDir()
 	service := NewService(appdata.NewService(root))
@@ -1443,6 +1573,7 @@ func TestOCRWorkerHelperProcess(t *testing.T) {
 				})
 				continue
 			}
+			helperRecognizeDelay()
 			_ = encoder.Encode(workerResponse{
 				ID: req.ID,
 				OK: true,
@@ -1475,6 +1606,18 @@ func helperRecognizeParams(raw any) workerRecognizeParams {
 	var params workerRecognizeParams
 	_ = json.Unmarshal(data, &params)
 	return params
+}
+
+func helperRecognizeDelay() {
+	delay := strings.TrimSpace(os.Getenv("RF_OCR_WORKER_DELAY_MS"))
+	if delay == "" {
+		return
+	}
+	var ms int
+	if _, err := fmt.Sscanf(delay, "%d", &ms); err != nil || ms <= 0 {
+		return
+	}
+	time.Sleep(time.Duration(ms) * time.Millisecond)
 }
 
 func appendHelperRecognizeLog(params workerRecognizeParams) {
