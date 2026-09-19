@@ -1,8 +1,9 @@
 // Cross-domain helpers shared by the backend service modules.
 
 import type {ScreenshotImageResult as BoundScreenshotImageResult} from '../../../bindings/github.com/lemon-casino/RecordingFreedom/app'
+import type {CaptureSource as BoundCaptureSource} from '../../../bindings/github.com/lemon-casino/RecordingFreedom/app/internal/devices/models'
 
-import type {ScreenshotItem} from '../mockBackend'
+import type {CaptureSource, ScreenshotItem} from '../mockBackend'
 export function normalizeOcrStatus(status: unknown): ScreenshotItem['ocrStatus'] {
   switch (status) {
     case 'queued':
@@ -118,4 +119,65 @@ export function fromBoundScreenshotImage(result: BoundScreenshotImageResult): Sc
     dataUrl: result.dataUrl,
     path: result.path,
     bytes: result.bytes }
+}
+
+// Opens a secondary window with the currently applied theme in the URL so it
+// can paint correctly on its very first frame.
+export function themedPopupURL(hashRoute: string): string {
+  const theme = document.documentElement.dataset.theme || 'night-teal'
+  return `/?theme=${encodeURIComponent(theme)}${hashRoute.replace(/^\//, '')}`
+}
+
+export function fromBoundRegionRect(rect: {x: number; y: number; width: number; height: number}) {
+  return {
+    x: rect.x,
+    y: rect.y,
+    width: rect.width,
+    height: rect.height }
+}
+
+function sourceDimensions(source: BoundCaptureSource) {
+  if (source.width && source.height) {
+    return `${source.width} x ${source.height}`
+  }
+  return 'Ready'
+}
+
+function sourceMeta(source: BoundCaptureSource) {
+  const base = source.subtitle || sourceDimensions(source)
+  if (source.available === false && source.unavailableReason) {
+    return `${base} · ${source.unavailableReason}`
+  }
+  if (source.available === false) {
+    return `${base} · ${source.capability}`
+  }
+  return base
+}
+
+function sourceLabel(type: CaptureSource['type']) {
+  if (type === 'screen') return 'Screen'
+  if (type === 'all-screens') return 'All Screens'
+  if (type === 'region') return 'Region'
+  if (type === 'window') return 'Window'
+  return 'Program'
+}
+
+export function fromBoundSource(source: BoundCaptureSource): CaptureSource {
+  const type = source.type as CaptureSource['type']
+  return {
+    id: source.id,
+    type,
+    label: sourceLabel(type),
+    name: source.name,
+    meta: sourceMeta(source),
+    x: source.x,
+    y: source.y,
+    width: source.width,
+    height: source.height,
+    displayIndex: source.displayIndex,
+    nativeId: source.nativeId,
+    processId: source.processId,
+    available: source.available,
+    capability: source.capability,
+    unavailableReason: source.unavailableReason }
 }
