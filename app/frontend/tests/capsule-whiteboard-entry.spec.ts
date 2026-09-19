@@ -1874,7 +1874,11 @@ async function expectWhiteboardLaunch(page: Page, mode: 'whiteboard' | 'annotati
       launchUrl: launch?.url ?? '',
       popupUrl: popup?.url ?? '',
     }
-  })).toEqual({mode, launchUrl: url, popupUrl: url})
+  })).toEqual({
+    mode,
+    launchUrl: url,
+    popupUrl: expect.stringMatching(new RegExp('^/[?]theme=[a-z-]+' + url.slice(1) + '$')),
+  })
 }
 
 async function emitWhiteboardVisibility(page: Page, event: {visible: boolean; mode: 'whiteboard' | 'annotation'}) {
