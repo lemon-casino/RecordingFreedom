@@ -210,7 +210,7 @@ func (s *RecordingFreedomService) CompleteRegionSelection(req RegionSelectionReq
 		Source:    source,
 		Geometry:  regionRectFromAppRect(captureRect),
 	}
-	_ = s.showRegionEditor(absoluteDIP)
+	_ = s.HideRegionFrame()
 	s.emitRegionSelection(result)
 	return result, nil
 }
